@@ -36,6 +36,7 @@ query GenerateFabricPeeringQuery($name: String!) {
                   }
                   peer_device {
                     node {
+                      __typename
                       id
                       display_label
                     }
@@ -58,6 +59,7 @@ query GenerateFabricPeeringQuery($name: String!) {
             nodes {
               edges {
                 node {
+                  __typename
                   id
                   ... on ComputePhysicalServer {
                     name {
@@ -66,19 +68,23 @@ query GenerateFabricPeeringQuery($name: String!) {
                     interfaces {
                       edges {
                         node {
+                          __typename
                           id
                           ... on InterfacePhysical {
                             connector {
                               node {
+                                __typename
                                 ... on NetworkLink {
                                   id
                                   connected_endpoints {
                                     edges {
                                       node {
+                                        __typename
                                         id
                                         ... on InterfacePhysical {
                                           device {
                                             node {
+                                              __typename
                                               id
                                               ... on DcimDevice {
                                                 name {
