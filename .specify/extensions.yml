@@ -30,3 +30,13 @@ hooks:
     prompt: Execute speckit.infrahub-speckit.route-implement?
     description: Infrahub artifact routing before implementation
     condition: null
+  after_implement:
+  - extension: infrahub-speckit
+    command: speckit.infrahub-speckit.route-friction
+    enabled: true
+    optional: false
+    priority: 10
+    prompt: Check this cycle for Infrahub skill-guidance friction?
+    description: Detect Infrahub skill friction after implementation and offer to
+      report it
+    condition: null

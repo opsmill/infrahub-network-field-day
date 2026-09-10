@@ -1,12 +1,9 @@
 ---
 name: speckit-infrahub-speckit-route-plan
-description: Hook command — runs before the active integration's speckit plan command
-  in Infrahub projects. Invokes the matching infrahub-managing-* skill so Phase 0
-  research and data-model design are grounded in authoritative Infrahub reference
-  material.
+description: Hook command — runs before the active integration's speckit plan command in Infrahub projects. Invokes the matching infrahub-managing-* skill so Phase 0 research and data-model design are grounded in authoritative Infrahub reference material.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
-  author: github-spec-kit
+  author: opsmill
   source: infrahub-speckit:commands/speckit.infrahub-speckit.route-plan.md
 ---
 

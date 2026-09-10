@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: infrahub-speckit
   name: "Infrahub Workflow Routing"
-  version: "3.0.1"
-  description: "Routes speckit specify/plan/implement to Infrahub artifact skills via pre-execution hooks and ships Infrahub spec templates."
+  version: "3.1.1"
+  description: "Routes speckit specify/plan/implement to Infrahub artifact skills via pre-execution hooks, checks the finished cycle for Infrahub skill-guidance friction, and ships Infrahub spec templates."
   author: opsmill
   repository: "https://github.com/opsmill/infrahub-speckit"
   license: Apache-2.0
@@ -42,6 +42,9 @@ provides:
     - name: speckit.infrahub-speckit.route-implement
       file: commands/speckit.infrahub-speckit.route-implement.md
       description: "Gate Infrahub skill invocation before implement."
+    - name: speckit.infrahub-speckit.route-friction
+      file: commands/speckit.infrahub-speckit.route-friction.md
+      description: "Scan the finished cycle for Infrahub skill-guidance friction and offer to draft a report."
 
 hooks:
   before_specify:
@@ -56,9 +59,15 @@ hooks:
     command: speckit.infrahub-speckit.route-implement
     optional: false
     description: "Infrahub artifact routing before implementation"
+  after_implement:
+    command: speckit.infrahub-speckit.route-friction
+    optional: false
+    prompt: "Check this cycle for Infrahub skill-guidance friction?"
+    description: "Detect Infrahub skill friction after implementation and offer to report it"
 
 tags:
   - "infrahub"
   - "infrastructure"
   - "routing"
+  - "friction-reporting"
   - "opsmill"

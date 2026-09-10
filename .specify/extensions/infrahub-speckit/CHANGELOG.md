@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-09-10
+
+### Added
+
+- Merged upstream 3.1.0 (branch `ic/feat-add-skill-gap-q9fjh`) into this project's
+  local fork: the `after_implement` friction hook and its
+  `speckit.infrahub-speckit.route-friction` command.
+
+### Changed
+
+- Reworded the new `route-friction` command to be agent-neutral, matching the
+  treatment already applied to the three `before_*` commands in 3.0.1, so the
+  hook reads correctly under this project's Codex-default integration.
+- Carried forward the local template provisioning (six `spec-*-template` entries)
+  and the **Objects** artifact classification row, neither of which exists
+  upstream.
+
+## [3.1.0] - 2026-09-10
+
+### Added
+
+- **Skill-friction reporting via a new `after_implement` hook.** A fourth hook command (`speckit.infrahub-speckit.route-friction`) fires when `/speckit.implement` finishes and checks the completed cycle for evidence that an Infrahub skill's own guidance had a gap. On a hit it prints a one-line offer naming the implicated skill and the evidence. Replying routes into the `infrahub-reporting-skill-gaps` skill, which drafts a redacted report and hands it to `infrahub-reporting-issues` for filing.
+
+  Infrahub skills fail quietly: a missing or unclear rule does not crash a run, it produces extra round trips and repeated nudges until the model works the answer out anyway. That friction is invisible once the cycle ends, so the hook looks for it while the session still holds the evidence.
+
+- **Detection is automatic; drafting and filing are not.** The hook does a cheap in-session scan and never invokes the reporting skill itself, so a cycle with nothing to report costs one line. The offer it prints is the trigger `infrahub-reporting-skill-gaps` already declares, so no extra wiring is needed to route a user's reply. Filing then passes through that skill's ban on filing directly, plus the mandatory content-review and submission-method gates in `infrahub-reporting-issues`. Nothing reaches GitHub without explicit approval, and the manual submission path sends nothing from the user's machine.
+
+- **An evidence gate that excludes session-shape counters.** The gate opens only on a closing probe from the skill's detection ladder: a red-to-green transition on the same target (`infrahubctl schema load` / `object load` / `check run` / `transform run`, or `pytest`), a coverage read showing no rule file covers the topic, or an in-session correction to an agent-authored artifact. Retry counts, edit churn, repeated asks, and docs escapes do not qualify. They rise for reasons unrelated to a skill's guidance, and a hook that fired on them would offer a report on most cycles and train users to ignore it.
+
+- **Two per-project escape hatches**, both on the hook's entry in `.specify/extensions.yml`: `optional: true` converts it from automatic to an opt-in offer (a `prompt` ships in the entry ready for this), and `enabled: false` disables it.
+
+### Changed
+
+- The `after_implement` friction hook does **not** halt when its reporting skills are absent, unlike the three `before_*` hooks, which halt when the mandatory `infrahub-managing-*` skills are missing. It runs after implementation has already succeeded, so nothing it discovers may fail, retry, or roll back a finished run. Every path through it returns; a missing skill, an error, or an ambiguous read all degrade to a no-op line.
+
 ## [3.0.1] - 2026-07-19
 
 ### Changed

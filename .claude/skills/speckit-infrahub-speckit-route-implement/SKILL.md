@@ -1,12 +1,9 @@
 ---
 name: speckit-infrahub-speckit-route-implement
-description: Hook command — runs before the active integration's speckit implement
-  command in Infrahub projects. Invokes the matching infrahub-managing-* skill for
-  each artifact type that tasks.md touches, so implementation code follows authoritative
-  Infrahub patterns and conventions.
+description: Hook command — runs before the active integration's speckit implement command in Infrahub projects. Invokes the matching infrahub-managing-* skill for each artifact type that tasks.md touches, so implementation code follows authoritative Infrahub patterns and conventions.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
-  author: github-spec-kit
+  author: opsmill
   source: infrahub-speckit:commands/speckit.infrahub-speckit.route-implement.md
 ---
 

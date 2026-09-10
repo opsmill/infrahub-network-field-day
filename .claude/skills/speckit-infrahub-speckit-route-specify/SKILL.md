@@ -1,12 +1,9 @@
 ---
 name: speckit-infrahub-speckit-route-specify
-description: Hook command — runs before the active integration's speckit specify command
-  in Infrahub projects. Detects .infrahub.yml, classifies artifact type, gates skill
-  invocation, and emits the template-override directive that the core specify skill
-  consumes.
+description: Hook command — runs before the active integration's speckit specify command in Infrahub projects. Detects .infrahub.yml, classifies artifact type, gates skill invocation, and emits the template-override directive that the core specify skill consumes.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
-  author: github-spec-kit
+  author: opsmill
   source: infrahub-speckit:commands/speckit.infrahub-speckit.route-specify.md
 ---
 
