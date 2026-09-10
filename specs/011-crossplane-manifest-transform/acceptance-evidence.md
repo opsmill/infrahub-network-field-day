@@ -253,18 +253,76 @@ nothing new to do. Loading the schema afterwards does not trigger a retry — th
 to advance to a new commit. Both facts together mean the reliable order is: create the
 branch, load schema, load objects, *then* push the code.
 
-### What that leaves unverified, precisely
+### Result — US2 scenario 1
 
-The three `.infrahub.yml` registrations are written and `yamllint`-clean, and the artifact
-definition matches the repository's existing conventions for a YAML artifact
-(`avd_anta_catalog`, `containerlab_topology`). What has **not** been proven:
+With the schema loaded, the next sync accepted all three registrations:
 
-| Unverified | Risk |
+| Registration | Imported as |
 | --- | --- |
-| Infrahub accepts the three registrations on sync (US2 scenario 1) | Low. The shapes match five existing entries field for field. The one thing a sync catches that nothing else does is a mismatch between the transform's `query` attribute and the registered query name — and that pairing was checked by hand: both are `crossplane_fabric_peering` |
-| An artifact is produced against the service (US2 scenario 2) | Low. `ServiceFabricPeering` inherits `CoreArtifactTarget`, verified in the generated protocols, and the object is in the `service_fabric_peerings` group, verified by query |
-| The artifact's checksum is stable for an unchanged model (US2 scenario 3) | **Already proven at the content level** — two renders are byte-identical (SC-004), and the checksum is a function of the content |
+| `CoreGraphQLQuery` | `crossplane_fabric_peering`, owned by `test-repository` |
+| `CoreTransformPython` | `crossplane_fabric_peering` → `CrossplaneFabricPeeringTransform`, query `crossplane_fabric_peering` |
+| `CoreArtifactDefinition` | `crossplane_fabric_peering` → artifact "Crossplane FabricPeering", `application/yaml`, targets `service_fabric_peerings` |
 
-So US2's substance is evidenced; what is missing is the plumbing between Infrahub and a
-git remote. Registering a repository is the natural first step of whatever cycle wires
-the Vidra operator, which spec assumption 3 already placed outside this one.
+`sync_status: in-sync`. The pairing a sync catches that nothing else does — the transform's
+`query` attribute against the registered query name — resolved correctly.
+
+## SC-010 / T026 — the artifact is generated
+
+Artifact generation fired automatically as part of the sync
+(`21:25:13 Generate artifact Crossplane FabricPeering`), with no manual trigger:
+
+| Field | Value |
+| --- | --- |
+| Name | `Crossplane FabricPeering` |
+| Status | `Ready` |
+| Content type | `application/yaml` |
+| Target | `nfd41-fabric-peering` |
+| Checksum | `a69b520a245e75fe1e6c3195f32f8229` |
+
+Fetched from storage, the artifact's bytes are identical to the `infrahubctl transform`
+render recorded under SC-001, and `md5sum` of those bytes equals the checksum Infrahub
+recorded. The only difference against the captured CLI output is one trailing blank line,
+which `infrahubctl` adds when printing to a terminal; the artifact itself ends with a
+single newline.
+
+## SC-010 / T027 — the checksum is stable
+
+Regenerated against an unchanged model via
+`POST /api/artifact/generate/<definition-id>?branch=cx-peering`:
+
+| | Before | After |
+| --- | --- | --- |
+| Checksum | `a69b520a245e75fe1e6c3195f32f8229` | `a69b520a245e75fe1e6c3195f32f8229` |
+| Storage id | `18d412b3-786e-…` | `18d412b3-786e-…` |
+| Artifact count | 1 | 1 |
+
+The regeneration was confirmed to have actually executed before the comparison was
+believed — `21:25:57 Beginning subflow run 'Generate artifact Crossplane FabricPeering'`,
+following the trigger at `21:25:55`. Checking that mattered: an earlier attempt passed the
+*artifact* id where the endpoint wants the *artifact definition* id, which returns HTTP 200
+and then fails in the background with `NodeNotFoundError`. Without reading the logs, that
+failure would have looked like a passing stability test.
+
+This is SC-004 observed through the artifact rather than through stdout, and it is what
+makes a changed checksum meaningful to an operator.
+
+## US2 acceptance, closed
+
+All three scenarios this document previously listed as unproven are now evidenced
+end to end, so the earlier "what that leaves unverified" table has been removed rather
+than left to contradict the sections above:
+
+| Scenario | Evidence |
+| --- | --- |
+| 1 — Infrahub accepts the three registrations on sync | T025 above: `in-sync`, all three imported, the `query`-attribute pairing resolved by the server rather than by hand |
+| 2 — an artifact is produced against the service | T026 above: `Ready`, `application/yaml`, against `nfd41-fabric-peering`, bytes identical to the render |
+| 3 — the checksum is stable for an unchanged model | T027 above: identical checksum and storage id across a regeneration confirmed to have executed |
+
+The one thing still outside this cycle is delivery: nothing here proves the Vidra operator
+pulls the artifact or that the manifest establishes BGP in the lab. Spec assumption 3
+placed both outside this feature, and they remain there.
+
+With this, the alternative evidence set that [plan.md](./plan.md)'s Complexity Tracking
+offers in place of `$infrahub-run-integration-tests` is **complete**: fixture unit tests,
+a live render, a Kubernetes-shape validation against the consumer's XRD, and a repository
+sync plus artifact generation. T043 is a sign-off decision, not a gap in coverage.
