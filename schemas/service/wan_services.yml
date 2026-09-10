@@ -1,0 +1,199 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# The services sitting on top of the provider edge.
+#
+# Three kinds, and the middle one is the point of the whole layering exercise.
+# In the lab, whether a tenant has internet access is a boolean field on the
+# tenant: `internet: true` for acme, `internet: false` for globex. Here it is
+# the presence or absence of a ServiceInternetAccess object -- which means the
+# difference between the two tenants is one object rather than one field, and
+# "internet access is a product the tenant either buys or does not" becomes
+# structurally true rather than a comment.
+#
+# That is why ServiceInternetAccess deliberately holds no tenant, VRF or
+# circuit set of its own. Everything it would restate already lives on the
+# L3VPN it attaches to.
+#
+# Unlike the Kubernetes services, none of these is a CoreArtifactTarget: they
+# render through device-scoped artifacts (FRR on the PE and CE, EOS on the
+# fabric), not through a cluster manifest.
+#
+# SERVICE LAYER.
+# ============================================================================
+
+nodes:
+  - name: L3vpn
+    namespace: Service
+    description: "A tenant's VPN across the provider edge"
+    label: Tenant L3VPN
+    icon: mdi:lan-connect
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+    relationships:
+      - name: tenant
+        peer: OrganizationTenant
+        label: Tenant
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__l3vpn_tenant
+        order_weight: 910
+      - name: vrf
+        peer: IpamVRF
+        label: Provider Edge VRF
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        identifier: service__l3vpn_vrf
+        order_weight: 920
+      - name: circuits
+        peer: DcimCircuit
+        label: Member Circuits
+        kind: Generic
+        cardinality: many
+        optional: true
+        on_delete: no-action
+        # The attachment circuits of this tenant's sites. Two sites of one
+        # tenant reach each other because they are both in here, not because
+        # anything was leaked between them -- which is why there is no
+        # site-to-site relationship anywhere in this model.
+        description: "The attachment circuits of this tenant's member sites"
+        identifier: service__l3vpn_circuits
+        order_weight: 930
+      - name: dc_service_prefixes
+        peer: IpamPrefix
+        label: DC Service Prefixes
+        kind: Generic
+        cardinality: many
+        optional: true
+        on_delete: no-action
+        # The shared half of the import policy: what every tenant may reach in
+        # the datacentre regardless of what it buys. Every tenant's prefixes
+        # sit in the provider's default table -- they have to, or the DC could
+        # not route back -- so if this were "import everything" the tenants
+        # would reach each other directly across the provider.
+        description: "The datacentre's published service range, common to every tenant"
+        identifier: service__l3vpn_dc_prefixes
+        order_weight: 940
+
+  - name: InternetAccess
+    namespace: Service
+    description: "The internet-access product, bought per tenant"
+    label: Internet Access
+    icon: mdi:web-check
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+    attributes:
+      - name: default_route_imported
+        kind: Boolean
+        label: Default Route Imported
+        optional: false
+        default_value: true
+        description: "Whether a default route is imported into the tenant's VRF"
+        order_weight: 1300
+      - name: prefixes_announced
+        kind: Boolean
+        label: Prefixes Announced
+        optional: false
+        default_value: true
+        description: "Whether the tenant's prefixes are announced upstream"
+        order_weight: 1310
+    relationships:
+      # Only two relationships, and neither restates anything. No tenant, no
+      # VRF, no circuits: those live on the L3VPN. Keeping this object thin is
+      # what makes "the only difference between acme and globex is one object"
+      # literally true.
+      - name: l3vpn
+        peer: ServiceL3vpn
+        label: L3VPN
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__internet_l3vpn
+        order_weight: 910
+      - name: peering
+        peer: WanInternetPeering
+        label: Internet Peering
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        identifier: service__internet_peering
+        order_weight: 920
+
+  - name: TenantCloud
+    namespace: Service
+    description: "A tenant's isolated compute in the datacentre"
+    label: Tenant Cloud
+    icon: mdi:cloud-lock
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+    relationships:
+      # The bridge between the provider edge and the fabric. All three of vrf,
+      # zone and prefix are mandatory: a tenant cloud with no zone is
+      # unreachable, and one with no VRF is not isolated. The lab's isolation
+      # is structural -- no VRF imports another's route targets anywhere in the
+      # fabric, so there is no east-west path to filter in the first place --
+      # and it takes all three to be so. There is deliberately no
+      # cloud-to-cloud relationship: the absence of a path is the feature.
+      - name: tenant
+        peer: OrganizationTenant
+        label: Tenant
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__cloud_tenant
+        order_weight: 910
+      - name: vrf
+        peer: IpamVRF
+        label: Fabric VRF
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__cloud_vrf
+        order_weight: 920
+      - name: zone
+        peer: SecurityZone
+        label: Firewall Zone
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        # The only way into a tenant cloud is out of the border leaf, through
+        # this zone's policy, and back. The firewall matches on source, which
+        # is how acme's sites reach acme's cloud and globex's packets simply do
+        # not match.
+        identifier: service__cloud_zone
+        order_weight: 930
+      - name: prefix
+        peer: IpamPrefix
+        label: Subnet
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__cloud_prefix
+        order_weight: 940
+      - name: vlan
+        peer: IpamVLAN
+        label: VLAN
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        identifier: service__cloud_vlan
+        order_weight: 950

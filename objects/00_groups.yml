@@ -19,3 +19,7 @@ spec:
     - name: servers
     - name: avd_artifacts
     - name: avd_structured_configs
+    # Artifact target group for the Crossplane FabricPeering manifest.
+    # Declared by specs/010-lab-service-layer-model/contracts/schema-kinds.md
+    # section 6; created here because 011 is the cycle that renders it.
+    - name: service_fabric_peerings

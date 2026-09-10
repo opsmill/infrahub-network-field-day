@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# Three additions to the marketplace security schema (infrahub/security).
+#
+# Everything else this repository needs from a firewall model is already there
+# and is used unmodified: zones, the polymorphic address book
+# (SecurityGenericAddress with IPAM-backed, literal, range and FQDN variants),
+# service and service-group objects, zone-pair policy rules with an evaluation
+# index, SecurityFirewall as a device kind, and SecurityFirewallInterface as
+# the zone-bound interface kind.
+#
+# Because SecurityFirewall inherits DcimGenericDevice and DcimPhysicalDevice,
+# the perimeter firewall is its own device kind and needs no `firewall` value
+# in the DcimDevice role dropdown -- which is why that role is absent from
+# dcim_extensions.yml.
+#
+# NOTE ON THE ADDRESS BOOK. The marketplace offers both literal address kinds
+# (SecurityPrefix, SecurityIPAddress, which carry IPNetwork/IPHost attributes)
+# and IPAM-backed ones (SecurityIPAMIPPrefix, SecurityIPAMIPAddress, which
+# reference IpamPrefix/IpamIPAddress). This project uses the IPAM-backed
+# variants for anything a route policy or a network policy also matches on, so
+# the several enforcement points reference one object rather than one object
+# and two copies of its CIDR.
+#
+# The three fields below are genuinely absent upstream. Each is added here
+# rather than by editing the adopted file, so a later `marketplace get` diffs
+# cleanly against schemas/security/security.yml.
+# ============================================================================
+
+extensions:
+  nodes:
+    - kind: SecurityZone
+      attributes:
+        - name: trust_level
+          kind: Number
+          label: Trust Level
+          optional: true
+          description: "0 is untrusted, 100 is fully trusted; orders zones by trust"
+          order_weight: 1200
+          parameters:
+            min_value: 0
+            max_value: 100
+      relationships:
+        - name: vrf
+          peer: IpamVRF
+          label: Fabric VRF
+          kind: Attribute
+          cardinality: one
+          optional: true
+          # The fabric side of this zone's handoff. Every tenant VRF in this
+          # fabric has exactly one route out -- a default pointing at its own
+          # zone -- so the pairing between a VRF and a zone is the thing that
+          # makes the firewall unavoidable rather than decorative. Without this
+          # relationship that pairing lives only in a route-map comment.
+          description: "The fabric VRF on the other side of this zone's handoff"
+          identifier: security_zone__vrf
+          order_weight: 930
+
+    - kind: SecurityPolicyRule
+      attributes:
+        - name: managed_by_service
+          kind: Boolean
+          label: Managed by a Service
+          optional: false
+          default_value: false
+          # The unmanaged-object guard, and the reason a reconciling generator
+          # is safe to run against a hand-maintained firewall. A generator must
+          # delete rules that no longer have a service behind them, but the
+          # baseline -- the anti-spoofing deny repeated at the head of every
+          # zone pair, the ICMP allowances -- has no service and must survive.
+          # A generator reconciles only where this is true.
+          #
+          # Existing rules load as false, which is correct: everything on the
+          # box today is hand-written.
+          description: "True when a service generator owns this rule; hand-written rules stay false"
+          order_weight: 2000
+
+# ---------------------------------------------------------------------------
+# Supplying the missing human-friendly id for SecurityPolicyRule.
+#
+# The adopted schema declares no `human_friendly_id` on this kind, which means
+# `infrahubctl object load` has no key to upsert-match against: it always
+# CREATEs, and a second run collides with the uniqueness constraint
+# 'index-source_zone-destination_zone-policy'. That makes any object file
+# containing rules non-re-runnable, which the project's idempotence rules do
+# not allow.
+#
+# The natural key is the uniqueness constraint itself, and every element of it
+# is reachable: SecurityZone.name and SecurityPolicy.name are both unique
+# upstream.
+# ---------------------------------------------------------------------------
+nodes:
+  - name: PolicyRule
+    namespace: Security
+    human_friendly_id:
+      - policy__name__value
+      - source_zone__name__value
+      - destination_zone__name__value
+      - index__value

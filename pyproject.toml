@@ -8,6 +8,11 @@ requires-python = ">=3.11, <3.14"
 dependencies = [
     "httpx>=0.28.1",
     "pyavd>=6.4.0,<6.5.0",
+    # Imported directly by generators/generate_avd_device_hostvar.py and
+    # transforms/crossplane_fabric_peering.py. It arrives transitively through
+    # pyavd, anta and yamllint too, but a direct import belongs in a direct
+    # dependency: a future pyavd that drops it would break production code.
+    "pyyaml>=6.0.1",
     "streamlit-flow-component>=1.6.1",
 ]
 
@@ -109,6 +114,7 @@ exclude = [
     "transforms/computed_interface_description_query.py",
     "transforms/cv_workspace_submission_webhook_query.py",
     "transforms/fabric_cabling_plan_query.py",
+    "transforms/crossplane_fabric_peering_query.py",
 ]
 
 

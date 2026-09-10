@@ -1,0 +1,185 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# The service layer.
+#
+# Two layers, and the difference between them is what this file establishes:
+#
+#   TECHNICAL LAYER   what exists, per device. Interfaces, addresses, zones,
+#                     address-book entries, cluster nodes, BGP sessions,
+#                     attachment circuits. Every attribute maps to something a
+#                     renderer emits into a device or cluster config.
+#
+#   SERVICE LAYER     what was ordered, per consumer. An L3VPN, an
+#                     internet-access product, an isolated tenant cloud, a
+#                     fabric-peered cluster, an exposed application, an access
+#                     grant. A service names its consumer, its status and its
+#                     intent; it carries no per-device detail.
+#
+# A generator sits underneath each concrete service kind, reads the service and
+# upserts the technical objects that realize it. That is why every service kind
+# inherits GeneratorTarget (schemas/generator.yml), which supplies the
+# `checksum` attribute the project's idempotence rules operate on. No renderer
+# reads the service layer directly.
+#
+# THE DEPENDENCY RUNS ONE WAY. Service files name technical kinds; technical
+# files name no service kind. The `extensions:` block at the bottom of this
+# file is the ONLY place the technical layer learns the service layer exists,
+# and it lives here rather than in schemas/base/dcim.yml precisely so the
+# direction holds -- the technical layer must stay loadable on its own.
+# tests/unit/test_service_layer_schema_contract.py enforces both halves.
+# ============================================================================
+
+generics:
+  - name: Generic
+    namespace: Service
+    description: "A service ordered by a consumer, realized by technical objects"
+    label: Service
+    icon: mdi:shape-outline
+    # Concrete service kinds appear in the menu; this generic is the query
+    # surface, not something to browse.
+    include_in_menu: false
+    human_friendly_id:
+      - name__value
+    display_label: "{{ name__value }}"
+    order_by:
+      - name__value
+    uniqueness_constraints:
+      - ["name__value"]
+    attributes:
+      - name: name
+        kind: Text
+        label: Name
+        optional: false
+        unique: true
+        description: "Service name, unique across every service kind"
+        order_weight: 1000
+        # Deliberately branch-AWARE, unlike opsmill/infrahub-demo-dc which
+        # marks this branch: agnostic. A branch-agnostic attribute is global,
+        # so a rename on a branch would take effect everywhere at once and
+        # bypass the proposed-change review every service workflow here is
+        # supposed to go through.
+      - name: description
+        kind: Text
+        label: Description
+        optional: true
+        order_weight: 1100
+      - name: status
+        kind: Dropdown
+        label: Status
+        optional: false
+        default_value: provisioning
+        order_weight: 1200
+        choices:
+          - name: provisioning
+            label: Provisioning
+            description: "Ordered; the generator has not yet materialized it"
+            color: "#ffff7f"
+          - name: active
+            label: Active
+            description: "Materialized and in service"
+            color: "#7fbf7f"
+          - name: error
+            label: Error
+            # Distinct from provisioning on purpose. Both states have no
+            # technical objects beneath them, and telling "not built yet" from
+            # "tried to build and failed" is otherwise impossible.
+            description: "The generator ran and failed"
+            color: "#ff7f7f"
+          - name: decommissioning
+            label: Decommissioning
+            description: "Being withdrawn"
+            color: "#fbfbfb"
+          - name: decommissioned
+            label: Decommissioned
+            description: "Withdrawn"
+            color: "#bfbfbf"
+    relationships:
+      - name: owner
+        peer: OrganizationGeneric
+        label: Owner
+        kind: Generic
+        cardinality: one
+        optional: false
+        # Never cascade. A service is a statement of intent about
+        # infrastructure it does not own.
+        on_delete: no-action
+        description: "The organization that ordered this service"
+        order_weight: 900
+
+  # ------------------------------------------------------------------------
+  # Binding generics. A service kind opts into these when it is scoped to
+  # particular devices or interfaces, which is what makes a device's own page
+  # able to answer "what services touch this device".
+  # ------------------------------------------------------------------------
+  - name: GenericDevice
+    namespace: Service
+    description: "A service scoped to one or more devices"
+    include_in_menu: false
+    relationships:
+      - name: devices
+        peer: DcimGenericDevice
+        label: Devices
+        kind: Generic
+        cardinality: many
+        optional: true
+        direction: inbound
+        identifier: device_services
+        on_delete: no-action
+        order_weight: 1000
+
+  - name: GenericInterface
+    namespace: Service
+    description: "A service scoped to one or more interfaces"
+    include_in_menu: false
+    relationships:
+      - name: interfaces
+        peer: DcimInterface
+        label: Assigned Interfaces
+        kind: Generic
+        cardinality: many
+        optional: true
+        identifier: interface_services
+        on_delete: no-action
+        order_weight: 1000
+
+# ============================================================================
+# The one coupling from the technical layer back to the service layer.
+#
+# Declared as an extension so schemas/base/dcim.yml never learns that services
+# exist. Putting these two relationships in the base schema instead would make
+# the base layer depend on this file, and the technical layer would stop being
+# loadable on its own.
+#
+# DcimInterface is the generic in this repository (InterfacePhysical and
+# InterfaceVirtual are the concrete nodes), so peering the generic covers both
+# without enumerating them.
+# ============================================================================
+extensions:
+  nodes:
+    - kind: DcimGenericDevice
+      relationships:
+        - name: device_services
+          peer: ServiceGeneric
+          label: Services
+          kind: Generic
+          cardinality: many
+          optional: true
+          direction: outbound
+          identifier: device_services
+          on_delete: no-action
+          order_weight: 3100
+
+    - kind: DcimInterface
+      relationships:
+        - name: interface_services
+          peer: ServiceGeneric
+          label: Interface Services
+          kind: Generic
+          cardinality: many
+          optional: true
+          identifier: interface_services
+          on_delete: no-action
+          order_weight: 3100

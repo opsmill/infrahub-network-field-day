@@ -102,7 +102,7 @@ with its workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` a
 
 ## Extension checklist
 
-When adding a device role:
+When adding an **AVD-rendered fabric** device role:
 
 1. Add the role value in `schemas/dcim_extensions.yml`.
 2. Load/check schema and regenerate generated files.
@@ -111,6 +111,22 @@ When adding a device role:
 5. Update whichever upstream generator creates devices of that role and group membership.
 6. Add tests, especially `tests/unit/test_avd.py` and hostvars tests when needed.
 7. Update `docs/docs/developer-guide/avd/role-mapping.md` and hostvars docs.
+
+When adding a **non-EOS** device role, steps 3 to 5 and 7 do not apply. The role values
+`firewall`, `isp_edge`, `isp_core`, `internet_edge`, `customer_edge`, `branch_router`
+and `k8s_node` describe equipment pyAVD never renders, and they are deliberately absent
+from `ROLE_TO_AVD_TYPE`:
+
+- `get_avd_type` raises `ValueError` for an unmapped role. That loud failure is the
+  wanted behaviour here; mapping one would instead let a firewall or an FRR router be
+  rendered as an EOS switch, which fails silently.
+- Devices with these roles must never join the `avd_devices` group, which is the only
+  path into the AVD hostvar generator. Membership is set in one place,
+  `src/solution_arista_avd/generator.py`, on the device-creation path the fabric and
+  rack generators run from device designs — so a manually loaded device stays out.
+- Add the role to `NON_AVD_DEVICE_ROLES` in `tests/unit/test_avd.py`, which keeps
+  `test_schema_roles_all_mapped` guarding the fabric roles while excluding these, and
+  update `docs/docs/developer-guide/schemas.md` instead of the AVD role-mapping doc.
 
 When adding a transform output:
 

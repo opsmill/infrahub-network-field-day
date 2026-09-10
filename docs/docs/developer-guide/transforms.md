@@ -155,6 +155,54 @@ the artifact renders successfully and says why it is empty:
 # ANTA disabled for fabric Fabric-L3LS-Multi-Domain
 ```
 
+### CrossplaneFabricPeeringTransform
+
+**File**: `transforms/crossplane_fabric_peering.py`
+
+**Purpose**: Render the `FabricPeering` custom resource the lab's Crossplane composition
+consumes, from the Infrahub model
+
+**Input**: ServiceFabricPeering
+**Output**: YAML — one Kubernetes custom resource
+
+This closes the loop the service-layer schema was built for: change the model, re-render,
+review the diff, then push.
+
+**Why the target is a service, not the cluster.** Artifact targets must inherit
+`CoreArtifactTarget`, and only the service kinds do — `Cluster.Kubernetes` deliberately
+does not, so the artifact hangs off the ordered intent ("this cluster peers with the
+fabric") while every rendered *value* comes from the technical layer beneath it: the
+cluster supplies the local ASN, the auth secret's name, the timers and the selectors, and
+each `Cluster.FabricPeering` supplies one peer's name, address, and ASN.
+
+**Pure Python with a YAML dumper**, unlike `ContainerLabTopology`. The output is a
+structured document rather than a text configuration, so the transform builds a dictionary
+and emits it, which lets the dumper decide what needs quoting. That matters twice here:
+`true` is a YAML boolean and `65401:110` carries a colon, and both have to stay strings for
+the Kubernetes API to accept them. A template gets that right only for as long as whoever
+edits it remembers to.
+
+Two transformations happen before the dictionary is built:
+
+- Label selectors are stored as `key=value` strings rather than JSON maps, because
+  Infrahub returns a server error for a JSON attribute key containing a dot or a slash —
+  and every Kubernetes label selector has both. The transform parses them back into the
+  map the resource needs. See `schemas/MARKETPLACE.md`.
+- `peer_address` resolves to an `Ipam.IPAddress`, whose value carries the prefix length.
+  A BGP neighbour address must not, so it is stripped.
+
+**It refuses to render an incomplete model.** A cluster with no local ASN, a service with
+no enabled peering, or a peering with no address raises an error naming the object and the
+field. A manifest with an empty peer list would apply cleanly, report healthy, and carry
+no routes — the failure that is hardest to diagnose. A `provisioning` status still
+renders, though: whether to apply a manifest is an operator's decision.
+
+Rendering is deterministic — peers sorted by name, selector keys sorted, and mapping key
+order fixed by insertion order with `sort_keys=False` — so an unchanged model produces a
+byte-identical artifact and a changed checksum means something real. Sequences are indented
+under the key that owns them, matching the hand-written manifest the artifact replaces, so a
+diff between the two reads as a field comparison.
+
 ### ContainerLabTopology
 
 **File**: `transforms/containerlab_topology.py`

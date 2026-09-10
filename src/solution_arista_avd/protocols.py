@@ -66,6 +66,30 @@ class OrganizationGeneric(CoreNode):
     name: String
     tags: RelationshipManager[BuiltinTag]
 
+class ClusterGeneric(CoreNode):
+    description: StringOptional
+    name: String
+    locations: RelationshipManager[LocationGeneric]
+    tags: RelationshipManager[BuiltinTag]
+
+class ServiceGeneric(CoreNode):
+    description: StringOptional
+    name: String
+    status: Dropdown
+    owner: RelationshipAttribute[OrganizationGeneric]
+
+class SecurityGenericAddress(CoreNode):
+    name: String
+    address_groups: RelationshipManager[SecurityGenericAddressGroup]
+
+class SecurityGenericAddressGroup(CoreNode):
+    description: StringOptional
+    name: String
+    addresses: RelationshipManager[SecurityGenericAddress]
+
+class ClusterGenericComputeUnitNodes(CoreNode):
+    nodes: RelationshipManager[ComputeGenericUnit]
+
 class DcimGenericDevice(CoreNode):
     description: StringOptional
     name: String
@@ -74,6 +98,22 @@ class DcimGenericDevice(CoreNode):
     platform: RelationshipAttribute[DcimPlatform]
     primary_address: RelationshipAttribute[IpamIPAddress]
     tags: RelationshipManager[BuiltinTag]
+
+class ServiceGenericDevice(CoreNode):
+    devices: RelationshipManager[DcimGenericDevice]
+
+class ServiceGenericInterface(CoreNode):
+    interfaces: RelationshipManager[DcimInterface]
+
+class SecurityGenericService(CoreNode):
+    description: StringOptional
+    name: String
+    service_groups: RelationshipManager[SecurityGenericServiceGroup]
+
+class SecurityGenericServiceGroup(CoreNode):
+    description: StringOptional
+    name: String
+    services: RelationshipManager[SecurityGenericService]
 
 class ComputeGenericUnit(CoreNode):
     pass
@@ -103,6 +143,7 @@ class GenericInterfaceBundle(CoreNode):
 
 class InterfaceLayer2(CoreNode):
     l2_mode: DropdownOptional
+    spanning_tree_bpduguard: DropdownOptional
     spanning_tree_portfast: DropdownOptional
 
 class InterfaceLayer3(CoreNode):
@@ -123,9 +164,30 @@ class DcimPhysicalDevice(CoreNode):
     device_type: RelationshipAttribute[DcimDeviceType]
     location: RelationshipAttribute[LocationHosting]
 
+class SecurityPolicyAssignment(CoreNode):
+    rules: RelationshipManager[SecurityRenderedPolicyRule]
+
 class GeneratorTarget(CoreNode):
     checksum: StringOptional
 
+
+
+class SecurityAddressGroup(SecurityGenericAddressGroup):
+    pass
+
+
+class ServiceAppAccess(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
+    approved: Boolean
+    approved_at: DateTimeOptional
+    approved_by: StringOptional
+    justification: StringOptional
+    ports: ListAttributeOptional
+    requester: String
+    application: RelationshipAttribute[ServiceFabricApp]
+    destination_vip: RelationshipAttribute[IpamIPAddress]
+    granted_rules: RelationshipManager[SecurityPolicyRule]
+    source_address: RelationshipAttribute[SecurityGenericAddress]
+    source_zone: RelationshipAttribute[SecurityZone]
 
 
 class AvdArtifact(CoreNode):
@@ -169,6 +231,25 @@ class RoutingBGPPeerGroup(CoreNode):
     type: DropdownOptional
     update_source: StringOptional
     device: RelationshipAttribute[DcimDevice]
+
+
+class DcimCircuit(CoreNode):
+    circuit_id: String
+    circuit_type: DropdownOptional
+    commit_rate: IntegerOptional
+    description: StringOptional
+    status: Dropdown
+    endpoints: RelationshipManager[DcimCircuitEndpoint]
+    provider: RelationshipAttribute[OrganizationProvider]
+
+
+class DcimCircuitEndpoint(DcimEndpoint):
+    description: StringOptional
+    name: String
+    side: Dropdown
+    status: Dropdown
+    circuit: RelationshipAttribute[DcimCircuit]
+    location: RelationshipAttribute[LocationHosting]
 
 
 class DcimDevice(CoreArtifactTarget, DcimGenericDevice, DcimPhysicalDevice):
@@ -215,6 +296,10 @@ class AvdEvpn(CoreNode):
     fabric: RelationshipManager[NetworkFabric]
 
 
+class SecurityFQDN(SecurityGenericAddress):
+    fqdn: String
+
+
 class NetworkFabric(CoreArtifactTarget, NetworkBuildingBlock):
     avd_hostvars_ready: Boolean
     cloudvision_managed: Boolean
@@ -229,8 +314,61 @@ class NetworkFabric(CoreArtifactTarget, NetworkBuildingBlock):
     node_id_pool: RelationshipAttribute[CoreNumberPool]
 
 
+class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
+    chart_name: StringOptional
+    chart_repository: StringOptional
+    chart_values: JSONAttributeOptional
+    chart_version: StringOptional
+    communities: ListAttributeOptional
+    exposed: Boolean
+    manifests: JSONAttributeOptional
+    namespace_name: String
+    policy_allow_dns: Boolean
+    policy_allow_egress_api_server: Boolean
+    policy_allow_egress_internet: Boolean
+    policy_allow_intra_namespace: Boolean
+    policy_allow_ports: JSONAttributeOptional
+    policy_default_deny: Boolean
+    service_selector: ListAttributeOptional
+    workload_selector: ListAttributeOptional
+    allowed_source_prefixes: RelationshipManager[IpamPrefix]
+    cluster: RelationshipAttribute[ClusterKubernetes]
+    peering_service: RelationshipAttribute[ServiceFabricPeering]
+    vip_block: RelationshipAttribute[IpamPrefix]
+    vrf: RelationshipAttribute[IpamVRF]
+
+
 class NetworkFabricDeviceDesign(NetworkDeviceDesign):
     fabric: RelationshipAttribute[NetworkFabric]
+
+
+class ClusterFabricPeering(CoreNode):
+    description: StringOptional
+    enabled: Boolean
+    name: String
+    peer_asn: Integer
+    cluster: RelationshipAttribute[ClusterKubernetes]
+    peer_address: RelationshipAttribute[IpamIPAddress]
+    peer_device: RelationshipAttribute[DcimGenericDevice]
+    peer_neighbor: RelationshipAttribute[RoutingBGPNeighbor]
+    svi: RelationshipAttribute[EvpnSvi]
+
+
+class ServiceFabricPeering(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
+    advertisement_selector: ListAttributeOptional
+    communities: ListAttributeOptional
+    cluster: RelationshipAttribute[ClusterKubernetes]
+    peerings: RelationshipManager[ClusterFabricPeering]
+
+
+class SecurityFirewall(DcimGenericDevice, DcimPhysicalDevice, CoreArtifactTarget, SecurityPolicyAssignment):
+    role: DropdownOptional
+    policy: RelationshipAttribute[SecurityPolicy]
+
+
+class SecurityFirewallInterface(DcimInterface, DcimEndpoint):
+    ip_addresses: RelationshipManager[IpamIPAddress]
+    security_zone: RelationshipAttribute[SecurityZone]
 
 
 class EvpnGatewayGroup(CoreNode):
@@ -258,9 +396,33 @@ class AvdHostvarFile(CoreFileObject):
     artifact: RelationshipAttribute[AvdArtifact]
 
 
+class SecurityIPAMIPAddress(SecurityGenericAddress):
+    description: StringOptional
+    ip_address: RelationshipAttribute[IpamIPAddress]
+
+
+class SecurityIPAMIPPrefix(SecurityGenericAddress):
+    description: StringOptional
+    ip_prefix: RelationshipAttribute[IpamPrefix]
+
+
 class IpamIPAddress(BuiltinIPAddress):
     fqdn: StringOptional
     interface: RelationshipAttribute[InterfaceLayer3]
+
+
+class SecurityIPAddress(SecurityGenericAddress):
+    address: IPHost
+    description: StringOptional
+
+
+class SecurityIPProtocol(SecurityGenericService):
+    protocol: IntegerOptional
+
+
+class SecurityIPRange(SecurityGenericAddress):
+    end: IPHost
+    start: IPHost
 
 
 class MlagInterface(InterfaceLayer2, GenericInterfaceBundle):
@@ -270,6 +432,43 @@ class MlagInterface(InterfaceLayer2, GenericInterfaceBundle):
     role: DropdownOptional
     status: Dropdown
     mlag_domain: RelationshipAttribute[GenericMlagDomain]
+
+
+class ServiceInternetAccess(ServiceGeneric, GeneratorTarget):
+    default_route_imported: Boolean
+    prefixes_announced: Boolean
+    l3vpn: RelationshipAttribute[ServiceL3vpn]
+    peering: RelationshipAttribute[WanInternetPeering]
+
+
+class WanInternetPeering(CoreNode):
+    description: StringOptional
+    name: String
+    peer_asn: Integer
+    circuit: RelationshipAttribute[DcimCircuit]
+    customer_aggregate: RelationshipAttribute[IpamPrefix]
+    internet_prefixes: RelationshipManager[IpamPrefix]
+    internet_provider: RelationshipAttribute[OrganizationProvider]
+    provider: RelationshipAttribute[OrganizationProvider]
+
+
+class ClusterKubernetes(ClusterGeneric, ClusterGenericComputeUnitNodes, GeneratorTarget):
+    advertisement_selector: ListAttributeOptional
+    bgp_auth_secret_name: StringOptional
+    bgp_timers: JSONAttributeOptional
+    cni_kind: Dropdown
+    cni_version: StringOptional
+    distribution: Dropdown
+    kubernetes_version: StringOptional
+    local_asn: IntegerOptional
+    node_selector: ListAttributeOptional
+    pod_cidr_communities: ListAttributeOptional
+    fabric_peerings: RelationshipManager[ClusterFabricPeering]
+    node_prefix: RelationshipAttribute[IpamPrefix]
+    pod_prefix: RelationshipAttribute[IpamPrefix]
+    service_prefix: RelationshipAttribute[IpamPrefix]
+    vip_pools: RelationshipManager[IpamPrefix]
+    vrf: RelationshipAttribute[IpamVRF]
 
 
 class IpamL2Domain(CoreNode):
@@ -286,6 +485,13 @@ class EvpnL2Vlan(CoreNode):
     rack_tags: RelationshipManager[LocationRack]
     tenant: RelationshipAttribute[EvpnTenant]
     vlan: RelationshipAttribute[IpamVLAN]
+
+
+class ServiceL3vpn(ServiceGeneric, GeneratorTarget):
+    circuits: RelationshipManager[DcimCircuit]
+    dc_service_prefixes: RelationshipManager[IpamPrefix]
+    tenant: RelationshipAttribute[OrganizationTenant]
+    vrf: RelationshipAttribute[IpamVRF]
 
 
 class InterfaceLag(DcimInterface, InterfaceLayer2, InterfaceLayer3, InterfaceHasSubInterface, GenericInterfaceBundle):
@@ -315,6 +521,7 @@ class OrganizationManufacturer(OrganizationGeneric):
 
 
 class NetworkNtpServer(CoreNode):
+    iburst: BooleanOptional
     name: String
     server_vrf: StringOptional
 
@@ -355,10 +562,27 @@ class NetworkPodDeviceDesign(NetworkDeviceDesign):
     pod: RelationshipAttribute[NetworkPod]
 
 
+class SecurityPolicy(CoreNode):
+    description: StringOptional
+    name: String
+    device_target: RelationshipAttribute[SecurityFirewall]
+    location_target: RelationshipAttribute[LocationGeneric]
+    rules: RelationshipManager[SecurityPolicyRule]
+
+
+class SecurityPolicyRule(CoreNode):
+    pass
+
+
 class IpamPrefix(BuiltinIPPrefix):
     gateway: RelationshipAttribute[IpamIPAddress]
     location: RelationshipAttribute[LocationHosting]
     organization: RelationshipAttribute[OrganizationGeneric]
+
+
+class SecurityPrefix(SecurityGenericAddress):
+    description: StringOptional
+    prefix: IPNetwork
 
 
 class RoutingPrefixList(CoreNode):
@@ -378,10 +602,12 @@ class OrganizationProvider(OrganizationGeneric):
 
 
 class LocationRack(LocationGeneric, LocationHosting, GeneratorTarget):
+    device_name_template: StringOptional
     generation_complete: Boolean
     index: Integer
     mlag: Boolean
     rack_type: Dropdown
+    always_include_vrfs_in_tenants: RelationshipManager[EvpnTenant]
     avd_tags: RelationshipManager[AvdTag]
     devices: RelationshipManager[DcimPhysicalDevice]
     pod: RelationshipAttribute[NetworkPod]
@@ -389,6 +615,24 @@ class LocationRack(LocationGeneric, LocationHosting, GeneratorTarget):
 
 class NetworkRackDeviceDesign(NetworkDeviceDesign):
     rack: RelationshipAttribute[LocationRack]
+
+
+class SecurityRenderedPolicyRule(CoreNode):
+    action: String
+    index: Integer
+    log: Boolean
+    name: String
+    destination_address: RelationshipManager[SecurityGenericAddress]
+    destination_groups: RelationshipManager[SecurityGenericAddressGroup]
+    destination_service_groups: RelationshipManager[SecurityGenericServiceGroup]
+    destination_services: RelationshipManager[SecurityGenericService]
+    destination_zone: RelationshipAttribute[SecurityZone]
+    source_address: RelationshipManager[SecurityGenericAddress]
+    source_groups: RelationshipManager[SecurityGenericAddressGroup]
+    source_policy: RelationshipAttribute[SecurityPolicy]
+    source_service_groups: RelationshipManager[SecurityGenericServiceGroup]
+    source_services: RelationshipManager[SecurityGenericService]
+    source_zone: RelationshipAttribute[SecurityZone]
 
 
 class RoutingRouteMap(CoreNode):
@@ -410,6 +654,38 @@ class IpamRouteTarget(CoreNode):
     description: StringOptional
     name: String
     vrf: RelationshipManager[IpamVRF]
+
+
+class SecurityService(SecurityGenericService):
+    port: Integer
+    ip_protocol: RelationshipAttribute[SecurityIPProtocol]
+
+
+class SecurityServiceGroup(SecurityGenericServiceGroup):
+    pass
+
+
+class SecurityServiceRange(SecurityGenericService):
+    end: Integer
+    start: Integer
+    ip_protocol: RelationshipAttribute[SecurityIPProtocol]
+
+
+class LocationSite(LocationGeneric, LocationHosting):
+    pass
+
+
+class WanSite(CoreNode):
+    attachment_kind: Dropdown
+    description: StringOptional
+    name: String
+    site_asn: IntegerOptional
+    bgp_session: RelationshipAttribute[RoutingBGPNeighbor]
+    circuit: RelationshipAttribute[DcimCircuit]
+    lan_prefix: RelationshipAttribute[IpamPrefix]
+    location: RelationshipAttribute[LocationGeneric]
+    static_routes: RelationshipManager[RoutingVrfStaticRoute]
+    tenant: RelationshipAttribute[OrganizationTenant]
 
 
 class NetworkSpanningTreePriority(CoreNode):
@@ -437,13 +713,21 @@ class AvdStructuredConfigFile(CoreFileObject):
 class EvpnSvi(CoreNode):
     description: StringOptional
     enabled: Boolean
-    ip_address_virtual: IPHost
+    ip_address_virtual: IPHostOptional
+    ip_virtual_router_addresses: ListAttributeOptional
     name: String
     svi_id: Integer
     avd_tags: RelationshipManager[AvdTag]
+    nodes: RelationshipManager[EvpnSviNode]
     rack_tags: RelationshipManager[LocationRack]
     vlan: RelationshipAttribute[IpamVLAN]
     vrf: RelationshipAttribute[IpamVRF]
+
+
+class EvpnSviNode(CoreNode):
+    ip_address: IPHost
+    device: RelationshipAttribute[DcimDevice]
+    svi: RelationshipAttribute[EvpnSvi]
 
 
 class AvdTag(CoreNode):
@@ -460,6 +744,21 @@ class EvpnTenant(CoreNode):
     l2vlans: RelationshipManager[EvpnL2Vlan]
     tags: RelationshipManager[BuiltinTag]
     vrfs: RelationshipManager[IpamVRF]
+
+
+class OrganizationTenant(OrganizationGeneric):
+    addresses: RelationshipManager[IpamIPAddress]
+    devices: RelationshipManager[DcimGenericDevice]
+    locations: RelationshipManager[LocationHosting]
+    prefixes: RelationshipManager[IpamPrefix]
+
+
+class ServiceTenantCloud(ServiceGeneric, GeneratorTarget):
+    prefix: RelationshipAttribute[IpamPrefix]
+    tenant: RelationshipAttribute[OrganizationTenant]
+    vlan: RelationshipAttribute[IpamVLAN]
+    vrf: RelationshipAttribute[IpamVRF]
+    zone: RelationshipAttribute[SecurityZone]
 
 
 class IpamVLAN(CoreNode):
@@ -493,6 +792,39 @@ class VirtualizationVirtualMachine(ComputeGenericUnit):
     host: RelationshipAttribute[VirtualizationHostVirtualMachine]
 
 
+class RoutingVrfBgpPeer(CoreNode):
+    cleartext_password: StringOptional
+    description: StringOptional
+    ip_address: IPHost
+    maximum_routes: IntegerOptional
+    next_hop_self: BooleanOptional
+    remote_asn: Integer
+    route_map_in: StringOptional
+    route_map_out: StringOptional
+    send_community: StringOptional
+    devices: RelationshipManager[DcimDevice]
+    vrf: RelationshipAttribute[IpamVRF]
+
+
+class RoutingVrfL3Interface(CoreNode):
+    description: StringOptional
+    enabled: Boolean
+    interface_name: String
+    ip_address: IPHost
+    ipv4_acl_in: StringOptional
+    ipv4_acl_out: StringOptional
+    device: RelationshipAttribute[DcimDevice]
+    vrf: RelationshipAttribute[IpamVRF]
+
+
+class RoutingVrfStaticRoute(CoreNode):
+    description: StringOptional
+    next_hop: IPHost
+    prefix: IPNetwork
+    devices: RelationshipManager[DcimDevice]
+    vrf: RelationshipAttribute[IpamVRF]
+
+
 class CloudvisionWorkspace(CoreNode):
     change_control_id: StringOptional
     change_control_url: URLOptional
@@ -506,6 +838,11 @@ class CloudvisionWorkspace(CoreNode):
     workspace_id: String
     workspace_url: URLOptional
     fabric: RelationshipAttribute[NetworkFabric]
+
+
+class SecurityZone(CoreNode):
+    name: String
+    interfaces: RelationshipManager[SecurityFirewallInterface]
 
 
 

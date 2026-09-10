@@ -14,6 +14,19 @@ from tests.unit.test_avd_example_fabrics_schema_contract import (
     _dcim_device_role_choice_names,
 )
 
+# DcimDevice.role choices for devices pyAVD never renders. Kept out of
+# ROLE_TO_AVD_TYPE deliberately: see TestRoleMapping.test_schema_roles_all_mapped.
+# There is no `firewall` entry: the marketplace security schema supplies
+# SecurityFirewall as its own device kind, so a firewall never needs a role.
+NON_AVD_DEVICE_ROLES = {
+    "isp_edge",
+    "isp_core",
+    "internet_edge",
+    "customer_edge",
+    "branch_router",
+    "k8s_node",
+}
+
 
 class TestGetAvdType:
     """Tests for get_avd_type function."""
@@ -69,15 +82,33 @@ class TestRoleMapping:
             assert get_avd_type(role) == avd_type
 
     def test_schema_roles_all_mapped(self) -> None:
-        """Every DcimDevice.role choice in the schema must have a mapping.
+        """Every AVD-rendered DcimDevice.role choice must have a mapping.
 
-        Guards against adding a role choice without a matching
+        Guards against adding a fabric role choice without a matching
         ``ROLE_TO_AVD_TYPE`` entry (which would leave devices without a
         valid AVD node type). See SC-005.
+
+        ``NON_AVD_DEVICE_ROLES`` is excluded on purpose. Those roles describe
+        devices pyAVD never renders -- the vSRX firewall, the FRR ISP and CE
+        routers, the branch router, the k3s nodes -- and mapping one would let
+        a non-EOS device be rendered as EOS. ``get_avd_type`` raising
+        ValueError for them is the desired behaviour, and
+        ``tests/unit/test_lab_layers_foundation_schema_contract.py`` asserts
+        the complement: that none of them ever gains a mapping. Devices with
+        these roles also never join the ``avd_devices`` group, which is the
+        only path into the AVD hostvar generator.
         """
-        schema_roles = _dcim_device_role_choice_names()
+        schema_roles = _dcim_device_role_choice_names() - NON_AVD_DEVICE_ROLES
         missing = schema_roles - set(ROLE_TO_AVD_TYPE)
         assert not missing, f"Schema roles missing ROLE_TO_AVD_TYPE mapping: {sorted(missing)}"
+
+    def test_non_avd_roles_are_declared_in_the_schema(self) -> None:
+        """The exclusion set must track the schema, not drift from it.
+
+        If a role is removed from the dropdown, this fails rather than letting
+        a stale exclusion silently widen the gap in the test above.
+        """
+        assert _dcim_device_role_choice_names() >= NON_AVD_DEVICE_ROLES
 
 
 class TestUnderlayRoleMapping:

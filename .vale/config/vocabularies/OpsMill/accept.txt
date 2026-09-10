@@ -133,5 +133,12 @@ ContainerLab
 Hostvars
 PyAVD
 
+# Product names introduced by the technical/service layer schemas.
+Crossplane
+Cilium
+
 # The reference design's own name, used as the landing-page heading.
 Arista AVD Reference Design
+
+# Ordinary technical vocabulary Vale's dictionary lacks.
+[Bb]oolean

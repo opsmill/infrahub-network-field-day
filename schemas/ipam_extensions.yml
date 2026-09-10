@@ -50,3 +50,28 @@ extensions:
               label: Management
             - name: backfill
               label: Backfill (from structured config)
+            # Lab roles outside the fabric. Every network the Kubernetes,
+            # Security and Wan layers reference is an IpamPrefix rather than a
+            # restated CIDR, because the lab has three independent enforcement
+            # points -- the leaves' RM-CILIUM-IN route policy, the vSRX zone
+            # policies and the Cilium network policies -- matching on the same
+            # networks. Making them one object is what turns "these should
+            # agree" into a graph fact.
+            - name: pod
+              label: Pod CIDR
+            - name: service
+              label: Service CIDR
+            - name: vip_pool
+              label: LoadBalancer VIP Pool
+            - name: wan_customer
+              label: WAN Customer LAN
+            - name: branch_lan
+              label: Branch LAN
+            - name: tenant_cloud
+              label: Tenant Cloud Subnet
+            - name: tenant_host
+              label: Tenant Host Subnet
+            - name: off_fabric_point_to_point
+              label: Off-Fabric Point-to-Point
+            - name: internet
+              label: Internet

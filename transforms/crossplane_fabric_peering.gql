@@ -1,0 +1,70 @@
+query CrossplaneFabricPeeringQuery($name: String!) {
+  target: ServiceFabricPeering(name__value: $name) {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        communities {
+          value
+        }
+        advertisement_selector {
+          value
+        }
+        cluster {
+          node {
+            id
+            name {
+              value
+            }
+            local_asn {
+              value
+            }
+            bgp_auth_secret_name {
+              value
+            }
+            bgp_timers {
+              value
+            }
+            pod_cidr_communities {
+              value
+            }
+            node_selector {
+              value
+            }
+            advertisement_selector {
+              value
+            }
+          }
+        }
+        peerings {
+          edges {
+            node {
+              id
+              name {
+                value
+              }
+              peer_asn {
+                value
+              }
+              enabled {
+                value
+              }
+              peer_address {
+                node {
+                  address {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
