@@ -44,8 +44,114 @@ Regenerate the typed protocol classes after any schema change (see [the command 
 | `avd/avd.yml` | `Avd.Evpn` |
 | `cv/cv.yml` | `Cloudvision.Workspace` — CloudVision workspace tracking for proposed-change validation |
 | `objects/objects.yml` | `Avd.Artifact`, `Avd.HostvarFile`, `Avd.StructuredConfigFile` |
+| `service/service.yml` | `Service.Generic` plus the `Service.GenericDevice` / `Service.GenericInterface` binding generics, and the one extension block coupling DCIM to the service layer |
+| `service/kubernetes_services.yml` | `Service.FabricPeering`, `Service.FabricApp` |
+| `service/access_services.yml` | `Service.AppAccess` |
+| `service/wan_services.yml` | `Service.L3vpn`, `Service.InternetAccess`, `Service.TenantCloud` |
+| `cluster/cluster.yml` | **Marketplace** (`infrahub/cluster`): `Cluster.Generic`, `Cluster.GenericComputeUnitNodes` |
+| `cluster/kubernetes.yml` | `Cluster.Kubernetes`, `Cluster.FabricPeering` — the CNI, pod/service/node ranges, VIP pools, and the fabric BGP contract |
+| `security/security.yml` | **Marketplace** (`infrahub/security`): 22 kinds — zones, the polymorphic address book, service objects, zone-pair policy rules, `Security.Firewall` as a device kind, `Security.FirewallInterface` |
+| `security_extensions.yml` | Adds `trust_level` and a fabric `vrf` link to `Security.Zone`, and `managed_by_service` to `Security.PolicyRule` |
+| `circuit/circuit.yml` | **Marketplace** (`infrahub/circuit`): `Dcim.Circuit`, `Dcim.CircuitEndpoint` |
+| `tenancy/tenancy.yml` | **Marketplace** (`infrahub/tenancy`): `Organization.Tenant`, plus tenant back-references on device, prefix, address, and location |
+| `wan/wan.yml` | `Wan.Tenant`, `Wan.Site`, `Wan.InternetPeering` — the provider-edge construct only; the circuit itself comes from the marketplace |
 
 The device and interface `role` dropdowns that the fabric uses are defined in `dcim_extensions.yml`, not in the base `dcim.yml` — the extension redefines the base lists.
+
+## Check the marketplace before authoring
+
+Some files under `schemas/` are downloaded from the [Infrahub
+Marketplace](https://marketplace.infrahub.app) rather than written here, and are kept
+byte-identical to the published version so a re-download diffs cleanly. Local additions
+go in a separate `*_extensions.yml`, never into the adopted file.
+
+```bash
+uv run infrahubctl marketplace get infrahub/security --stdout > schemas/security/security.yml
+```
+
+**Look there first.** The marketplace publishes 56 schemas across 10 collections, so a
+new domain is likely already covered — and adopting one tends to yield a better model
+than a first draft. `infrahub/security`, for instance, makes its address book
+polymorphic through a `Security.GenericAddress` generic, which removes a constraint a
+hand-rolled version has to push into a check.
+
+`schemas/MARKETPLACE.md` records what is adopted, at which version, how to verify a file
+is unmodified, and which schemas were evaluated and rejected with reasons.
+
+## Technical and service layers
+
+The schema is split into two layers, and the split is enforced structurally rather than
+by convention.
+
+**Technical layer** — what exists, per device. Interfaces, addresses, firewall zones,
+address-book entries, cluster nodes, BGP sessions, attachment circuits. Every attribute
+maps to something a renderer emits into a device or cluster configuration. The fabric
+hierarchy below is part of this layer, as are `kubernetes/`, `security/` and `wan/`.
+
+**Service layer** — what was ordered, per consumer. An L3VPN, an internet-access
+product, an isolated tenant cloud, a fabric-peered cluster, an exposed application, an
+access grant. A service names its consumer, its lifecycle status and its intent, and
+carries no per-device detail. Everything under `service/` belongs to this layer.
+
+### The dependency runs one way
+
+Service schemas reference technical kinds. Technical schemas reference no service kind,
+so `kubernetes/`, `security/` and `wan/` load without `service/` present:
+
+```bash
+uv run infrahubctl schema check schemas/base schemas/cluster schemas/security \
+  schemas/wan schemas/circuit schemas/tenancy schemas/dcim_extensions.yml \
+  schemas/ipam_extensions.yml schemas/generator.yml --branch <branch>
+```
+
+The reverse fails, which is the point: checking `schemas/service` alone reports
+`Unable to find the schema 'SecurityZone' in the registry`.
+
+One place couples the technical layer back to the service layer — an `extensions:` block
+in `service/service.yml` adding `device_services` to `Dcim.GenericDevice` and
+`interface_services` to `Dcim.Interface`. It lives in the service file deliberately:
+putting it in `base/dcim.yml` would make the base layer depend on the service layer.
+`tests/unit/test_service_layer_schema_contract.py` asserts both halves, because no
+server-side schema check can catch a violation — a technical file that peers a service
+kind validates cleanly as long as both are loaded together.
+
+### What a service kind inherits
+
+| Generic | Supplies | Applied to |
+|---------|----------|------------|
+| `Service.Generic` | `name`, `description`, `status`, `owner` | every service kind |
+| `Generator.Target` | `checksum` for change detection | every service kind |
+| `CoreArtifactTarget` | artifact rendering | only the kinds delivered to the cluster as manifests |
+
+Every service kind inherits the first two, which is the mechanism by which a generator
+sits underneath the service layer: it targets a group of service objects and uses
+`checksum` to stay idempotent.
+
+`CoreArtifactTarget` is applied to `Service.FabricPeering`, `Service.FabricApp` and
+`Service.AppAccess` only. Those three render into Crossplane manifests, so marking them
+now means an artifact definition can be attached later without a schema migration.
+`Service.L3vpn`, `Service.InternetAccess` and `Service.TenantCloud` render through
+device-scoped artifacts instead, so they are not artifact targets themselves.
+
+### Addresses are always IPAM objects
+
+No node in either layer restates a prefix or an address as text. A network referenced by
+more than one object is one `Ipam.Prefix`, related to from each. This matters most where
+three enforcement points match on the same network: a fabric route policy, a firewall
+zone policy and a Kubernetes network policy can all name one prefix object, so agreement
+between them is a graph fact rather than three copies that might drift.
+
+### Non-EOS device roles
+
+`dcim_extensions.yml` carries seven device roles for equipment pyAVD never renders:
+`firewall`, `isp_edge`, `isp_core`, `internet_edge`, `customer_edge`, `branch_router`
+and `k8s_node`. These are deliberately absent from `ROLE_TO_AVD_TYPE` in
+`src/solution_arista_avd/avd.py`. `get_avd_type` raises `ValueError` for an unmapped
+role, and that loud failure is the wanted behaviour: mapping one would let a firewall be
+rendered as an EOS switch. Devices with these roles must also stay out of the
+`avd_devices` group, which is the only path into the AVD hostvar generator.
+
+The "adding a device role" checklist in `AGENTS.md` applies to fabric roles only.
 
 ## Network fabric hierarchy
 
@@ -161,7 +267,7 @@ An IP address. Inherits `BuiltinIPAddress`. Relationships: `interface` → `Inte
 
 An IP prefix. Inherits `BuiltinIPPrefix`.
 
-- **`role`** (required, via `ipam_extensions.yml`): `supernet`, `pod_super_spine_spine`, `pod_leaf_spine`, `loopback`, `loopback-vtep`, `technical`, `management`, `backfill`.
+- **`role`** (required, via `ipam_extensions.yml`): `supernet`, `pod_super_spine_spine`, `pod_leaf_spine`, `loopback`, `loopback-vtep`, `technical`, `management`, `backfill`, and the off-fabric lab roles `pod`, `service`, `vip_pool`, `wan_customer`, `branch_lan`, `tenant_cloud`.
 - **`status`** (via `ipam_extensions.yml`): `active`, `deprecated`, `reserved`.
 - **Relationships**: `gateway` → `IpamIPAddress`, `vlan` → `IpamVLAN`, `vrf` → `IpamVRF`, `location` → `Location.Hosting`.
 
@@ -303,7 +409,7 @@ Mixed into kinds that can be generator targets (`NetworkPod`, `LocationRack`, `C
 
 **CloudVision workspace status** (`CloudvisionWorkspace.status`): `pending`, `built`, `submitted`, `abandoned`, `submit_failed`.
 
-**Prefix role** (`IpamPrefix.role`): `fabric_supernet`, `fabric_point_to_point`, `dci`, `mlag`, `mlag_peering`, `supernet`, `pod_super_spine_spine`, `pod_leaf_spine`, `loopback`, `loopback-vtep`, `technical`, `management`, `backfill`.
+**Prefix role** (`IpamPrefix.role`): `fabric_supernet`, `fabric_point_to_point`, `dci`, `mlag`, `mlag_peering`, `supernet`, `pod_super_spine_spine`, `pod_leaf_spine`, `loopback`, `loopback-vtep`, `technical`, `management`, `backfill`, and the off-fabric lab roles `pod`, `service`, `vip_pool`, `wan_customer`, `branch_lan`, `tenant_cloud`.
 
 **Prefix status** (`IpamPrefix.status`): `active`, `deprecated`, `reserved`.
 

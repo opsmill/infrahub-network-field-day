@@ -1,0 +1,229 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# The provider edge and the branch office.
+#
+# WHAT THIS FILE DELIBERATELY DOES NOT DEFINE:
+#
+#   the tenant     -> infrahub/tenancy gives OrganizationTenant, and
+#                     tenancy_extensions.yml adds the numeric id, the
+#                     customer/internal classification and the site and circuit
+#                     relationships. A tenant crosses the provider edge, the
+#                     fabric and the cluster at once, so there is no WAN-specific
+#                     tenant kind and no per-domain copy of its identity.
+#   its VRFs       -> ServiceL3vpn.vrf for the provider edge and
+#                     ServiceTenantCloud.vrf for the fabric. An IpamVRF carries
+#                     its own name and route targets.
+#   the circuit    -> infrahub/circuit gives DcimCircuit plus
+#                     DcimCircuitEndpoint, which carries a `side` and inherits
+#                     DcimEndpoint. Two endpoints per circuit, uniqueness on
+#                     [circuit, side], and each endpoint joins an interface
+#                     through the repository's existing NetworkLink connector.
+#
+# WHAT IS GENUINELY ABSENT, and therefore here: how a site attaches. A site's
+# LAN, whether it speaks eBGP or is statically routed, and its own ASN have no
+# published equivalent. So does a plain transit peering with an upstream AS.
+#
+# TENANT, NOT SITE. A tenant may have several sites, and two sites of one tenant
+# reach each other because they share a VPN rather than because anything was
+# leaked -- which is why there is no site-to-site relationship anywhere here.
+#
+# THE BRANCH OFFICE IS NOT A CUSTOMER. Private circuit into the border leaf,
+# never touches the ISP. It is an OrganizationTenant classified `internal`,
+# with a site and a circuit like any other, which records the trust difference
+# without inventing a parallel structure for it.
+#
+# TECHNICAL LAYER. Nothing here may reference a Service* kind.
+# ============================================================================
+
+nodes:
+  - name: Site
+    namespace: Wan
+    description: "One location of a WAN tenant, and how it attaches"
+    label: WAN Site
+    icon: mdi:office-building-marker
+    include_in_menu: true
+    human_friendly_id:
+      - tenant__name__value
+      - name__value
+    display_label: "{{ tenant__name__value }} / {{ name__value }}"
+    order_by:
+      - name__value
+    uniqueness_constraints:
+      - ["tenant", "name__value"]
+    attributes:
+      - name: name
+        kind: Text
+        label: Name
+        optional: false
+        order_weight: 1000
+      - name: attachment_kind
+        kind: Dropdown
+        label: Attachment Kind
+        optional: false
+        default_value: bgp
+        order_weight: 1100
+        choices:
+          - name: bgp
+            label: eBGP
+            description: "The classic managed CE, running eBGP with the provider edge"
+          - name: static
+            label: Static
+            description: "Statically routed handoff with no routing protocol"
+      - name: site_asn
+        kind: Number
+        label: Site ASN
+        optional: true
+        # Required exactly when attachment_kind is bgp. That conditional is not
+        # expressible as a schema constraint, so it is optional here and
+        # belongs to a check.
+        description: "Set only for a bgp attachment"
+        order_weight: 1200
+        parameters:
+          min_value: 1
+          max_value: 4294967295
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1400
+    relationships:
+      - name: tenant
+        peer: OrganizationTenant
+        label: Tenant
+        kind: Parent
+        cardinality: one
+        optional: false
+        # The one tenant, from infrahub/tenancy. There is no WanTenant: a
+        # tenant crosses the provider edge, the fabric and the cluster at once,
+        # so a per-domain tenant kind would be a second identity for the same
+        # organization. See schemas/tenancy_extensions.yml.
+        identifier: tenant__sites
+        order_weight: 900
+      - name: lan_prefix
+        peer: IpamPrefix
+        label: LAN Prefix
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: wan_site__lan_prefix
+        order_weight: 910
+      - name: circuit
+        peer: DcimCircuit
+        label: Circuit
+        kind: Attribute
+        cardinality: one
+        optional: true
+        # The marketplace circuit, not a WAN-specific one. Its two
+        # DcimCircuitEndpoint objects carry the provider and customer sides,
+        # and each joins an interface through a NetworkLink -- so the branch's
+        # circuit terminates on the border leaf with no provider in the path
+        # and needs no special case here.
+        identifier: wan_site__circuit
+        order_weight: 920
+      - name: location
+        peer: LocationGeneric
+        label: Location
+        kind: Attribute
+        cardinality: one
+        optional: true
+        identifier: location__wan_sites
+        order_weight: 930
+      - name: bgp_session
+        peer: RoutingBGPNeighbor
+        label: BGP Session
+        kind: Attribute
+        cardinality: one
+        optional: true
+        description: "Present when attachment_kind is bgp"
+        identifier: wan_site__bgp_session
+        order_weight: 940
+      - name: static_routes
+        peer: RoutingVrfStaticRoute
+        label: Static Routes
+        kind: Generic
+        cardinality: many
+        optional: true
+        description: "Present when attachment_kind is static"
+        identifier: wan_site__static_routes
+        order_weight: 950
+
+  - name: InternetPeering
+    namespace: Wan
+    description: "A provider's transit peering with an internet autonomous system"
+    label: Internet Peering
+    icon: mdi:web
+    include_in_menu: true
+    human_friendly_id:
+      - name__value
+    display_label: name__value
+    order_by:
+      - name__value
+    uniqueness_constraints:
+      - ["name__value"]
+    # infrahub/peering_ixp was evaluated and is a different thing: it models
+    # Internet Exchange peering with route servers and an IX LAN. This is plain
+    # transit to a single upstream AS.
+    attributes:
+      - name: name
+        kind: Text
+        label: Name
+        optional: false
+        unique: true
+        order_weight: 1000
+      - name: peer_asn
+        kind: Number
+        label: Peer ASN
+        optional: false
+        order_weight: 1100
+        parameters:
+          min_value: 1
+          max_value: 4294967295
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1400
+    relationships:
+      - name: provider
+        peer: OrganizationProvider
+        label: Provider
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: provider__internet_peerings
+        order_weight: 900
+      - name: internet_provider
+        peer: OrganizationProvider
+        label: Internet Provider
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: internet_provider__peerings
+        order_weight: 910
+      - name: circuit
+        peer: DcimCircuit
+        label: Circuit
+        kind: Attribute
+        cardinality: one
+        optional: true
+        description: "The upstream circuit, if the peering runs over one"
+        identifier: internet_peering__circuit
+        order_weight: 920
+      - name: customer_aggregate
+        peer: IpamPrefix
+        label: Customer Aggregate
+        kind: Attribute
+        cardinality: one
+        optional: true
+        description: "The aggregate the provider announces on its tenants' behalf"
+        identifier: internet_peering__customer_aggregate
+        order_weight: 930
+      - name: internet_prefixes
+        peer: IpamPrefix
+        label: Internet Prefixes
+        kind: Generic
+        cardinality: many
+        optional: true
+        identifier: internet_peering__internet_prefixes
+        order_weight: 940

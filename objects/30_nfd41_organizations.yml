@@ -1,0 +1,71 @@
+---
+# ============================================================================
+# NFD41 — organizations and the premises outside the datacentre.
+#
+# ONE TENANT, CROSSING EVERY DOMAIN. acme is a single OrganizationTenant with a
+# VRF on the provider edge, an isolated subnet in the fabric, and applications
+# in the cluster. There is no per-domain tenant object.
+#
+# Which domains a tenant actually reaches is derived from the services that
+# name it, not recorded here — so this file carries identity and trust, and
+# nothing about scope.
+#
+# The branch office is deliberately classified `internal`: structurally a
+# tenant, with a site and a circuit like any other, but not a paying customer
+# and at a different trust level.
+#
+# Sourced from ../lab/wan/tenants.yml.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: OrganizationProvider
+  data:
+    - name: NFD41-ISP
+      description: "The lab's service provider, AS 65500"
+    - name: NFD41-Internet
+      description: "The internet, such as it is: AS 64500 with a web server behind it"
+
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: OrganizationTenant
+  data:
+    - name: acme
+      description: "Two sites attached two different ways, a private cloud subnet, and internet access"
+      tenant_id: 10
+      classification: customer
+    - name: globex
+      description: "The control: one site, its own cloud subnet, and no internet product"
+      tenant_id: 20
+      classification: customer
+    - name: branch
+      description: "Our own office on a private circuit; never touches the ISP"
+      tenant_id: 30
+      classification: internal
+
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: LocationSite
+  data:
+    - name: acme-hq
+      shortname: acme-hq
+      description: "acme headquarters; eBGP attachment"
+    - name: acme-dr
+      shortname: acme-dr
+      description: "acme disaster-recovery site; statically routed attachment"
+    - name: globex-hq
+      shortname: globex-hq
+      description: "globex headquarters; eBGP attachment"
+    - name: branch-office
+      shortname: branch
+      description: "Branch office on a private circuit into the border leaf"
+    - name: internet-edge
+      shortname: internet
+      description: "Where the provider hands off to AS 64500"
+    - name: provider-edge
+      shortname: provider
+      description: "The provider's own premises; where every attachment circuit terminates"

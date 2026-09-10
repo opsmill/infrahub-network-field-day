@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# ONE tenant, crossing every domain.
+#
+# A tenant is not a per-domain thing. `acme` is one organization that has a VRF
+# on the provider edge, an isolated subnet in the fabric, and applications in
+# the cluster -- all at once. An earlier draft of this feature had a separate
+# `WanTenant` kind holding a VRF name and a route-table id, which meant two
+# tenant objects for one tenant and two places for its identity to drift. That
+# kind is gone; `OrganizationTenant` from infrahub/tenancy is now the only
+# tenant, and everything hangs off it.
+#
+# SCOPE IS DERIVED, NOT STORED. Which domains a tenant reaches is answered by
+# which services reference it, not by a field somebody has to keep in step:
+#
+#   provider edge   a ServiceL3vpn names this tenant
+#   fabric          a ServiceTenantCloud names this tenant
+#   cluster         a ServiceFabricApp is owned by this tenant
+#
+# So "does acme have cloud resources?" is a query, and it cannot disagree with
+# reality the way a `scope` enum would. A stored scope would also have to be a
+# relationship into the service layer, which the technical layer is not allowed
+# to hold.
+#
+# WHERE THE VRFs LIVE. The provider-edge VRF is `ServiceL3vpn.vrf` and the
+# fabric VRF is `ServiceTenantCloud.vrf` -- both already existed, which is what
+# made `WanTenant.vrf_name` and `WanTenant.dc_vrf` redundant. An IpamVRF
+# carries its own name and route targets, so there is nothing left to restate.
+#
+# NOT THE SAME AS EvpnTenant. That is a fabric construct grouping VRFs for EVPN
+# route-target allocation -- the lab's TENANT_CLOUD holds two customers' VRFs at
+# once -- so it is deliberately a different kind with a confusingly similar
+# English name.
+#
+# The `circuits` pair below follows the pattern the adopted tenancy file itself
+# documents for wiring a tenant onto an optional extension's node.
+# ============================================================================
+
+extensions:
+  nodes:
+    - kind: OrganizationTenant
+      attributes:
+        - name: tenant_id
+          kind: Number
+          label: Tenant ID
+          optional: true
+          # Drives addressing and route-table numbering where a renderer needs a
+          # stable small integer. Optional because an internal tenant may not
+          # need one.
+          description: "Stable numeric id used to derive addressing and route-table numbers"
+          order_weight: 1100
+        - name: classification
+          kind: Dropdown
+          label: Classification
+          optional: false
+          default_value: customer
+          # Trust, not scope. The branch office is a tenant in every structural
+          # sense -- it has a site, a circuit, a LAN -- but it is deliberately
+          # not a paying customer, and its firewall zone policy may be more
+          # permissive than the WAN's without loosening anything for the
+          # customers. That distinction is worth recording as data.
+          description: "Whether this tenant is a paying customer or one of our own sites"
+          order_weight: 1150
+          choices:
+            - name: customer
+              label: Customer
+              description: "A paying tenant attached through a provider"
+              color: "#e2efee"
+            - name: internal
+              label: Internal
+              description: "Our own site, at a different trust level"
+              color: "#e6e9f4"
+      relationships:
+        - name: sites
+          peer: WanSite
+          label: Sites
+          kind: Component
+          cardinality: many
+          optional: true
+          identifier: tenant__sites
+          order_weight: 1500
+        - name: circuits
+          peer: DcimCircuit
+          label: Circuits
+          kind: Generic
+          cardinality: many
+          optional: true
+          identifier: tenant__circuit
+          order_weight: 1550
+
+    - kind: DcimCircuit
+      relationships:
+        - name: tenant
+          peer: OrganizationTenant
+          label: Tenant
+          kind: Attribute
+          cardinality: one
+          optional: true
+          identifier: tenant__circuit
+          order_weight: 1800

@@ -1,0 +1,304 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# Kubernetes-specific additions on top of the marketplace cluster schema.
+#
+# WHAT THIS FILE DELIBERATELY DOES NOT DEFINE. The generic cluster, its name,
+# description, locations, tags, and the fact that a cluster is built out of
+# compute units all come from `infrahub/cluster` (schemas/cluster/cluster.yml)
+# and are inherited, not restated:
+#
+#   ClusterGeneric                 name, description, locations, tags
+#   ClusterGenericComputeUnitNodes nodes -> ComputeGenericUnit
+#
+# So a cluster's members are ordinary ComputePhysicalServer objects enrolled
+# through `worker_in_cluster`. There is no Kubernetes-specific node kind: the
+# marketplace already models "machine that belongs to a cluster", and a second
+# kind for the same idea would be a parallel structure.
+#
+# WHAT IS GENUINELY ABSENT, and therefore here: the CNI, the pod/service/node
+# ranges, the LoadBalancer VIP pools, and the BGP contract the cluster holds
+# with the fabric. Nothing in the marketplace covers a CNI that speaks BGP.
+#
+# The marketplace's ClusterHosting was evaluated and is not the right base: it
+# inherits VirtualizationHostVirtualMachine because it hosts virtual machines.
+# A k3s cluster hosts pods, so it takes ClusterGeneric directly.
+#
+# TECHNICAL LAYER. Nothing here may reference a Service* kind.
+# ============================================================================
+
+nodes:
+  - name: Kubernetes
+    namespace: Cluster
+    description: "A Kubernetes cluster that peers with the fabric"
+    label: Kubernetes Cluster
+    icon: mdi:kubernetes
+    include_in_menu: true
+    menu_placement: ClusterGeneric
+    inherit_from:
+      - ClusterGeneric
+      - ClusterGenericComputeUnitNodes
+      - GeneratorTarget
+    # name uniqueness, human_friendly_id, display_label and order_by are all
+    # inherited from ClusterGeneric.
+    attributes:
+      - name: distribution
+        kind: Dropdown
+        label: Distribution
+        optional: false
+        default_value: k3s
+        order_weight: 1200
+        choices:
+          - name: k3s
+            label: k3s
+            color: "#ffc61c"
+          - name: k8s
+            label: Upstream Kubernetes
+            color: "#326ce5"
+          - name: rke2
+            label: RKE2
+            color: "#0075a8"
+          - name: openshift
+            label: OpenShift
+            color: "#ee0000"
+          - name: eks
+            label: Amazon EKS
+            color: "#ff9900"
+          - name: gke
+            label: Google GKE
+            color: "#4285f4"
+          - name: aks
+            label: Azure AKS
+            color: "#0078d4"
+      - name: kubernetes_version
+        kind: Text
+        label: Kubernetes Version
+        optional: true
+        order_weight: 1300
+      - name: cni_kind
+        kind: Dropdown
+        label: CNI
+        optional: false
+        default_value: cilium
+        order_weight: 1400
+        choices:
+          - name: cilium
+            label: Cilium
+            color: "#f8c517"
+          - name: calico
+            label: Calico
+            color: "#ff6b35"
+          - name: flannel
+            label: Flannel
+            color: "#8a6a3d"
+          - name: other
+            label: Other
+            color: "#95a5a6"
+      - name: cni_version
+        kind: Text
+        label: CNI Version
+        optional: true
+        order_weight: 1500
+      - name: local_asn
+        kind: Number
+        label: Local ASN
+        optional: true
+        description: "The cluster's BGP AS; must match the leaves' remote-as"
+        order_weight: 1600
+        parameters:
+          min_value: 1
+          max_value: 4294967295
+      - name: bgp_auth_secret_name
+        kind: Text
+        label: BGP Auth Secret Name
+        optional: true
+        # The NAME of the in-cluster secret holding the session password, never
+        # the password. Infrahub is a source of truth for topology, not a
+        # secret store.
+        description: "Name of the cluster secret holding the BGP session password"
+        order_weight: 1700
+      - name: pod_cidr_communities
+        kind: List
+        label: Pod CIDR Communities
+        optional: true
+        description: "Communities tagged onto the per-node PodCIDR advertisement"
+        order_weight: 1800
+      - name: bgp_timers
+        kind: JSON
+        label: BGP Timers
+        optional: true
+        description: "Connect-retry, hold and keepalive seconds"
+        order_weight: 1900
+      - name: node_selector
+        kind: List
+        label: BGP Node Selector
+        optional: true
+        # BGP is opt-in per node, and the CNI expresses that as a label
+        # selector rather than a flag on each machine -- which is why cluster
+        # members stay plain compute units with nothing Kubernetes-specific
+        # bolted onto them.
+        # A List of "key=value" strings, not a JSON map. Infrahub 1.10.6
+        # returns a 500 when a JSON attribute's object key contains a dot or a
+        # slash, and every Kubernetes label selector looks like
+        # `nfd41.lab/bgp`. opsmill/infrahub-dogfooding hits the same wall and
+        # solves it the same way, parsing `key=value` pairs in its transform.
+        description: "Selects which cluster members run a BGP speaker, as key=value pairs"
+        order_weight: 2000
+      - name: advertisement_selector
+        kind: List
+        label: Advertisement Selector
+        optional: true
+        # A List of "key=value" strings, not a JSON map. Infrahub 1.10.6
+        # returns a 500 when a JSON attribute's object key contains a dot or a
+        # slash, and every Kubernetes label selector looks like
+        # `nfd41.lab/bgp`. opsmill/infrahub-dogfooding hits the same wall and
+        # solves it the same way, parsing `key=value` pairs in its transform.
+        description: "Label tying advertisements to this cluster's sessions, as key=value pairs"
+        order_weight: 2010
+    relationships:
+      # Networks are IPAM objects. The same ranges are matched on by the
+      # leaves' route policy, the firewall address book and the CNI's own
+      # policies, so they have to be one object each.
+      - name: pod_prefix
+        peer: IpamPrefix
+        label: Pod CIDR
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: cluster__pod_prefix
+        order_weight: 900
+      - name: service_prefix
+        peer: IpamPrefix
+        label: Service CIDR
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: cluster__service_prefix
+        order_weight: 910
+      - name: node_prefix
+        peer: IpamPrefix
+        label: Node CIDR
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: cluster__node_prefix
+        order_weight: 920
+      - name: vip_pools
+        peer: IpamPrefix
+        label: LoadBalancer VIP Pools
+        kind: Generic
+        cardinality: many
+        optional: true
+        identifier: cluster__vip_pools
+        order_weight: 930
+      - name: fabric_peerings
+        peer: ClusterFabricPeering
+        label: Fabric Peerings
+        kind: Component
+        cardinality: many
+        optional: true
+        identifier: cluster__fabric_peerings
+        order_weight: 940
+      - name: vrf
+        peer: IpamVRF
+        label: Fabric VRF
+        kind: Attribute
+        cardinality: one
+        optional: true
+        description: "The fabric VRF the cluster's traffic lands in"
+        identifier: cluster__vrf
+        order_weight: 950
+
+  - name: FabricPeering
+    namespace: Cluster
+    description: "One BGP session between a cluster's CNI and a fabric device"
+    label: Cluster Fabric Peering
+    icon: mdi:vector-polyline
+    include_in_menu: false
+    human_friendly_id:
+      - cluster__name__value
+      - name__value
+    display_label: "{{ cluster__name__value }} - {{ name__value }}"
+    order_by:
+      - name__value
+    uniqueness_constraints:
+      - ["cluster", "peer_device"]
+    # The cluster side of the session only. The fabric side is the repository's
+    # existing RoutingBGPNeighbor on the leaf, which is device-scoped and is
+    # what AVD renders; `peer_neighbor` links the two halves so a query can
+    # check they agree. The marketplace's RoutingBGPSession was evaluated and
+    # rejected: it brings a second RoutingBGPPeerGroup that collides with this
+    # repository's, and a RoutingAutonomousSystem that duplicates RoutingAsn.
+    attributes:
+      - name: name
+        kind: Text
+        label: Name
+        optional: false
+        order_weight: 1000
+      - name: peer_asn
+        kind: Number
+        label: Peer ASN
+        optional: false
+        description: "The peer's BGP AS; for an MLAG pair this is shared"
+        order_weight: 1100
+        parameters:
+          min_value: 1
+          max_value: 4294967295
+      - name: enabled
+        kind: Boolean
+        optional: false
+        default_value: true
+        order_weight: 1200
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1400
+    relationships:
+      - name: cluster
+        peer: ClusterKubernetes
+        label: Cluster
+        kind: Parent
+        cardinality: one
+        optional: false
+        identifier: cluster__fabric_peerings
+        order_weight: 900
+      - name: peer_device
+        peer: DcimGenericDevice
+        label: Peer Device
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: device__cluster_peerings
+        order_weight: 910
+      - name: peer_address
+        peer: IpamIPAddress
+        label: Peer Address
+        kind: Attribute
+        cardinality: one
+        optional: false
+        # Must be the device's own SVI address, not an MLAG pair's shared VARP
+        # gateway. An anycast address cannot identify a single BGP peer, and a
+        # session pointed at one is ambiguous across the pair.
+        description: "The peer's unique SVI address, never a shared VARP gateway"
+        identifier: cluster_peering__peer_address
+        order_weight: 920
+      - name: svi
+        peer: EvpnSvi
+        label: Fabric SVI
+        kind: Attribute
+        cardinality: one
+        optional: true
+        description: "The fabric-side SVI, so both halves of the session are one graph path"
+        identifier: cluster_peering__svi
+        order_weight: 930
+      - name: peer_neighbor
+        peer: RoutingBGPNeighbor
+        label: Fabric-side Neighbor
+        kind: Attribute
+        cardinality: one
+        optional: true
+        description: "The device-scoped neighbour AVD renders for the other half of this session"
+        identifier: cluster_peering__peer_neighbor
+        order_weight: 940

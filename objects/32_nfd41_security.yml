@@ -1,0 +1,558 @@
+---
+# ============================================================================
+# NFD41 — the perimeter firewall, as data.
+#
+# Every tenant VRF in this fabric has exactly one route out: a default pointing
+# at its own zone here. That makes the firewall unavoidable rather than
+# decorative, and it is why the zone-to-VRF pairing is modelled explicitly
+# instead of living in a route-map comment.
+#
+# Infrahub owns the whole device, not only the grants issued against it. All
+# six zones, thirteen address-book entries, four groups and all eleven zone
+# pairs with their nineteen rules are here.
+#
+# EVERY RULE LOADS WITH managed_by_service: false. Everything on the box today
+# is hand-written, including the anti-spoofing deny repeated at the head of the
+# first six zone pairs. A reconciling generator must delete rules with no
+# service behind them, so that flag is what keeps the baseline safe.
+#
+# Sourced field-for-field from ../lab/configs/fw/vsrx/junos.conf.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityZone
+  data:
+    - name: k8s-prod
+      trust_level: 70
+      vrf: K8S_PROD
+    - name: app-prod
+      trust_level: 70
+      vrf: APP_PROD
+    - name: acme-cloud
+      trust_level: 60
+      vrf: TENANT_ACME
+    - name: globex-cloud
+      trust_level: 60
+      vrf: TENANT_GLOBEX
+    - name: branch
+      trust_level: 40
+      vrf: BRANCH
+    - name: wan
+      trust_level: 20
+      vrf: WAN
+
+---
+# One physical interface per zone. A policy written against the wrong interface
+# commits cleanly and never matches a packet, which is why the binding is data.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityFirewallInterface
+  data:
+    - name: ge-0/0/0
+      description: "Zone k8s-prod, toward the border leaf"
+      device: fw1
+      security_zone: k8s-prod
+      ip_addresses:
+        kind: IpamIPAddress
+        data:
+          - address: 10.250.110.2/30
+    - name: ge-0/0/1
+      description: "Zone app-prod, toward the border leaf"
+      device: fw1
+      security_zone: app-prod
+      ip_addresses:
+        kind: IpamIPAddress
+        data:
+          - address: 10.250.210.2/30
+    - name: ge-0/0/2
+      description: "Zone wan, toward the border leaf"
+      device: fw1
+      security_zone: wan
+      ip_addresses:
+        kind: IpamIPAddress
+        data:
+          - address: 10.250.150.2/30
+    - name: ge-0/0/3
+      description: "Zone branch, toward the border leaf"
+      device: fw1
+      security_zone: branch
+      ip_addresses:
+        kind: IpamIPAddress
+        data:
+          - address: 10.250.170.2/30
+    - name: ge-0/0/4
+      description: "Zone acme-cloud, toward the border leaf"
+      device: fw1
+      security_zone: acme-cloud
+      ip_addresses:
+        kind: IpamIPAddress
+        data:
+          - address: 10.250.10.2/30
+    - name: ge-0/0/5
+      description: "Zone globex-cloud, toward the border leaf"
+      device: fw1
+      security_zone: globex-cloud
+      ip_addresses:
+        kind: IpamIPAddress
+        data:
+          - address: 10.250.20.2/30
+
+---
+# The address book, IPAM-backed. Each entry references the same IpamPrefix the
+# leaves' route policy and the CNI's network policies match on, so the three
+# enforcement points cannot drift apart.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityIPAMIPPrefix
+  data:
+    - name: k8s-nodes
+      description: "Kubernetes node subnet"
+      ip_prefix: ["10.110.0.0/24", "default"]
+      address_groups:
+        kind: SecurityAddressGroup
+        data:
+          - name: k8s-all
+          - name: k8s-reachable
+    - name: k8s-pods
+      description: "Cilium pod CIDR"
+      ip_prefix: ["10.111.0.0/16", "default"]
+      address_groups:
+        kind: SecurityAddressGroup
+        data:
+          - name: k8s-all
+    - name: k8s-services
+      description: "Kubernetes service CIDR"
+      ip_prefix: ["10.112.0.0/16", "default"]
+      address_groups:
+        kind: SecurityAddressGroup
+        data:
+          - name: k8s-reachable
+    - name: app-hosts
+      description: "Bare-metal application tier"
+      ip_prefix: ["10.210.0.0/24", "default"]
+    - name: fabric-infra
+      description: "Fabric infrastructure; never a legitimate session source"
+      ip_prefix: ["10.41.0.0/16", "default"]
+    - name: wan-customers
+      description: "All WAN customer space"
+      ip_prefix: ["10.60.0.0/16", "default"]
+    - name: branch-users
+      description: "Branch office LAN"
+      ip_prefix: ["10.70.0.0/24", "default"]
+    - name: acme-hq
+      ip_prefix: ["10.60.10.0/24", "default"]
+      address_groups:
+        kind: SecurityAddressGroup
+        data:
+          - name: acme-sites
+    - name: acme-dr
+      ip_prefix: ["10.60.11.0/24", "default"]
+      address_groups:
+        kind: SecurityAddressGroup
+        data:
+          - name: acme-sites
+    - name: acme-cloud
+      ip_prefix: ["10.220.10.0/24", "default"]
+    - name: globex-hq
+      ip_prefix: ["10.60.20.0/24", "default"]
+      address_groups:
+        kind: SecurityAddressGroup
+        data:
+          - name: globex-sites
+    - name: globex-cloud
+      ip_prefix: ["10.220.20.0/24", "default"]
+
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamIPAddress
+  data:
+    - address: 10.112.240.33/32
+      description: "The self-service access portal VIP"
+
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityIPAMIPAddress
+  data:
+    - name: access-portal
+      description: "The only DC service the branch may reach before requesting access"
+      ip_address: ["10.112.240.33/32", "default"]
+
+---
+# The one literal address in the book. `any` is not an allocated network, so it
+# is deliberately NOT an IPAM object -- but it is still an explicit object
+# rather than an empty match, so no rule's scope is ambiguous.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityPrefix
+  data:
+    - name: any
+      description: "Matches everything; used where Junos says destination-address any"
+      prefix: 0.0.0.0/0
+
+---
+# A tenant's sites are a group rather than one prefix, because a tenant is not
+# a site: acme has two, attached two different ways, and both must reach acme's
+# cloud. Adding a third site is one member here, not a new policy.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityAddressGroup
+  data:
+    - name: acme-sites
+      description: "Every acme site; both must reach acme's cloud"
+    - name: globex-sites
+      description: "Every globex site"
+    - name: k8s-all
+      description: "Kubernetes nodes and pods"
+    - name: k8s-reachable
+      description: "What the branch may ping: nodes and services, not pods"
+
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityIPProtocol
+  data:
+    - name: tcp
+      protocol: 6
+    - name: icmp
+      protocol: 1
+
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityService
+  data:
+    - name: junos-http
+      description: "HTTP"
+      port: 80
+      ip_protocol: tcp
+    - name: junos-https
+      description: "HTTPS"
+      port: 443
+      ip_protocol: tcp
+    - name: junos-ping
+      description: "ICMP echo"
+      port: 0
+      ip_protocol: icmp
+
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityPolicy
+  data:
+    - name: nfd41-perimeter
+      description: "Every zone pair on fw1; rules are ordered per pair by index"
+      device_target: fw1
+
+
+---
+# The eleven zone pairs and their nineteen rules, in file order from junos.conf.
+#
+# ORDER IS LOAD-BEARING. Junos evaluates a zone pair's policies in order and
+# only then falls through to the default, so the anti-spoofing deny sits at
+# index 10 of every pair it guards and a later grant cannot get above it.
+# Uniqueness is [index, source_zone, destination_zone, policy], which is
+# exactly that first-match semantics.
+#
+# `any` is an explicit address object rather than an empty match, so no rule's
+# scope is ambiguous. Address and group references name their concrete kind
+# inline because SecurityGenericAddress has no human-friendly id of its own.
+#
+# The last five pairs are single explicit denies -- which is why `action` needs
+# a real deny value rather than treating absence-of-permit as the only denial.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityPolicyRule
+  data:
+    # ---- app-prod -> k8s-prod ------------------------------------
+    - name: deny-spoofed-infra
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: app-prod
+      destination_zone: k8s-prod
+      source_address:
+        - fabric-infra
+      destination_address:
+        - any
+    - name: app-to-k8s-services
+      index: 20
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: app-prod
+      destination_zone: k8s-prod
+      source_address:
+        - app-hosts
+      destination_address:
+        - k8s-services
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: junos-http
+            port: 80
+            ip_protocol: tcp
+          - name: junos-https
+            port: 443
+            ip_protocol: tcp
+    - name: app-to-k8s-icmp
+      index: 30
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: app-prod
+      destination_zone: k8s-prod
+      source_address:
+        - app-hosts
+      destination_address:
+        - k8s-nodes
+        - k8s-pods
+        - k8s-services
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: junos-ping
+            port: 0
+            ip_protocol: icmp
+    # ---- k8s-prod -> app-prod ------------------------------------
+    - name: deny-spoofed-infra
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: k8s-prod
+      destination_zone: app-prod
+      source_address:
+        - fabric-infra
+      destination_address:
+        - any
+    - name: k8s-to-app
+      index: 20
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: k8s-prod
+      destination_zone: app-prod
+      source_groups:
+        - k8s-all
+      destination_address:
+        - app-hosts
+    # ---- wan -> k8s-prod -----------------------------------------
+    - name: deny-spoofed-infra
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: wan
+      destination_zone: k8s-prod
+      source_address:
+        - fabric-infra
+      destination_address:
+        - any
+    - name: wan-to-k8s-services
+      index: 20
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: wan
+      destination_zone: k8s-prod
+      source_address:
+        - wan-customers
+      destination_address:
+        - k8s-services
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: junos-http
+            port: 80
+            ip_protocol: tcp
+          - name: junos-https
+            port: 443
+            ip_protocol: tcp
+    # ---- branch -> k8s-prod --------------------------------------
+    - name: deny-spoofed-infra
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: branch
+      destination_zone: k8s-prod
+      source_address:
+        - fabric-infra
+      destination_address:
+        - any
+    - name: branch-to-access-portal
+      index: 20
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: branch
+      destination_zone: k8s-prod
+      source_address:
+        - branch-users
+      destination_address:
+        - access-portal
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: junos-http
+            port: 80
+            ip_protocol: tcp
+          - name: junos-https
+            port: 443
+            ip_protocol: tcp
+    - name: branch-to-k8s-icmp
+      index: 30
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: branch
+      destination_zone: k8s-prod
+      source_address:
+        - branch-users
+      destination_groups:
+        - k8s-reachable
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: junos-ping
+            port: 0
+            ip_protocol: icmp
+    # ---- wan -> acme-cloud ---------------------------------------
+    - name: deny-spoofed-infra
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: wan
+      destination_zone: acme-cloud
+      source_address:
+        - fabric-infra
+      destination_address:
+        - any
+    - name: acme-sites-to-acme-cloud
+      index: 20
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: wan
+      destination_zone: acme-cloud
+      source_groups:
+        - acme-sites
+      destination_address:
+        - acme-cloud
+    # ---- wan -> globex-cloud -------------------------------------
+    - name: deny-spoofed-infra
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: wan
+      destination_zone: globex-cloud
+      source_address:
+        - fabric-infra
+      destination_address:
+        - any
+    - name: globex-sites-to-globex-cloud
+      index: 20
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: wan
+      destination_zone: globex-cloud
+      source_groups:
+        - globex-sites
+      destination_address:
+        - globex-cloud
+    # ---- acme-cloud -> wan ---------------------------------------
+    - name: acme-cloud-to-acme-sites
+      index: 10
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: acme-cloud
+      destination_zone: wan
+      source_address:
+        - acme-cloud
+      destination_groups:
+        - acme-sites
+    # ---- globex-cloud -> wan -------------------------------------
+    - name: globex-cloud-to-globex-sites
+      index: 10
+      action: permit
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: globex-cloud
+      destination_zone: wan
+      source_address:
+        - globex-cloud
+      destination_groups:
+        - globex-sites
+    # ---- wan -> app-prod -----------------------------------------
+    - name: deny-wan-to-app
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: wan
+      destination_zone: app-prod
+      source_address:
+        - any
+      destination_address:
+        - any
+    # ---- wan -> branch -------------------------------------------
+    - name: deny-wan-to-branch
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: wan
+      destination_zone: branch
+      source_address:
+        - any
+      destination_address:
+        - any
+    # ---- branch -> wan -------------------------------------------
+    - name: deny-branch-to-wan
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: branch
+      destination_zone: wan
+      source_address:
+        - any
+      destination_address:
+        - any

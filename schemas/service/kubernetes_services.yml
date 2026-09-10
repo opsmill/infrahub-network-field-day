@@ -1,0 +1,254 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# The two service kinds whose intent is delivered to the cluster as Crossplane
+# manifests.
+#
+# Both inherit CoreArtifactTarget as well as GeneratorTarget, so a later cycle
+# can register a transform and an artifact definition against them without
+# touching this schema again. The delivery path follows
+# opsmill/infrahub-dogfooding: a Python transform renders the object into a
+# manifest stored as an Infrahub artifact, and an in-cluster operator pulls and
+# reconciles it.
+#
+# SERVICE LAYER. These reference technical kinds (ClusterKubernetes and
+# ClusterFabricPeering, both built on the marketplace's infrahub/cluster, plus
+# IpamPrefix and IpamVRF); nothing in the technical layer references them.
+# ============================================================================
+
+nodes:
+  - name: FabricPeering
+    namespace: Service
+    description: "A cluster's BGP contract with the EVPN fabric"
+    label: Fabric Peering Service
+    icon: mdi:handshake
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+      - CoreArtifactTarget
+    # human_friendly_id, display_label, order_by and the name uniqueness
+    # constraint are inherited from ServiceGeneric.
+    attributes:
+      # Selectors are Lists of "key=value" strings rather than JSON maps:
+      # Infrahub 1.10.6 returns a 500 when a JSON attribute's object key
+      # contains a dot or a slash, which every Kubernetes label selector does.
+      - name: communities
+        kind: List
+        label: Communities
+        optional: true
+        description: "Communities tagged onto advertisements carried by this peering"
+        order_weight: 1300
+      - name: advertisement_selector
+        kind: List
+        label: Advertisement Selector
+        optional: true
+        # Must agree with the cluster's own selector. When they disagree the
+        # advertisement is created and simply never attaches to a BGP session,
+        # which looks like a routing problem rather than a label mismatch.
+        description: "Label tying per-application advertisements to these sessions"
+        order_weight: 1400
+    relationships:
+      - name: cluster
+        peer: ClusterKubernetes
+        label: Cluster
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__cluster_peering
+        order_weight: 910
+      - name: peerings
+        peer: ClusterFabricPeering
+        label: Realized Peerings
+        kind: Generic
+        cardinality: many
+        optional: true
+        on_delete: no-action
+        description: "The BGP sessions that realize this service"
+        identifier: service__fabric_peerings
+        order_weight: 920
+
+  - name: FabricApp
+    namespace: Service
+    description: "An application that is a participant in the fabric"
+    label: Fabric Application
+    icon: mdi:apps
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+      - CoreArtifactTarget
+    # One object rather than five, because the parts are not separable. A
+    # service with no pool never gets a VIP; a VIP with no advertisement is
+    # unreachable off-cluster; an advertisement with no network policy exposes
+    # the app to the whole tenant. Each of those is a working cluster and a
+    # broken application, and each failure looks like a different problem.
+    attributes:
+      - name: namespace_name
+        kind: Text
+        label: Namespace
+        optional: false
+        # Not `namespace`: that is a schema-level key and an attribute of that
+        # name would shadow it.
+        description: "Kubernetes namespace to create and deploy into"
+        order_weight: 1300
+      - name: chart_repository
+        kind: Text
+        label: Chart Repository
+        optional: true
+        order_weight: 1400
+      - name: chart_name
+        kind: Text
+        label: Chart Name
+        optional: true
+        order_weight: 1410
+      - name: chart_version
+        kind: Text
+        label: Chart Version
+        optional: true
+        order_weight: 1420
+      - name: chart_values
+        kind: JSON
+        label: Chart Values
+        optional: true
+        order_weight: 1430
+      - name: manifests
+        kind: JSON
+        label: Raw Manifests
+        optional: true
+        # The escape hatch for anything a chart cannot express, and for
+        # workloads that simply have no chart. "No chart" does not mean "not
+        # managed". Shape is user-defined, hence JSON.
+        description: "Raw API objects to create in the namespace"
+        order_weight: 1440
+      - name: exposed
+        kind: Boolean
+        label: Exposed to Fabric
+        optional: false
+        default_value: false
+        # False means cluster-internal: no pool, no advertisement, no route off
+        # the cluster. The lab's ClusterIP-only backend is this case, and its
+        # unreachability from the app tenant is an asserted negative.
+        description: "Whether this application gets a VIP advertised into the fabric"
+        order_weight: 1500
+      - name: service_selector
+        kind: List
+        label: Service Selector
+        optional: true
+        # A Service is never exposed to the fabric merely by being of type
+        # LoadBalancer; it has to be selected.
+        description: "Which Services in the namespace get a VIP and get advertised"
+        order_weight: 1510
+      - name: communities
+        kind: List
+        label: Communities
+        optional: true
+        order_weight: 1520
+      - name: policy_default_deny
+        kind: Boolean
+        label: Policy - Default Deny
+        optional: false
+        default_value: true
+        order_weight: 1600
+      - name: policy_allow_dns
+        kind: Boolean
+        label: Policy - Allow DNS
+        optional: false
+        default_value: true
+        order_weight: 1610
+      - name: policy_allow_intra_namespace
+        kind: Boolean
+        label: Policy - Allow Intra-Namespace
+        optional: false
+        default_value: true
+        # Default-deny denies egress as well as ingress, so without this a
+        # chart's own components cannot reach one another and the application
+        # fails in a way that reads as a broken chart.
+        description: "Let pods in this namespace talk to each other"
+        order_weight: 1620
+      - name: policy_allow_egress_api_server
+        kind: Boolean
+        label: Policy - Allow Egress to API Server
+        optional: false
+        default_value: false
+        description: "Needed by any chart carrying an operator, controller or webhook"
+        order_weight: 1630
+      - name: policy_allow_egress_internet
+        kind: Boolean
+        label: Policy - Allow Egress to Internet
+        optional: false
+        default_value: false
+        order_weight: 1640
+      - name: policy_allow_ports
+        kind: JSON
+        label: Policy - Allowed Ports
+        optional: true
+        description: "Ports the permitted sources may reach, as port/protocol pairs"
+        order_weight: 1650
+      - name: workload_selector
+        kind: List
+        label: Workload Selector
+        optional: true
+        description: "Endpoints the source rules apply to; empty means every pod"
+        order_weight: 1660
+    relationships:
+      - name: cluster
+        peer: ClusterKubernetes
+        label: Cluster
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__cluster_apps
+        order_weight: 910
+      - name: vrf
+        peer: IpamVRF
+        label: Fabric Tenant VRF
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        identifier: service__app_vrf
+        order_weight: 920
+      - name: vip_block
+        peer: IpamPrefix
+        label: VIP Block
+        kind: Attribute
+        cardinality: one
+        optional: true
+        # Optional so an unexposed application is valid. When exposed, the
+        # block has to sit inside the cluster's service prefix or the leaves'
+        # inbound route policy refuses the advertisement -- which is the
+        # intended behaviour, not a bug to work around. That containment is a
+        # graph query, so it belongs to a check rather than a constraint.
+        on_delete: no-action
+        identifier: service__app_vip_block
+        order_weight: 930
+      - name: allowed_source_prefixes
+        peer: IpamPrefix
+        label: Allowed Source Prefixes
+        kind: Generic
+        cardinality: many
+        optional: true
+        # The third of three independent gates, and the only one owned by the
+        # application rather than the network: the route has to exist, the
+        # firewall zone policy has to permit the session, and then this has to
+        # name the source. These are relationships rather than CIDR text
+        # precisely so all three gates reference the same objects.
+        on_delete: no-action
+        description: "Networks outside the cluster permitted to reach this application"
+        identifier: service__app_allowed_sources
+        order_weight: 940
+      - name: peering_service
+        peer: ServiceFabricPeering
+        label: Peering Service
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "Which peering carries this application's advertisement"
+        identifier: service__app_peering
+        order_weight: 950

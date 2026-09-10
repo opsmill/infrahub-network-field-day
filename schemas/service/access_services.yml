@@ -1,0 +1,133 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# "This person may use that application", as one object.
+#
+# A request arrives, and once approved this is the only thing that has to exist
+# for the whole path to work: the application (a ServiceFabricApp, which brings
+# its namespace, its VIP, the BGP advertisement that puts that VIP in the
+# leaves' VRF, and its network policy) and a firewall rule permitting the
+# session.
+#
+# Those are the two halves that are always forgotten separately. An application
+# that is deployed and not permitted is a ticket; a firewall hole with nothing
+# behind it is an audit finding. Bundling them means revoking access removes the
+# rule along with the grant, and `granted_rules` is what makes that traceable.
+#
+# SERVICE LAYER.
+# ============================================================================
+
+nodes:
+  - name: AppAccess
+    namespace: Service
+    description: "A grant of access to one application from one source"
+    label: Application Access Grant
+    icon: mdi:key-chain
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+      - CoreArtifactTarget
+    attributes:
+      - name: requester
+        kind: Text
+        label: Requester
+        optional: false
+        order_weight: 1300
+      - name: justification
+        kind: TextArea
+        label: Justification
+        optional: true
+        order_weight: 1310
+      - name: approved
+        kind: Boolean
+        label: Approved
+        optional: false
+        default_value: false
+        # The gate. Nothing is composed while this is false, so an unapproved
+        # request is inert rather than merely hidden. Approval is a patch on
+        # this one field, which puts it in the change history and lets it come
+        # from the portal or from the API.
+        description: "Nothing is materialized until this is true"
+        order_weight: 1400
+      - name: approved_by
+        kind: Text
+        label: Approved By
+        optional: true
+        order_weight: 1410
+      - name: approved_at
+        kind: DateTime
+        label: Approved At
+        optional: true
+        description: "So the audit trail lives with the grant, not only in change history"
+        order_weight: 1420
+      - name: ports
+        kind: List
+        label: Permitted Ports
+        optional: true
+        # An empty list is rejected by the generator rather than read as
+        # "all ports" -- the lab's FirewallAccess CRD makes the same choice
+        # with minItems: 1.
+        description: "TCP ports this grant opens; empty is rejected, never treated as all"
+        order_weight: 1500
+    relationships:
+      - name: application
+        peer: ServiceFabricApp
+        label: Application
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__access_application
+        order_weight: 910
+      - name: source_zone
+        peer: SecurityZone
+        label: Source Zone
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        identifier: service__access_source_zone
+        order_weight: 920
+      - name: source_address
+        peer: SecurityGenericAddress
+        label: Source Address
+        kind: Attribute
+        cardinality: one
+        optional: false
+        # An existing address-book entry, never a synthesised CIDR. The
+        # firewall's own objects stay the vocabulary so a generated rule reads
+        # the same way as the hand-written ones beside it.
+        on_delete: no-action
+        identifier: service__access_source_address
+        order_weight: 930
+      - name: destination_vip
+        peer: IpamIPAddress
+        label: Destination VIP
+        kind: Attribute
+        cardinality: one
+        optional: false
+        # Must sit inside the range the border leaf re-advertises to the
+        # source, or the grant is permitted by the firewall and still
+        # unroutable. Because both sides are IPAM objects that containment is
+        # a graph question, so the schema makes it detectable and a check
+        # enforces it -- see data-model.md section 13.
+        on_delete: no-action
+        identifier: service__access_destination_vip
+        order_weight: 940
+      - name: granted_rules
+        peer: SecurityPolicyRule
+        label: Granted Firewall Rules
+        kind: Generic
+        cardinality: many
+        optional: true
+        on_delete: no-action
+        # What this grant caused to exist. Rules created here carry
+        # managed_by_service: true, which is how a reconciling generator knows
+        # to remove them on revocation while leaving the hand-written baseline
+        # in the same zone pair untouched.
+        description: "The firewall rules this grant materialized"
+        identifier: service__access_granted_rules
+        order_weight: 950

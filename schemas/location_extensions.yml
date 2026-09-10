@@ -3,6 +3,28 @@
 version: "1.0"
 
 nodes:
+  # A customer or branch premises. Needed because DcimCircuitEndpoint.location is
+  # mandatory and peers LocationHosting, and a circuit terminating at a customer
+  # site has nowhere else to point.
+  #
+  # infrahub/location_site was evaluated first and is not adoptable here: its
+  # LocationSite inherits IpamPrefixScope and IpamVLANGroupScope, which this
+  # repository's diverged base IPAM does not provide. Adopting it therefore means
+  # re-adopting base IPAM, which is a change to existing working schema and out of
+  # scope. Kept deliberately minimal so a later swap to the published kind is
+  # small.
+  - name: Site
+    namespace: Location
+    description: "A customer or branch premises outside the datacentre"
+    label: Site
+    icon: mdi:office-building-marker
+    include_in_menu: true
+    inherit_from:
+      - LocationGeneric
+      - LocationHosting
+    parent: null
+    children: null
+
   - name: Hall
     namespace: Location
     branch: agnostic

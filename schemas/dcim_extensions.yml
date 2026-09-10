@@ -69,6 +69,43 @@ extensions:
             - name: rr
               label: Route Reflector (RR)
               description: "MPLS/WAN route reflector"
+            # Non-EOS lab roles. There is deliberately no `firewall` value:
+            # the marketplace security schema supplies SecurityFirewall, which
+            # inherits DcimGenericDevice and DcimPhysicalDevice, so a firewall
+            # is its own device kind rather than a DcimDevice with a role.
+            #
+            # These are deliberately ABSENT from
+            # ROLE_TO_AVD_TYPE in src/solution_arista_avd/avd.py: get_avd_type
+            # raises ValueError on an unmapped role, and that loud failure is
+            # the behaviour we want for a firewall or an FRR router. Mapping
+            # one would instead let a non-EOS device be rendered as EOS, which
+            # is silently wrong. Devices with these roles must also stay out of
+            # the avd_devices group, which is the only path into the AVD
+            # hostvar generator.
+            - name: isp_edge
+              label: ISP Edge (PE)
+              description: "Customer-facing provider edge holding a VRF per tenant"
+              color: "#f4e9dd"
+            - name: isp_core
+              label: ISP Core
+              description: "Provider core; default VRF transit and the DC handoff"
+              color: "#f4e9dd"
+            - name: internet_edge
+              label: Internet Edge
+              description: "Border router of the internet autonomous system"
+              color: "#e3f0e8"
+            - name: customer_edge
+              label: Customer Edge (CE)
+              description: "Tenant-side router terminating an attachment circuit"
+              color: "#eef0f4"
+            - name: branch_router
+              label: Branch Router
+              description: "Branch office router with an integrated switched LAN"
+              color: "#eef0f4"
+            - name: k8s_node
+              label: Kubernetes Node
+              description: "Cluster member; may also be a ComputePhysicalServer"
+              color: "#dde1e7"
         - name: node_id
           label: Node ID
           kind: Number
