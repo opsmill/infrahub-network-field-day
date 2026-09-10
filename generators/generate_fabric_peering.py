@@ -280,5 +280,20 @@ class FabricPeeringGenerator(InfrahubGenerator):
         """
         service_node = parsed.target.edges[0].node
         service = await self.client.get(kind="ServiceFabricPeering", id=service_node.id)
-        service.peerings = session_ids  # type: ignore[attr-defined]
-        await service.save(allow_upsert=True, update_group_context=False)
+
+        # A RelationshipManager is not a list: it must be fetched before its
+        # members can be edited, and it is edited through add/remove rather
+        # than assignment.
+        peerings = service.peerings  # type: ignore[attr-defined]
+        await peerings.fetch()
+
+        current = set(peerings.peer_ids)
+        wanted = set(session_ids)
+        for missing in sorted(wanted - current):
+            peerings.add(missing)
+        for stale in sorted(current - wanted):
+            peerings.remove(stale)
+
+        if wanted != current:
+            await service.save(update_group_context=False)
+            self.logger.info("Linked %s session(s) to the service", len(wanted))
