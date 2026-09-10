@@ -61,8 +61,14 @@ GOLDEN_DIR = Path(__file__).parent / "golden" / "nfd41"
 # against that instead of the real configuration.
 NO_STRUCTURED_CONFIG_MARKER = "! No structured config available"
 
-SPINES = ["spine1", "spine2"]
-LEAVES = ["k8s-leaf1", "k8s-leaf2", "app-leaf1", "app-leaf2", "border-leaf1"]
+# The pod and rack generators name devices `spine-{pod}-{index}` and
+# `leaf-{pod}-{rack_index}-{index}`; the seed data spells the same names out so
+# the generators upsert onto the pinned devices instead of creating a second set.
+SPINES = [f"spine-{POD_NAME}-1", f"spine-{POD_NAME}-2"]
+K8S_LEAVES = [f"leaf-{POD_NAME}-1-1", f"leaf-{POD_NAME}-1-2"]
+APP_LEAVES = [f"leaf-{POD_NAME}-2-1", f"leaf-{POD_NAME}-2-2"]
+BORDER_LEAVES = [f"leaf-{POD_NAME}-3-1"]
+LEAVES = [*K8S_LEAVES, *APP_LEAVES, *BORDER_LEAVES]
 DEVICES = [*SPINES, *LEAVES]
 
 # The uplink each leaf takes on each spine, from lab/nfd41.clab.yml. Pinned here
@@ -70,32 +76,34 @@ DEVICES = [*SPINES, *LEAVES]
 # itself differently renders a different spine configuration even though every
 # address is still correct.
 EXPECTED_UPLINKS = {
-    "k8s-leaf1": ["Ethernet1", "Ethernet1"],
-    "k8s-leaf2": ["Ethernet2", "Ethernet2"],
-    "app-leaf1": ["Ethernet3", "Ethernet3"],
-    "app-leaf2": ["Ethernet4", "Ethernet4"],
-    "border-leaf1": ["Ethernet5", "Ethernet5"],
+    K8S_LEAVES[0]: ["Ethernet1", "Ethernet1"],
+    K8S_LEAVES[1]: ["Ethernet2", "Ethernet2"],
+    APP_LEAVES[0]: ["Ethernet3", "Ethernet3"],
+    APP_LEAVES[1]: ["Ethernet4", "Ethernet4"],
+    BORDER_LEAVES[0]: ["Ethernet5", "Ethernet5"],
 }
 
 # ASNs are per MLAG pair, not per switch.
 EXPECTED_ASNS = {
-    "spine1": 65100,
-    "spine2": 65100,
-    "k8s-leaf1": 65101,
-    "k8s-leaf2": 65101,
-    "app-leaf1": 65102,
-    "app-leaf2": 65102,
-    "border-leaf1": 65103,
+    SPINES[0]: 65100,
+    SPINES[1]: 65100,
+    K8S_LEAVES[0]: 65101,
+    K8S_LEAVES[1]: 65101,
+    APP_LEAVES[0]: 65102,
+    APP_LEAVES[1]: 65102,
+    BORDER_LEAVES[0]: 65103,
 }
 
+# Node IDs are per AVD node type, which is why the spines and the leaves both
+# start at 1.
 EXPECTED_NODE_IDS = {
-    "spine1": 1,
-    "spine2": 2,
-    "k8s-leaf1": 1,
-    "k8s-leaf2": 2,
-    "app-leaf1": 3,
-    "app-leaf2": 4,
-    "border-leaf1": 5,
+    SPINES[0]: 1,
+    SPINES[1]: 2,
+    K8S_LEAVES[0]: 1,
+    K8S_LEAVES[1]: 2,
+    APP_LEAVES[0]: 3,
+    APP_LEAVES[1]: 4,
+    BORDER_LEAVES[0]: 5,
 }
 
 

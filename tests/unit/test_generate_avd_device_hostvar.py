@@ -1690,7 +1690,14 @@ def test_extract_custom_hostvars_rejects_malformed_yaml_string() -> None:
         GenerateAVDDeviceHostvar._extract_custom_hostvars(_custom("not: [closed"))
 
 
-def test_merge_custom_hostvars_scope_precedence_and_replacement() -> None:
+def test_merge_custom_hostvars_scope_precedence_and_list_composition() -> None:
+    """Narrower override scopes compose with wider ones rather than replacing them.
+
+    "Overrides at different levels get put in" is the point of the three scopes,
+    so a pod-scope list adds to what the fabric declared. A narrower scope can
+    still override an individual entry by reusing its identity key -- which is
+    strictly more expressive than the wholesale replacement this used to do.
+    """
     merged = GenerateAVDDeviceHostvar._merge_custom_hostvars(
         {
             "fabric_only": True,
@@ -1717,8 +1724,37 @@ def test_merge_custom_hostvars_scope_precedence_and_replacement() -> None:
         "device_only": True,
         "scope": "device",
         "nested": {"fabric": True, "pod": True, "device": True, "winner": "device"},
-        "servers": [{"name": "pod-server"}],
+        "servers": [{"name": "fabric-server"}, {"name": "pod-server"}],
     }
+
+
+def test_merge_custom_hostvars_narrower_scope_overrides_a_matching_entry() -> None:
+    """A pod scope tunes a fabric-declared entry by reusing its identity key."""
+    merged = GenerateAVDDeviceHostvar._merge_custom_hostvars(
+        {"ipv4_acls": [{"name": "ACL-A", "entries": [{"sequence": 10}]}, {"name": "ACL-B"}]},
+        {"ipv4_acls": [{"name": "ACL-A", "counters_per_entry": True}]},
+    )
+
+    assert merged["ipv4_acls"] == [
+        {"name": "ACL-A", "entries": [{"sequence": 10}], "counters_per_entry": True},
+        {"name": "ACL-B"},
+    ]
+
+
+def test_merge_custom_hostvars_replaces_a_list_with_no_identity_key() -> None:
+    """Entries with no shared scalar key are replaced, not guessed at.
+
+    AVD adapters are identified by `switch_ports`, which is itself a list, so
+    there is no key to match on. Replacing is the only behaviour that cannot
+    silently produce a half-merged adapter; an override that needs to change one
+    has to restate it in full.
+    """
+    merged = GenerateAVDDeviceHostvar._merge_custom_hostvars(
+        {"servers": [{"name": "host-a", "adapters": [{"mode": "access", "vlans": "10"}]}]},
+        {"servers": [{"name": "host-a", "adapters": [{"vlans": "20"}]}]},
+    )
+
+    assert merged["servers"] == [{"name": "host-a", "adapters": [{"vlans": "20"}]}]
 
 
 def test_deep_merge_does_not_mutate_inputs() -> None:

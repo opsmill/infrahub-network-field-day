@@ -26,7 +26,9 @@ This fork models one fabric: **`NFD41_FABRIC`**, the containerlab topology deplo
 | Workload BGP | Cilium peers eBGP from each k3s node into `K8S_PROD`, bounded by `RM-CILIUM-IN` and `maximum_routes`. |
 | Platform | Arista cEOS-LAB containers. |
 
-The identity a running lab fixes — hostname, node ID, management address, loopback, ASN — is pinned in `objects/26_nfd41_devices.yml` and preserved by the generators. Everything genuinely design-driven (uplink and MLAG cabling, interface expansion, point-to-point and MLAG peer addressing, host_vars, structured config) is generated.
+The numbering a running lab fixes — node ID, management address, loopback, ASN — is pinned in `objects/26_nfd41_devices.yml` and preserved by the generators, because the fabric's route targets and BGP communities already reference it. Everything genuinely design-driven is generated: uplink and MLAG cabling, interface expansion, point-to-point and MLAG peer addressing, host_vars, structured config.
+
+Hostnames are the generators' (`spine-{pod}-{index}`, `leaf-{pod}-{rack_index}-{index}`) and the lab is redeployed under them. The seed data spells the same names out only because the generators upsert devices by name.
 
 **Parity is asserted, not assumed.** `tests/integration/test_nfd41_fabric.py` boots a real Infrahub stack, runs the generator chain, renders the EOS configuration for all seven switches and compares it byte for byte against the configuration the lab is deployed with (`tests/integration/golden/nfd41/`). A diff there is a regression.
 

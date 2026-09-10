@@ -11,7 +11,7 @@
 # role here that disagrees with it produces a fabric that cables itself onto
 # ports that have no wire.
 #
-#   leaf  Ethernet1-2   uplinks to spine1 / spine2      (role spine)
+#   leaf  Ethernet1-2   uplinks to the two spines       (role spine)
 #   leaf  Ethernet3-4   MLAG peer-link port-channel     (role mlag_peer)
 #   leaf  Ethernet5-24  workload and handoff ports      (role server)
 #   spine Ethernet1-8   downlinks to the leaves         (role leaf)

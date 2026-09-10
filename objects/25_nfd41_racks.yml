@@ -4,12 +4,14 @@
 #
 # Rack names are load-bearing, not labels: the rack generator uses the rack name
 # as the MLAG domain ID, and the hostvar generator uses it as the AVD node-group
-# name. The deployed switches are configured with `mlag configuration domain-id
-# K8S_LEAFS`, so the rack has to be called K8S_LEAFS.
+# name, which is what reaches the switch as `mlag configuration domain-id`. So
+# the rack has to be called K8S_LEAFS.
 #
-# `device_name_template` pins the hostnames to the ones containerlab already
-# gives these nodes. Without it the generator would name them
-# `leaf-nfd41-pod1-1-1` and the rendered config would not match the running lab.
+# The rack index is load-bearing too, because the generators derive device
+# hostnames from it: `leaf-{pod}-{rack_index}-{index}`. K8S_LEAFS=1 gives
+# `leaf-nfd41-pod1-1-1` and `-1-2`, APP_LEAFS=2 gives `-2-1` and `-2-2`, and
+# BORDER_LEAFS=3 gives `-3-1`. Reordering the racks renames devices, which
+# renames them in every neighbour's rendered configuration as well.
 #
 # The AVD tags are declared from the tag side, after the racks: `AvdTag.racks`
 # is a mandatory relationship, so a tag cannot exist before the racks it scopes.
@@ -30,7 +32,6 @@ spec:
       pod: nfd41-pod1
       parent: "Hall-NFD41"
       mlag: true
-      device_name_template: "k8s-leaf{index}"
       device_designs:
         data:
           - role: leaf
@@ -49,7 +50,6 @@ spec:
       pod: nfd41-pod1
       parent: "Hall-NFD41"
       mlag: true
-      device_name_template: "app-leaf{index}"
       device_designs:
         data:
           - role: leaf
@@ -62,7 +62,6 @@ spec:
       pod: nfd41-pod1
       parent: "Hall-NFD41"
       mlag: false
-      device_name_template: "border-leaf{index}"
       always_include_vrfs_in_tenants:
         - TENANT_K8S
         - TENANT_APP

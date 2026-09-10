@@ -5,11 +5,12 @@ import logging
 import operator
 import re
 import sys
+from collections.abc import Hashable
 from copy import deepcopy
 from dataclasses import dataclass
 from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, TypedDict
 
 import yaml
 from infrahub_sdk.generator import InfrahubGenerator
@@ -42,6 +43,7 @@ for module_name in _RELOADED_MODULES:
 from solution_arista_avd.avd import (  # noqa: E402
     MLAG_MAIN_TIER_ROLES,
     NON_EMITTED_UNDERLAYS,
+    ROLE_TO_AVD_TYPE,
     SPINE_UPLINK_LEAF_ROLES,
     SPINE_UPLINK_UNDERLAYS,
     SVI_RENDERING_ROLES,
@@ -2285,15 +2287,110 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         return deepcopy(parsed)
 
     @classmethod
-    def _deep_merge(cls, base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
-        """Recursively merge ``overlay`` over ``base`` without mutating either input."""
+    def _deep_merge(
+        cls, base: dict[str, Any], overlay: dict[str, Any], *, parent_key: str | None = None
+    ) -> dict[str, Any]:
+        """Recursively merge ``overlay`` over ``base`` without mutating either input.
+
+        Dicts merge recursively. Lists of mappings merge by identity when one can
+        be established (see ``_merge_lists``); every other list is replaced by the
+        overlay, which is the only safe default for a list of scalars.
+        """
         merged = deepcopy(base)
         for key, value in overlay.items():
-            if isinstance(value, dict) and isinstance(merged.get(key), dict):
-                merged[key] = cls._deep_merge(merged[key], value)
+            existing = merged.get(key)
+            if isinstance(value, dict) and isinstance(existing, dict):
+                merged[key] = cls._deep_merge(existing, value, parent_key=key)
+            elif isinstance(value, list) and isinstance(existing, list):
+                merged[key] = cls._merge_lists(existing, value, key=key, parent_key=parent_key)
             else:
                 merged[key] = deepcopy(value)
         return merged
+
+    # Keys that identify an entry within an AVD list, in resolution order. A key
+    # is only used when every entry on both sides carries it and its values are
+    # unique per list, so `svis[].nodes` (keyed by `node`) and `l3leaf.nodes`
+    # (keyed by `name`) resolve correctly without a path map.
+    _LIST_IDENTITY_KEYS: ClassVar[tuple[str, ...]] = (
+        "name",
+        "id",
+        "group",
+        "profile",
+        "node",
+        "ip_address",
+        "prefix",
+        "interface_name",
+    )
+
+    # AVD node-type keys. A `nodes` or `node_groups` list under one of these is
+    # the fabric's own device list, which the generator owns outright.
+    _NODE_TYPE_KEYS: ClassVar[frozenset[str]] = frozenset({*ROLE_TO_AVD_TYPE.values(), "super_spine"})
+
+    @classmethod
+    def _merge_lists(
+        cls, base: list[Any], overlay: list[Any], *, key: str | None = None, parent_key: str | None = None
+    ) -> list[Any]:
+        """Merge two lists, by entry identity where one can be established.
+
+        This is what makes ``avd_custom_hostvars`` able to reach *inside* a
+        generated list. Without it an override that adds, say, a static route to
+        a VRF is discarded the moment the generator emits any ``tenants`` at all
+        -- silently, because a replaced list raises nothing. The override model is
+        the documented way to carry AVD inputs this design does not model, so it
+        has to compose with generated data rather than lose to it.
+
+        Precedence is unchanged: where both sides describe the same entry, the
+        overlay (generated) value wins field by field. Entries only the base
+        (override) has are kept; entries only the overlay has are appended.
+        """
+        if key in {"nodes", "node_groups"} and parent_key in cls._NODE_TYPE_KEYS:
+            # `<node_type>.nodes` / `.node_groups` name devices AVD has to resolve
+            # facts for. Merging here would let an override inject a device that
+            # does not exist in Infrahub, is not cabled, and has no host_vars --
+            # producing an AVD input that fails far from its cause. Topology is
+            # generator-owned; the override is discarded, as before.
+            return deepcopy(overlay)
+
+        identity = cls._list_identity_key(base, overlay)
+        if identity is None:
+            # A list of scalars, of mixed types, or with no shared unique key.
+            # Replacing is the only behaviour that cannot silently corrupt it.
+            return deepcopy(overlay)
+
+        merged: list[Any] = []
+        overlay_by_id = {entry[identity]: entry for entry in overlay}
+        consumed: set[Any] = set()
+        for entry in base:
+            entry_id = entry[identity]
+            if entry_id in overlay_by_id:
+                merged.append(cls._deep_merge(entry, overlay_by_id[entry_id], parent_key=key))
+                consumed.add(entry_id)
+            else:
+                merged.append(deepcopy(entry))
+        merged.extend(deepcopy(entry) for entry in overlay if entry[identity] not in consumed)
+        return merged
+
+    @classmethod
+    def _list_identity_key(cls, base: list[Any], overlay: list[Any]) -> str | None:
+        """The key identifying entries across both lists, or ``None`` if there is none."""
+        if not base or not overlay:
+            return None
+        if not all(isinstance(entry, dict) for entry in (*base, *overlay)):
+            return None
+
+        for key in cls._LIST_IDENTITY_KEYS:
+            if not all(key in entry for entry in (*base, *overlay)):
+                continue
+            values = [entry[key] for entry in (*base, *overlay)]
+            if not all(isinstance(value, Hashable) for value in values):
+                continue
+            # Unique *within* each list; the same identity may of course appear
+            # in both, which is exactly the case worth merging.
+            if len({entry[key] for entry in base}) == len(base) and len({entry[key] for entry in overlay}) == len(
+                overlay
+            ):
+                return key
+        return None
 
     @classmethod
     def _merge_custom_hostvars(cls, *scopes: dict[str, Any]) -> dict[str, Any]:

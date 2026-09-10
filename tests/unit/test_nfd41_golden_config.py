@@ -26,7 +26,17 @@ from pyavd import get_avd_facts, get_device_config, get_device_structured_config
 FIXTURES = Path(__file__).parent / "fixtures" / "nfd41"
 GOLDEN = Path(__file__).parent.parent / "integration" / "golden" / "nfd41"
 
-DEVICES = ["spine1", "spine2", "k8s-leaf1", "k8s-leaf2", "app-leaf1", "app-leaf2", "border-leaf1"]
+# Hostnames come from the pod and rack generators' default naming:
+# `spine-{pod}-{index}` and `leaf-{pod}-{rack_index}-{index}`.
+DEVICES = [
+    "spine-nfd41-pod1-1",
+    "spine-nfd41-pod1-2",
+    "leaf-nfd41-pod1-1-1",
+    "leaf-nfd41-pod1-1-2",
+    "leaf-nfd41-pod1-2-1",
+    "leaf-nfd41-pod1-2-2",
+    "leaf-nfd41-pod1-3-1",
+]
 
 
 def _hostvars() -> dict[str, dict]:

@@ -90,7 +90,7 @@ spec:
       enable_mlag_ibgp_peering_vrfs: true
       redistribute_connected: true
       redistribute_static: true
-    # WAN and BRANCH exist on border-leaf1 only: there is nothing to stretch,
+    # WAN and BRANCH exist on the border leaf only: there is nothing to stretch,
     # because no other leaf has a port in them.
     - name: WAN
       description: "ISP transit - WAN customers"

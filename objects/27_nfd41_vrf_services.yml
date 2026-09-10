@@ -62,28 +62,28 @@ spec:
   kind: EvpnSviNode
   data:
     - svi: ["K8S_PROD", "K8S_NODES"]
-      device: "k8s-leaf1"
+      device: "leaf-nfd41-pod1-1-1"
       ip_address: 10.110.0.2/24
     - svi: ["K8S_PROD", "K8S_NODES"]
-      device: "k8s-leaf2"
+      device: "leaf-nfd41-pod1-1-2"
       ip_address: 10.110.0.3/24
     - svi: ["APP_PROD", "APP_HOSTS"]
-      device: "app-leaf1"
+      device: "leaf-nfd41-pod1-2-1"
       ip_address: 10.210.0.2/24
     - svi: ["APP_PROD", "APP_HOSTS"]
-      device: "app-leaf2"
+      device: "leaf-nfd41-pod1-2-2"
       ip_address: 10.210.0.3/24
     - svi: ["TENANT_ACME", "ACME_CLOUD"]
-      device: "app-leaf1"
+      device: "leaf-nfd41-pod1-2-1"
       ip_address: 10.220.10.2/24
     - svi: ["TENANT_ACME", "ACME_CLOUD"]
-      device: "app-leaf2"
+      device: "leaf-nfd41-pod1-2-2"
       ip_address: 10.220.10.3/24
     - svi: ["TENANT_GLOBEX", "GLOBEX_CLOUD"]
-      device: "app-leaf1"
+      device: "leaf-nfd41-pod1-2-1"
       ip_address: 10.220.20.2/24
     - svi: ["TENANT_GLOBEX", "GLOBEX_CLOUD"]
-      device: "app-leaf2"
+      device: "leaf-nfd41-pod1-2-2"
       ip_address: 10.220.20.3/24
 ---
 apiVersion: infrahub.app/v1
@@ -96,22 +96,22 @@ spec:
       prefix: 0.0.0.0/0
       next_hop: 10.250.110.2
       description: "Default via the firewall's k8s-prod zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     - vrf: APP_PROD
       prefix: 0.0.0.0/0
       next_hop: 10.250.210.2
       description: "Default via the firewall's app-prod zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     - vrf: TENANT_ACME
       prefix: 0.0.0.0/0
       next_hop: 10.250.10.2
       description: "Default via the firewall's acme-cloud zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     - vrf: TENANT_GLOBEX
       prefix: 0.0.0.0/0
       next_hop: 10.250.20.2
       description: "Default via the firewall's globex-cloud zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     # The DC service prefix and each tenant's cloud subnet are originated INTO
     # the WAN pointing at the firewall. Static routes rather than a leak from
     # the tenant VRFs on purpose: a leak would create a path that bypasses the
@@ -122,29 +122,29 @@ spec:
       prefix: 10.112.240.0/24
       next_hop: 10.250.150.2
       description: "DC service VIP range, via the firewall's WAN zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     - vrf: WAN
       prefix: 10.220.10.0/24
       next_hop: 10.250.150.2
       description: "acme cloud subnet, via the firewall's WAN zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     - vrf: WAN
       prefix: 10.220.20.0/24
       next_hop: 10.250.150.2
       description: "globex cloud subnet, via the firewall's WAN zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     - vrf: BRANCH
       prefix: 10.112.240.0/24
       next_hop: 10.250.170.2
       description: "DC service VIP range, via the firewall's branch zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     # The branch does not get a shortcut, it gets one more destination it is
     # allowed to ask about -- still via the firewall.
     - vrf: BRANCH
       prefix: 10.110.0.0/24
       next_hop: 10.250.170.2
       description: "k8s node subnet, via the firewall's branch zone"
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
 ---
 apiVersion: infrahub.app/v1
 kind: Object
@@ -165,7 +165,7 @@ spec:
       maximum_routes: 100
       route_map_in: RM-CILIUM-IN
       route_map_out: RM-FABRIC-TO-CILIUM
-      devices: ["k8s-leaf1", "k8s-leaf2"]
+      devices: ["leaf-nfd41-pod1-1-1", "leaf-nfd41-pod1-1-2"]
     - vrf: K8S_PROD
       ip_address: 10.110.0.12
       remote_asn: 65401
@@ -176,7 +176,7 @@ spec:
       maximum_routes: 100
       route_map_in: RM-CILIUM-IN
       route_map_out: RM-FABRIC-TO-CILIUM
-      devices: ["k8s-leaf1", "k8s-leaf2"]
+      devices: ["leaf-nfd41-pod1-1-1", "leaf-nfd41-pod1-1-2"]
     - vrf: K8S_PROD
       ip_address: 10.110.0.13
       remote_asn: 65401
@@ -187,7 +187,7 @@ spec:
       maximum_routes: 100
       route_map_in: RM-CILIUM-IN
       route_map_out: RM-FABRIC-TO-CILIUM
-      devices: ["k8s-leaf1", "k8s-leaf2"]
+      devices: ["leaf-nfd41-pod1-1-1", "leaf-nfd41-pod1-1-2"]
     # eBGP to the ISP. RM-WAN-IN is the fabric's opinion of what the provider is
     # allowed to tell us: customer prefixes only. Without it a provider mistake
     # becomes a datacentre outage.
@@ -199,7 +199,7 @@ spec:
       maximum_routes: 1000
       route_map_in: RM-WAN-IN
       route_map_out: RM-DC-TO-EXTERNAL
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
     - vrf: BRANCH
       ip_address: 10.250.70.2
       remote_asn: 65030
@@ -208,7 +208,7 @@ spec:
       maximum_routes: 100
       route_map_in: RM-BRANCH-IN
       route_map_out: RM-DC-TO-BRANCH
-      devices: ["border-leaf1"]
+      devices: ["leaf-nfd41-pod1-3-1"]
 ---
 # The border leaf's routed handoffs. Every tenant reaches the outside world
 # through one of these, and each is filtered inbound: the firewall is trusted to
@@ -224,7 +224,7 @@ spec:
     # interface. On physical hardware it belongs at the access edge, so spoofed
     # traffic never crosses the fabric at all.
     - vrf: K8S_PROD
-      device: "border-leaf1"
+      device: "leaf-nfd41-pod1-3-1"
       interface_name: Ethernet10
       ip_address: 10.250.110.1/30
       description: FW1_ge-0/0/0_ZONE-K8S-PROD
@@ -232,49 +232,49 @@ spec:
       ipv4_acl_in: ACL-FROM-FIREWALL
       ipv4_acl_out: ACL-K8S-ANTISPOOF
     - vrf: APP_PROD
-      device: "border-leaf1"
+      device: "leaf-nfd41-pod1-3-1"
       interface_name: Ethernet11
       ip_address: 10.250.210.1/30
       description: FW1_ge-0/0/1_ZONE-APP-PROD
       enabled: true
       ipv4_acl_in: ACL-FROM-FIREWALL
     - vrf: WAN
-      device: "border-leaf1"
+      device: "leaf-nfd41-pod1-3-1"
       interface_name: Ethernet12
       ip_address: 10.250.50.1/30
       description: ISP_PE2_WAN_HANDOFF
       enabled: true
       ipv4_acl_in: ACL-FROM-WAN
     - vrf: BRANCH
-      device: "border-leaf1"
+      device: "leaf-nfd41-pod1-3-1"
       interface_name: Ethernet13
       ip_address: 10.250.70.1/30
       description: BRANCH_RTR_CIRCUIT
       enabled: true
       ipv4_acl_in: ACL-FROM-BRANCH
     - vrf: WAN
-      device: "border-leaf1"
+      device: "leaf-nfd41-pod1-3-1"
       interface_name: Ethernet14
       ip_address: 10.250.150.1/30
       description: FW1_ZONE-WAN
       enabled: true
       ipv4_acl_in: ACL-FROM-FIREWALL
     - vrf: BRANCH
-      device: "border-leaf1"
+      device: "leaf-nfd41-pod1-3-1"
       interface_name: Ethernet15
       ip_address: 10.250.170.1/30
       description: FW1_ZONE-BRANCH
       enabled: true
       ipv4_acl_in: ACL-FROM-FIREWALL
     - vrf: TENANT_ACME
-      device: "border-leaf1"
+      device: "leaf-nfd41-pod1-3-1"
       interface_name: Ethernet16
       ip_address: 10.250.10.1/30
       description: FW1_ge-0/0/4_ZONE-ACME-CLOUD
       enabled: true
       ipv4_acl_in: ACL-FROM-FIREWALL
     - vrf: TENANT_GLOBEX
-      device: "border-leaf1"
+      device: "leaf-nfd41-pod1-3-1"
       interface_name: Ethernet17
       ip_address: 10.250.20.1/30
       description: FW1_ge-0/0/5_ZONE-GLOBEX-CLOUD

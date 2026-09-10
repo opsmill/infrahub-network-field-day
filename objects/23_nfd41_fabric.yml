@@ -271,7 +271,6 @@ spec:
         data:
           - name: "nfd41-pod1"
             index: 1
-            device_name_template: "spine{index}"
             device_designs:
               data:
                 - role: spine

@@ -31,7 +31,9 @@ The second one boots a real Infrahub stack in testcontainers, loads the schemas 
 | **Workload BGP** | Cilium peers eBGP from each k3s node into `K8S_PROD`, bounded by an inbound route map and `maximum_routes` |
 | **Platform** | Arista cEOS-LAB containers, driven by containerlab |
 
-Identity the deployed lab fixes — hostname, node ID, management address, loopback, ASN — is pinned in `objects/26_nfd41_devices.yml` and preserved by the generators. Everything genuinely design-driven is generated: uplink and MLAG cabling, interface expansion, point-to-point and MLAG peer addressing, AVD host_vars, structured config, and the rendered artifacts.
+Numbering the deployed lab fixes — node ID, management address, loopback, ASN — is pinned in `objects/26_nfd41_devices.yml` and preserved by the generators, since the fabric's route targets and BGP communities already reference it. Everything design-driven is generated: uplink and MLAG cabling, interface expansion, point-to-point and MLAG peer addressing, AVD host_vars, structured config, and the rendered artifacts.
+
+Hostnames come from the generators (`spine-{pod}-{index}`, `leaf-{pod}-{rack_index}-{index}`) and the lab is redeployed under them, rather than the generators being taught the lab's names. `scripts/regenerate_nfd41_golden.py` proves that rename is cosmetic: it substitutes the names back out and asserts the result equals the deployed configuration exactly.
 
 ## What It's For
 

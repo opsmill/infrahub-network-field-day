@@ -388,53 +388,47 @@
     },
     "node_groups": [
       {
-        "bgp_as": "65101",
         "filter": {
+          "always_include_vrfs_in_tenants": [
+            "TENANT_K8S",
+            "TENANT_APP"
+          ],
           "tags": [
-            "k8s"
+            "border"
           ]
         },
-        "group": "K8S_LEAFS",
-        "mlag_domain_id": "K8S_LEAFS",
+        "group": "BORDER_LEAFS",
+        "mlag": false,
         "nodes": [
           {
-            "name": "k8s-leaf1"
-          },
-          {
-            "name": "k8s-leaf2"
+            "name": "leaf-nfd41-pod1-3-1"
           }
-        ],
-        "virtual_router_mac_address": "00:1c:73:00:00:99"
+        ]
       }
     ],
     "nodes": [
       {
-        "id": 1,
-        "loopback_ipv4_address": "10.41.0.11",
+        "bgp_as": "65103",
+        "id": 5,
+        "loopback_ipv4_address": "10.41.0.15",
         "loopback_ipv4_pool": "10.41.0.0/24",
-        "mgmt_ip": "172.20.41.21/24",
-        "mlag_interfaces": [
-          "Ethernet3",
-          "Ethernet4"
-        ],
-        "mlag_peer_ipv4_pool": "10.41.254.0/24",
-        "mlag_peer_l3_ipv4_pool": "10.41.253.0/24",
-        "name": "k8s-leaf1",
+        "mgmt_ip": "172.20.41.25/24",
+        "name": "leaf-nfd41-pod1-3-1",
         "uplink_interfaces": [
           "Ethernet1",
           "Ethernet2"
         ],
         "uplink_ipv4_pool": "10.41.255.0/24",
         "uplink_switch_interfaces": [
-          "Ethernet1",
-          "Ethernet1"
+          "Ethernet5",
+          "Ethernet5"
         ],
         "uplink_switches": [
-          "spine1",
-          "spine2"
+          "spine-nfd41-pod1-1",
+          "spine-nfd41-pod1-2"
         ],
         "virtual_router_mac_address": "00:1c:73:00:00:99",
-        "vtep_loopback_ipv4_address": "10.41.1.11",
+        "vtep_loopback_ipv4_address": "10.41.1.15",
         "vtep_loopback_ipv4_pool": "10.41.1.0/24"
       }
     ]
@@ -489,7 +483,7 @@
             "Ethernet11"
           ],
           "switches": [
-            "app-leaf1"
+            "leaf-nfd41-pod1-2-1"
           ],
           "vlans": "310"
         }
@@ -510,7 +504,7 @@
             "Ethernet11"
           ],
           "switches": [
-            "app-leaf2"
+            "leaf-nfd41-pod1-2-2"
           ],
           "vlans": "320"
         }
@@ -531,7 +525,7 @@
             "Ethernet10"
           ],
           "switches": [
-            "app-leaf1"
+            "leaf-nfd41-pod1-2-1"
           ],
           "vlans": "210"
         }
@@ -552,7 +546,7 @@
             "Ethernet10"
           ],
           "switches": [
-            "app-leaf2"
+            "leaf-nfd41-pod1-2-2"
           ],
           "vlans": "210"
         }
@@ -573,7 +567,7 @@
             "Ethernet10"
           ],
           "switches": [
-            "k8s-leaf1"
+            "leaf-nfd41-pod1-1-1"
           ],
           "vlans": "110"
         }
@@ -594,7 +588,7 @@
             "Ethernet10"
           ],
           "switches": [
-            "k8s-leaf2"
+            "leaf-nfd41-pod1-1-2"
           ],
           "vlans": "110"
         }
@@ -615,7 +609,7 @@
             "Ethernet11"
           ],
           "switches": [
-            "k8s-leaf2"
+            "leaf-nfd41-pod1-1-2"
           ],
           "vlans": "110"
         }
@@ -657,8 +651,8 @@
               "maximum_routes": 100,
               "next_hop_self": true,
               "nodes": [
-                "k8s-leaf1",
-                "k8s-leaf2"
+                "leaf-nfd41-pod1-1-1",
+                "leaf-nfd41-pod1-1-2"
               ],
               "remote_as": "65401",
               "route_map_in": "RM-CILIUM-IN",
@@ -672,8 +666,8 @@
               "maximum_routes": 100,
               "next_hop_self": true,
               "nodes": [
-                "k8s-leaf1",
-                "k8s-leaf2"
+                "leaf-nfd41-pod1-1-1",
+                "leaf-nfd41-pod1-1-2"
               ],
               "remote_as": "65401",
               "route_map_in": "RM-CILIUM-IN",
@@ -687,8 +681,8 @@
               "maximum_routes": 100,
               "next_hop_self": true,
               "nodes": [
-                "k8s-leaf1",
-                "k8s-leaf2"
+                "leaf-nfd41-pod1-1-1",
+                "leaf-nfd41-pod1-1-2"
               ],
               "remote_as": "65401",
               "route_map_in": "RM-CILIUM-IN",
@@ -711,7 +705,7 @@
               "ipv4_acl_in": "ACL-FROM-FIREWALL",
               "ipv4_acl_out": "ACL-K8S-ANTISPOOF",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ]
             }
           ],
@@ -722,7 +716,7 @@
             {
               "next_hop": "10.250.110.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "0.0.0.0/0"
             }
@@ -739,11 +733,11 @@
               "nodes": [
                 {
                   "ip_address": "10.110.0.2/24",
-                  "node": "k8s-leaf1"
+                  "node": "leaf-nfd41-pod1-1-1"
                 },
                 {
                   "ip_address": "10.110.0.3/24",
-                  "node": "k8s-leaf2"
+                  "node": "leaf-nfd41-pod1-1-2"
                 }
               ],
               "tags": [
@@ -767,7 +761,7 @@
               "ip_address": "10.250.50.2",
               "maximum_routes": 1000,
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "remote_as": "65500",
               "route_map_in": "RM-WAN-IN",
@@ -788,7 +782,7 @@
               ],
               "ipv4_acl_in": "ACL-FROM-WAN",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ]
             },
             {
@@ -802,7 +796,7 @@
               ],
               "ipv4_acl_in": "ACL-FROM-FIREWALL",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ]
             }
           ],
@@ -813,21 +807,21 @@
             {
               "next_hop": "10.250.150.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "10.112.240.0/24"
             },
             {
               "next_hop": "10.250.150.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "10.220.10.0/24"
             },
             {
               "next_hop": "10.250.150.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "10.220.20.0/24"
             }
@@ -842,7 +836,7 @@
               "ip_address": "10.250.70.2",
               "maximum_routes": 100,
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "remote_as": "65030",
               "route_map_in": "RM-BRANCH-IN",
@@ -863,7 +857,7 @@
               ],
               "ipv4_acl_in": "ACL-FROM-BRANCH",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ]
             },
             {
@@ -877,7 +871,7 @@
               ],
               "ipv4_acl_in": "ACL-FROM-FIREWALL",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ]
             }
           ],
@@ -888,14 +882,14 @@
             {
               "next_hop": "10.250.170.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "10.112.240.0/24"
             },
             {
               "next_hop": "10.250.170.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "10.110.0.0/24"
             }
@@ -924,7 +918,7 @@
               ],
               "ipv4_acl_in": "ACL-FROM-FIREWALL",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ]
             }
           ],
@@ -935,7 +929,7 @@
             {
               "next_hop": "10.250.10.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "0.0.0.0/0"
             }
@@ -952,11 +946,11 @@
               "nodes": [
                 {
                   "ip_address": "10.220.10.2/24",
-                  "node": "app-leaf1"
+                  "node": "leaf-nfd41-pod1-2-1"
                 },
                 {
                   "ip_address": "10.220.10.3/24",
-                  "node": "app-leaf2"
+                  "node": "leaf-nfd41-pod1-2-2"
                 }
               ],
               "tags": [
@@ -982,7 +976,7 @@
               ],
               "ipv4_acl_in": "ACL-FROM-FIREWALL",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ]
             }
           ],
@@ -993,7 +987,7 @@
             {
               "next_hop": "10.250.20.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "0.0.0.0/0"
             }
@@ -1010,11 +1004,11 @@
               "nodes": [
                 {
                   "ip_address": "10.220.20.2/24",
-                  "node": "app-leaf1"
+                  "node": "leaf-nfd41-pod1-2-1"
                 },
                 {
                   "ip_address": "10.220.20.3/24",
-                  "node": "app-leaf2"
+                  "node": "leaf-nfd41-pod1-2-2"
                 }
               ],
               "tags": [
@@ -1046,7 +1040,7 @@
               ],
               "ipv4_acl_in": "ACL-FROM-FIREWALL",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ]
             }
           ],
@@ -1057,7 +1051,7 @@
             {
               "next_hop": "10.250.210.2",
               "nodes": [
-                "border-leaf1"
+                "leaf-nfd41-pod1-3-1"
               ],
               "prefix": "0.0.0.0/0"
             }
@@ -1074,11 +1068,11 @@
               "nodes": [
                 {
                   "ip_address": "10.210.0.2/24",
-                  "node": "app-leaf1"
+                  "node": "leaf-nfd41-pod1-2-1"
                 },
                 {
                   "ip_address": "10.210.0.3/24",
-                  "node": "app-leaf2"
+                  "node": "leaf-nfd41-pod1-2-2"
                 }
               ],
               "tags": [

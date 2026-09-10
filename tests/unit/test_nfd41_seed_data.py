@@ -12,7 +12,6 @@ import operator
 from pathlib import Path
 from typing import Any
 
-import pytest
 import yaml
 
 OBJECTS_DIR = Path(__file__).parent.parent.parent / "objects"
@@ -76,43 +75,62 @@ def test_nfd41_pinned_asns_are_seeded() -> None:
     assert seeded >= NFD41_PINNED_ASNS, f"missing RoutingAsn objects: {sorted(NFD41_PINNED_ASNS - seeded)}"
 
 
-def test_nfd41_devices_are_named_for_the_deployed_lab() -> None:
-    """The seven switches carry the hostnames containerlab gives them.
+# How the pod and rack generators name what they create. Mirrored from
+# generators/generate_pod.py and generators/generate_rack.py.
+SPINE_NAME = "spine-{pod}-{index}"
+LEAF_NAME = "leaf-{pod}-{rack_index}-{index}"
 
-    The rendered configuration contains these names, and so does every
-    neighbour's configuration, so a rename is a fabric-wide change.
+
+def _pod() -> dict[str, Any]:
+    fabric = next(entry for _, entry in _load_objects("NetworkFabric") if entry["name"] == "NFD41_FABRIC")
+    return fabric["children"]["data"][0]
+
+
+def test_seeded_switch_names_match_what_the_generators_produce() -> None:
+    """The pinned devices must be named exactly as the generators would name them.
+
+    The pod and rack generators upsert devices *by name*. A seeded name that does
+    not match leaves these objects orphaned and a second set of devices created
+    alongside them -- which renders as a fabric of switches with no uplinks, plus
+    a duplicate set with no pinned identity.
     """
-    devices = {entry["name"] for path, entry in _load_objects("DcimDevice") if path.name.startswith("26_nfd41")}
-    assert devices == {
-        "spine1",
-        "spine2",
-        "k8s-leaf1",
-        "k8s-leaf2",
-        "app-leaf1",
-        "app-leaf2",
-        "border-leaf1",
-    }
+    pod = _pod()["name"]
+    expected = {SPINE_NAME.format(pod=pod, index=index) for index in (1, 2)}
+    for _, rack in _load_objects("LocationRack"):
+        quantity = rack["device_designs"]["data"][0]["device_quantity"]
+        expected |= {
+            LEAF_NAME.format(pod=pod, rack_index=rack["index"], index=index) for index in range(1, quantity + 1)
+        }
+
+    seeded = {entry["name"] for path, entry in _load_objects("DcimDevice") if path.name.startswith("26_nfd41")}
+    assert seeded == expected
 
 
-@pytest.mark.parametrize(
-    ("rack", "template", "expected"),
-    [
-        ("K8S_LEAFS", "k8s-leaf{index}", ["k8s-leaf1", "k8s-leaf2"]),
-        ("APP_LEAFS", "app-leaf{index}", ["app-leaf1", "app-leaf2"]),
-        ("BORDER_LEAFS", "border-leaf{index}", ["border-leaf1"]),
-    ],
-)
-def test_rack_name_templates_produce_the_seeded_hostnames(rack: str, template: str, expected: list[str]) -> None:
-    """A rack's name template must render exactly the hostnames that are seeded.
+def test_no_rack_or_pod_overrides_the_default_naming() -> None:
+    """Naming is left to the generators; the lab is deployed to match.
 
-    If it does not, the rack generator creates a second set of devices under its
-    own names and leaves the seeded ones uncabled -- which renders as a fabric
-    of switches with no uplinks.
+    A `device_name_template` here would have to agree with every seeded device
+    name, so the two could drift apart silently. Leaving it unset removes that
+    failure mode.
     """
-    racks = {entry["name"]: entry for _, entry in _load_objects("LocationRack")}
-    assert racks[rack]["device_name_template"] == template
-    quantity = racks[rack]["device_designs"]["data"][0]["device_quantity"]
-    assert [template.format(index=index) for index in range(1, quantity + 1)] == expected
+    overrides = [
+        entry["name"]
+        for entry in (*(rack for _, rack in _load_objects("LocationRack")), _pod())
+        if entry.get("device_name_template")
+    ]
+    assert not overrides, f"unexpected device_name_template on: {sorted(overrides)}"
+
+
+def test_spine_uplink_ports_follow_rack_order() -> None:
+    """Rack index decides which spine port a rack's leaves land on.
+
+    The generators allocate spine downlinks in rack order, so the indices fix the
+    point-to-point addressing and every spine interface description. Reordering
+    the racks rewrites the spines' configuration.
+    """
+    racks = sorted((entry for _, entry in _load_objects("LocationRack")), key=operator.itemgetter("index"))
+    assert [rack["name"] for rack in racks] == ["K8S_LEAFS", "APP_LEAFS", "BORDER_LEAFS"]
+    assert [rack["index"] for rack in racks] == [1, 2, 3]
 
 
 def test_nfd41_mlag_domains_are_named_after_their_racks() -> None:
