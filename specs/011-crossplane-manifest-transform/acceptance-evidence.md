@@ -229,6 +229,30 @@ That second one is worth a bug report: a worker restart can permanently wedge ev
 scheduled flow with a concurrency limit, and the only symptom is that repository syncs
 silently stop happening.
 
+**3. The branch's schema must be loaded before its first sync.** Infrahub validates a
+`CoreGraphQLQuery` against the branch's schema as it imports it, so syncing a branch whose
+schema has not been loaded yet fails at the first new query:
+
+```text
+Found 9 Python transforms in the repository
+Found 7 artifact definitions in the repository
+Failed to synchronize branch, skipping it.
+  reason=Cannot query field 'ServiceFabricPeering' on type 'Query'
+         path: ['CoreGraphQLQueryCreate']
+```
+
+This is the registration check doing its job — the counts show Infrahub read the feature's
+`.infrahub.yml` correctly — but it means a branch created by `infrahubctl branch create`
+must have `schema load` and `object load` run against it *before* the repository sync
+reaches it. The ordering is not obvious, because the branch is created from `main` and
+inherits `main`'s schema, which is exactly what a new feature's schema is not.
+
+It also has a sharp edge: the commit is recorded on the repository *before* the import
+runs, so after an `error-import` the branch sits at the failed commit and the sync has
+nothing new to do. Loading the schema afterwards does not trigger a retry — the branch has
+to advance to a new commit. Both facts together mean the reliable order is: create the
+branch, load schema, load objects, *then* push the code.
+
 ### What that leaves unverified, precisely
 
 The three `.infrahub.yml` registrations are written and `yamllint`-clean, and the artifact
