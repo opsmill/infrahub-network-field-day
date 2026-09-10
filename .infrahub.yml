@@ -69,6 +69,10 @@ queries:
   - name: crossplane_fabric_peering
     file_path: "./transforms/crossplane_fabric_peering.gql"
 
+  # Service-layer generator: derives a cluster's fabric BGP sessions
+  - name: generate_fabric_peering
+    file_path: "./generators/generate_fabric_peering.gql"
+
 
 generator_definitions:
   - name: generate-avd-device-hostvar
@@ -136,6 +140,18 @@ generator_definitions:
     convert_query_response: false
     execute_in_proposed_change: false
     execute_after_merge: false
+
+  # Sits underneath the service layer: one ClusterFabricPeering per fabric
+  # device the cluster's nodes are cabled to, with peer_asn read from the
+  # fabric's own RoutingAsn so the two ends of the session cannot drift.
+  - name: generate-fabric-peering
+    file_path: "./generators/generate_fabric_peering.py"
+    query: generate_fabric_peering
+    targets: service_fabric_peerings
+    parameters:
+      name: name__value
+    class_name: FabricPeeringGenerator
+    convert_query_response: false
 
   - name: generate-server-cabling
     file_path: "./generators/generate_server_cabling.py"

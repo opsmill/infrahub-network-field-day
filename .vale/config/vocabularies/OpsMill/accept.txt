@@ -71,6 +71,7 @@ idempotency
 idempotently
 upsert
 upserted
+upserting
 
 # General technical usage
 checksumming
@@ -109,6 +110,7 @@ CablingPlan
 CloudVision
 CustomWebhook
 FabricGenerator
+FabricPeeringGenerator
 GenerateAVDDeviceHostvar
 GeneratorMixin
 PodGenerator
