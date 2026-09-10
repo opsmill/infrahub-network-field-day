@@ -97,6 +97,25 @@ spec:
 # One session per leaf. The peer address is each leaf's OWN Vlan110 SVI
 # address, never the MLAG pair's shared VARP gateway 10.110.0.1 — an anycast
 # address is ambiguous across the pair and cannot identify a single peer.
+# Ownership of these rows is split, deliberately, as of the service-layer
+# generator (specs/012-service-layer-generator):
+#
+#   name, peer_address, description, svi -> declared HERE and authoritative.
+#     Nothing in the fabric model connects a peering address to a device: the
+#     IpamIPAddress is attached to no interface, so the generator has no
+#     traversal to derive it from and is forbidden to invent one (FR-027).
+#     `name` is likewise a lab-facing label -- `k8s-leaf1` is the containerlab
+#     hostname of the switch the fabric model calls `leaf-nfd41-pod1-1-1`.
+#
+#   peer_asn -> a SEED only. `generate-fabric-peering` overwrites it from the
+#     peer device's own RoutingAsn, which is the number AVD renders onto the
+#     switch. If the value below ever disagrees with the fabric, the generator
+#     wins and the drift is corrected rather than shipped.
+#
+# These rows are therefore NOT removed. They are the only record of each
+# session's address, and deleting them would leave a deleted session
+# unrecreatable. Removing them becomes possible once the leaves' peering SVIs
+# are modelled, which makes the address derivable exactly as the ASN now is.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:

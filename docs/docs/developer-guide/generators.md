@@ -247,6 +247,47 @@ creation path: re-running it after a VLAN or LAG change updates an already-cable
 producing duplicate links. The operator-facing walkthrough is
 [Add a Server](../how-to/add-server.md).
 
+### FabricPeeringGenerator
+
+**File**: `generators/generate_fabric_peering.py`
+
+**Design object**: `Service.FabricPeering` — the ordered intent, "this cluster peers with the
+fabric"
+
+**Generated objects**: `Cluster.FabricPeering` — one BGP session per fabric device the
+cluster's nodes are cabled to
+
+**Target group**: `service_fabric_peerings`
+
+This is the generator that sits underneath the service layer. Before it, each session's peer
+device, address and BGP AS were written by hand in `objects/34_nfd41_cluster.yml`. The AS was
+a second copy of a number the fabric model already held, and the lab's own notes describe what
+a second copy costs: change either side without the other and BGP either does not come up or
+comes up carrying nothing.
+
+**What it derives.** The peer set comes from the cabling — cluster nodes, their interfaces,
+each link's far end — reduced to *distinct* devices whose role is `leaf`, `border_leaf` or
+`l2leaf`, and sorted by device name. `peer_asn` is read from the peer device's own
+`Routing.Asn`, the same node AVD renders the switch from, so the two ends of the session
+cannot drift apart.
+
+**Two traps worth knowing.** `NetworkLink.connected_endpoints` returns *both* ends of a cable,
+including the cluster node's own interface, so the near end is excluded by interface id —
+filtering by device kind only appears to work because cluster nodes are `Compute.PhysicalServer`
+rather than `Dcim.Device`. And adoption fetches the existing session and sets one attribute
+rather than upserting: an upsert validates every mandatory field, so a payload that omits
+`name` and `peer_address` in order to preserve them is rejected outright.
+
+**What it does not do.** It never creates a session from nothing. `peer_address` is mandatory
+and is recorded only on an existing session, so a newly cabled leaf has no address the
+generator is permitted to supply — it raises naming the device instead. Modelling the leaves'
+peering SVIs would make the address derivable exactly as the ASN now is; until then the
+address stays declared in object data.
+
+**Cleanup.** Sessions the generator previously produced and no longer derives are removed by
+the tracking context. Sessions it never produced are outside that context and are never
+deletion candidates.
+
 ### BackfillStructuredConfigGenerator
 
 **File**: `generators/backfill_structured_config.py`

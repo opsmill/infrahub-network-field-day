@@ -86,7 +86,7 @@ Infrahub reference-design repository, per the plan's Structure Decision:
 - [X] T022 [US1] Implement the reconciliation: index existing sessions by `peer_device` id, then build the adopt or create payload per [data-model.md](./data-model.md) §3
 - [X] T023 [US1] Implement all seven validations, raising before any write. Ordering matters: a partial write is the only path by which this generator can delete a real session — see [research.md](./research.md) R4
 - [X] T024 [US1] Write the sessions with `await session.save(allow_upsert=True)`, relying on the `[["cluster", "peer_device"]]` uniqueness constraint as the natural key so an upsert adopts rather than duplicates
-- [ ] T025 [US1] Link the written sessions to the ordering service through its `peerings` relationship (FR-016)
+- [X] T025 [US1] Link the written sessions to the ordering service through its `peerings` relationship (FR-016)
 - [X] T026 [US1] Run `uv run pytest tests/unit/test_generate_fabric_peering.py -v` and confirm every test written in T011–T017 now passes
 
 **Checkpoint**: The derivation is correct and fully covered without a server.
@@ -99,14 +99,14 @@ Infrahub reference-design repository, per the plan's Structure Decision:
 
 **Independent Test**: Run the generator, regenerate the artifact, and diff against the T004 baseline.
 
-- [ ] T027 [US2] Register the query and the generator in `.infrahub.yml` exactly as specified in [contracts/generator-contract.md](./contracts/generator-contract.md) §1, targeting the existing `service_fabric_peerings` group rather than creating a second group over the same object (FR-025)
-- [ ] T028 [US2] Commit and push the branch so the repository sync picks it up, then confirm `sync_status: in-sync` at the new commit and that a `CoreGeneratorDefinition` named `generate-fabric-peering` exists on the branch. A mismatch between the transform's `query` attribute and the registered query name surfaces only here
-- [ ] T029 [US2] Run the generator: `uv run infrahubctl generator generate-fabric-peering --branch svc-gen name=nfd41-fabric-peering`
-- [ ] T030 [US2] Confirm the adoption was pure: exactly two `ClusterFabricPeering` objects, `name` still `k8s-leaf1`/`k8s-leaf2`, `peer_address` still `10.110.0.2/24` and `10.110.0.3/24`, `peer_device` the two leaves and never a `ComputePhysicalServer` (G-2, G-4)
-- [ ] T031 [US2] Re-render and diff against the baseline: `uv run infrahubctl transform crossplane_fabric_peering name=nfd41-fabric-peering --branch svc-gen | diff /tmp/baseline.yaml -`. **Expected: no output.** This is SC-004 and the single most important check in the cycle
-- [ ] T032 [US2] Regenerate the artifact through `POST /api/artifact/generate/<definition-id>?branch=svc-gen` and confirm the checksum is unchanged from T004. Pass the **artifact definition** id, not the artifact id — cycle 011 found the latter returns HTTP 200 then fails in the background with `NodeNotFoundError`, which looks exactly like a passing test
-- [ ] T033 [US2] Confirm the regeneration actually executed by finding `Generate artifact Crossplane FabricPeering` in the task-worker log after the trigger timestamp. An unchanged checksum from a run that never happened is not evidence
-- [ ] T034 [US2] Run the generator a second time and repeat T031 and T032, proving idempotence at the level an operator observes (SC-002, contract §4)
+- [X] T027 [US2] Register the query and the generator in `.infrahub.yml` exactly as specified in [contracts/generator-contract.md](./contracts/generator-contract.md) §1, targeting the existing `service_fabric_peerings` group rather than creating a second group over the same object (FR-025)
+- [X] T028 [US2] Commit and push the branch so the repository sync picks it up, then confirm `sync_status: in-sync` at the new commit and that a `CoreGeneratorDefinition` named `generate-fabric-peering` exists on the branch. A mismatch between the transform's `query` attribute and the registered query name surfaces only here
+- [X] T029 [US2] Run the generator: `uv run infrahubctl generator generate-fabric-peering --branch svc-gen name=nfd41-fabric-peering`
+- [X] T030 [US2] Confirm the adoption was pure: exactly two `ClusterFabricPeering` objects, `name` still `k8s-leaf1`/`k8s-leaf2`, `peer_address` still `10.110.0.2/24` and `10.110.0.3/24`, `peer_device` the two leaves and never a `ComputePhysicalServer` (G-2, G-4)
+- [X] T031 [US2] Re-render and diff against the baseline: `uv run infrahubctl transform crossplane_fabric_peering name=nfd41-fabric-peering --branch svc-gen | diff /tmp/baseline.yaml -`. **Expected: no output.** This is SC-004 and the single most important check in the cycle
+- [X] T032 [US2] Regenerate the artifact through `POST /api/artifact/generate/<definition-id>?branch=svc-gen` and confirm the checksum is unchanged from T004. Pass the **artifact definition** id, not the artifact id — cycle 011 found the latter returns HTTP 200 then fails in the background with `NodeNotFoundError`, which looks exactly like a passing test
+- [X] T033 [US2] Confirm the regeneration actually executed by finding `Generate artifact Crossplane FabricPeering` in the task-worker log after the trigger timestamp. An unchanged checksum from a run that never happened is not evidence
+- [X] T034 [US2] Run the generator a second time and repeat T031 and T032, proving idempotence at the level an operator observes (SC-002, contract §4)
 
 **Checkpoint**: MVP complete. The generator produces the sessions, and the artifact is byte-identical.
 
@@ -120,16 +120,16 @@ Infrahub reference-design repository, per the plan's Structure Decision:
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T035 [P] [US3] Add `test_empty_peer_set_raises_before_writing` asserting that a cluster with no cabled nodes produces an error and zero writes, so a partial set can never reach the tracking group (FR-019, V-7)
-- [ ] T036 [P] [US3] Add `test_disabled_session_stays_disabled` asserting `enabled` is absent from the adopt payload, so an operator who disabled a session keeps it disabled across runs (FR-017)
+- [X] T035 [P] [US3] Add `test_empty_peer_set_raises_before_writing` asserting that a cluster with no cabled nodes produces an error and zero writes, so a partial set can never reach the tracking group (FR-019, V-7)
+- [X] T036 [P] [US3] Add `test_disabled_session_stays_disabled` asserting `enabled` is absent from the adopt payload, so an operator who disabled a session keeps it disabled across runs (FR-017)
 
 ### Implementation and validation for User Story 3
 
-- [ ] T037 [US3] Review every `save()` call and add `update_group_context=False` to any object the generator touches but does not own, following `generate_rack.py` and `generate_fabric.py`. Sessions the generator owns must NOT carry this flag, or cleanup will never remove them
-- [ ] T038 [US3] Live-verify FR-022: create a `ClusterFabricPeering` by hand that the derivation would not produce, run the generator, and confirm the object survives. This holds by construction — deletion candidates are last run's group members minus this run's ([research.md](./research.md) R4) — but it is the destructive path, so prove it rather than reason about it
-- [ ] T039 [US3] Live-verify FR-021: remove the cabling of the only node attached to one leaf, re-run, and confirm exactly that leaf's session is deleted and the other survives
-- [ ] T040 [US3] Confirm the artifact now renders one peer, and that its checksum **moved** — the complement of T032. If nothing can move the checksum, T032 proves nothing (SC-005)
-- [ ] T041 [US3] Restore the cabling, re-run, and confirm the session and the original checksum both return, leaving the branch as US2 left it
+- [X] T037 [US3] Review every `save()` call and add `update_group_context=False` to any object the generator touches but does not own, following `generate_rack.py` and `generate_fabric.py`. Sessions the generator owns must NOT carry this flag, or cleanup will never remove them
+- [X] T038 [US3] Live-verify FR-022: create a `ClusterFabricPeering` by hand that the derivation would not produce, run the generator, and confirm the object survives. This holds by construction — deletion candidates are last run's group members minus this run's ([research.md](./research.md) R4) — but it is the destructive path, so prove it rather than reason about it
+- [X] T039 [US3] Live-verify FR-021: remove the cabling of the only node attached to one leaf, re-run, and confirm exactly that leaf's session is deleted and the other survives
+- [X] T040 [US3] Confirm the artifact now renders one peer, and that its checksum **moved** — the complement of T032. If nothing can move the checksum, T032 proves nothing (SC-005)
+- [X] T041 [US3] Restore the cabling, re-run, and confirm the session and the original checksum both return, leaving the branch as US2 left it
 
 **Checkpoint**: The destructive path is understood and bounded.
 
@@ -137,14 +137,14 @@ Infrahub reference-design repository, per the plan's Structure Decision:
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T042 Remove the two hand-written `ClusterFabricPeering` entries from `objects/34_nfd41_cluster.yml`, keeping the cluster, its nodes and its addresses. Leaving them would let the file's values silently win on the next `object load`, preserving the second copy this feature exists to remove
-- [ ] T043 Re-run `uv run infrahubctl object load objects/ --branch svc-gen` and confirm it is idempotent with the rows gone and does not delete the generated sessions
-- [ ] T044 [P] Add a `### FabricPeeringGenerator` entry to `docs/docs/developer-guide/generators.md` alongside the seven existing generators, covering the design object, generated objects, target group, the derivation, and the adopt-versus-create distinction
-- [ ] T045 [P] Update the generator inventory in `AGENTS.md` to include `generate-fabric-peering`
-- [ ] T046 [P] Add any new vocabulary to `.vale/config/vocabularies/OpsMill/accept.txt` only if `lint-prose` reports a new error; confirm the count is unchanged rather than assuming
-- [ ] T047 Run the full gate: `uv run pytest tests/unit` and `uv run invoke lint`. `lint-prose` fails on 7 pre-existing errors in `docs/`; confirm the count is unchanged
-- [ ] T048 Write `specs/012-service-layer-generator/acceptance-evidence.md` recording SC-001 through SC-010 with the actual checksums, object counts and command output, following the format cycle 011 established
-- [ ] T049 Record the Principle II exception evidence explicitly: the unit tests, the live double-run, and the artifact checksum comparison, stated as the documented alternative to `$infrahub-test-generator-idempotence`
+- [X] T042 **Revised during implementation — the rows are NOT removed.** Removing them was impossible: `peer_address` is recorded only on the session, so a deleted session could never be recreated (proved live in T041, where restoring required re-loading this file). Instead `objects/34_nfd41_cluster.yml` is annotated to record the split ownership — `name`, `peer_address`, `description` and `svi` are declared there and authoritative; `peer_asn` is a seed the generator overwrites from the fabric. The `peer_asn` duplication therefore remains in the file, but is no longer authoritative, which is a smaller win than this task originally assumed and is recorded as such in acceptance-evidence.md
+- [X] T043 Re-ran `uv run infrahubctl object load objects/34_nfd41_cluster.yml --branch svc-gen` with the rows present and confirmed it is idempotent and does not disturb the generated sessions — done as part of the T041 restore, which depended on exactly this behaviour
+- [X] T044 [P] Add a `### FabricPeeringGenerator` entry to `docs/docs/developer-guide/generators.md` alongside the seven existing generators, covering the design object, generated objects, target group, the derivation, and the adopt-versus-create distinction
+- [X] T045 [P] Update the generator inventory in `AGENTS.md` to include `generate-fabric-peering`
+- [X] T046 [P] Add any new vocabulary to `.vale/config/vocabularies/OpsMill/accept.txt` only if `lint-prose` reports a new error; confirm the count is unchanged rather than assuming
+- [X] T047 Run the full gate: `uv run pytest tests/unit` and `uv run invoke lint`. `lint-prose` fails on 7 pre-existing errors in `docs/`; confirm the count is unchanged
+- [X] T048 Write `specs/012-service-layer-generator/acceptance-evidence.md` recording SC-001 through SC-010 with the actual checksums, object counts and command output, following the format cycle 011 established
+- [X] T049 Record the Principle II exception evidence explicitly: the unit tests, the live double-run, and the artifact checksum comparison, stated as the documented alternative to `$infrahub-test-generator-idempotence`
 - [ ] T050 Delete the throwaway branch once the evidence is captured: `uv run infrahubctl branch delete svc-gen`
 - [ ] T051 Obtain maintainer sign-off on the Principle II and Principle IV exceptions recorded in [plan.md](./plan.md) Complexity Tracking — the same open decision as cycles 010 and 011, now with a second principle attached
 

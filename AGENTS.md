@@ -62,8 +62,8 @@ Key docs to read before larger changes:
 
 Current generator definitions are registered in `.infrahub.yml`:
 `generate-fabric`, `generate-pod`, `generate-rack`, `generate-server-cabling`,
-`generate-avd-device-hostvar`, `generate-avd-device-structured-config`, and
-`backfill-structured-config`.
+`generate-avd-device-hostvar`, `generate-avd-device-structured-config`,
+`backfill-structured-config`, and `generate-fabric-peering`.
 
 Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
