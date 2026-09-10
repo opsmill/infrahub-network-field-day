@@ -1,0 +1,38 @@
+---
+# ============================================================================
+# NFD41 — the one service-layer object this cycle needs.
+#
+# An artifact needs a target that inherits CoreArtifactTarget, and only the
+# service kinds do — specs/010-lab-service-layer-model FR-083 scoped it to the
+# three cluster-delivered ones deliberately, so the artifact hangs off ordered
+# intent rather than off a piece of infrastructure. This is that target.
+#
+# It is the ONLY service-layer object loaded. Everything the rendered manifest
+# actually says comes from the technical layer beneath it: the cluster supplies
+# the local ASN, the auth secret's name, the timers and the selectors, and each
+# ClusterFabricPeering supplies a peer's name, address and ASN.
+#
+# The advertisement selector is a "key=value" list rather than a map because
+# Infrahub 1.10.6 returns a 500 for a JSON attribute key containing a dot or a
+# slash, and every Kubernetes label selector has both. Recorded in
+# schemas/MARKETPLACE.md; the transform parses it back into a map.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: ServiceFabricPeering
+  data:
+    - name: nfd41-fabric-peering
+      description: "The nfd41 cluster's BGP contract with the EVPN fabric"
+      status: active
+      owner: branch
+      cluster: nfd41
+      communities:
+        - "65401:110"
+      advertisement_selector:
+        - "nfd41.lab/advertise=fabric"
+      peerings:
+        - [nfd41, k8s-leaf1]
+        - [nfd41, k8s-leaf2]
+      member_of_groups:
+        - service_fabric_peerings

@@ -65,6 +65,10 @@ queries:
   - name: cv_workspace_submission_webhook
     file_path: "./transforms/cv_workspace_submission_webhook.gql"
 
+  # Crossplane manifest rendering
+  - name: crossplane_fabric_peering
+    file_path: "./transforms/crossplane_fabric_peering.gql"
+
 
 generator_definitions:
   - name: generate-avd-device-hostvar
@@ -184,6 +188,9 @@ python_transforms:
     class_name: CVWorkspaceSubmissionWebhookPayload
     file_path: "./transforms/cv_workspace_submission_webhook.py"
     convert_query_response: false
+  - name: crossplane_fabric_peering
+    class_name: CrossplaneFabricPeeringTransform
+    file_path: "./transforms/crossplane_fabric_peering.py"
 
 artifact_definitions:
   - name: "cabling_plan"
@@ -228,3 +235,10 @@ artifact_definitions:
     content_type: "application/yaml"
     targets: "fabrics"
     transformation: "containerlab_topology"
+  - name: "crossplane_fabric_peering"
+    artifact_name: "Crossplane FabricPeering"
+    parameters:
+      name: "name__value"
+    content_type: "application/yaml"
+    targets: "service_fabric_peerings"
+    transformation: "crossplane_fabric_peering"

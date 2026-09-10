@@ -2257,6 +2257,7 @@ source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "pyavd" },
+    { name = "pyyaml" },
     { name = "streamlit-flow-component" },
 ]
 
@@ -2283,6 +2284,7 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyavd", specifier = ">=6.4.0,<6.5.0" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "streamlit-flow-component", specifier = ">=1.6.1" },
 ]
 
