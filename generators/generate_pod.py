@@ -164,9 +164,15 @@ class PodGenerator(InfrahubGenerator, GeneratorMixin):
         """Create the spine switches"""
 
         device_asn_pool = None if self.underlay_routing_protocol == "ebgp" else self.asn_pool
+        name_template = await self.resolve_device_name_template(kind="NetworkPod", node_id=self.pod_id)
         for idx in range(1, self.amount_of_spines + 1):
             device = await self.create_avd_device(
-                name=f"spine-{self.pod_name}-{idx}",
+                name=self.render_device_name(
+                    name_template,
+                    f"spine-{self.pod_name}-{idx}",
+                    pod=self.pod_name,
+                    index=idx,
+                ),
                 role=self.spine_role,
                 object_template_id=self.pod_spine_switch_template,
                 pod_id=self.pod_id,

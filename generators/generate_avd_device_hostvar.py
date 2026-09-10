@@ -97,6 +97,7 @@ class RackInfo(TypedDict):
     mlag: bool | None
     leaf_names: list[str]
     avd_tags: list[str]
+    always_include_vrfs_in_tenants: list[str]
 
 
 class EvpnGatewayPayload(TypedDict):
@@ -1082,6 +1083,28 @@ def _portfast_setting(interface: object) -> str:
     return str(_value(interface, "spanning_tree_portfast") or PORTFAST_DEFAULT)
 
 
+def _bpduguard_setting(interface: object) -> str | None:
+    """Resolve the spanning-tree BPDU guard intent for a host-facing switch port.
+
+    Unset means "leave it to the platform default" rather than "disabled", so
+    nothing is emitted -- an edge port silently gaining BPDU guard would change
+    behaviour on fabrics that never asked for it.
+    """
+    value = _value(interface, "spanning_tree_bpduguard")
+    return str(value) if value else None
+
+
+def _apply_edge_port_config(adapter: dict[str, Any], interface: object) -> None:
+    """Apply the host-facing edge-port hardening and description to an adapter."""
+    adapter["spanning_tree_portfast"] = _portfast_setting(interface)
+    bpduguard = _bpduguard_setting(interface)
+    if bpduguard:
+        adapter["spanning_tree_bpduguard"] = bpduguard
+    description = _value(interface, "description")
+    if description:
+        adapter["description"] = str(description)
+
+
 def _lag_member_adapter(
     *,
     lag_node: object,
@@ -1135,7 +1158,7 @@ def _lag_member_adapter(
         endpoint_lag_node=lag_node,
     )
     _apply_vlan_adapter_config(adapter, list(tagged_vlans), untagged_vlan)
-    adapter["spanning_tree_portfast"] = _portfast_setting(local_interface)
+    _apply_edge_port_config(adapter, local_interface)
     return adapter
 
 
@@ -1431,8 +1454,8 @@ def extract_connected_endpoints(  # noqa: C901
                     # Determine mode and add VLAN config
                     _apply_vlan_adapter_config(adapter, tagged_vlans, untagged_vlan)
 
-                    # Add spanning tree portfast for server ports
-                    adapter["spanning_tree_portfast"] = _portfast_setting(interface)
+                    # Edge-port hardening and the port description
+                    _apply_edge_port_config(adapter, interface)
 
                     servers[server_name]["adapters"].append(adapter)
                     server_adapter_keys[server_name].add(adapter_key)
@@ -1457,6 +1480,24 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             {name for peer in avd_tag_peers if (name := cls._peer_name(peer)) and name not in rack_tag_set}
         )
         return [*rack_tags, *avd_tags]
+
+    @staticmethod
+    def _build_node_group_filter(avd_tags: list[str], rack_info: RackInfo) -> dict[str, Any]:
+        """Build the AVD node-group ``filter`` that scopes services onto these leaves.
+
+        ``tags`` matches a tenant's SVIs and L2 VLANs to this rack.
+        ``always_include_vrfs_in_tenants`` adds a tenant's VRFs regardless of
+        tag: a border leaf terminates a tenant's VRF for a firewall or WAN
+        handoff but owns none of that tenant's access VLANs, so tag matching
+        alone would leave the VRF off the device and the handoff unrouted.
+        """
+        node_group_filter: dict[str, Any] = {}
+        if avd_tags:
+            node_group_filter["tags"] = avd_tags
+        always_include = sorted(dict.fromkeys(rack_info.get("always_include_vrfs_in_tenants", []) or []))
+        if always_include:
+            node_group_filter["always_include_vrfs_in_tenants"] = always_include
+        return node_group_filter
 
     @classmethod
     async def _fetch_relationship_peers(cls, obj: object, relationship_name: str) -> list[object]:
@@ -1501,12 +1542,26 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             }
         )
 
-    async def _fetch_rack_avd_tags(self, rack_id: str | None) -> list[str]:
-        if not rack_id:
-            return []
+    async def _fetch_rack_avd_scoping(self, rack_id: str | None) -> tuple[list[str], list[str]]:
+        """Return the rack's AVD tags and its always-include tenant names.
 
-        rack = await self.client.get(kind="LocationRack", id=rack_id, include=["avd_tags"])
-        return await self._fetch_relationship_peer_names(rack, "avd_tags")
+        Both scope which of the fabric's VRFs and VLANs land on this rack's
+        leaves: tags match a service to a rack, and the always-include list
+        forces a tenant's VRFs on regardless of tag, which is what a border leaf
+        terminating a handoff needs.
+        """
+        if not rack_id:
+            return [], []
+
+        rack = await self.client.get(
+            kind="LocationRack",
+            id=rack_id,
+            include=["avd_tags", "always_include_vrfs_in_tenants"],
+        )
+        return (
+            await self._fetch_relationship_peer_names(rack, "avd_tags"),
+            await self._fetch_relationship_peer_names(rack, "always_include_vrfs_in_tenants"),
+        )
 
     async def _build_tenants_hostvars(self, fabric_id: str) -> list[dict[str, Any]]:
         """Build AVD-compatible tenants structure from EVPN data.
@@ -1542,9 +1597,17 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             for vrf in vrfs:
                 vrf_data: dict[str, Any] = {"name": vrf.name.value}
 
-                vrf_vni = getattr(vrf, "vrf_vni", None)
-                if vrf_vni and vrf_vni.value is not None:
-                    vrf_data["vrf_vni"] = vrf_vni.value
+                for field_name, key in (
+                    ("vrf_id", "vrf_id"),
+                    ("vrf_vni", "vrf_vni"),
+                    ("description", "description"),
+                    ("enable_mlag_ibgp_peering_vrfs", "enable_mlag_ibgp_peering_vrfs"),
+                    ("redistribute_connected", "redistribute_connected"),
+                    ("redistribute_static", "redistribute_static"),
+                ):
+                    value = self._gql_val(vrf, field_name)
+                    if value is not None:
+                        vrf_data[key] = value
 
                 vtep_diag_lo = getattr(vrf, "vtep_diagnostic_loopback", None)
                 vtep_diag_ip = getattr(vrf, "vtep_diagnostic_loopback_ip_range", None)
@@ -1553,30 +1616,19 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
                     if vtep_diag_ip and vtep_diag_ip.value:
                         vrf_data["vtep_diagnostic"]["loopback_ip_range"] = str(vtep_diag_ip.value)
 
-                svis = await self._filter_or_fetch_peers(
-                    kind="EvpnSvi",
-                    filter_name="vrf__ids",
-                    parent_id=getattr(vrf, "id", None),
-                    relationship=getattr(vrf, "svis", None),
-                )
-                svis_list: list[dict[str, Any]] = []
-                for svi in svis:
-                    svi_data: dict[str, Any] = {
-                        "id": svi.svi_id.value,
-                        "name": svi.name.value,
-                        "enabled": svi.enabled.value,
-                    }
-                    if svi.ip_address_virtual and svi.ip_address_virtual.value:
-                        svi_data["ip_address_virtual"] = str(svi.ip_address_virtual.value)
-                    rack_tag_peers = await self._fetch_relationship_peers(svi, "rack_tags")
-                    avd_tag_peers = await self._fetch_relationship_peers(svi, "avd_tags")
-                    svi_tags = self._build_svi_tags(rack_tag_peers, avd_tag_peers)
-                    if svi_tags:
-                        svi_data["tags"] = svi_tags
-                    svis_list.append(svi_data)
-
+                svis_list = await self._build_svis_hostvars(vrf)
                 if svis_list:
                     vrf_data["svis"] = svis_list
+
+                for key, builder in (
+                    ("static_routes", self._build_vrf_static_routes),
+                    ("bgp_peers", self._build_vrf_bgp_peers),
+                    ("l3_interfaces", self._build_vrf_l3_interfaces),
+                ):
+                    entries = await builder(vrf)
+                    if entries:
+                        vrf_data[key] = entries
+
                 vrfs_list.append(vrf_data)
 
             if vrfs_list:
@@ -1590,6 +1642,242 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             tenants_list.append(tenant_data)
 
         return tenants_list
+
+    async def _build_svis_hostvars(self, vrf: Any) -> list[dict[str, Any]]:
+        """Build a VRF's AVD ``svis`` list, including VARP and per-node addresses.
+
+        Two gateway styles are supported and they are mutually exclusive per SVI:
+        ``ip_address_virtual`` is a shared anycast address, while
+        ``ip_virtual_router_addresses`` plus per-node addresses (VARP) gives each
+        leaf an address of its own as well. A BGP-speaking workload needs the
+        latter -- an anycast-only SVI leaves its neighbour address ambiguous
+        across an MLAG pair.
+        """
+        svis = await self._filter_or_fetch_peers(
+            kind="EvpnSvi",
+            filter_name="vrf__ids",
+            parent_id=getattr(vrf, "id", None),
+            relationship=getattr(vrf, "svis", None),
+        )
+        svis_list: list[dict[str, Any]] = []
+        for svi in svis:
+            svi_data: dict[str, Any] = {
+                "id": svi.svi_id.value,
+                "name": svi.name.value,
+                "enabled": svi.enabled.value,
+            }
+            description = self._gql_val(svi, "description")
+            if description:
+                svi_data["description"] = description
+            if svi.ip_address_virtual and svi.ip_address_virtual.value:
+                svi_data["ip_address_virtual"] = str(svi.ip_address_virtual.value)
+
+            virtual_router_addresses = self._gql_val(svi, "ip_virtual_router_addresses")
+            if virtual_router_addresses:
+                svi_data["ip_virtual_router_addresses"] = [str(address) for address in virtual_router_addresses]
+
+            nodes = await self._build_svi_node_addresses(svi)
+            if nodes:
+                svi_data["nodes"] = nodes
+
+            rack_tag_peers = await self._fetch_relationship_peers(svi, "rack_tags")
+            avd_tag_peers = await self._fetch_relationship_peers(svi, "avd_tags")
+            svi_tags = self._build_svi_tags(rack_tag_peers, avd_tag_peers)
+            if svi_tags:
+                svi_data["tags"] = svi_tags
+            svis_list.append(svi_data)
+
+        return sorted(svis_list, key=operator.itemgetter("id"))
+
+    async def _build_svi_node_addresses(self, svi: Any) -> list[dict[str, Any]]:
+        """Build the SVI's per-device address list (AVD ``svis[].nodes``)."""
+        svi_nodes = await self._filter_or_fetch_peers(
+            kind="EvpnSviNode",
+            filter_name="svi__ids",
+            parent_id=getattr(svi, "id", None),
+            relationship=getattr(svi, "nodes", None),
+        )
+        entries: list[dict[str, Any]] = []
+        for svi_node in svi_nodes:
+            device_name = await self._single_peer_name(svi_node, "device")
+            address = self._gql_val(svi_node, "ip_address")
+            if device_name and address:
+                entries.append({"node": device_name, "ip_address": str(address)})
+        return sorted(entries, key=operator.itemgetter("node"))
+
+    async def _build_vrf_static_routes(self, vrf: Any) -> list[dict[str, Any]]:
+        """Build a VRF's AVD ``static_routes``, each scoped to the devices that originate it."""
+        routes = await self._filter_or_fetch_peers(
+            kind="RoutingVrfStaticRoute",
+            filter_name="vrf__ids",
+            parent_id=getattr(vrf, "id", None),
+            relationship=getattr(vrf, "static_routes", None),
+        )
+        entries: list[dict[str, Any]] = []
+        for route in routes:
+            prefix = self._gql_val(route, "prefix")
+            next_hop = self._gql_val(route, "next_hop")
+            nodes = await self._peer_device_names(route, "devices")
+            if not (prefix and next_hop and nodes):
+                continue
+            # `description` is deliberately not emitted: AVD's static-route model
+            # has no such key and rejects it outright, which fails the whole
+            # device's input validation. It is kept on the object as
+            # documentation for whoever reads the route in the UI or a diff.
+            entries.append(
+                {
+                    "prefix": str(prefix),
+                    "next_hop": str(next_hop).split("/")[0],
+                    "nodes": nodes,
+                }
+            )
+        return sorted(entries, key=operator.itemgetter("prefix", "next_hop"))
+
+    async def _build_vrf_bgp_peers(self, vrf: Any) -> list[dict[str, Any]]:
+        """Build a VRF's AVD ``bgp_peers`` (workload and external eBGP neighbours)."""
+        peers = await self._filter_or_fetch_peers(
+            kind="RoutingVrfBgpPeer",
+            filter_name="vrf__ids",
+            parent_id=getattr(vrf, "id", None),
+            relationship=getattr(vrf, "bgp_peers", None),
+        )
+        entries: list[dict[str, Any]] = []
+        for peer in peers:
+            address = self._gql_val(peer, "ip_address")
+            remote_asn = self._gql_val(peer, "remote_asn")
+            nodes = await self._peer_device_names(peer, "devices")
+            if not (address and remote_asn is not None and nodes):
+                continue
+            entry: dict[str, Any] = {
+                "ip_address": str(address).split("/")[0],
+                "remote_as": str(remote_asn),
+                "nodes": nodes,
+            }
+            for field_name, key in (
+                ("description", "description"),
+                ("cleartext_password", "cleartext_password"),
+                ("send_community", "send_community"),
+                ("next_hop_self", "next_hop_self"),
+                ("maximum_routes", "maximum_routes"),
+                ("route_map_in", "route_map_in"),
+                ("route_map_out", "route_map_out"),
+            ):
+                value = self._gql_val(peer, field_name)
+                # `not value` would drop a deliberate `false` (next_hop_self),
+                # so only None and the empty string are treated as unset.
+                if value not in (None, ""):
+                    entry[key] = value
+            entries.append(entry)
+        return sorted(entries, key=operator.itemgetter("ip_address"))
+
+    async def _build_vrf_l3_interfaces(self, vrf: Any) -> list[dict[str, Any]]:
+        """Build a VRF's AVD ``l3_interfaces`` (routed handoffs such as a firewall leg).
+
+        AVD takes parallel ``interfaces``/``nodes``/``ip_addresses`` lists; each
+        Infrahub object is one device-and-interface pair, so each becomes a
+        single-element entry. That keeps the objects individually addressable --
+        one handoff per object, with its own ACL bindings and change history.
+        """
+        l3_interfaces = await self._filter_or_fetch_peers(
+            kind="RoutingVrfL3Interface",
+            filter_name="vrf__ids",
+            parent_id=getattr(vrf, "id", None),
+            relationship=getattr(vrf, "l3_interfaces", None),
+        )
+        entries: list[dict[str, Any]] = []
+        for l3_interface in l3_interfaces:
+            interface_name = self._gql_val(l3_interface, "interface_name")
+            address = self._gql_val(l3_interface, "ip_address")
+            device_name = await self._single_peer_name(l3_interface, "device")
+            if not (interface_name and address and device_name):
+                continue
+            entry: dict[str, Any] = {
+                "interfaces": [interface_name],
+                "nodes": [device_name],
+                "ip_addresses": [str(address)],
+            }
+            for field_name, key in (
+                ("description", "description"),
+                ("enabled", "enabled"),
+                ("ipv4_acl_in", "ipv4_acl_in"),
+                ("ipv4_acl_out", "ipv4_acl_out"),
+            ):
+                value = self._gql_val(l3_interface, field_name)
+                # As above: `enabled: false` is meaningful and must survive.
+                if value not in (None, ""):
+                    entry[key] = value
+            entries.append(entry)
+        return sorted(entries, key=lambda entry: (entry["nodes"][0], entry["interfaces"][0]))
+
+    async def _peer_device_names(self, obj: object, relationship_name: str) -> list[str]:
+        """Resolve the device names behind a cardinality-many relationship.
+
+        Reads the peer ids and fetches each device, rather than going through
+        ``RelationshipManager.peers`` -- those return ``RelatedNode``s whose
+        ``.peer`` resolves through the local store, which is not populated for an
+        object reached via ``client.filters`` without an explicit ``include``.
+        Fetched names are cached: a VRF's BGP peers and static routes all point
+        at the same handful of devices.
+        """
+        relationship = getattr(obj, relationship_name, None)
+        if relationship is None:
+            return []
+
+        cache: dict[str, str | None] = self._device_name_cache
+        names: set[str] = set()
+        peer_ids = [
+            peer_id for peer in getattr(relationship, "peers", []) or [] if (peer_id := getattr(peer, "id", None))
+        ]
+        for peer_id in peer_ids:
+            if peer_id not in cache:
+                try:
+                    cache[peer_id] = self._peer_name(await self.client.get(kind="DcimDevice", id=peer_id))
+                except (AttributeError, KeyError, ValueError):
+                    cache[peer_id] = None
+            if (name := cache[peer_id]) is not None:
+                names.add(name)
+
+        if not peer_ids:
+            # No peer ids at all: either the relationship is empty, or this is a
+            # query-model object that exposes its peers inline. The shared peer
+            # walk covers the second case.
+            return await self._fetch_relationship_peer_names(obj, relationship_name)
+        return sorted(names)
+
+    @property
+    def _device_name_cache(self) -> dict[str, str | None]:
+        cache = getattr(self, "_device_names_by_id", None)
+        if cache is None:
+            cache = {}
+            self._device_names_by_id = cache
+        return cache
+
+    async def _single_peer_name(self, obj: object, relationship_name: str, *, kind: str = "DcimDevice") -> str | None:
+        """Resolve the name behind a cardinality-one relationship.
+
+        Deliberately never reads ``RelatedNode.peer``: that property resolves
+        through the SDK's local store and raises ``NodeNotFoundError`` for a peer
+        the client has not already fetched, which is the normal case for an
+        object reached via ``client.filters``. Reading the peer id and fetching
+        it is the path that works for both a GraphQL query model (which carries
+        the peer inline as ``node``) and a plain SDK relationship.
+        """
+        relationship = getattr(obj, relationship_name, None)
+        if relationship is None:
+            return None
+
+        node = getattr(relationship, "node", None)
+        if node is not None and (name := self._peer_name(node)):
+            return name
+
+        peer_id = getattr(relationship, "id", None)
+        if not peer_id:
+            return None
+        try:
+            fetched = await self.client.get(kind=kind, id=peer_id)
+        except (AttributeError, KeyError, ValueError):
+            return None
+        return self._peer_name(fetched)
 
     async def _build_l2vlans_hostvars(self, tenant: Any) -> list[dict[str, Any]]:
         """Build the AVD ``l2vlans`` list for a tenant, with tag-based scoping.
@@ -1948,9 +2236,14 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
                         server_vrf = cls._gql_val(node, "server_vrf")
                         if server_vrf:
                             entry["server_vrf"] = server_vrf
+                        if cls._gql_val(node, "iburst"):
+                            entry["iburst"] = True
                         ntp_list.append(entry)
             if ntp_list:
                 result["ntp_servers"] = ntp_list
+
+        if cls._gql_val(fabric, "ntp_set_first_server_as_preferred"):
+            result["ntp_set_first_server_as_preferred"] = True
 
         local_users_rel = getattr(fabric, "local_users", None)
         if local_users_rel and hasattr(local_users_rel, "edges"):
@@ -2045,7 +2338,13 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         """Extract rack grouping data for leaf node_groups."""
         device_rack = getattr(device, "rack", None)
         if not device_rack or not device_rack.node:
-            return {"name": None, "mlag": None, "leaf_names": [], "avd_tags": []}
+            return {
+                "name": None,
+                "mlag": None,
+                "leaf_names": [],
+                "avd_tags": [],
+                "always_include_vrfs_in_tenants": [],
+            }
 
         rack = device_rack.node
         rack_name = rack.name.value if getattr(rack, "name", None) else None
@@ -2063,7 +2362,13 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
                     continue
                 leaf_names.append(node.name.value)
 
-        return {"name": rack_name, "mlag": rack_mlag, "leaf_names": sorted(leaf_names), "avd_tags": []}
+        return {
+            "name": rack_name,
+            "mlag": rack_mlag,
+            "leaf_names": sorted(leaf_names),
+            "avd_tags": [],
+            "always_include_vrfs_in_tenants": [],
+        }
 
     @staticmethod
     def _extract_evpn_gateway_payload(device: object, *, hostname: str, role: str) -> EvpnGatewayPayload | None:
@@ -2255,10 +2560,15 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         if management.get("ntp_servers"):
             ntp_settings: dict[str, Any] = {"servers": []}
             for srv in management["ntp_servers"]:
-                ntp_settings["servers"].append({"name": srv["name"]})
+                server_entry: dict[str, Any] = {"name": srv["name"]}
+                if srv.get("iburst"):
+                    server_entry["iburst"] = True
+                ntp_settings["servers"].append(server_entry)
                 # server_vrf goes at the ntp_settings level, not per-server
                 if "server_vrf" in srv and "server_vrf" not in ntp_settings:
                     ntp_settings["server_vrf"] = srv["server_vrf"]
+            if management.get("ntp_set_first_server_as_preferred"):
+                ntp_settings["set_first_ntp_server_as_preferred"] = True
             hostvars["ntp_settings"] = ntp_settings
         if management.get("local_users"):
             hostvars["aaa_settings"] = {"local_users": management["local_users"]}
@@ -2273,6 +2583,7 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         # node-group level rather than in l3leaf.defaults.
         if renders_mlag:
             avd_tags = sorted(dict.fromkeys(rack_info.get("avd_tags", [])))
+            node_group_filter = GenerateAVDDeviceHostvar._build_node_group_filter(avd_tags, rack_info)
             if mlag_info["domain_id"]:
                 mlag_bgp_asn = mlag_info.get("bgp_asn")
                 pair_names = sorted(dict.fromkeys([*mlag_info.get("peer_names", []), hostname]))
@@ -2291,8 +2602,8 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
                 effective_vrmac = mlag_info["virtual_router_mac"] or virtual_router_mac
                 if effective_vrmac:
                     node_group["virtual_router_mac_address"] = effective_vrmac
-                if avd_tags:
-                    node_group["filter"] = {"tags": avd_tags}
+                if node_group_filter:
+                    node_group["filter"] = node_group_filter
                 hostvars[node_type_key]["node_groups"] = [node_group]
             else:
                 rack_name = rack_info.get("name")
@@ -2302,8 +2613,8 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
                         "group": rack_name,
                         "nodes": [{"name": leaf_name} for leaf_name in leaf_names],
                     }
-                    if avd_tags:
-                        node_group["filter"] = {"tags": avd_tags}
+                    if node_group_filter:
+                        node_group["filter"] = node_group_filter
                     if rack_info.get("mlag") is False:
                         node_group["mlag"] = False
                     hostvars[node_type_key]["node_groups"] = [node_group]
@@ -2457,7 +2768,11 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         mlag_info: dict[str, Any] = {"domain_id": None, "bgp_asn": None, "virtual_router_mac": None, "peer_names": []}
         if not is_l2leaf or mlag_capable:
             rack_info = self._extract_rack_info(device)
-            rack_info["avd_tags"] = await self._fetch_rack_avd_tags(device.rack.node.id if device.rack.node else None)
+            rack_avd_tags, rack_always_include = await self._fetch_rack_avd_scoping(
+                device.rack.node.id if device.rack.node else None
+            )
+            rack_info["avd_tags"] = rack_avd_tags
+            rack_info["always_include_vrfs_in_tenants"] = rack_always_include
             mlag_info = self._extract_mlag_info(device)
             # Extract mlag_peer interface names for AVD mlag_interfaces
             if mlag_info["domain_id"] and iface_edges:

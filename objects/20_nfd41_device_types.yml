@@ -1,0 +1,84 @@
+---
+# ============================================================================
+# NFD41 — device type and templates for the containerlab cEOS switches.
+#
+# The NFD41 fabric runs on Arista cEOS-LAB containers, not physical hardware, so
+# it needs its own device type and port layout: every switch presents plain
+# `EthernetN` interfaces and the topology only wires the low-numbered ones.
+#
+# Port layout mirrors lab/nfd41.clab.yml, which is the authority -- the
+# containerlab wiring is a physical fact of the deployed lab, and an interface
+# role here that disagrees with it produces a fabric that cables itself onto
+# ports that have no wire.
+#
+#   leaf  Ethernet1-2   uplinks to spine1 / spine2      (role spine)
+#   leaf  Ethernet3-4   MLAG peer-link port-channel     (role mlag_peer)
+#   leaf  Ethernet5-24  workload and handoff ports      (role server)
+#   spine Ethernet1-8   downlinks to the leaves         (role leaf)
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDeviceType
+  data:
+    - name: "Arista cEOS-LAB"
+      manufacturer: Arista
+      platform: EOS
+      description: "Arista cEOS-LAB container switch (containerlab)"
+      part_number: cEOS-LAB
+      height: 1
+      full_depth: false
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: TemplateDcimDevice
+  parameters:
+    expand_range: true
+  data:
+    - template_name: "nfd41-spine-switch"
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      role: "spine"
+      interfaces:
+        kind: TemplateInterfaceVirtual
+        data:
+          - template_name: "Nfd41SpineLoopback0"
+            name: "Loopback0"
+            role: "loopback"
+    - template_name: "nfd41-spine-switch"
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      role: "spine"
+      interfaces:
+        kind: TemplateInterfacePhysical
+        parameters:
+          expand_range: true
+        data:
+          - template_name: "Nfd41SpineEthernet[1-8]"
+            name: "Ethernet[1-8]"
+            profiles: ["profile-interface-leaf"]
+    - template_name: "nfd41-leaf-switch"
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      role: "leaf"
+      interfaces:
+        kind: TemplateInterfaceVirtual
+        data:
+          - template_name: "Nfd41LeafLoopback0"
+            name: "Loopback0"
+            role: "loopback"
+    - template_name: "nfd41-leaf-switch"
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      role: "leaf"
+      interfaces:
+        kind: TemplateInterfacePhysical
+        parameters:
+          expand_range: true
+        data:
+          - template_name: "Nfd41LeafEthernet[1-2]"
+            name: "Ethernet[1-2]"
+            profiles: ["profile-interface-spine"]
+          - template_name: "Nfd41LeafEthernet[3-4]"
+            name: "Ethernet[3-4]"
+            profiles: ["profile-interface-mlag-peer"]
+          - template_name: "Nfd41LeafEthernet[5-24]"
+            name: "Ethernet[5-24]"
+            profiles: ["profile-interface-server"]

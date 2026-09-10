@@ -1,0 +1,235 @@
+---
+# ============================================================================
+# NFD41 — the seven switches, with the identity the deployed lab already fixes.
+#
+# Hostname, node ID, management address, loopback and ASN are facts of a running
+# containerlab topology, not choices left to a generator: the switches are up,
+# their neighbours are configured with these addresses, and the fabric's BGP
+# communities and route targets already reference these AS numbers. Re-allocating
+# any of them from a pool would silently renumber a live fabric.
+#
+# So they are pinned here and the generators reconcile onto them: the pod and
+# rack generators upsert by hostname (which is why the racks carry a
+# `device_name_template`), preserve every field already set, and go on to do the
+# work that *is* design-driven -- cabling the uplinks and MLAG peer-links,
+# expanding the interface templates, and building the AVD host_vars.
+#
+# The point-to-point and MLAG peer addressing is deliberately NOT pinned. AVD
+# derives each /31 from the node ID and the pool prefix, which is exactly what
+# the deployed switches run, so pinning it would duplicate a derivation that is
+# already correct -- and would drift the moment a node ID changed.
+#
+# Node IDs are per AVD node type, which is why the spines and the leaves both
+# start at 1. Loopbacks stay distinct because the leaf tier is offset past the
+# spines by `loopback_ipv4_offset: 10` (see the fabric's custom hostvars).
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamIPAddress
+  data:
+    # --- out-of-band management (Management0, VRF MGMT) --------------------
+    - address: 172.20.41.11/24
+      ip_namespace: default
+      description: spine1 Management0
+    - address: 172.20.41.12/24
+      ip_namespace: default
+      description: spine2 Management0
+    - address: 172.20.41.21/24
+      ip_namespace: default
+      description: k8s-leaf1 Management0
+    - address: 172.20.41.22/24
+      ip_namespace: default
+      description: k8s-leaf2 Management0
+    - address: 172.20.41.23/24
+      ip_namespace: default
+      description: app-leaf1 Management0
+    - address: 172.20.41.24/24
+      ip_namespace: default
+      description: app-leaf2 Management0
+    - address: 172.20.41.25/24
+      ip_namespace: default
+      description: border-leaf1 Management0
+    # --- Loopback0: router ID and EVPN overlay peering ---------------------
+    - address: 10.41.0.1/32
+      ip_namespace: default
+      description: spine1 Loopback0
+    - address: 10.41.0.2/32
+      ip_namespace: default
+      description: spine2 Loopback0
+    - address: 10.41.0.11/32
+      ip_namespace: default
+      description: k8s-leaf1 Loopback0
+    - address: 10.41.0.12/32
+      ip_namespace: default
+      description: k8s-leaf2 Loopback0
+    - address: 10.41.0.13/32
+      ip_namespace: default
+      description: app-leaf1 Loopback0
+    - address: 10.41.0.14/32
+      ip_namespace: default
+      description: app-leaf2 Loopback0
+    - address: 10.41.0.15/32
+      ip_namespace: default
+      description: border-leaf1 Loopback0
+    # --- Loopback1: VXLAN tunnel source. Shared across an MLAG pair, so the
+    # pair presents one VTEP to the fabric. Only the primary of each pair is
+    # pinned; the rack generator points the secondary at the same address.
+    - address: 10.41.1.11/32
+      ip_namespace: default
+      description: K8S_LEAFS shared VTEP
+    - address: 10.41.1.13/32
+      ip_namespace: default
+      description: APP_LEAFS shared VTEP
+    - address: 10.41.1.15/32
+      ip_namespace: default
+      description: border-leaf1 VTEP
+---
+# One ASN per MLAG pair rather than per switch: that is what AVD's node groups
+# express naturally and what keeps the EVPN route targets tidy.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: RoutingAsn
+  data:
+    - asn: 65100
+      description: "NFD41 spines"
+      fabric: "NFD41_FABRIC"
+    - asn: 65101
+      description: "NFD41 K8S_LEAFS pair"
+      fabric: "NFD41_FABRIC"
+    - asn: 65102
+      description: "NFD41 APP_LEAFS pair"
+      fabric: "NFD41_FABRIC"
+    - asn: 65103
+      description: "NFD41 border leaf"
+      fabric: "NFD41_FABRIC"
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDevice
+  data:
+    - name: "spine1"
+      status: provisioning
+      role: spine
+      node_id: 1
+      index: 1
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      platform: EOS
+      object_template: "nfd41-spine-switch"
+      pod: nfd41-pod1
+      asn: "65100"
+      mgmt_ip: ["172.20.41.11/24", default]
+      loopback_ip: ["10.41.0.1/32", default]
+      member_of_groups: ["avd_devices"]
+    - name: "spine2"
+      status: provisioning
+      role: spine
+      node_id: 2
+      index: 2
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      platform: EOS
+      object_template: "nfd41-spine-switch"
+      pod: nfd41-pod1
+      asn: "65100"
+      mgmt_ip: ["172.20.41.12/24", default]
+      loopback_ip: ["10.41.0.2/32", default]
+      member_of_groups: ["avd_devices"]
+    - name: "k8s-leaf1"
+      status: provisioning
+      role: leaf
+      node_id: 1
+      index: 1
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      platform: EOS
+      object_template: "nfd41-leaf-switch"
+      pod: nfd41-pod1
+      rack: "K8S_LEAFS"
+      asn: "65101"
+      mgmt_ip: ["172.20.41.21/24", default]
+      loopback_ip: ["10.41.0.11/32", default]
+      vtep_loopback_ip: ["10.41.1.11/32", default]
+      member_of_groups: ["avd_devices"]
+    - name: "k8s-leaf2"
+      status: provisioning
+      role: leaf
+      node_id: 2
+      index: 2
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      platform: EOS
+      object_template: "nfd41-leaf-switch"
+      pod: nfd41-pod1
+      rack: "K8S_LEAFS"
+      asn: "65101"
+      mgmt_ip: ["172.20.41.22/24", default]
+      loopback_ip: ["10.41.0.12/32", default]
+      vtep_loopback_ip: ["10.41.1.11/32", default]
+      member_of_groups: ["avd_devices"]
+    - name: "app-leaf1"
+      status: provisioning
+      role: leaf
+      node_id: 3
+      index: 1
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      platform: EOS
+      object_template: "nfd41-leaf-switch"
+      pod: nfd41-pod1
+      rack: "APP_LEAFS"
+      asn: "65102"
+      mgmt_ip: ["172.20.41.23/24", default]
+      loopback_ip: ["10.41.0.13/32", default]
+      vtep_loopback_ip: ["10.41.1.13/32", default]
+      member_of_groups: ["avd_devices"]
+    - name: "app-leaf2"
+      status: provisioning
+      role: leaf
+      node_id: 4
+      index: 2
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      platform: EOS
+      object_template: "nfd41-leaf-switch"
+      pod: nfd41-pod1
+      rack: "APP_LEAFS"
+      asn: "65102"
+      mgmt_ip: ["172.20.41.24/24", default]
+      loopback_ip: ["10.41.0.14/32", default]
+      vtep_loopback_ip: ["10.41.1.13/32", default]
+      member_of_groups: ["avd_devices"]
+    - name: "border-leaf1"
+      status: provisioning
+      role: leaf
+      node_id: 5
+      index: 1
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      platform: EOS
+      object_template: "nfd41-leaf-switch"
+      pod: nfd41-pod1
+      rack: "BORDER_LEAFS"
+      asn: "65103"
+      mgmt_ip: ["172.20.41.25/24", default]
+      loopback_ip: ["10.41.0.15/32", default]
+      vtep_loopback_ip: ["10.41.1.15/32", default]
+      member_of_groups: ["avd_devices"]
+---
+# The MLAG domain ID is the rack name, and the hostvar generator uses it as the
+# AVD node-group name -- so it is also what appears as `mlag configuration
+# domain-id` on the switches. Pre-seeded with its ASN so the rack generator
+# reuses it rather than drawing a fresh number from the pool.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: MlagDomain
+  data:
+    - domain_id: "K8S_LEAFS"
+      asn: "65101"
+      pod: nfd41-pod1
+      peers:
+        - "k8s-leaf1"
+        - "k8s-leaf2"
+    - domain_id: "APP_LEAFS"
+      asn: "65102"
+      pod: nfd41-pod1
+      peers:
+        - "app-leaf1"
+        - "app-leaf2"

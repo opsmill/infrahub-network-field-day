@@ -272,6 +272,22 @@ generics:
             description: "Network port (switch-facing)"
         description: "Spanning-tree PortFast setting for host/edge access ports"
         order_weight: 1600
+      - name: spanning_tree_bpduguard
+        label: Spanning Tree BPDU Guard
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: enabled
+            label: Enabled
+            description: "Err-disable the port if it receives a BPDU"
+          - name: disabled
+            label: Disabled
+            description: "Explicitly disable BPDU guard on this port"
+        # Pairs with PortFast. An edge port that receives a BPDU is a
+        # workload trying to influence spanning tree, so it is err-disabled
+        # rather than trusted.
+        description: "Spanning-tree BPDU guard for host/edge access ports"
+        order_weight: 1650
 
   - name: Layer3
     namespace: Interface

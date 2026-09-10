@@ -327,13 +327,21 @@ class RackGenerator(InfrahubGenerator, GeneratorMixin):
         share_mlag_vtep_loopback = (
             self.rack_mlag_enabled and self.leaf_role in VTEP_LOOPBACK_ROLES and self.vtep_loopback_pool is not None
         )
+        name_template = await self.resolve_device_name_template(kind="LocationRack", node_id=self.rack_id)
         for index in range(1, self.rack_amount_of_leafs + 1):
             vtep_loopback_pool = self.vtep_loopback_pool
             if share_mlag_vtep_loopback and index % 2 == 0:
                 vtep_loopback_pool = None
 
             leaf_switch = await self.create_avd_device(
-                name=f"leaf-{self.pod_name}-{self.rack_index}-{index}",
+                name=self.render_device_name(
+                    name_template,
+                    f"leaf-{self.pod_name}-{self.rack_index}-{index}",
+                    pod=self.pod_name,
+                    rack=self.rack_name,
+                    rack_index=self.rack_index,
+                    index=index,
+                ),
                 role=self.leaf_role,
                 object_template_id=self.rack_leaf_switch_template,
                 pod_id=self.pod_id,

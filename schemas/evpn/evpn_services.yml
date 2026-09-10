@@ -89,8 +89,19 @@ nodes:
       - name: ip_address_virtual
         label: Virtual IP Address
         kind: IPHost
+        optional: true
         description: "Anycast gateway virtual IP address (e.g. 10.10.10.1/24)"
         order_weight: 1100
+      - name: ip_virtual_router_addresses
+        label: Virtual Router Addresses
+        kind: List
+        optional: true
+        # Use these instead of `ip_address_virtual` when each leaf also needs
+        # a unique address of its own on the SVI: a BGP-speaking workload has to
+        # have an unambiguous neighbour address per leaf, which a shared anycast
+        # address cannot give it. Pair with per-node addresses in `nodes`.
+        description: "VARP gateway addresses; pair with per-node addresses in `nodes`"
+        order_weight: 1150
       - name: enabled
         kind: Boolean
         default_value: true
@@ -134,6 +145,60 @@ nodes:
         optional: true
         description: "AVD tag names emitted as AVD SVI tags"
         order_weight: 970
+      - name: nodes
+        label: "Per-node Addresses"
+        peer: EvpnSviNode
+        cardinality: many
+        kind: Component
+        optional: true
+        identifier: "svi__nodes"
+        description: "Per-device addresses on this SVI, for VARP designs"
+        order_weight: 1400
+
+  - name: SviNode
+    namespace: Evpn
+    description: "One device's own address on an SVI, alongside the shared VARP gateway"
+    label: EVPN SVI Node Address
+    icon: mdi:ip-outline
+    include_in_menu: false
+    # Keyed on the device rather than the SVI: `EvpnSvi.name` is only unique
+    # within its VRF, so an HFID through it is not a stable identifier. A device
+    # does not carry the same address twice, so device + address is.
+    human_friendly_id:
+      - device__name__value
+      - ip_address__value
+    order_by:
+      - svi__name__value
+      - device__name__value
+    # display_label only accepts attributes, so it shows the address rather than
+    # the device; the human-friendly ID still identifies it by SVI and device.
+    display_label: ip_address__value
+    uniqueness_constraints:
+      - [svi, device]
+    attributes:
+      - name: ip_address
+        label: IP Address
+        kind: IPHost
+        optional: false
+        description: "This device's unique address on the SVI, e.g. 10.110.0.2/24"
+        order_weight: 1100
+    relationships:
+      - name: svi
+        label: SVI
+        peer: EvpnSvi
+        cardinality: one
+        kind: Parent
+        optional: false
+        identifier: "svi__nodes"
+        order_weight: 900
+      - name: device
+        label: Device
+        peer: DcimDevice
+        cardinality: one
+        kind: Attribute
+        optional: false
+        identifier: "device__svi_addresses"
+        order_weight: 1000
 
   - name: L2Vlan
     namespace: Evpn

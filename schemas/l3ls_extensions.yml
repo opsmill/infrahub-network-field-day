@@ -171,6 +171,13 @@ extensions:
           default_value: false
           description: "Generate ANTA test catalogs for this fabric's devices."
           order_weight: 11300
+        - name: ntp_set_first_server_as_preferred
+          label: Prefer First NTP Server
+          kind: Boolean
+          optional: true
+          default_value: false
+          description: "Mark the first NTP server as preferred, so clock selection is deterministic."
+          order_weight: 11350
         - name: avd_custom_hostvars
           label: AVD Custom Hostvars
           kind: JSON
@@ -243,6 +250,14 @@ extensions:
     # --- NetworkPod: MLAG IP pool relationships ---
     - kind: NetworkPod
       attributes:
+        - name: device_name_template
+          label: Device Name Template
+          kind: Text
+          optional: true
+          # `{pod}` and `{index}` are available -- for example `spine{index}`.
+          # Leave unset to keep the default `spine-{pod}-{index}`.
+          description: "Format template for the spine hostnames the pod generator creates"
+          order_weight: 9050
         - name: avd_custom_hostvars
           label: AVD Custom Hostvars
           kind: JSON
@@ -309,12 +324,40 @@ extensions:
     # --- IpamVRF: EVPN-specific extensions ---
     - kind: IpamVRF
       attributes:
+        - name: vrf_id
+          label: VRF ID
+          kind: Number
+          optional: true
+          # Distinct from `vrf_vni`, though the two are commonly set to the
+          # same number.
+          description: "AVD vrf_id; seeds the route distinguisher and MLAG iBGP peering VLAN"
+          order_weight: 1090
         - name: vrf_vni
           label: VRF VNI
           kind: Number
           optional: true
           description: "VNI number for this VRF in the EVPN fabric"
           order_weight: 1100
+        - name: enable_mlag_ibgp_peering_vrfs
+          label: MLAG iBGP Peering
+          kind: Boolean
+          optional: true
+          # Keeps an MLAG pair with a path to the tenant's prefixes when one
+          # member loses its uplinks. Only meaningful on VRFs on an MLAG pair.
+          description: "Peer iBGP across the MLAG peer link inside this VRF"
+          order_weight: 1110
+        - name: redistribute_connected
+          label: Redistribute Connected
+          kind: Boolean
+          optional: true
+          description: "Redistribute connected routes into this VRF's BGP address family."
+          order_weight: 1120
+        - name: redistribute_static
+          label: Redistribute Static
+          kind: Boolean
+          optional: true
+          description: "Redistribute static routes into this VRF's BGP address family."
+          order_weight: 1130
         - name: vtep_diagnostic_loopback
           label: VTEP Diagnostic Loopback
           kind: Number
@@ -346,6 +389,33 @@ extensions:
           identifier: "vrf__svis"
           description: "SVIs within this VRF"
           order_weight: 1500
+        - name: static_routes
+          label: Static Routes
+          peer: RoutingVrfStaticRoute
+          kind: Component
+          cardinality: many
+          optional: true
+          identifier: "vrf__static_routes"
+          description: "Static routes originated inside this VRF on named devices"
+          order_weight: 1600
+        - name: bgp_peers
+          label: BGP Peers
+          peer: RoutingVrfBgpPeer
+          kind: Component
+          cardinality: many
+          optional: true
+          identifier: "vrf__bgp_peers"
+          description: "eBGP neighbours inside this VRF (workload or external peers)"
+          order_weight: 1700
+        - name: l3_interfaces
+          label: L3 Interfaces
+          peer: RoutingVrfL3Interface
+          kind: Component
+          cardinality: many
+          optional: true
+          identifier: "vrf__l3_interfaces"
+          description: "Routed interfaces placed in this VRF, such as a firewall or WAN handoff"
+          order_weight: 1800
 
     # Note: L2 leaf sizing is modelled as a NetworkRackDeviceDesign with role
     # `l2leaf` (schemas/device_design.yml); the l2leaf role is added to

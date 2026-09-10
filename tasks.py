@@ -292,7 +292,7 @@ def init_semaphore(
             "project_id": project_id,
             "json": json.dumps(
                 {
-                    "fabric": "Fabric-L3LS-Multi-Domain",
+                    "fabric": "NFD41_FABRIC",
                     "clab_staging_dir": clab_container_staging,
                     # Reported back by the playbook so a run tells you where the
                     # files are on the Docker host, not just inside the container.

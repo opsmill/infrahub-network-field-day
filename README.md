@@ -1,12 +1,37 @@
-# Arista AVD Reference Design
+# Infrahub Network Field Day
 
-![CI](https://github.com/opsmill/infrahub-arista-avd/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/opsmill/infrahub-network-field-day/actions/workflows/ci.yml/badge.svg)
 
-The Arista AVD Reference Design models a full Arista datacenter fabric in Infrahub — topology, addressing pools, EVPN configuration, and per-device intent as structured, queryable data. The whole team can browse, filter, and query the fabric through the web UI, GraphQL API, or MCP interface; every change runs through Infrahub branches and proposed changes, with a complete audit trail before it reaches a device.
+The NFD41 lab's Arista EVPN/VXLAN fabric, modelled in Infrahub and rendered with AVD.
 
-Designed for network automation teams running AVD with static variable files who need a shared source of truth, API access, and branch-based change control — and for teams evaluating how to operate AVD at scale with a ready-made source of truth and generation pipeline.
+A fork of [opsmill/infrahub-arista-avd](https://github.com/opsmill/infrahub-arista-avd) with one thing changed: instead of seven illustrative example designs, it models **one real fabric** — the containerlab topology deployed for Network Field Day 41. Topology, addressing, EVPN services, tenant VRFs, firewall handoffs and workload BGP peerings all live in Infrahub as structured, queryable data, and PyAVD renders them into the EOS configuration the switches actually run.
 
-**Jump to:** [What it's for](#what-its-for) · [How it works](#how-it-works) · [Quick start](#quick-start) · [What's included](#whats-included) · [Documentation](#documentation)
+The claim is falsifiable, and tested. That lab is currently driven by static Ansible `group_vars`; this repository holds the same fabric as Infrahub objects, and asserts that the configuration it renders is **byte-for-byte identical** to what the lab is deployed with. The source of truth moves; nothing on the wire changes.
+
+```console
+$ uv run pytest tests/unit/test_nfd41_golden_config.py
+9 passed in 1.31s
+
+$ uv run pytest tests/integration/test_nfd41_fabric.py -m e2e
+11 passed in 326.92s
+```
+
+The second one boots a real Infrahub stack in testcontainers, loads the schemas and seed data, runs the generator chain, renders the EOS artifact for all seven switches, and diffs each against `tests/integration/golden/nfd41/` — the configuration copied from the running lab.
+
+**Jump to:** [The fabric](#the-fabric) · [What it's for](#what-its-for) · [How it works](#how-it-works) · [Quick start](#quick-start) · [What's included](#whats-included) · [Documentation](#documentation)
+
+## The Fabric
+
+| | |
+|---|---|
+| **Topology** | Single-pod 3-stage L3LS: two spines, two MLAG leaf pairs (`K8S_LEAFS`, `APP_LEAFS`), one non-MLAG border leaf |
+| **Routing** | eBGP underlay, eBGP EVPN overlay; ASNs per MLAG pair (`65100` spines, `65101`–`65103` leaves) |
+| **Tenants** | 4 tenants, 6 VRFs — `K8S_PROD`, `APP_PROD`, `TENANT_ACME`, `TENANT_GLOBEX`, `WAN`, `BRANCH` |
+| **Security** | No route leaking anywhere. Every tenant VRF's only egress is a default route pointing at its own firewall zone, originated on the border leaf — so the firewall is the only path that exists, not a policy that could be bypassed. |
+| **Workload BGP** | Cilium peers eBGP from each k3s node into `K8S_PROD`, bounded by an inbound route map and `maximum_routes` |
+| **Platform** | Arista cEOS-LAB containers, driven by containerlab |
+
+Identity the deployed lab fixes — hostname, node ID, management address, loopback, ASN — is pinned in `objects/26_nfd41_devices.yml` and preserved by the generators. Everything genuinely design-driven is generated: uplink and MLAG cabling, interface expansion, point-to-point and MLAG peer addressing, AVD host_vars, structured config, and the rendered artifacts.
 
 ## What It's For
 
@@ -27,7 +52,7 @@ The full pipeline, from a high-level fabric design to versioned, deployable conf
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
 - Python 3.11+
-- PyAVD >= 6.3.0, < 6.4.0 (bundled in the custom Docker image -- no separate install required)
+- PyAVD >= 6.4.0, < 6.5.0 (bundled in the custom Docker image -- no separate install required)
 
 ## Quick Start
 
@@ -54,7 +79,7 @@ Then follow [Provision Your First Fabric](docs/docs/provision-first-fabric.md) t
 
 After `invoke load` completes and you run the generator chain on a fabric:
 
-1. **Seed data appears in the UI** — manufacturers, device types, addressing pools, device templates, two example fabrics (Fabric-L3LS-MultiPod-A, Fabric-L3LS-MultiPod-B) with pods and racks, and seed VLANs are loaded.
+1. **Seed data appears in the UI** — the manufacturer, cEOS-LAB device type and templates, addressing and numbering pools, and the `NFD41_FABRIC` design with its pod, three leaf racks, seven switches, four tenants and six VRFs are loaded.
 2. **FabricGenerator runs** — super-spine devices appear on the branch, with loopback and management addresses allocated from pools.
 3. **PodGenerator and RackGenerator trigger automatically** — spine and leaf devices appear, cabled to their uplinks, with interconnect addresses, BGP ASNs, and node IDs assigned.
 4. **AVD generators run** — each device's PyAVD host_vars and structured configuration are stored as `AvdArtifact` graph objects.
@@ -81,7 +106,7 @@ After `invoke load` completes and you run the generator chain on a fabric:
   - Cabling plan CSV
   - ANTA test catalogs — generation ships; test execution is on the roadmap
   - Computed interface descriptions
-- **Seed data** — manufacturers, device types, addressing and number pools (loopback, interconnect, management, ASN, node ID), device profiles and templates, two example fabrics with pods and racks, and seed VLANs.
+- **Seed data** — the manufacturer, cEOS-LAB device type, interface profiles and device templates, addressing and number pools (loopback, VTEP, interconnect, MLAG, management, ASN, node ID), and the `NFD41_FABRIC` design: one pod, three leaf racks, the seven switches with their pinned identity, four tenants over six VRFs, and the workload endpoints.
 - **Service portal** — Streamlit application with guided day-2 workflows:
   - Add network segment (VRF, VLAN, SVI)
   - Provision server into a rack

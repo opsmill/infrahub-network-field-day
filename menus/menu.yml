@@ -204,6 +204,27 @@ spec:
             kind: RoutingStaticRoute
             icon: "mdi:routes"
 
+          # The three VRF-scoped services below are AVD *inputs* -- authored
+          # here and rendered into config -- unlike the four above, which the
+          # backfill generator reconciles from what AVD derived.
+          - namespace: Routing
+            name: VrfStaticRoute
+            label: VRF Static Routes
+            kind: RoutingVrfStaticRoute
+            icon: "mdi:routes-clock"
+
+          - namespace: Routing
+            name: VrfBgpPeer
+            label: VRF BGP Peers
+            kind: RoutingVrfBgpPeer
+            icon: "mdi:vector-polyline"
+
+          - namespace: Routing
+            name: VrfL3Interface
+            label: VRF L3 Interfaces
+            kind: RoutingVrfL3Interface
+            icon: "mdi:ethernet"
+
     # --------- EVPN Services ---------
     - namespace: Evpn
       name: EvpnMenu
@@ -222,6 +243,12 @@ spec:
             label: SVIs
             kind: EvpnSvi
             icon: "mdi:lan-connect"
+
+          - namespace: Evpn
+            name: SviNodes
+            label: SVI Node Addresses
+            kind: EvpnSviNode
+            icon: "mdi:ip-outline"
 
           - namespace: Evpn
             name: L2VLANs

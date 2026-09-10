@@ -1,0 +1,282 @@
+---
+# ============================================================================
+# NFD41 — the per-VRF services: SVIs, default routes, BGP peers and handoffs.
+#
+# This file is where the security premise of the lab actually lives. Every
+# tenant VRF has exactly one route out: a default pointing at its own firewall
+# zone, originated on the border leaf only. There is no route leak between
+# tenants anywhere -- so the firewall is not a policy choice that could be
+# bypassed, it is the only path that exists.
+#
+# The Kubernetes SVI uses VARP rather than a shared anycast address: Cilium
+# peers BGP from each node, so each leaf needs an address of its own to be an
+# unambiguous neighbour, plus a shared gateway the nodes point their default
+# route at.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: EvpnSvi
+  data:
+    - name: "K8S_NODES"
+      svi_id: 110
+      description: "k3s node network"
+      enabled: true
+      vrf: K8S_PROD
+      vlan: K8S_NODES
+      ip_virtual_router_addresses:
+        - "10.110.0.1"
+      avd_tags: ["k8s"]
+    - name: "APP_HOSTS"
+      svi_id: 210
+      description: "Application host network"
+      enabled: true
+      vrf: APP_PROD
+      vlan: APP_HOSTS
+      ip_virtual_router_addresses:
+        - "10.210.0.1"
+      avd_tags: ["app"]
+    - name: "ACME_CLOUD"
+      svi_id: 310
+      description: "acme tenant cloud instances"
+      enabled: true
+      vrf: TENANT_ACME
+      vlan: ACME_CLOUD
+      ip_virtual_router_addresses:
+        - "10.220.10.1"
+      avd_tags: ["cloud"]
+    - name: "GLOBEX_CLOUD"
+      svi_id: 320
+      description: "globex tenant cloud instances"
+      enabled: true
+      vrf: TENANT_GLOBEX
+      vlan: GLOBEX_CLOUD
+      ip_virtual_router_addresses:
+        - "10.220.20.1"
+      avd_tags: ["cloud"]
+---
+# Each leaf's own address on the SVI, alongside the shared VARP gateway above.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: EvpnSviNode
+  data:
+    - svi: ["K8S_PROD", "K8S_NODES"]
+      device: "k8s-leaf1"
+      ip_address: 10.110.0.2/24
+    - svi: ["K8S_PROD", "K8S_NODES"]
+      device: "k8s-leaf2"
+      ip_address: 10.110.0.3/24
+    - svi: ["APP_PROD", "APP_HOSTS"]
+      device: "app-leaf1"
+      ip_address: 10.210.0.2/24
+    - svi: ["APP_PROD", "APP_HOSTS"]
+      device: "app-leaf2"
+      ip_address: 10.210.0.3/24
+    - svi: ["TENANT_ACME", "ACME_CLOUD"]
+      device: "app-leaf1"
+      ip_address: 10.220.10.2/24
+    - svi: ["TENANT_ACME", "ACME_CLOUD"]
+      device: "app-leaf2"
+      ip_address: 10.220.10.3/24
+    - svi: ["TENANT_GLOBEX", "GLOBEX_CLOUD"]
+      device: "app-leaf1"
+      ip_address: 10.220.20.2/24
+    - svi: ["TENANT_GLOBEX", "GLOBEX_CLOUD"]
+      device: "app-leaf2"
+      ip_address: 10.220.20.3/24
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: RoutingVrfStaticRoute
+  data:
+    # Each tenant's only egress, forced through its own firewall zone.
+    - vrf: K8S_PROD
+      prefix: 0.0.0.0/0
+      next_hop: 10.250.110.2
+      description: "Default via the firewall's k8s-prod zone"
+      devices: ["border-leaf1"]
+    - vrf: APP_PROD
+      prefix: 0.0.0.0/0
+      next_hop: 10.250.210.2
+      description: "Default via the firewall's app-prod zone"
+      devices: ["border-leaf1"]
+    - vrf: TENANT_ACME
+      prefix: 0.0.0.0/0
+      next_hop: 10.250.10.2
+      description: "Default via the firewall's acme-cloud zone"
+      devices: ["border-leaf1"]
+    - vrf: TENANT_GLOBEX
+      prefix: 0.0.0.0/0
+      next_hop: 10.250.20.2
+      description: "Default via the firewall's globex-cloud zone"
+      devices: ["border-leaf1"]
+    # The DC service prefix and each tenant's cloud subnet are originated INTO
+    # the WAN pointing at the firewall. Static routes rather than a leak from
+    # the tenant VRFs on purpose: a leak would create a path that bypasses the
+    # firewall. Both tenant subnets go into the same WAN VRF, so isolation is
+    # done twice over instead -- by the per-tenant import policy on the ISP PE,
+    # and by the firewall zone policy.
+    - vrf: WAN
+      prefix: 10.112.240.0/24
+      next_hop: 10.250.150.2
+      description: "DC service VIP range, via the firewall's WAN zone"
+      devices: ["border-leaf1"]
+    - vrf: WAN
+      prefix: 10.220.10.0/24
+      next_hop: 10.250.150.2
+      description: "acme cloud subnet, via the firewall's WAN zone"
+      devices: ["border-leaf1"]
+    - vrf: WAN
+      prefix: 10.220.20.0/24
+      next_hop: 10.250.150.2
+      description: "globex cloud subnet, via the firewall's WAN zone"
+      devices: ["border-leaf1"]
+    - vrf: BRANCH
+      prefix: 10.112.240.0/24
+      next_hop: 10.250.170.2
+      description: "DC service VIP range, via the firewall's branch zone"
+      devices: ["border-leaf1"]
+    # The branch does not get a shortcut, it gets one more destination it is
+    # allowed to ask about -- still via the firewall.
+    - vrf: BRANCH
+      prefix: 10.110.0.0/24
+      next_hop: 10.250.170.2
+      description: "k8s node subnet, via the firewall's branch zone"
+      devices: ["border-leaf1"]
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: RoutingVrfBgpPeer
+  data:
+    # Cilium's BGP control plane peers from each k3s node and advertises the pod
+    # CIDR plus LoadBalancer VIPs. RM-CILIUM-IN is what keeps a compromised node
+    # from advertising anything it likes into the fabric, and maximum_routes
+    # bounds the damage a misconfigured one can do.
+    - vrf: K8S_PROD
+      ip_address: 10.110.0.11
+      remote_asn: 65401
+      description: k8s-node1-cilium
+      cleartext_password: "Nfd41-Cilium"
+      send_community: all
+      next_hop_self: true
+      maximum_routes: 100
+      route_map_in: RM-CILIUM-IN
+      route_map_out: RM-FABRIC-TO-CILIUM
+      devices: ["k8s-leaf1", "k8s-leaf2"]
+    - vrf: K8S_PROD
+      ip_address: 10.110.0.12
+      remote_asn: 65401
+      description: k8s-node2-cilium
+      cleartext_password: "Nfd41-Cilium"
+      send_community: all
+      next_hop_self: true
+      maximum_routes: 100
+      route_map_in: RM-CILIUM-IN
+      route_map_out: RM-FABRIC-TO-CILIUM
+      devices: ["k8s-leaf1", "k8s-leaf2"]
+    - vrf: K8S_PROD
+      ip_address: 10.110.0.13
+      remote_asn: 65401
+      description: k8s-node3-cilium
+      cleartext_password: "Nfd41-Cilium"
+      send_community: all
+      next_hop_self: true
+      maximum_routes: 100
+      route_map_in: RM-CILIUM-IN
+      route_map_out: RM-FABRIC-TO-CILIUM
+      devices: ["k8s-leaf1", "k8s-leaf2"]
+    # eBGP to the ISP. RM-WAN-IN is the fabric's opinion of what the provider is
+    # allowed to tell us: customer prefixes only. Without it a provider mistake
+    # becomes a datacentre outage.
+    - vrf: WAN
+      ip_address: 10.250.50.2
+      remote_asn: 65500
+      description: isp-pe2
+      send_community: all
+      maximum_routes: 1000
+      route_map_in: RM-WAN-IN
+      route_map_out: RM-DC-TO-EXTERNAL
+      devices: ["border-leaf1"]
+    - vrf: BRANCH
+      ip_address: 10.250.70.2
+      remote_asn: 65030
+      description: branch-rtr
+      send_community: all
+      maximum_routes: 100
+      route_map_in: RM-BRANCH-IN
+      route_map_out: RM-DC-TO-BRANCH
+      devices: ["border-leaf1"]
+---
+# The border leaf's routed handoffs. Every tenant reaches the outside world
+# through one of these, and each is filtered inbound: the firewall is trusted to
+# police sessions but must never originate fabric infrastructure prefixes, and
+# an ISP or branch circuit may only source its own assigned range.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: RoutingVrfL3Interface
+  data:
+    # ACL-K8S-ANTISPOOF is applied outbound here rather than inbound on the
+    # Vlan110 SVI because cEOS-LAB does not support `ip access-group` on a VLAN
+    # interface. On physical hardware it belongs at the access edge, so spoofed
+    # traffic never crosses the fabric at all.
+    - vrf: K8S_PROD
+      device: "border-leaf1"
+      interface_name: Ethernet10
+      ip_address: 10.250.110.1/30
+      description: FW1_ge-0/0/0_ZONE-K8S-PROD
+      enabled: true
+      ipv4_acl_in: ACL-FROM-FIREWALL
+      ipv4_acl_out: ACL-K8S-ANTISPOOF
+    - vrf: APP_PROD
+      device: "border-leaf1"
+      interface_name: Ethernet11
+      ip_address: 10.250.210.1/30
+      description: FW1_ge-0/0/1_ZONE-APP-PROD
+      enabled: true
+      ipv4_acl_in: ACL-FROM-FIREWALL
+    - vrf: WAN
+      device: "border-leaf1"
+      interface_name: Ethernet12
+      ip_address: 10.250.50.1/30
+      description: ISP_PE2_WAN_HANDOFF
+      enabled: true
+      ipv4_acl_in: ACL-FROM-WAN
+    - vrf: BRANCH
+      device: "border-leaf1"
+      interface_name: Ethernet13
+      ip_address: 10.250.70.1/30
+      description: BRANCH_RTR_CIRCUIT
+      enabled: true
+      ipv4_acl_in: ACL-FROM-BRANCH
+    - vrf: WAN
+      device: "border-leaf1"
+      interface_name: Ethernet14
+      ip_address: 10.250.150.1/30
+      description: FW1_ZONE-WAN
+      enabled: true
+      ipv4_acl_in: ACL-FROM-FIREWALL
+    - vrf: BRANCH
+      device: "border-leaf1"
+      interface_name: Ethernet15
+      ip_address: 10.250.170.1/30
+      description: FW1_ZONE-BRANCH
+      enabled: true
+      ipv4_acl_in: ACL-FROM-FIREWALL
+    - vrf: TENANT_ACME
+      device: "border-leaf1"
+      interface_name: Ethernet16
+      ip_address: 10.250.10.1/30
+      description: FW1_ge-0/0/4_ZONE-ACME-CLOUD
+      enabled: true
+      ipv4_acl_in: ACL-FROM-FIREWALL
+    - vrf: TENANT_GLOBEX
+      device: "border-leaf1"
+      interface_name: Ethernet17
+      ip_address: 10.250.20.1/30
+      description: FW1_ge-0/0/5_ZONE-GLOBEX-CLOUD
+      enabled: true
+      ipv4_acl_in: ACL-FROM-FIREWALL

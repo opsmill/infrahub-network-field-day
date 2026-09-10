@@ -13,26 +13,24 @@ This is a **reference design** that covers a defined set of AVD capabilities on 
 Some boundaries below are marked *confirm scope* and are being finalized with the maintainers. Where a row says `confirm`, treat the exact edge as undecided rather than guaranteed.
 :::
 
-## AVD example scenario coverage
+## The modelled fabric
 
-Status of the official [AVD example designs](https://avd.arista.com/6.2/ansible_collections/arista/avd/examples/index.html) this reference design covers. Gaps are closed with **native schema** where a capability is reusable and first-class, and with the **`avd_custom_hostvars` escape hatch** where a full native model would be disproportionate (niche, single-scenario, pass-through).
+This fork models one fabric: **`NFD41_FABRIC`**, the containerlab topology deployed for Network Field Day 41. Upstream's seven example designs were removed — the seed data describes the deployed lab and nothing else, so there is exactly one source of truth and no cross-fabric numbering collisions.
 
-Each scenario has its own loadable fabric design; every device renders valid PyAVD EOS configuration (0 validation violations) on a fresh instance.
+| Aspect | What it is |
+|--------|------------|
+| Topology | Single-pod 3-stage L3LS: two spines, two MLAG leaf pairs (`K8S_LEAFS`, `APP_LEAFS`) and a single non-MLAG `BORDER_LEAFS` node. |
+| Underlay / overlay | eBGP underlay, eBGP EVPN overlay, ASNs per MLAG pair (`65100` spines, `65101`-`65103` leaves). |
+| Tenants | Four tenants, six VRFs: `K8S_PROD`, `APP_PROD`, `TENANT_ACME`, `TENANT_GLOBEX`, `WAN`, `BRANCH`. No route leaking anywhere. |
+| Service insertion | Every tenant VRF's only route out is a default pointing at its own firewall zone, originated on the border leaf. The firewall is unavoidable rather than a policy that could be bypassed. |
+| Workload BGP | Cilium peers eBGP from each k3s node into `K8S_PROD`, bounded by `RM-CILIUM-IN` and `maximum_routes`. |
+| Platform | Arista cEOS-LAB containers. |
 
-| AVD example scenario | Status | Fabric | Design |
-|----------------------|:------:|--------|--------|
-| Single-DC L3LS | ✅ | `Fabric-L3LS` | eBGP underlay, EVPN/VXLAN L3LS. |
-| Single-DC Multi-Pod L3LS (5-stage Clos) | ✅ | `Fabric-L3LS-MultiPod-A` | 6 super-spines + 3 pods; super-spines as EVPN route servers; tenants as vlan-aware bundles (`evpn_vlan_aware_bundles`). |
-| Dual-DC L3LS | ✅ | `Fabric-L3LS-Multi-Domain` | EVPN DC Gateway (next-hop-self) + DCI `l3_edge` p2p links, via `avd_custom_hostvars`. |
-| L2LS fabric (standalone) | ✅ | `Fabric-L2LS` | underlay `none` → `l2spine` + `l2leaf`, pure Layer-2 (no VNI/VXLAN/EVPN), MLAG both tiers, two MLAG rack pairs; overlay-free `Evpn.Tenant` (`MY_FABRIC`) with tag-scoped VLANs `BLUE-NET`/`GREEN-NET`/`ORANGE-NET` and per-tier MSTP priorities (l2spine 4096 / l2leaf 16384), mirroring the AVD `l2ls-fabric` example. Host endpoints sit on leaf access ports via per-color access profiles (one untagged VLAN each, PortFast `edge`). The example's dual-homed `FIREWALL` (trunk Port-Channel to both spines) is **not modeled** — deliberately deferred, see below. |
-| Campus fabric | ✅ | `Fabric-Campus` | underlay `ospf` → `l3spine` core with anycast SVIs (`Evpn.Svi`) + `l2leaf` access; dot1x/PoE via escape hatch. |
-| ISIS-LDP IPVPN | ✅ | `Fabric-ISIS-LDP` | underlay `isis-ldp` → `p` core + `pe` edge; per-customer L3VPN VRFs (`Evpn.Tenant`/`Ipam.VRF`). |
+The identity a running lab fixes — hostname, node ID, management address, loopback, ASN — is pinned in `objects/26_nfd41_devices.yml` and preserved by the generators. Everything genuinely design-driven (uplink and MLAG cabling, interface expansion, point-to-point and MLAG peer addressing, host_vars, structured config) is generated.
 
-The non-L3LS designs are driven by the fabric `underlay_routing_protocol`, which the pod/rack generators map to the correct device roles (gated so eBGP L3LS fabrics are unaffected).
+**Parity is asserted, not assumed.** `tests/integration/test_nfd41_fabric.py` boots a real Infrahub stack, runs the generator chain, renders the EOS configuration for all seven switches and compares it byte for byte against the configuration the lab is deployed with (`tests/integration/golden/nfd41/`). A diff there is a regression.
 
-**Deferred — L2LS spine-attached firewall.** The upstream `l2ls-fabric` example dual-homes a firewall to both `l2spine` switches as a trunk Port-Channel. Modeling it needs a connected endpoint attachable to spine-tier devices, which the current endpoint/cabling path does not cover (it cables endpoints to a rack's leaves). It was scoped out rather than forced through `avd_custom_hostvars`, so the L2LS example is feature-complete for the fabric, services and host endpoints but includes no firewall. Everything else in that design is modeled natively.
-
-Services are modeled **schema-first**: L2 VLANs (L2LS), anycast SVIs on the campus l3spine core, and per-customer L3VPN VRFs on the ISIS-LDP PE are all `Ipam.VLAN` / `Evpn.Tenant` / `Ipam.VRF` / `Evpn.Svi` **objects** rendered by the generator — the same service model as the L3LS fabrics. The `avd_custom_hostvars` escape hatch is reserved for capabilities the schema does not yet model — EVPN DC Gateway remote-peers and campus dot1x/PoE — a deliberate, documented niche exception (native modeling of those is future schema work). Native-vs-escape-hatch guidance is in the [developer guide](./developer-guide/avd/extending.md).
+The schema still carries the roles and underlay choices the upstream examples used (`l2leaf`, `l2spine`, `l3spine`, `p`, `pe`, `rr`; `ospf`, `isis-ldp`, `none`), so those designs remain expressible — there is simply no seed data for them here.
 
 ## Fabric generation
 
@@ -68,7 +66,12 @@ Services are modeled **schema-first**: L2 VLANs (L2LS), anycast SVIs on the camp
 | BGP peer groups | 🟡 | Wired into hostvars and produce config; **confirm** supported scope. |
 | DCI links between Border Leafs | ✅ | `NetworkLink` objects with `role=dci` reuse shared physical endpoints and generate PyAVD `l3_edge.p2p_links`; external networks and EVPN Gateway are out of scope for this phase. |
 | Route targets | 🟡 | Modeled but AVD-derived (not fed as input). |
-| Prefix lists, route maps, static routes | 🟡 | Reconciled *from* AVD output via the backfill generator, not authored as inputs. |
+| VRF static routes | ✅ | `Routing.VrfStaticRoute` objects, each scoped to the devices that originate it. |
+| VRF BGP peers | ✅ | `Routing.VrfBgpPeer` objects with password, communities, `maximum_routes` and in/out route maps. |
+| VRF L3 interfaces (firewall / WAN handoffs) | ✅ | `Routing.VrfL3Interface` objects with inbound and outbound ACL bindings. |
+| Per-node SVI addresses + VARP gateway | ✅ | `Evpn.SviNode` plus `Evpn.Svi.ip_virtual_router_addresses`, for SVIs a workload peers BGP over. |
+| ACL, prefix-list and route-map *contents* | 🟡 | Supplied through the fabric's `avd_custom_hostvars` escape hatch; the interface and peer *bindings* are native. |
+| Prefix lists, route maps, static routes (reconciled) | 🟡 | The backfill generator still reconciles what AVD derives; authored inputs take precedence. |
 
 ## Rendering & artifacts
 
