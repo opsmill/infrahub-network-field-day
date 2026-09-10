@@ -303,7 +303,11 @@ def test_adopt_payload_omits_preserved_fields() -> None:
     assert len(payloads) == 2
     for payload in payloads:
         assert payload.is_adoption is True
-        assert set(payload.data) == {"cluster", "peer_device", "peer_asn"}
+        assert payload.existing_id is not None
+        # Only the derived field is named. The rest are preserved by never
+        # being touched -- the update fetches the node and sets this one
+        # attribute, because an upsert would demand every mandatory field.
+        assert set(payload.data) == {"peer_asn"}
         assert "name" not in payload.data
         assert "enabled" not in payload.data
         assert "peer_address" not in payload.data

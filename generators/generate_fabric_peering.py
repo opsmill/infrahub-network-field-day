@@ -23,10 +23,11 @@ Two things about this generator are deliberate and easy to get wrong:
   Filtering by device kind happens to work today only because cluster nodes are
   `ComputePhysicalServer` rather than `DcimDevice`; filtering by id is what is
   actually meant.
-* **Adoption omits fields rather than preserving them.** `save(allow_upsert=True)`
-  writes whatever the payload contains, so keeping an existing session's `name`,
-  `enabled` and `peer_address` means not passing them at all. Only `peer_asn` is
-  rewritten on a session that already exists.
+* **Adoption fetches and modifies; it does not upsert.** An upsert mutation
+  validates every mandatory field on the node -- `name`, `peer_address`,
+  `peer_asn` -- so a payload that omits them in order to preserve them is
+  rejected outright. Fetching the existing session and setting one attribute
+  leaves the others exactly as they were. Only `peer_asn` is ever rewritten.
 
 An incomplete model raises before anything is written. That ordering is load
 bearing rather than tidy: the tracking context deletes previously-managed
@@ -216,6 +217,12 @@ def build_session_payloads(cluster: ClusterNode, peers: list[DerivedPeer]) -> li
     forbids inventing or allocating one. ``validate_model`` refuses that case
     before this function is reached, which is what keeps the two shapes from
     collapsing into a half-populated third.
+
+    The payload names only the field to change. It is applied by fetching the
+    existing node and setting that attribute, NOT by an upsert: an upsert
+    validates every mandatory field on the node, so "omit a field to preserve
+    it" is not expressible that way. Fetch-and-modify preserves ``name``,
+    ``enabled`` and ``peer_address`` because it never touches them.
     """
     existing = _existing_by_device(cluster)
 
@@ -223,11 +230,7 @@ def build_session_payloads(cluster: ClusterNode, peers: list[DerivedPeer]) -> li
         SessionPayload(
             device_name=peer.device_name,
             is_adoption=True,
-            data={
-                "cluster": cluster.id,
-                "peer_device": peer.device_id,
-                "peer_asn": peer.peer_asn,
-            },
+            data={"peer_asn": peer.peer_asn},
             existing_id=existing[peer.device_id].id,
         )
         for peer in peers
@@ -247,12 +250,16 @@ class FabricPeeringGenerator(InfrahubGenerator):
 
         session_ids: list[str] = []
         for payload in payloads:
-            session = await self.client.create(kind="ClusterFabricPeering", data=payload.data)
-            await session.save(allow_upsert=True)
+            # Fetch and modify rather than upsert. An upsert mutation validates
+            # every mandatory field on the node -- name, peer_address, peer_asn
+            # -- so a payload that omits them to preserve them is rejected
+            # outright. Fetching leaves untouched fields exactly as they were.
+            session = await self.client.get(kind="ClusterFabricPeering", id=payload.existing_id)
+            session.peer_asn.value = payload.data["peer_asn"]  # type: ignore[attr-defined]
+            await session.save()
             session_ids.append(session.id)
             self.logger.info(
-                "%s fabric peering to %s (asn %s)",
-                "Adopted" if payload.is_adoption else "Created",
+                "Adopted fabric peering to %s (asn %s)",
                 payload.device_name,
                 payload.data["peer_asn"],
             )
