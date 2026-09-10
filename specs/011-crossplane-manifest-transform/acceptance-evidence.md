@@ -183,11 +183,51 @@ Also resolved here, from `data-model.md` section 6's open question: **a scalar n
 resolve through the `OrganizationGeneric` generic.** `owner: branch` loaded without an
 inline `kind:` block.
 
-## Not yet evidenced
+## SC-010 / T025 — repository sync
 
-| Criterion | Status | Why |
-| --- | --- | --- |
-| SC-010 — repository sync and artifact generation | **Blocked** | `infrahubctl repository list` returns empty: no `CoreRepository` is registered on this instance. Exercising a sync needs the branch pushed to a remote and `repository.yml` loaded, which is deployment setup rather than transform work |
+**Correcting an earlier claim in this document**: SC-010 was recorded as blocked because
+"exercising a sync needs the branch pushed to a remote". That was wrong. The working tree
+is already bind-mounted into the task-worker at `/upstream`
+(`docker-compose.override.yml:40`), which is exactly the `location` that `repository.yml`
+declares, and `invoke load` registers it as part of routine setup. No remote is involved.
+
+Registering it worked first time and synced git `main`:
+
+| Imported from git main's `.infrahub.yml` | Count |
+| --- | --- |
+| Python transforms | 8 |
+| Artifact definitions | 6 |
+| Check definitions | 2 |
+| Generator definitions | 7 |
+| GraphQL queries | 17 |
+
+`sync_status: in-sync`, `operational_status: online`, commit `4412576`. Artifact generation
+was triggered automatically for all six existing definitions, which is the behaviour US2
+depends on.
+
+### Two prerequisites nothing documents
+
+Getting the feature branch to sync took two discoveries, both worth recording because
+neither is in the quickstart, the skill rules, or `AGENTS.md`:
+
+**1. `infrahubctl branch create` defaults to `--no-sync-with-git`.** A branch created
+without that flag is never associated with a git branch, so Infrahub never reads
+`.infrahub.yml` for it and no registration can ever appear. This is the actual reason
+SC-010 looked blocked: the branch used for every other piece of evidence in this document
+had `sync_with_git=False`. Nothing warns you; the branch simply stays empty of
+repository-derived objects.
+
+**2. The instance's scheduled sync was deadlocked.** `git_repositories_sync` is scheduled
+every minute but had not run since 13:57 — seven hours. Its Prefect deployment carries a
+concurrency limit of 1, and a flow run orphaned when the workers restarted was still
+holding the slot in `PENDING` with no start time, so every subsequent run was cancelled
+with `Deployment concurrency limit reached`. `clean-up-deadlocks` was stuck the same way,
+on the same minute. Cancelling the two orphaned runs released both slots and the
+minute-by-minute sync resumed immediately.
+
+That second one is worth a bug report: a worker restart can permanently wedge every
+scheduled flow with a concurrency limit, and the only symptom is that repository syncs
+silently stop happening.
 
 ### What that leaves unverified, precisely
 
