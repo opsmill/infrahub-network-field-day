@@ -1,0 +1,121 @@
+query GenerateFabricPeeringQuery($name: String!) {
+  # The ordered intent. Aliased `target:` because the artifact definition
+  # parameterises this generator on the service's name.
+  target: ServiceFabricPeering(name__value: $name) {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        cluster {
+          node {
+            id
+            name {
+              value
+            }
+            local_asn {
+              value
+            }
+            # The sessions that already exist. Fetched so the generator can
+            # tell "adopt" from "create": an existing session keeps its name,
+            # enabled flag and address, and only peer_asn is rewritten.
+            # Omitting this block breaks adoption -- see research.md R3.
+            fabric_peerings {
+              edges {
+                node {
+                  id
+                  name {
+                    value
+                  }
+                  peer_asn {
+                    value
+                  }
+                  enabled {
+                    value
+                  }
+                  peer_device {
+                    node {
+                      id
+                      display_label
+                    }
+                  }
+                  peer_address {
+                    node {
+                      id
+                      address {
+                        value
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            # The cabling. Each node's interface reaches a link, and the link
+            # holds BOTH of its endpoints -- including the node's own
+            # interface, which is why every interface id is selected: the near
+            # end is excluded by id at the far side (research.md R2).
+            nodes {
+              edges {
+                node {
+                  id
+                  ... on ComputePhysicalServer {
+                    name {
+                      value
+                    }
+                    interfaces {
+                      edges {
+                        node {
+                          id
+                          ... on InterfacePhysical {
+                            connector {
+                              node {
+                                ... on NetworkLink {
+                                  id
+                                  connected_endpoints {
+                                    edges {
+                                      node {
+                                        id
+                                        ... on InterfacePhysical {
+                                          device {
+                                            node {
+                                              id
+                                              ... on DcimDevice {
+                                                name {
+                                                  value
+                                                }
+                                                role {
+                                                  value
+                                                }
+                                                asn {
+                                                  node {
+                                                    id
+                                                    asn {
+                                                      value
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
