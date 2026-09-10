@@ -20,12 +20,12 @@ The rendered document, with the values currently loaded:
 apiVersion: nfd41.lab/v1alpha1
 kind: FabricPeering
 metadata:
-  name: nfd41-fabric-peering
+  name: nfd41
 spec:
   localASN: 65401
   authSecretName: nfd41-bgp-auth
   nodeSelector:
-    nfd41.lab/bgp: "true"
+    nfd41.lab/bgp: 'true'
   advertisementSelector:
     nfd41.lab/advertise: fabric
   podCIDRCommunities:

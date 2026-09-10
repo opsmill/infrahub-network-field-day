@@ -120,7 +120,19 @@ def test_renders_the_xrd_apiversion_and_kind() -> None:
 
     assert rendered["apiVersion"] == "nfd41.lab/v1alpha1"
     assert rendered["kind"] == "FabricPeering"
-    assert rendered["metadata"]["name"] == "nfd41-fabric-peering"
+    assert rendered["metadata"]["name"] == "nfd41"
+
+
+def test_metadata_name_comes_from_the_cluster_not_the_service() -> None:
+    """The XRD is cluster-scoped with one resource per cluster.
+
+    Naming the resource after the service would let a service rename produce a
+    second FabricPeering beside the deployed one rather than updating it, so
+    renaming the service must not move the manifest's identity.
+    """
+    rendered = _render(service_name="something-else-entirely")
+
+    assert rendered["metadata"]["name"] == "nfd41"
 
 
 def test_renders_every_field_the_composition_consumes() -> None:

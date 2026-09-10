@@ -17,7 +17,7 @@
 apiVersion: nfd41.lab/v1alpha1
 kind: FabricPeering
 metadata:
-  name: nfd41-fabric-peering
+  name: nfd41
 spec:
   localASN: 65401
   authSecretName: nfd41-bgp-auth
@@ -68,42 +68,37 @@ Validated against `../lab/crossplane/platform/00-xrd-fabric-peering.yaml`:
 | `podCIDRCommunities` | *absent, XRD default* | `['65401:110']` |
 | `timers` | *absent, XRD default* | `{5, 9, 3}` |
 
-**Shared fields: 2. Mismatched: 0. Omitted by the render: nothing.**
+**Shared fields: 3 (including `metadata.name`). Mismatched: 0. Omitted by the render: nothing.**
 
 Every one of the five added fields carries **exactly** the value the XRD would have
 defaulted to, so the rendered manifest is semantically identical to the hand-written one
 with the defaults made explicit. That is the desired direction: a reviewer can see the
 whole contract rather than having to cross-reference the XRD to know what is in force.
 
-### ⚠️ One finding needing a decision: `metadata.name`
+### `metadata.name` — resolved, option 2 applied
 
 | | Value |
 | --- | --- |
 | Hand-written resource | `nfd41` |
-| Rendered resource | `nfd41-fabric-peering` |
+| Rendered resource, as first written | `nfd41-fabric-peering` |
+| Rendered resource, now | `nfd41` |
 
-`metadata.name` comes from the `ServiceFabricPeering` object's name, and I named the seed
-object descriptively. The XRD is **cluster-scoped with one resource per cluster**, so
-applying the rendered manifest as it stands would create a *second* `FabricPeering`
-alongside the deployed one rather than updating it in place.
+`metadata.name` originally came from the `ServiceFabricPeering` object's name, which was
+seeded descriptively. Because the XRD is **cluster-scoped with one resource per cluster**,
+applying that manifest would have created a *second* `FabricPeering` beside the deployed
+one rather than updating it in place.
 
-Three ways to resolve it, none yet chosen:
+The transform now renders `metadata.name` from `ClusterKubernetes.name`. That ties the
+manifest's identity to the thing the XRD is actually scoped to, and removes a path by
+which renaming a service silently produces a duplicate resource;
+`test_metadata_name_comes_from_the_cluster_not_the_service` renames the service in a
+fixture and asserts the manifest's identity does not move. Two services pointing at one
+cluster now collide instead, which is the failure a check should catch and which
+`data-model.md` section 7 already lists.
 
-1. **Rename the service object to `nfd41`** — one line in
-   `objects/35_nfd41_peering_service.yml`. Simplest, but makes the service's name a
-   Kubernetes identifier rather than a description.
-2. **Render `metadata.name` from the cluster name instead of the service name** — one line
-   in the transform. Arguably more correct: the XRD is cluster-scoped, so the resource is
-   identified by its cluster, and it stays right even if someone renames the service.
-   Two services referencing one cluster would then collide, which a check should catch
-   anyway (already listed in `data-model.md` section 7).
-3. **Accept it** and let the lab's hand-written resource be deleted when the artifact
-   takes over.
-
-**Recommendation: option 2.** It ties the manifest's identity to the thing the XRD is
-actually scoped to, and it removes a way for a rename to silently produce a duplicate
-resource. It was not applied unilaterally because it changes what the artifact is called,
-which is a decision about the deployed system rather than about the code.
+**The rendered manifest is now field-for-field identical to the hand-written one**, with
+the five XRD defaults made explicit. Nothing about the deployed lab changed; this only
+changes what the artifact would do if applied.
 
 ## SC-004 / T019 — deterministic
 

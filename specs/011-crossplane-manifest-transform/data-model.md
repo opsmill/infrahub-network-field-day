@@ -12,7 +12,7 @@ Three kinds, reached in one traversal from the artifact target.
 
 | Kind | Role | Why it is read |
 | --- | --- | --- |
-| `ServiceFabricPeering` | the artifact target | Supplies the artifact's identity and `metadata.name`; contributes `communities` and `advertisement_selector` |
+| `ServiceFabricPeering` | the artifact target | Supplies the artifact's identity; contributes `communities` and `advertisement_selector`. Does **not** supply `metadata.name` — see below |
 | `ClusterKubernetes` | the substance | Every other rendered value: local ASN, secret name, timers, pod-CIDR communities, both selectors |
 | `ClusterFabricPeering` | one per fabric leaf | Each peer's name, ASN and address |
 
@@ -25,7 +25,7 @@ Three kinds, reached in one traversal from the artifact target.
 | --- | --- | --- | --- |
 | `apiVersion` | *constant* | `nfd41.lab/v1alpha1` | — |
 | `kind` | *constant* | `FabricPeering` | — |
-| `metadata.name` | `ServiceFabricPeering.name` | verbatim | *(seeded this cycle)* |
+| `metadata.name` | `ClusterKubernetes.name` | verbatim | `nfd41` |
 | `spec.localASN` | `ClusterKubernetes.local_asn` | verbatim, **mandatory** | `65401` |
 | `spec.authSecretName` | `ClusterKubernetes.bgp_auth_secret_name` | verbatim; omit if unset | `nfd41-bgp-auth` |
 | `spec.nodeSelector` | `ClusterKubernetes.node_selector` | **parse `key=value` → map** | `{nfd41.lab/bgp: "true"}` |
@@ -107,7 +107,7 @@ One `ServiceFabricPeering`, the minimum for the artifact to have a target (FR-03
 
 | Field | Value | Note |
 | --- | --- | --- |
-| `name` | `nfd41-fabric-peering` | Becomes `metadata.name` |
+| `name` | `nfd41-fabric-peering` | The artifact's identity; **not** `metadata.name` |
 | `status` | `active` | Does not gate rendering |
 | `owner` | an `OrganizationTenant` | Mandatory on `ServiceGeneric` |
 | `cluster` | `nfd41` | Mandatory |

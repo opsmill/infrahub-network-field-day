@@ -224,10 +224,16 @@ class CrossplaneFabricPeeringTransform(InfrahubTransform):
         spec.update({key: value for key, value in optional.items() if value})
         spec["peers"] = peers
 
+        # metadata.name comes from the CLUSTER, not the service. The XRD is
+        # cluster-scoped with one resource per cluster, so the cluster is what
+        # the resource is identified by -- and naming it after the service would
+        # let a service rename silently create a second FabricPeering alongside
+        # the deployed one instead of updating it. Two services pointing at one
+        # cluster would collide here, which a check should catch anyway.
         manifest = {
             "apiVersion": API_VERSION,
             "kind": KIND,
-            "metadata": {"name": _value(service.name)},
+            "metadata": {"name": cluster_name},
             "spec": spec,
         }
 
