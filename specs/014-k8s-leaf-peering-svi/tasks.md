@@ -139,8 +139,8 @@ without an Infrahub instance and catch a bad edit at review time rather than at 
 - [X] T041 [P] Run `uv run invoke lint-markdown`
 - [X] T042 Run `uv run invoke lint-prose` and confirm the count is unchanged from the known baseline of 7 errors / 4 warnings. If a new word is flagged, add it to `.vale/config/vocabularies/OpsMill/accept.txt` as the repo already does for similar terms.
 - [X] T043 Write `specs/014-k8s-leaf-peering-svi/acceptance-evidence.md` recording every success criterion with real command output, following the format of `specs/011-crossplane-manifest-transform/acceptance-evidence.md`. Record gaps as gaps.
-- [ ] T044 Commit on `014-k8s-leaf-peering-svi` with the required trailer lines
-- [ ] T045 Delete the `svi-model` Infrahub branch, or state why it was kept for inspection
+- [X] T044 Commit on `014-k8s-leaf-peering-svi` with the required trailer lines
+- [X] T045 Delete the `svi-model` Infrahub branch, or state why it was kept for inspection
 
 ---
 
