@@ -615,6 +615,52 @@ class GeneratorMixin:
                 return str(value) if value is not None else None
         return None
 
+    async def resolve_device_name_template(self, *, kind: str, node_id: str | None) -> str | None:
+        """Read a pod's or rack's ``device_name_template``, or ``None`` if unset.
+
+        The field is not in the generators' GraphQL queries (it is a naming
+        concern, not topology), so it is read on its own. A container that does
+        not carry the attribute at all -- an older schema, or a test double --
+        yields ``None`` and the caller keeps its default naming.
+        """
+        if not node_id:
+            return None
+        try:
+            container = await self.client.get(kind=kind, id=node_id)
+        except Exception:  # noqa: BLE001 - a missing attribute must not fail generation
+            logger.debug("Could not read %s %s for a device_name_template", kind, node_id)
+            return None
+
+        template = self._pool_attr_value(container, "device_name_template")
+        return template or None
+
+    @staticmethod
+    def render_device_name(template: str | None, default: str, **fields: object) -> str:
+        """Render a device hostname from ``template``, falling back to ``default``.
+
+        A template that references an unknown field, or is not a valid format
+        string, falls back to the default rather than raising: a typo in a naming
+        template should not stop a fabric from generating, and the generated name
+        is visible in the resulting devices.
+        """
+        if not template:
+            return default
+        try:
+            rendered = template.format(**fields)
+        except (KeyError, IndexError, ValueError):
+            logger.warning(
+                "device_name_template %r is not usable with fields %s; falling back to %r",
+                template,
+                sorted(fields),
+                default,
+            )
+            return default
+        rendered = rendered.strip()
+        if not rendered:
+            logger.warning("device_name_template %r rendered empty; falling back to %r", template, default)
+            return default
+        return rendered
+
     async def create_avd_device(
         self,
         *,

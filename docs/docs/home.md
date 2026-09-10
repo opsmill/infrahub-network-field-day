@@ -90,7 +90,7 @@ flowchart LR
   - Cabling plan CSV
   - ANTA test catalogs (generation is included; test execution on the roadmap)
   - Computed interface descriptions
-- **Seed data** — a ready-to-run starting point. `invoke load` populates Infrahub immediately with manufacturers, device types, device profiles and templates, addressing and number pools, and two example fabrics with pods, racks, and seed VLANs.
+- **Seed data** — a ready-to-run starting point. `invoke load` populates Infrahub immediately with the manufacturer, cEOS-LAB device type, device profiles and templates, addressing and number pools, and the `NFD41_FABRIC` design with its pod, racks, switches, tenants and VRFs.
 - **Service portal** — a Streamlit application for self-service day-2 operations. Every operation creates a branch and opens a proposed change for review.
   - Add a network segment (VRF, VLAN, SVI)
   - Provision a server into a rack

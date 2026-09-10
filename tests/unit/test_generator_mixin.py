@@ -1157,3 +1157,68 @@ async def test_trigger_generator_tolerant_mode_propagates_non_timeout_errors() -
             timeout=300,
             tolerate_timeout=True,
         )
+
+
+# --- Optional device naming override ------------------------------------------
+# `device_name_template` lets a fabric whose hostnames are already fixed
+# elsewhere keep them. The NFD41 design does not use it — the lab is deployed
+# under the generators' default names instead — so it is covered here directly.
+
+
+def test_render_device_name_falls_back_to_the_default_when_unset() -> None:
+    assert GeneratorMixin.render_device_name(None, "spine-pod1-1", pod="pod1", index=1) == "spine-pod1-1"
+    assert GeneratorMixin.render_device_name("", "spine-pod1-1", pod="pod1", index=1) == "spine-pod1-1"
+
+
+def test_render_device_name_applies_the_template() -> None:
+    assert GeneratorMixin.render_device_name("spine{index}", "ignored", pod="pod1", index=2) == "spine2"
+    assert (
+        GeneratorMixin.render_device_name(
+            "{pod}-leaf{index}", "ignored", pod="nfd41", rack="K8S_LEAFS", rack_index=1, index=2
+        )
+        == "nfd41-leaf2"
+    )
+
+
+@pytest.mark.parametrize("template", ["{nonexistent}", "{", "spine{index", "{0}"])
+def test_render_device_name_falls_back_on_an_unusable_template(template: str) -> None:
+    """A typo in a naming template must not stop a fabric generating.
+
+    The rendered name is visible on the resulting devices, so falling back to the
+    default is recoverable; raising here would abort the whole pod generator.
+    """
+    assert GeneratorMixin.render_device_name(template, "spine-pod1-1", pod="pod1", index=1) == "spine-pod1-1"
+
+
+def test_render_device_name_rejects_a_template_that_renders_empty() -> None:
+    assert GeneratorMixin.render_device_name("  ", "spine-pod1-1", pod="pod1", index=1) == "spine-pod1-1"
+
+
+def test_render_device_name_strips_surrounding_whitespace() -> None:
+    assert GeneratorMixin.render_device_name(" spine{index} ", "ignored", pod="pod1", index=1) == "spine1"
+
+
+@pytest.mark.asyncio
+async def test_resolve_device_name_template_returns_none_when_unset() -> None:
+    generator = _make_generator()
+    generator.client.get = AsyncMock(return_value=SimpleNamespace(device_name_template=SimpleNamespace(value=None)))
+
+    assert await generator.resolve_device_name_template(kind="NetworkPod", node_id="pod-1") is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_device_name_template_returns_none_without_a_node_id() -> None:
+    generator = _make_generator()
+    generator.client.get = AsyncMock()
+
+    assert await generator.resolve_device_name_template(kind="NetworkPod", node_id=None) is None
+    generator.client.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_device_name_template_tolerates_a_container_without_the_attribute() -> None:
+    """An older schema, or a test double, must not fail generation."""
+    generator = _make_generator()
+    generator.client.get = AsyncMock(return_value=SimpleNamespace())
+
+    assert await generator.resolve_device_name_template(kind="LocationRack", node_id="rack-1") is None

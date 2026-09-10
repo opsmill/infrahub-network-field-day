@@ -18,7 +18,30 @@ When closing a capability gap (for example, to support a new AVD example scenari
 - **Prefer a native schema change** when the capability is reused across more than one scenario, is a first-class topology/role/protocol concept operators select in the UI, or needs validation, pool allocation, or deterministic generation. Examples: device roles and their `ROLE_TO_AVD_TYPE` mapping, underlay protocol choices, EVPN inputs such as `evpn_vlan_aware_bundles` and EVPN Gateway Groups.
 - **Use the `avd_custom_hostvars` escape hatch** when the capability is specific to a single scenario, is a pass-through of PyAVD keys that need no allocation or cross-device derivation, or would be premature to model before real demand. Examples: campus dot1x/PoE/port-profiles/in-band management and MPLS/VPN-IPv4 for ISIS-LDP IPVPN.
 
-`avd_custom_hostvars` is a JSON attribute available at fabric, pod, and device scope. Its content deep-merges with the generator-produced hostvars, and **generator-produced values win** on conflict. Keep escape-hatch content in committed seed data (not manual UI edits) so a design stays reproducible and idempotent, and confirm every key is accepted by the pinned PyAVD version. Escape-hatch use is a deliberate, documented choice per capability — not a default fallback to avoid modeling.
+`avd_custom_hostvars` is a JSON attribute available at fabric, pod, and device scope. Its content merges with the generator-produced hostvars, and **generator-produced values win** on conflict. Keep escape-hatch content in committed seed data (not manual UI edits) so a design stays reproducible and idempotent, and confirm every key is accepted by the pinned PyAVD version. Escape-hatch use is a deliberate, documented choice per capability — not a default fallback to avoid modeling.
+
+### How the merge composes
+
+The merge has to reach *inside* generated structures, or the escape hatch is unusable wherever the design already models something natively. The rules:
+
+| Both sides are | Result |
+|----------------|--------|
+| Dicts | Merged recursively |
+| Lists of mappings with a shared, unique scalar key | Merged entry by entry on that key |
+| Anything else (scalars, lists of scalars, entries with no shared key) | The generated value replaces the override |
+
+Entry identity is resolved from the entries themselves — the first of `name`, `id`, `group`, `profile`, `node`, `ip_address`, `prefix`, `interface_name` that every entry on both sides carries with unique values. That is why `svis[].nodes` (keyed by `node`) and `l3leaf.nodes` (keyed by `name`) both resolve correctly without a path map.
+
+Within a merged entry, precedence is unchanged: the generated value still wins field by field. Entries only the override declares are kept, and entries only the generator produced are appended. Merging is idempotent, so re-generation does not grow a list.
+
+So an override **can** add a static route to a natively-modelled VRF, or a tenant the design does not model, without the generated `tenants` list wiping it. Before this it could not: a replaced list raises nothing, so the override simply vanished from the rendered configuration.
+
+Two deliberate exceptions:
+
+- **`<node_type>.nodes` and `<node_type>.node_groups` are never merged.** Those name devices PyAVD has to resolve facts for, so an override adding one injects a device that does not exist in Infrahub, is not cabled and has no host_vars — an input that fails a long way from its cause. Infrahub owns the topology; the override is discarded, as it always was.
+- **AVD adapters are replaced, not merged.** They are identified by `switch_ports`, which is itself a list, so there is no key to match on. An override that needs to change an adapter has to restate it in full.
+
+The contract is pinned in [`tests/unit/test_hostvar_override_merge.py`](https://github.com/opsmill/infrahub-network-field-day/blob/main/tests/unit/test_hostvar_override_merge.py).
 
 ## Add a new device role
 

@@ -37,7 +37,18 @@ The branch-first upgrade flow is a maintainer/operator task — you rebuild the 
    Open a proposed change from your branch and inspect the diff of the rendered EOS configurations and structured config. This is where a PyAVD version bump shows its effect — look for unexpected changes to interfaces, BGP, or EVPN stanzas.
 
 5. **Validate.**
-   Confirm the rendered artifacts build cleanly and the diff matches the release notes' expected changes. If ANTA catalog generation is enabled, regenerate the catalogs and review them too.
+   Start with the fast check — `uv run pytest tests/unit/test_nfd41_golden_config.py` renders the fabric's host_vars through the new PyAVD and diffs the result against the configuration the lab is deployed with. It runs in about a second and needs no containers, so a version bump that changes a default, renames a key, or reorders a stanza shows up immediately rather than after a 15-minute stack run.
+
+   Then confirm the rendered artifacts build cleanly and the diff matches the release notes' expected changes. If ANTA catalog generation is enabled, regenerate the catalogs and review them too.
+
+   The full pipeline check is `uv run pytest tests/integration/test_nfd41_fabric.py -m e2e`, which boots a real stack and asserts the same parity end to end.
+
+   :::note
+   If the new PyAVD legitimately changes the rendered configuration, the golden
+   files have to be refreshed from the lab *after* it has been redeployed with
+   the new version — not edited to match. See
+   `tests/integration/golden/nfd41/README.md`.
+   :::
 
 6. **Merge through the proposed change.**
    Once the diff is understood and approved, merge the proposed change. Only then does the new PyAVD version reach production.

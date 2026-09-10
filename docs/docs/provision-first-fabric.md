@@ -1,6 +1,6 @@
 ---
 title: Provision your first fabric
-description: Run the generator chain end-to-end on Fabric-L3LS-MultiPod-A and reach rendered AVD artifacts.
+description: Run the generator chain end-to-end on NFD41_FABRIC and reach rendered AVD artifacts.
 audience: user
 sidebar_position: 2
 ---
@@ -9,7 +9,7 @@ sidebar_position: 2
 
 Prerequisites: [Quick Start](./quick-start.md) complete — Infrahub is running at `http://localhost:8000`, and seed data (fabrics, pods, racks, device types, IP pools) is loaded.
 
-At this point you have fabrics defined but **no devices**. The steps below generate the devices, cabling, hostvars, and configurations for `Fabric-L3LS-MultiPod-A`.
+At this point the fabric design is loaded and the seven switches exist with their pinned identity, but they are **not cabled** and have no host_vars. The steps below generate the cabling, host_vars, and configurations for `NFD41_FABRIC`.
 
 ## The generator chain
 
@@ -49,7 +49,7 @@ The CLI route needs credentials in your shell — either `source .envrc` first o
 1. In the Infrahub UI, open **Actions → Generator definitions** from the main menu.
 2. Find **`generate-fabric`** in the list and click it.
 3. In the generator page, click the **Run** button.
-4. Select the target fabric (`Fabric-L3LS-MultiPod-A`) from the dropdown.
+4. Select the target fabric (`NFD41_FABRIC`) from the dropdown.
 5. Click **Run** to start.
 
 Infrahub queues the generator and shows progress. The fabric generator itself takes under a minute.

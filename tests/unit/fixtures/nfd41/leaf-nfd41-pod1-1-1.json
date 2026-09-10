@@ -1,0 +1,1101 @@
+{
+  "aaa_settings": {
+    "authorization": {
+      "exec": {
+        "default": "local"
+      }
+    },
+    "local_users": [
+      {
+        "name": "admin",
+        "privilege": 15,
+        "role": "network-admin",
+        "sha512_password": "$6$Nfd41Lab$EhS4fIdtU8S9PK0YbkZWqgkVgr0EL0oGJafF2PMgh5kppnuId4V7hJVcOvCVEfcCUzxR91Bx17VJ5ZPBXas7R0"
+      },
+      {
+        "name": "avd",
+        "privilege": 15,
+        "role": "network-admin",
+        "sha512_password": "$6$Nfd41Lab$EhS4fIdtU8S9PK0YbkZWqgkVgr0EL0oGJafF2PMgh5kppnuId4V7hJVcOvCVEfcCUzxR91Bx17VJ5ZPBXas7R0"
+      }
+    ]
+  },
+  "bgp_graceful_restart": {
+    "enabled": true,
+    "restart_time": 300
+  },
+  "bgp_peer_groups": {
+    "evpn_overlay_peers": {
+      "password": "gEMcfePissYjHyX/WxqTFCM3/bTbO70+"
+    },
+    "ipv4_underlay_peers": {
+      "password": "3132fLAdXzcBskcjlGVz2EnzeIjIFmfR"
+    },
+    "mlag_ipv4_underlay_peer": {
+      "password": "V3usv1/zwCsB5zH5pYBwxA=="
+    }
+  },
+  "custom_platform_settings": [
+    {
+      "platforms": [
+        "cEOS-LAB"
+      ],
+      "reload_delay": {
+        "mlag": 300,
+        "non_mlag": 330
+      }
+    }
+  ],
+  "custom_structured_configuration_ip_access_lists": [
+    {
+      "entries": [
+        {
+          "action": "permit",
+          "destination": "any",
+          "protocol": "ip",
+          "sequence": 10,
+          "source": "172.20.41.0/24"
+        },
+        {
+          "action": "deny",
+          "destination": "any",
+          "log": true,
+          "protocol": "ip",
+          "sequence": 100,
+          "source": "any"
+        }
+      ],
+      "name": "ACL-MGMT-IN"
+    }
+  ],
+  "custom_structured_configuration_prefix_lists": [
+    {
+      "name": "PL-CILIUM-PERMITTED",
+      "sequence_numbers": [
+        {
+          "action": "permit 10.111.0.0/16 le 26",
+          "sequence": 10
+        },
+        {
+          "action": "permit 10.112.0.0/16 le 32",
+          "sequence": 20
+        }
+      ]
+    },
+    {
+      "name": "PL-FABRIC-TO-CILIUM",
+      "sequence_numbers": [
+        {
+          "action": "permit 0.0.0.0/0",
+          "sequence": 10
+        },
+        {
+          "action": "permit 10.110.0.0/24",
+          "sequence": 20
+        }
+      ]
+    },
+    {
+      "name": "PL-WAN-PERMITTED",
+      "sequence_numbers": [
+        {
+          "action": "permit 10.60.0.0/16 le 24",
+          "sequence": 10
+        }
+      ]
+    },
+    {
+      "name": "PL-BRANCH-PERMITTED",
+      "sequence_numbers": [
+        {
+          "action": "permit 10.70.0.0/24",
+          "sequence": 10
+        }
+      ]
+    },
+    {
+      "name": "PL-DC-ADVERTISED",
+      "sequence_numbers": [
+        {
+          "action": "permit 10.112.240.0/24 le 32",
+          "sequence": 10
+        },
+        {
+          "action": "permit 10.220.10.0/24 le 32",
+          "sequence": 20
+        },
+        {
+          "action": "permit 10.220.20.0/24 le 32",
+          "sequence": 30
+        }
+      ]
+    },
+    {
+      "name": "PL-DC-ADVERTISED-BRANCH",
+      "sequence_numbers": [
+        {
+          "action": "permit 10.112.240.0/24 le 32",
+          "sequence": 10
+        },
+        {
+          "action": "permit 10.110.0.0/24",
+          "sequence": 20
+        }
+      ]
+    }
+  ],
+  "custom_structured_configuration_route_maps": [
+    {
+      "name": "RM-CILIUM-IN",
+      "sequence_numbers": [
+        {
+          "description": "Accept only sanctioned pod and service CIDRs",
+          "match": [
+            "ip address prefix-list PL-CILIUM-PERMITTED"
+          ],
+          "sequence": 10,
+          "set": [
+            "community 65101:110 additive"
+          ],
+          "type": "permit"
+        },
+        {
+          "description": "Explicit deny - anything else is a policy violation",
+          "sequence": 99,
+          "type": "deny"
+        }
+      ]
+    },
+    {
+      "name": "RM-WAN-IN",
+      "sequence_numbers": [
+        {
+          "description": "Accept only assigned customer supernets",
+          "match": [
+            "ip address prefix-list PL-WAN-PERMITTED"
+          ],
+          "sequence": 10,
+          "set": [
+            "community 65103:50 additive"
+          ],
+          "type": "permit"
+        },
+        {
+          "description": "Explicit deny - the provider announced something it should not",
+          "sequence": 99,
+          "type": "deny"
+        }
+      ]
+    },
+    {
+      "name": "RM-BRANCH-IN",
+      "sequence_numbers": [
+        {
+          "description": "Accept only the branch LAN",
+          "match": [
+            "ip address prefix-list PL-BRANCH-PERMITTED"
+          ],
+          "sequence": 10,
+          "set": [
+            "community 65103:70 additive"
+          ],
+          "type": "permit"
+        },
+        {
+          "description": "Explicit deny",
+          "sequence": 99,
+          "type": "deny"
+        }
+      ]
+    },
+    {
+      "name": "RM-DC-TO-BRANCH",
+      "sequence_numbers": [
+        {
+          "description": "Advertise DC services and the node subnet to our own office",
+          "match": [
+            "ip address prefix-list PL-DC-ADVERTISED-BRANCH"
+          ],
+          "sequence": 10,
+          "type": "permit"
+        },
+        {
+          "description": "Explicit deny - still no pod CIDR, still no app tenant",
+          "sequence": 99,
+          "type": "deny"
+        }
+      ]
+    },
+    {
+      "name": "RM-DC-TO-EXTERNAL",
+      "sequence_numbers": [
+        {
+          "description": "Advertise the DC service VIP range only",
+          "match": [
+            "ip address prefix-list PL-DC-ADVERTISED"
+          ],
+          "sequence": 10,
+          "type": "permit"
+        },
+        {
+          "description": "Explicit deny - do not leak DC internals to the outside",
+          "sequence": 99,
+          "type": "deny"
+        }
+      ]
+    },
+    {
+      "name": "RM-FABRIC-TO-CILIUM",
+      "sequence_numbers": [
+        {
+          "description": "Default route and node subnet only",
+          "match": [
+            "ip address prefix-list PL-FABRIC-TO-CILIUM"
+          ],
+          "sequence": 10,
+          "type": "permit"
+        },
+        {
+          "sequence": 99,
+          "type": "deny"
+        }
+      ]
+    }
+  ],
+  "default_interface_mtu": 9214,
+  "dns_settings": {
+    "domain": "nfd41.lab",
+    "servers": [
+      {
+        "ip_address": "172.20.41.1",
+        "vrf": "MGMT"
+      }
+    ]
+  },
+  "fabric_ip_addressing": {
+    "mlag": {
+      "algorithm": "first_id"
+    }
+  },
+  "fabric_name": "NFD41_FABRIC",
+  "ipv4_acls": [
+    {
+      "entries": [
+        {
+          "action": "permit",
+          "destination": "any",
+          "protocol": "ip",
+          "sequence": 10,
+          "source": "10.110.0.0/24"
+        },
+        {
+          "action": "permit",
+          "destination": "any",
+          "protocol": "ip",
+          "sequence": 20,
+          "source": "10.111.0.0/16"
+        },
+        {
+          "action": "permit",
+          "destination": "any",
+          "protocol": "ip",
+          "sequence": 30,
+          "source": "10.112.0.0/16"
+        },
+        {
+          "action": "deny",
+          "destination": "any",
+          "log": true,
+          "protocol": "ip",
+          "sequence": 100,
+          "source": "any"
+        }
+      ],
+      "name": "ACL-K8S-ANTISPOOF"
+    },
+    {
+      "entries": [
+        {
+          "action": "permit",
+          "destination": "any",
+          "protocol": "ip",
+          "sequence": 10,
+          "source": "10.60.0.0/16"
+        },
+        {
+          "action": "deny",
+          "destination": "any",
+          "log": true,
+          "protocol": "ip",
+          "sequence": 100,
+          "source": "any"
+        }
+      ],
+      "name": "ACL-FROM-WAN"
+    },
+    {
+      "entries": [
+        {
+          "action": "permit",
+          "destination": "any",
+          "protocol": "ip",
+          "sequence": 10,
+          "source": "10.70.0.0/24"
+        },
+        {
+          "action": "deny",
+          "destination": "any",
+          "log": true,
+          "protocol": "ip",
+          "sequence": 100,
+          "source": "any"
+        }
+      ],
+      "name": "ACL-FROM-BRANCH"
+    },
+    {
+      "entries": [
+        {
+          "action": "deny",
+          "destination": "any",
+          "log": true,
+          "protocol": "ip",
+          "sequence": 10,
+          "source": "10.41.0.0/16"
+        },
+        {
+          "action": "permit",
+          "destination": "any",
+          "protocol": "ip",
+          "sequence": 20,
+          "source": "any"
+        }
+      ],
+      "name": "ACL-FROM-FIREWALL"
+    }
+  ],
+  "l3leaf": {
+    "defaults": {
+      "bgp_defaults": [
+        "no bgp default ipv4-unicast",
+        "distance bgp 20 200 200"
+      ],
+      "loopback_ipv4_offset": 10,
+      "mlag_dual_primary_detection": true,
+      "platform": "cEOS-LAB",
+      "spanning_tree_mode": "mstp",
+      "spanning_tree_priority": 4096
+    },
+    "node_groups": [
+      {
+        "bgp_as": "65101",
+        "filter": {
+          "tags": [
+            "k8s"
+          ]
+        },
+        "group": "K8S_LEAFS",
+        "mlag_domain_id": "K8S_LEAFS",
+        "nodes": [
+          {
+            "name": "leaf-nfd41-pod1-1-1"
+          },
+          {
+            "name": "leaf-nfd41-pod1-1-2"
+          }
+        ],
+        "virtual_router_mac_address": "00:1c:73:00:00:99"
+      }
+    ],
+    "nodes": [
+      {
+        "id": 1,
+        "loopback_ipv4_address": "10.41.0.11",
+        "loopback_ipv4_pool": "10.41.0.0/24",
+        "mgmt_ip": "172.20.41.21/24",
+        "mlag_interfaces": [
+          "Ethernet3",
+          "Ethernet4"
+        ],
+        "mlag_peer_ipv4_pool": "10.41.254.0/24",
+        "mlag_peer_l3_ipv4_pool": "10.41.253.0/24",
+        "name": "leaf-nfd41-pod1-1-1",
+        "uplink_interfaces": [
+          "Ethernet1",
+          "Ethernet2"
+        ],
+        "uplink_ipv4_pool": "10.41.255.0/24",
+        "uplink_switch_interfaces": [
+          "Ethernet1",
+          "Ethernet1"
+        ],
+        "uplink_switches": [
+          "spine-nfd41-pod1-1",
+          "spine-nfd41-pod1-2"
+        ],
+        "virtual_router_mac_address": "00:1c:73:00:00:99",
+        "vtep_loopback_ipv4_address": "10.41.1.11",
+        "vtep_loopback_ipv4_pool": "10.41.1.0/24"
+      }
+    ]
+  },
+  "logging_settings": {
+    "vrfs": [
+      {
+        "name": "MGMT",
+        "source_interface": "Management0"
+      }
+    ]
+  },
+  "management_eapi": {
+    "default_services": false,
+    "enable_http": false,
+    "enable_https": true,
+    "enabled": true,
+    "vrfs": [
+      {
+        "enabled": true,
+        "name": "MGMT"
+      }
+    ]
+  },
+  "mgmt_gateway": "172.20.41.1",
+  "mgmt_interface": "Management0",
+  "mgmt_interface_vrf": "MGMT",
+  "ntp_settings": {
+    "server_vrf": "MGMT",
+    "servers": [
+      {
+        "iburst": true,
+        "name": "172.20.41.1"
+      }
+    ],
+    "set_first_ntp_server_as_preferred": true
+  },
+  "overlay_routing_protocol": "ebgp",
+  "p2p_uplinks_mtu": 9214,
+  "servers": [
+    {
+      "adapters": [
+        {
+          "description": "acme tenant cloud instance",
+          "endpoint_ports": [
+            "eth1"
+          ],
+          "mode": "access",
+          "spanning_tree_bpduguard": "enabled",
+          "spanning_tree_portfast": "edge",
+          "switch_ports": [
+            "Ethernet11"
+          ],
+          "switches": [
+            "leaf-nfd41-pod1-2-1"
+          ],
+          "vlans": "310"
+        }
+      ],
+      "name": "acme-cloud1"
+    },
+    {
+      "adapters": [
+        {
+          "description": "globex tenant cloud instance",
+          "endpoint_ports": [
+            "eth1"
+          ],
+          "mode": "access",
+          "spanning_tree_bpduguard": "enabled",
+          "spanning_tree_portfast": "edge",
+          "switch_ports": [
+            "Ethernet11"
+          ],
+          "switches": [
+            "leaf-nfd41-pod1-2-2"
+          ],
+          "vlans": "320"
+        }
+      ],
+      "name": "globex-cloud1"
+    },
+    {
+      "adapters": [
+        {
+          "description": "app-host",
+          "endpoint_ports": [
+            "eth1"
+          ],
+          "mode": "access",
+          "spanning_tree_bpduguard": "enabled",
+          "spanning_tree_portfast": "edge",
+          "switch_ports": [
+            "Ethernet10"
+          ],
+          "switches": [
+            "leaf-nfd41-pod1-2-1"
+          ],
+          "vlans": "210"
+        }
+      ],
+      "name": "host-a"
+    },
+    {
+      "adapters": [
+        {
+          "description": "app-host",
+          "endpoint_ports": [
+            "eth1"
+          ],
+          "mode": "access",
+          "spanning_tree_bpduguard": "enabled",
+          "spanning_tree_portfast": "edge",
+          "switch_ports": [
+            "Ethernet10"
+          ],
+          "switches": [
+            "leaf-nfd41-pod1-2-2"
+          ],
+          "vlans": "210"
+        }
+      ],
+      "name": "host-b"
+    },
+    {
+      "adapters": [
+        {
+          "description": "k3s-server",
+          "endpoint_ports": [
+            "eth1"
+          ],
+          "mode": "access",
+          "spanning_tree_bpduguard": "enabled",
+          "spanning_tree_portfast": "edge",
+          "switch_ports": [
+            "Ethernet10"
+          ],
+          "switches": [
+            "leaf-nfd41-pod1-1-1"
+          ],
+          "vlans": "110"
+        }
+      ],
+      "name": "k8s-node1"
+    },
+    {
+      "adapters": [
+        {
+          "description": "k3s-agent",
+          "endpoint_ports": [
+            "eth1"
+          ],
+          "mode": "access",
+          "spanning_tree_bpduguard": "enabled",
+          "spanning_tree_portfast": "edge",
+          "switch_ports": [
+            "Ethernet10"
+          ],
+          "switches": [
+            "leaf-nfd41-pod1-1-2"
+          ],
+          "vlans": "110"
+        }
+      ],
+      "name": "k8s-node2"
+    },
+    {
+      "adapters": [
+        {
+          "description": "k3s-agent",
+          "endpoint_ports": [
+            "eth1"
+          ],
+          "mode": "access",
+          "spanning_tree_bpduguard": "enabled",
+          "spanning_tree_portfast": "edge",
+          "switch_ports": [
+            "Ethernet11"
+          ],
+          "switches": [
+            "leaf-nfd41-pod1-1-2"
+          ],
+          "vlans": "110"
+        }
+      ],
+      "name": "k8s-node3"
+    }
+  ],
+  "spine": {
+    "defaults": {
+      "bgp_defaults": [
+        "no bgp default ipv4-unicast",
+        "distance bgp 20 200 200"
+      ],
+      "platform": "cEOS-LAB"
+    }
+  },
+  "ssh_settings": {
+    "enabled": true,
+    "idle_timeout": 15,
+    "vrfs": [
+      {
+        "enabled": true,
+        "ipv4_acl": "ACL-MGMT-IN",
+        "name": "MGMT"
+      }
+    ]
+  },
+  "tenants": [
+    {
+      "mac_vrf_vni_base": 11000,
+      "name": "TENANT_K8S",
+      "vrfs": [
+        {
+          "bgp_peers": [
+            {
+              "cleartext_password": "Nfd41-Cilium",
+              "description": "k8s-node1-cilium",
+              "ip_address": "10.110.0.11",
+              "maximum_routes": 100,
+              "next_hop_self": true,
+              "nodes": [
+                "leaf-nfd41-pod1-1-1",
+                "leaf-nfd41-pod1-1-2"
+              ],
+              "remote_as": "65401",
+              "route_map_in": "RM-CILIUM-IN",
+              "route_map_out": "RM-FABRIC-TO-CILIUM",
+              "send_community": "all"
+            },
+            {
+              "cleartext_password": "Nfd41-Cilium",
+              "description": "k8s-node2-cilium",
+              "ip_address": "10.110.0.12",
+              "maximum_routes": 100,
+              "next_hop_self": true,
+              "nodes": [
+                "leaf-nfd41-pod1-1-1",
+                "leaf-nfd41-pod1-1-2"
+              ],
+              "remote_as": "65401",
+              "route_map_in": "RM-CILIUM-IN",
+              "route_map_out": "RM-FABRIC-TO-CILIUM",
+              "send_community": "all"
+            },
+            {
+              "cleartext_password": "Nfd41-Cilium",
+              "description": "k8s-node3-cilium",
+              "ip_address": "10.110.0.13",
+              "maximum_routes": 100,
+              "next_hop_self": true,
+              "nodes": [
+                "leaf-nfd41-pod1-1-1",
+                "leaf-nfd41-pod1-1-2"
+              ],
+              "remote_as": "65401",
+              "route_map_in": "RM-CILIUM-IN",
+              "route_map_out": "RM-FABRIC-TO-CILIUM",
+              "send_community": "all"
+            }
+          ],
+          "description": "Kubernetes production - Cilium peers BGP from the nodes",
+          "enable_mlag_ibgp_peering_vrfs": true,
+          "l3_interfaces": [
+            {
+              "description": "FW1_ge-0/0/0_ZONE-K8S-PROD",
+              "enabled": true,
+              "interfaces": [
+                "Ethernet10"
+              ],
+              "ip_addresses": [
+                "10.250.110.1/30"
+              ],
+              "ipv4_acl_in": "ACL-FROM-FIREWALL",
+              "ipv4_acl_out": "ACL-K8S-ANTISPOOF",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ]
+            }
+          ],
+          "name": "K8S_PROD",
+          "redistribute_connected": true,
+          "redistribute_static": true,
+          "static_routes": [
+            {
+              "next_hop": "10.250.110.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "0.0.0.0/0"
+            }
+          ],
+          "svis": [
+            {
+              "description": "k3s node network",
+              "enabled": true,
+              "id": 110,
+              "ip_virtual_router_addresses": [
+                "10.110.0.1"
+              ],
+              "name": "K8S_NODES",
+              "nodes": [
+                {
+                  "ip_address": "10.110.0.2/24",
+                  "node": "leaf-nfd41-pod1-1-1"
+                },
+                {
+                  "ip_address": "10.110.0.3/24",
+                  "node": "leaf-nfd41-pod1-1-2"
+                }
+              ],
+              "tags": [
+                "k8s"
+              ]
+            }
+          ],
+          "vrf_id": 110,
+          "vrf_vni": 110
+        }
+      ]
+    },
+    {
+      "mac_vrf_vni_base": 15000,
+      "name": "TENANT_EXTERNAL",
+      "vrfs": [
+        {
+          "bgp_peers": [
+            {
+              "description": "isp-pe2",
+              "ip_address": "10.250.50.2",
+              "maximum_routes": 1000,
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "remote_as": "65500",
+              "route_map_in": "RM-WAN-IN",
+              "route_map_out": "RM-DC-TO-EXTERNAL",
+              "send_community": "all"
+            }
+          ],
+          "description": "ISP transit - WAN customers",
+          "l3_interfaces": [
+            {
+              "description": "ISP_PE2_WAN_HANDOFF",
+              "enabled": true,
+              "interfaces": [
+                "Ethernet12"
+              ],
+              "ip_addresses": [
+                "10.250.50.1/30"
+              ],
+              "ipv4_acl_in": "ACL-FROM-WAN",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ]
+            },
+            {
+              "description": "FW1_ZONE-WAN",
+              "enabled": true,
+              "interfaces": [
+                "Ethernet14"
+              ],
+              "ip_addresses": [
+                "10.250.150.1/30"
+              ],
+              "ipv4_acl_in": "ACL-FROM-FIREWALL",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ]
+            }
+          ],
+          "name": "WAN",
+          "redistribute_connected": true,
+          "redistribute_static": true,
+          "static_routes": [
+            {
+              "next_hop": "10.250.150.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "10.112.240.0/24"
+            },
+            {
+              "next_hop": "10.250.150.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "10.220.10.0/24"
+            },
+            {
+              "next_hop": "10.250.150.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "10.220.20.0/24"
+            }
+          ],
+          "vrf_id": 50,
+          "vrf_vni": 50
+        },
+        {
+          "bgp_peers": [
+            {
+              "description": "branch-rtr",
+              "ip_address": "10.250.70.2",
+              "maximum_routes": 100,
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "remote_as": "65030",
+              "route_map_in": "RM-BRANCH-IN",
+              "route_map_out": "RM-DC-TO-BRANCH",
+              "send_community": "all"
+            }
+          ],
+          "description": "Branch office - private circuit, no ISP in path",
+          "l3_interfaces": [
+            {
+              "description": "BRANCH_RTR_CIRCUIT",
+              "enabled": true,
+              "interfaces": [
+                "Ethernet13"
+              ],
+              "ip_addresses": [
+                "10.250.70.1/30"
+              ],
+              "ipv4_acl_in": "ACL-FROM-BRANCH",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ]
+            },
+            {
+              "description": "FW1_ZONE-BRANCH",
+              "enabled": true,
+              "interfaces": [
+                "Ethernet15"
+              ],
+              "ip_addresses": [
+                "10.250.170.1/30"
+              ],
+              "ipv4_acl_in": "ACL-FROM-FIREWALL",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ]
+            }
+          ],
+          "name": "BRANCH",
+          "redistribute_connected": true,
+          "redistribute_static": true,
+          "static_routes": [
+            {
+              "next_hop": "10.250.170.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "10.112.240.0/24"
+            },
+            {
+              "next_hop": "10.250.170.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "10.110.0.0/24"
+            }
+          ],
+          "vrf_id": 70,
+          "vrf_vni": 70
+        }
+      ]
+    },
+    {
+      "mac_vrf_vni_base": 13000,
+      "name": "TENANT_CLOUD",
+      "vrfs": [
+        {
+          "description": "acme - isolated cloud instances",
+          "enable_mlag_ibgp_peering_vrfs": true,
+          "l3_interfaces": [
+            {
+              "description": "FW1_ge-0/0/4_ZONE-ACME-CLOUD",
+              "enabled": true,
+              "interfaces": [
+                "Ethernet16"
+              ],
+              "ip_addresses": [
+                "10.250.10.1/30"
+              ],
+              "ipv4_acl_in": "ACL-FROM-FIREWALL",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ]
+            }
+          ],
+          "name": "TENANT_ACME",
+          "redistribute_connected": true,
+          "redistribute_static": true,
+          "static_routes": [
+            {
+              "next_hop": "10.250.10.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "0.0.0.0/0"
+            }
+          ],
+          "svis": [
+            {
+              "description": "acme tenant cloud instances",
+              "enabled": true,
+              "id": 310,
+              "ip_virtual_router_addresses": [
+                "10.220.10.1"
+              ],
+              "name": "ACME_CLOUD",
+              "nodes": [
+                {
+                  "ip_address": "10.220.10.2/24",
+                  "node": "leaf-nfd41-pod1-2-1"
+                },
+                {
+                  "ip_address": "10.220.10.3/24",
+                  "node": "leaf-nfd41-pod1-2-2"
+                }
+              ],
+              "tags": [
+                "cloud"
+              ]
+            }
+          ],
+          "vrf_id": 310,
+          "vrf_vni": 310
+        },
+        {
+          "description": "globex - isolated cloud instances",
+          "enable_mlag_ibgp_peering_vrfs": true,
+          "l3_interfaces": [
+            {
+              "description": "FW1_ge-0/0/5_ZONE-GLOBEX-CLOUD",
+              "enabled": true,
+              "interfaces": [
+                "Ethernet17"
+              ],
+              "ip_addresses": [
+                "10.250.20.1/30"
+              ],
+              "ipv4_acl_in": "ACL-FROM-FIREWALL",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ]
+            }
+          ],
+          "name": "TENANT_GLOBEX",
+          "redistribute_connected": true,
+          "redistribute_static": true,
+          "static_routes": [
+            {
+              "next_hop": "10.250.20.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "0.0.0.0/0"
+            }
+          ],
+          "svis": [
+            {
+              "description": "globex tenant cloud instances",
+              "enabled": true,
+              "id": 320,
+              "ip_virtual_router_addresses": [
+                "10.220.20.1"
+              ],
+              "name": "GLOBEX_CLOUD",
+              "nodes": [
+                {
+                  "ip_address": "10.220.20.2/24",
+                  "node": "leaf-nfd41-pod1-2-1"
+                },
+                {
+                  "ip_address": "10.220.20.3/24",
+                  "node": "leaf-nfd41-pod1-2-2"
+                }
+              ],
+              "tags": [
+                "cloud"
+              ]
+            }
+          ],
+          "vrf_id": 320,
+          "vrf_vni": 320
+        }
+      ]
+    },
+    {
+      "mac_vrf_vni_base": 12000,
+      "name": "TENANT_APP",
+      "vrfs": [
+        {
+          "description": "Classic bare-metal application tier",
+          "enable_mlag_ibgp_peering_vrfs": true,
+          "l3_interfaces": [
+            {
+              "description": "FW1_ge-0/0/1_ZONE-APP-PROD",
+              "enabled": true,
+              "interfaces": [
+                "Ethernet11"
+              ],
+              "ip_addresses": [
+                "10.250.210.1/30"
+              ],
+              "ipv4_acl_in": "ACL-FROM-FIREWALL",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ]
+            }
+          ],
+          "name": "APP_PROD",
+          "redistribute_connected": true,
+          "redistribute_static": true,
+          "static_routes": [
+            {
+              "next_hop": "10.250.210.2",
+              "nodes": [
+                "leaf-nfd41-pod1-3-1"
+              ],
+              "prefix": "0.0.0.0/0"
+            }
+          ],
+          "svis": [
+            {
+              "description": "Application host network",
+              "enabled": true,
+              "id": 210,
+              "ip_virtual_router_addresses": [
+                "10.210.0.1"
+              ],
+              "name": "APP_HOSTS",
+              "nodes": [
+                {
+                  "ip_address": "10.210.0.2/24",
+                  "node": "leaf-nfd41-pod1-2-1"
+                },
+                {
+                  "ip_address": "10.210.0.3/24",
+                  "node": "leaf-nfd41-pod1-2-2"
+                }
+              ],
+              "tags": [
+                "app"
+              ]
+            }
+          ],
+          "vrf_id": 210,
+          "vrf_vni": 210
+        }
+      ]
+    }
+  ],
+  "timezone": "UTC",
+  "type": "l3leaf",
+  "underlay_filter_peer_as": false,
+  "underlay_filter_redistribute_connected": true,
+  "underlay_routing_protocol": "ebgp",
+  "virtual_router_mac_address": "00:1c:73:00:00:99"
+}

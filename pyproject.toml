@@ -1,13 +1,13 @@
 [project]
 name = "solution-arista-avd"
 version = "0.1.0"
-description = "Arista AVD reference design for Infrahub: models datacenter fabric intent, EVPN services, and per-device AVD data, then renders EOS configurations and documentation through PyAVD."
+description = "Infrahub Network Field Day: the NFD41 lab's Arista EVPN/VXLAN fabric modelled in Infrahub, rendered to EOS configuration through PyAVD."
 authors = [{ name = "OpsMill", email = "info@opsmill.com" }]
 readme = "README.md"
 requires-python = ">=3.11, <3.14"
 dependencies = [
     "httpx>=0.28.1",
-    "pyavd>=6.3.0,<6.4.0",
+    "pyavd>=6.4.0,<6.5.0",
     "streamlit-flow-component>=1.6.1",
 ]
 

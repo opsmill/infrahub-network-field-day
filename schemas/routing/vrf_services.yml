@@ -1,0 +1,240 @@
+---
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+#
+# VRF-scoped routing services: the per-VRF static routes, eBGP neighbours and
+# routed interfaces that AVD accepts under `network_services[].vrfs[]`.
+#
+# Until now these three were reconciled *from* AVD output by the backfill
+# generator rather than authored as inputs, which meant a service-insertion
+# design -- every tenant's only way out is a default route pointing at a
+# firewall handoff interface -- could not be expressed in Infrahub at all. They
+# are the load-bearing objects in that design: remove the static route and the
+# tenant has no egress; remove the L3 interface and the firewall is not in the
+# path; remove the BGP peer and a workload cannot announce anything.
+#
+# Each object names the devices it applies to, because a VRF is fabric-wide but
+# a handoff or a peering is not: a tenant default route is originated on the
+# border leaf only, and the Kubernetes nodes peer with their own leaf pair.
+version: "1.0"
+
+nodes:
+  - name: VrfStaticRoute
+    namespace: Routing
+    description: "A static route originated inside a VRF on specific devices"
+    label: VRF Static Route
+    icon: mdi:routes
+    include_in_menu: false
+    human_friendly_id:
+      - vrf__name__value
+      - prefix__value
+      - next_hop__value
+    order_by:
+      - vrf__name__value
+      - prefix__value
+    display_label: prefix__value
+    uniqueness_constraints:
+      - [vrf, prefix__value, next_hop__value]
+    attributes:
+      - name: prefix
+        kind: IPNetwork
+        optional: false
+        description: "Destination prefix, e.g. 0.0.0.0/0"
+        order_weight: 1000
+      - name: next_hop
+        label: Next Hop
+        kind: IPHost
+        optional: false
+        description: "Next-hop address the traffic is handed to"
+        order_weight: 1100
+      # Documentation only. AVD's static-route model has no `description` key
+      # and rejects one, so this is not emitted into the host_vars.
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1300
+    relationships:
+      - name: vrf
+        label: VRF
+        peer: IpamVRF
+        kind: Parent
+        cardinality: one
+        optional: false
+        identifier: "vrf__static_routes"
+        order_weight: 900
+      - name: devices
+        label: Devices
+        peer: DcimDevice
+        kind: Attribute
+        cardinality: many
+        optional: false
+        identifier: "device__vrf_static_routes"
+        # A tenant default route belongs on the border leaf only: originating it
+        # fabric-wide would black-hole traffic on every leaf that has no path to
+        # the next hop.
+        description: "Devices that originate this route"
+        order_weight: 1200
+
+  - name: VrfBgpPeer
+    namespace: Routing
+    description: "An eBGP neighbour inside a VRF, such as a workload or an external router"
+    label: VRF BGP Peer
+    icon: mdi:vector-polyline
+    include_in_menu: false
+    human_friendly_id:
+      - vrf__name__value
+      - ip_address__value
+    order_by:
+      - vrf__name__value
+      - ip_address__value
+    display_label: ip_address__value
+    uniqueness_constraints:
+      - [vrf, ip_address__value]
+    attributes:
+      - name: ip_address
+        label: Peer Address
+        kind: IPHost
+        optional: false
+        description: "Neighbour address inside the VRF"
+        order_weight: 1000
+      - name: remote_asn
+        label: Remote ASN
+        kind: Number
+        optional: false
+        description: "The neighbour's autonomous system number"
+        order_weight: 1100
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1200
+      - name: cleartext_password
+        label: Cleartext Password
+        kind: Text
+        optional: true
+        # Prefer this over a pre-hashed value: EOS type-7 ciphertext is keyed by
+        # the peer address or peer-group name, so a hash copied between peers
+        # applies cleanly and then silently fails to authenticate.
+        description: "BGP session password in cleartext; AVD encrypts it at build time"
+        order_weight: 1300
+      - name: send_community
+        label: Send Community
+        kind: Text
+        optional: true
+        description: "Communities to advertise to this neighbour, e.g. `all`"
+        order_weight: 1400
+      - name: next_hop_self
+        label: Next Hop Self
+        kind: Boolean
+        optional: true
+        description: "Advertise this device as the next hop to the neighbour"
+        order_weight: 1500
+      - name: maximum_routes
+        label: Maximum Routes
+        kind: Number
+        optional: true
+        # The blast-radius limit on a compromised or misconfigured peer.
+        # Belongs on every workload-facing session.
+        description: "Cap on prefixes accepted from this neighbour"
+        order_weight: 1600
+      - name: route_map_in
+        label: Route Map In
+        kind: Text
+        optional: true
+        # Bounds a peer to the prefixes it was assigned, so a workload cannot
+        # announce whatever it likes.
+        description: "Inbound route map name"
+        order_weight: 1700
+      - name: route_map_out
+        label: Route Map Out
+        kind: Text
+        optional: true
+        description: "Outbound route map name, bounding what the fabric tells the peer"
+        order_weight: 1800
+    relationships:
+      - name: vrf
+        label: VRF
+        peer: IpamVRF
+        kind: Parent
+        cardinality: one
+        optional: false
+        identifier: "vrf__bgp_peers"
+        order_weight: 900
+      - name: devices
+        label: Devices
+        peer: DcimDevice
+        kind: Attribute
+        cardinality: many
+        optional: false
+        identifier: "device__vrf_bgp_peers"
+        description: "Devices that establish this session (both members of an MLAG pair, typically)"
+        order_weight: 1050
+
+  - name: VrfL3Interface
+    namespace: Routing
+    description: "A routed interface placed in a VRF, such as a firewall or WAN handoff"
+    label: VRF L3 Interface
+    icon: mdi:ethernet
+    include_in_menu: false
+    human_friendly_id:
+      - device__name__value
+      - interface_name__value
+    order_by:
+      - device__name__value
+      - interface_name__value
+    display_label: interface_name__value
+    uniqueness_constraints:
+      - [device, interface_name__value]
+    attributes:
+      - name: interface_name
+        label: Interface
+        kind: Text
+        optional: false
+        description: "Interface name on the device, e.g. Ethernet10"
+        order_weight: 1000
+      - name: ip_address
+        label: IP Address
+        kind: IPHost
+        optional: false
+        description: "Address configured on the routed interface, e.g. 10.250.110.1/30"
+        order_weight: 1100
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1200
+      - name: enabled
+        kind: Boolean
+        optional: true
+        default_value: true
+        order_weight: 1300
+      - name: ipv4_acl_in
+        label: IPv4 ACL In
+        kind: Text
+        optional: true
+        # The ACL's own entries are an AVD `ipv4_acls` input rather than an
+        # Infrahub object, so this is a name reference only: a name with no
+        # matching ACL renders an interface bound to a list that does not exist.
+        description: "Name of the inbound IPv4 ACL"
+        order_weight: 1400
+      - name: ipv4_acl_out
+        label: IPv4 ACL Out
+        kind: Text
+        optional: true
+        description: "Name of the outbound IPv4 ACL"
+        order_weight: 1500
+    relationships:
+      - name: vrf
+        label: VRF
+        peer: IpamVRF
+        kind: Parent
+        cardinality: one
+        optional: false
+        identifier: "vrf__l3_interfaces"
+        order_weight: 900
+      - name: device
+        label: Device
+        peer: DcimDevice
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: "device__vrf_l3_interfaces"
+        description: "The device the interface belongs to"
+        order_weight: 1050

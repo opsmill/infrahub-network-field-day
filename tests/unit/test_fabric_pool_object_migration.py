@@ -44,22 +44,36 @@ def test_every_network_pod_legacy_mlag_assignment_is_in_pod_ip_pools() -> None:
                     assert legacy_pool in pod_ip_pools, f"{pod['name']} missing {field} in pod_ip_pools"
 
 
-def test_migrated_prefix_roles_use_explicit_fabric_and_mlag_roles() -> None:
-    roles_by_prefix = {row["prefix"]: row["role"] for row in _object_rows("IpamPrefix")}
+# Roles the pool model replaced. A prefix still carrying one of these is not
+# picked up by the role-driven pool collection, so the fabric silently falls back
+# to a generated default pool instead of the prefix that was authored for it.
+RETIRED_PREFIX_ROLES = {"pod_leaf_spine", "pod_super_spine_spine", "technical"}
 
-    assert roles_by_prefix["10.0.0.0/8"] == "fabric_supernet"
-    assert "pod_leaf_spine" not in set(roles_by_prefix.values())
-    assert "pod_super_spine_spine" not in set(roles_by_prefix.values())
-    assert "technical" not in {
-        roles_by_prefix[prefix]
-        for prefix in (
-            "172.16.0.0/28",
-            "10.60.4.0/24",
-            "10.61.4.0/24",
-            "10.64.4.0/24",
-            "10.64.5.0/24",
-        )
+
+def test_no_prefix_carries_a_retired_role() -> None:
+    """Every seeded prefix uses an explicit pool role, not a pre-migration one."""
+    offenders = {
+        row["prefix"]: row["role"] for row in _object_rows("IpamPrefix") if row.get("role") in RETIRED_PREFIX_ROLES
     }
-    assert roles_by_prefix["172.16.0.0/28"] == "dci"
-    assert roles_by_prefix["10.64.4.0/24"] == "mlag"
-    assert roles_by_prefix["10.64.5.0/24"] == "mlag_peering"
+    assert not offenders, f"prefixes with retired roles: {offenders}"
+
+
+def test_exactly_one_fabric_supernet_is_seeded() -> None:
+    """The deterministic fallback needs one supernet to carve from, and only one.
+
+    Two would make which prefix a generated fallback pool comes from depend on
+    query order.
+    """
+    supernets = [row["prefix"] for row in _object_rows("IpamPrefix") if row.get("role") == "fabric_supernet"]
+    assert len(supernets) == 1, f"expected one fabric_supernet prefix, found {supernets}"
+
+
+def test_mlag_prefixes_use_the_explicit_mlag_roles() -> None:
+    """Both MLAG pools are role-tagged, and distinctly.
+
+    The peer link and the L3 peering across it are separate pools; giving both
+    the same role makes the pod pick one of them for both purposes.
+    """
+    roles = {row["prefix"]: row.get("role") for row in _object_rows("IpamPrefix")}
+    assert sorted(prefix for prefix, role in roles.items() if role == "mlag")
+    assert sorted(prefix for prefix, role in roles.items() if role == "mlag_peering")

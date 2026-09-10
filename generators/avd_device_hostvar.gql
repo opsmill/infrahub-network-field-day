@@ -636,6 +636,7 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                       node {
                         name { value }
                         server_vrf { value }
+                        iburst { value }
                       }
                     }
                   }
@@ -679,6 +680,12 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                   value
                 }
                 spanning_tree_portfast {
+                  value
+                }
+                spanning_tree_bpduguard {
+                  value
+                }
+                description {
                   value
                 }
                 tagged_vlan {
@@ -844,6 +851,12 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                                                       value
                                                     }
                                                     spanning_tree_portfast {
+                                                      value
+                                                    }
+                                                    spanning_tree_bpduguard {
+                                                      value
+                                                    }
+                                                    description {
                                                       value
                                                     }
                                                     lag {

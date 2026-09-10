@@ -50,6 +50,8 @@ UntaggedVlan = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesN
 UntaggedVlanNode = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode
 # The query always selects `spanning_tree_portfast`; a port with no intent carries None.
 Portfast = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreePortfast
+BpduGuard = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreeBpduguard
+IfaceDescription = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalDescription
 
 
 def _attr(value: object) -> SimpleNamespace:
@@ -139,6 +141,8 @@ def _make_uplink_edge(
             tagged_vlan=TaggedVlan(edges=[]),
             untagged_vlan=UntaggedVlan(node=None),
             spanning_tree_portfast=Portfast(value=None),
+            spanning_tree_bpduguard=BpduGuard(value=None),
+            description=IfaceDescription(value=None),
             lag={"node": None},
             connector=IfaceConnector(
                 node=ConnectorNode(
@@ -246,6 +250,8 @@ def _make_server_edge(
             tagged_vlan=TaggedVlan(edges=[]),
             untagged_vlan=UntaggedVlan(node=None),
             spanning_tree_portfast=Portfast(value=None),
+            spanning_tree_bpduguard=BpduGuard(value=None),
+            description=IfaceDescription(value=None),
             lag={"node": None},
             connector=IfaceConnector(
                 node=ConnectorNode(
@@ -365,6 +371,8 @@ def _make_lagged_server_edge() -> IfaceEdge:
             tagged_vlan=TaggedVlan(edges=[]),
             untagged_vlan=UntaggedVlan(node=None),
             spanning_tree_portfast=Portfast(value=None),
+            spanning_tree_bpduguard=BpduGuard(value=None),
+            description=IfaceDescription(value=None),
             lag={
                 "node": {
                     "__typename": "InterfaceLag",
@@ -425,6 +433,8 @@ def _make_switch_lagged_server_edge(
             tagged_vlan=TaggedVlan(edges=[]),
             untagged_vlan=UntaggedVlan(node=None),
             spanning_tree_portfast=Portfast(value=None),
+            spanning_tree_bpduguard=BpduGuard(value=None),
+            description=IfaceDescription(value=None),
             lag={
                 "node": {
                     "__typename": "InterfaceLag",
@@ -746,6 +756,8 @@ def _make_access_server_edge(
     *,
     untagged_vlan: int,
     portfast: str | None = None,
+    bpduguard: str | None = None,
+    description: str | None = None,
     server_name: str = "host1",
 ) -> IfaceEdge:
     """A leaf access port facing a host, carrying one untagged (access) VLAN."""
@@ -755,7 +767,53 @@ def _make_access_server_edge(
         node=UntaggedVlanNode(__typename="IpamVLAN", vlan_id={"value": untagged_vlan}, status={"value": "active"})
     )
     node.spanning_tree_portfast = Portfast(value=portfast)
+    node.spanning_tree_bpduguard = BpduGuard(value=bpduguard)
+    node.description = IfaceDescription(value=description)
     return edge
+
+
+def test_host_access_port_carries_bpduguard_and_description() -> None:
+    """An edge port's BPDU guard and description reach the AVD adapter.
+
+    Both are rendered by AVD onto the switch port. Without the description AVD
+    falls back to its own `SERVER_<host>_<port>` naming, and without BPDU guard a
+    workload that sends a BPDU is trusted rather than err-disabled.
+    """
+    edge = _make_access_server_edge(
+        "Ethernet10",
+        untagged_vlan=110,
+        bpduguard="enabled",
+        description="k3s-server",
+    )
+
+    adapters = extract_connected_endpoints([edge], "k8s-leaf1")[0]["adapters"]
+
+    assert adapters == [
+        {
+            "endpoint_ports": ["eth0"],
+            "switch_ports": ["Ethernet10"],
+            "switches": ["k8s-leaf1"],
+            "mode": "access",
+            "vlans": "110",
+            "spanning_tree_portfast": "edge",
+            "spanning_tree_bpduguard": "enabled",
+            "description": "k3s-server",
+        }
+    ]
+
+
+def test_host_access_port_omits_unset_bpduguard_and_description() -> None:
+    """Unset means "leave it to the platform", not "disabled".
+
+    An edge port silently gaining BPDU guard would change behaviour on a fabric
+    that never asked for it.
+    """
+    edge = _make_access_server_edge("Ethernet10", untagged_vlan=110)
+
+    adapter = extract_connected_endpoints([edge], "leaf1")[0]["adapters"][0]
+
+    assert "spanning_tree_bpduguard" not in adapter
+    assert "description" not in adapter
 
 
 def test_host_access_port_renders_access_mode_and_edge_portfast() -> None:

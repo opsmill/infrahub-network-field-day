@@ -54,6 +54,19 @@ nodes:
         kind: Boolean
         optional: true
         default_value: false
+      - name: device_name_template
+        label: Device Name Template
+        kind: Text
+        branch: aware
+        optional: true
+        # `{pod}`, `{rack}`, `{rack_index}` and `{index}` are available -- for
+        # example `k8s-leaf{index}`. Leave unset to keep the default
+        # `leaf-{pod}-{rack_index}-{index}`. Set this when the fabric's hostnames
+        # are already fixed by a deployed lab or a naming standard.
+        #
+        # Applies to the rack's leaf tier only; any `l2leaf` devices in the same
+        # rack keep their default names, so the two tiers cannot collide.
+        description: "Format template for the hostnames the rack generator creates"
     relationships:
       - name: pod
         peer: NetworkPod
@@ -76,3 +89,16 @@ nodes:
         cardinality: many
         optional: true
         identifier: "rack__avd_tags"
+      - name: always_include_vrfs_in_tenants
+        label: Always Include VRFs In Tenants
+        peer: EvpnTenant
+        branch: aware
+        kind: Attribute
+        cardinality: many
+        optional: true
+        identifier: "rack__always_include_vrfs_in_tenants"
+        # This is what a border leaf needs: it terminates a tenant's VRF for a
+        # firewall or WAN handoff but owns none of that tenant's access VLANs, so
+        # tag matching alone would leave the VRF off the device -- and the
+        # handoff interface with no VRF to sit in.
+        description: "Tenants whose VRFs are created on this rack regardless of AVD tags"

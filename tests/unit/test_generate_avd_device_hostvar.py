@@ -1690,7 +1690,14 @@ def test_extract_custom_hostvars_rejects_malformed_yaml_string() -> None:
         GenerateAVDDeviceHostvar._extract_custom_hostvars(_custom("not: [closed"))
 
 
-def test_merge_custom_hostvars_scope_precedence_and_replacement() -> None:
+def test_merge_custom_hostvars_scope_precedence_and_list_composition() -> None:
+    """Narrower override scopes compose with wider ones rather than replacing them.
+
+    "Overrides at different levels get put in" is the point of the three scopes,
+    so a pod-scope list adds to what the fabric declared. A narrower scope can
+    still override an individual entry by reusing its identity key -- which is
+    strictly more expressive than the wholesale replacement this used to do.
+    """
     merged = GenerateAVDDeviceHostvar._merge_custom_hostvars(
         {
             "fabric_only": True,
@@ -1717,8 +1724,37 @@ def test_merge_custom_hostvars_scope_precedence_and_replacement() -> None:
         "device_only": True,
         "scope": "device",
         "nested": {"fabric": True, "pod": True, "device": True, "winner": "device"},
-        "servers": [{"name": "pod-server"}],
+        "servers": [{"name": "fabric-server"}, {"name": "pod-server"}],
     }
+
+
+def test_merge_custom_hostvars_narrower_scope_overrides_a_matching_entry() -> None:
+    """A pod scope tunes a fabric-declared entry by reusing its identity key."""
+    merged = GenerateAVDDeviceHostvar._merge_custom_hostvars(
+        {"ipv4_acls": [{"name": "ACL-A", "entries": [{"sequence": 10}]}, {"name": "ACL-B"}]},
+        {"ipv4_acls": [{"name": "ACL-A", "counters_per_entry": True}]},
+    )
+
+    assert merged["ipv4_acls"] == [
+        {"name": "ACL-A", "entries": [{"sequence": 10}], "counters_per_entry": True},
+        {"name": "ACL-B"},
+    ]
+
+
+def test_merge_custom_hostvars_replaces_a_list_with_no_identity_key() -> None:
+    """Entries with no shared scalar key are replaced, not guessed at.
+
+    AVD adapters are identified by `switch_ports`, which is itself a list, so
+    there is no key to match on. Replacing is the only behaviour that cannot
+    silently produce a half-merged adapter; an override that needs to change one
+    has to restate it in full.
+    """
+    merged = GenerateAVDDeviceHostvar._merge_custom_hostvars(
+        {"servers": [{"name": "host-a", "adapters": [{"mode": "access", "vlans": "10"}]}]},
+        {"servers": [{"name": "host-a", "adapters": [{"vlans": "20"}]}]},
+    )
+
+    assert merged["servers"] == [{"name": "host-a", "adapters": [{"vlans": "20"}]}]
 
 
 def test_deep_merge_does_not_mutate_inputs() -> None:
@@ -1872,6 +1908,9 @@ async def test_tenants_hostvars_prefers_child_side_filters() -> None:
             case "EvpnL2Vlan":
                 assert kwargs == {"tenant__ids": ["tenant-1"]}
                 return [l2vlan]
+            case "EvpnSviNode" | "RoutingVrfStaticRoute" | "RoutingVrfBgpPeer" | "RoutingVrfL3Interface":
+                # This fixture models a plain anycast SVI with no VRF services.
+                return []
         pytest.fail(f"unexpected filter kind {kind}")
 
     gen = _make_generator()
@@ -2089,15 +2128,62 @@ def test_rack_avd_tags_emit_node_group_filter_tags() -> None:
 
 
 @pytest.mark.anyio
-async def test_rack_avd_tags_are_fetched_by_rack_id() -> None:
+async def test_rack_avd_scoping_is_fetched_by_rack_id() -> None:
     gen = _make_generator()
-    rack = SimpleNamespace(avd_tags=_rel([_named_peer("storage"), _named_peer("compute")]))
+    rack = SimpleNamespace(
+        avd_tags=_rel([_named_peer("storage"), _named_peer("compute")]),
+        always_include_vrfs_in_tenants=_rel([]),
+    )
     gen.client.get = AsyncMock(return_value=rack)
 
-    tags = await gen._fetch_rack_avd_tags("rack-1")
+    tags, always_include = await gen._fetch_rack_avd_scoping("rack-1")
 
     assert tags == ["compute", "storage"]
-    gen.client.get.assert_awaited_once_with(kind="LocationRack", id="rack-1", include=["avd_tags"])
+    assert always_include == []
+    gen.client.get.assert_awaited_once_with(
+        kind="LocationRack", id="rack-1", include=["avd_tags", "always_include_vrfs_in_tenants"]
+    )
+
+
+@pytest.mark.anyio
+async def test_rack_always_include_tenants_reach_the_node_group_filter() -> None:
+    """A border rack's always-include tenants must survive into the AVD filter.
+
+    Without this the tenant's VRF is created only where one of its VLANs is
+    tagged, so a border leaf holding just the firewall handoff would render the
+    handoff interface with no VRF to put it in.
+    """
+    gen = _make_generator()
+    rack = SimpleNamespace(
+        avd_tags=_rel([_named_peer("border")]),
+        always_include_vrfs_in_tenants=_rel([_named_peer("TENANT_APP"), _named_peer("TENANT_K8S")]),
+    )
+    gen.client.get = AsyncMock(return_value=rack)
+
+    tags, always_include = await gen._fetch_rack_avd_scoping("rack-border")
+
+    rack_info = {
+        "name": "BORDER_LEAFS",
+        "mlag": False,
+        "leaf_names": ["border-leaf1"],
+        "avd_tags": tags,
+        "always_include_vrfs_in_tenants": always_include,
+    }
+    assert GenerateAVDDeviceHostvar._build_node_group_filter(tags, rack_info) == {
+        "tags": ["border"],
+        "always_include_vrfs_in_tenants": ["TENANT_APP", "TENANT_K8S"],
+    }
+
+
+def test_node_group_filter_omits_empty_scoping() -> None:
+    rack_info = {
+        "name": "R1",
+        "mlag": True,
+        "leaf_names": [],
+        "avd_tags": [],
+        "always_include_vrfs_in_tenants": [],
+    }
+    assert GenerateAVDDeviceHostvar._build_node_group_filter([], rack_info) == {}
 
 
 def test_generated_only_p2p_mtu_resolves() -> None:

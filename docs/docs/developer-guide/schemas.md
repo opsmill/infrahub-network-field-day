@@ -28,17 +28,18 @@ Regenerate the typed protocol classes after any schema change (see [the command 
 | `dcim_extensions.yml` | `Network.Link`, including `role=dci` and DCI link fields, plus device extensions (`role`, BGP ASN relationship, `node_id`, loopback/mgmt, pod/rack relations) and the interface `role`/`description`/`ip_address` extensions |
 | `dci.yml` | `NetworkFabric.dci_pool` DCI addressing source |
 | `l3ls_extensions.yml` | L3LS fabric attributes (routing protocols, MTU, spanning-tree, EVPN overlay) and pod/rack/VRF/MLAG extensions |
-| `location_extensions.yml` | `Location.Hall`, `Location.Rack` (`rack_type`, leaf counts, `generation_complete`) |
+| `location_extensions.yml` | `Location.Hall`, `Location.Rack` (`rack_type`, leaf counts, `generation_complete`, `device_name_template`, `always_include_vrfs_in_tenants`) |
 | `ipam_extensions.yml` | `Ipam.Prefix` `role` and `status` dropdowns |
 | `management.yml` | `Network.DnsServer`, `Network.NtpServer`, `Network.LocalUser` |
 | `generator.yml` | `Generator.Target` generic (`checksum` tracking) |
 | `vlan/vlan.yml` | `Ipam.VLAN`, `Ipam.L2Domain` |
 | `vrf/vrf.yml` | `Ipam.VRF`, `Ipam.RouteTarget` |
-| `evpn/evpn_services.yml` | `Evpn.Tenant`, `Evpn.Svi`, `Evpn.L2Vlan` |
+| `evpn/evpn_services.yml` | `Evpn.Tenant`, `Evpn.Svi`, `Evpn.SviNode`, `Evpn.L2Vlan` |
 | `evpn/evpn_gateway.yml` | `Evpn.Domain`, `Evpn.GatewayGroup`, plus fabric/pod/device EVPN Gateway relationship extensions |
 | `lag/lag.yml` | `Interface.Lag`, `Generic.InterfaceBundle` |
 | `mlag/mlag.yml` | `Generic.MlagDomain`, `Mlag.Domain`, `Mlag.Interface` |
 | `routing/routing.yml` | `Routing.BGPPeerGroup`, `Routing.BGPNeighbor`, prefix lists, route maps, static routes |
+| `routing/vrf_services.yml` | `Routing.VrfStaticRoute`, `Routing.VrfBgpPeer`, `Routing.VrfL3Interface` — the per-VRF services authored as AVD *inputs* |
 | `compute/compute.yml` | `Compute.GenericUnit`, `Compute.PhysicalServer`, virtualization hosts |
 | `avd/avd.yml` | `Avd.Evpn` |
 | `cv/cv.yml` | `Cloudvision.Workspace` — CloudVision workspace tracking for proposed-change validation |
@@ -174,7 +175,9 @@ A layer-2 domain grouping VLANs. Attributes: `name`. Relationships: `vlans` → 
 
 ### `IpamVRF` — `Ipam.VRF`
 
-A VRF. Attributes: `name` (unique), `vrf_rd`, `vrf_vni`, `vtep_diagnostic_loopback`. Relationships: `namespace` → `BuiltinIPNamespace`, `import_rt` / `export_rt` → `IpamRouteTarget`, `tenant` → `EvpnTenant`, `svis` → `EvpnSvi`.
+A VRF. Attributes: `name` (unique), `vrf_rd`, `vrf_id`, `vrf_vni`, `enable_mlag_ibgp_peering_vrfs`, `redistribute_connected`, `redistribute_static`, `vtep_diagnostic_loopback`. Relationships: `namespace` → `BuiltinIPNamespace`, `import_rt` / `export_rt` → `IpamRouteTarget`, `tenant` → `EvpnTenant`, `svis` → `EvpnSvi`, `static_routes` → `RoutingVrfStaticRoute`, `bgp_peers` → `RoutingVrfBgpPeer`, `l3_interfaces` → `RoutingVrfL3Interface` (all components).
+
+`vrf_id` is distinct from `vrf_vni` even though the two are usually set to the same number: `vrf_id` seeds the route distinguisher and the MLAG iBGP peering VLAN.
 
 ### `IpamRouteTarget` — `Ipam.RouteTarget`
 
@@ -188,11 +191,46 @@ An EVPN tenant. Attributes: `name` (unique), `mac_vrf_vni_base`, `description`. 
 
 ### `EvpnSvi` — `Evpn.Svi`
 
-An SVI. Attributes: `name`, `svi_id`, `ip_address_virtual`, `enabled`. Relationships: `vrf` → `IpamVRF` (parent), `vlan` → `IpamVLAN`, `rack_tags` → `LocationRack`, `avd_tags` → `AvdTag`.
+An SVI. Attributes: `name`, `svi_id`, `ip_address_virtual`, `ip_virtual_router_addresses`, `enabled`, `description`. Relationships: `vrf` → `IpamVRF` (parent), `vlan` → `IpamVLAN`, `rack_tags` → `LocationRack`, `avd_tags` → `AvdTag`, `nodes` → `EvpnSviNode` (component).
+
+The two gateway styles are mutually exclusive per SVI. `ip_address_virtual` is a shared anycast address and needs nothing else. `ip_virtual_router_addresses` (VARP) is paired with per-node addresses in `nodes`, and is what an SVI needs when a workload peers BGP over it — an anycast-only SVI leaves the neighbour address ambiguous across an MLAG pair.
+
+### `EvpnSviNode` — `Evpn.SviNode`
+
+One device's own address on an SVI, alongside the shared VARP gateway. Attributes: `ip_address`. Relationships: `svi` → `EvpnSvi` (parent), `device` → `DcimDevice`.
+
+Its human-friendly ID is `device` + `ip_address` rather than `svi` + `device`: `EvpnSvi.name` is only unique within its VRF, so an ID through it is not a stable identifier.
 
 ### `EvpnL2Vlan` — `Evpn.L2Vlan`
 
 An L2-only VLAN attached to a tenant. Attributes: `name`, `vlan_id`, `vni_override`. Relationships: `tenant` → `EvpnTenant` (parent), `vlan` → `IpamVLAN`.
+
+## VRF services
+
+These three are AVD **inputs**, not reconciled output. They are what makes a
+service-insertion design expressible: a tenant VRF whose only route out is a
+default pointing at a firewall handoff. Each names the devices it applies to,
+because a VRF is fabric-wide but a handoff or a peering is not.
+
+### `RoutingVrfStaticRoute` — `Routing.VrfStaticRoute`
+
+A static route originated inside a VRF. Attributes: `prefix`, `next_hop`, `description`. Relationships: `vrf` → `IpamVRF` (parent), `devices` → `DcimDevice`.
+
+`description` is documentation only — AVD's static-route model has no such key and rejects one, so it is not emitted into the host_vars. Scoping to `devices` matters: originating a tenant default fabric-wide would black-hole traffic on every leaf with no path to the next hop.
+
+### `RoutingVrfBgpPeer` — `Routing.VrfBgpPeer`
+
+An eBGP neighbour inside a VRF — a workload (Cilium on a Kubernetes node) or an external router (an ISP PE, a branch router). Attributes: `ip_address`, `remote_asn`, `description`, `cleartext_password`, `send_community`, `next_hop_self`, `maximum_routes`, `route_map_in`, `route_map_out`. Relationships: `vrf` → `IpamVRF` (parent), `devices` → `DcimDevice` (both members of an MLAG pair, typically).
+
+`route_map_in` and `maximum_routes` are the load-bearing fields: together they bound what a peer may announce and how much of it, which is what keeps a compromised node from injecting a default route or hijacking another tenant.
+
+Prefer `cleartext_password` over a pre-hashed value. EOS type-7 ciphertext is keyed by the peer address or peer-group name, so a hash copied between peers applies cleanly and then silently fails to authenticate.
+
+### `RoutingVrfL3Interface` — `Routing.VrfL3Interface`
+
+A routed interface placed in a VRF, such as a firewall or WAN handoff. Attributes: `interface_name`, `ip_address`, `description`, `enabled`, `ipv4_acl_in`, `ipv4_acl_out`. Relationships: `vrf` → `IpamVRF` (parent), `device` → `DcimDevice`.
+
+AVD takes parallel `interfaces` / `nodes` / `ip_addresses` lists; each object is one device-and-interface pair and becomes a single-element entry, so every handoff stays individually addressable with its own ACL bindings and change history. The ACL *names* are references — the ACL bodies are an AVD `ipv4_acls` input supplied through the fabric's `avd_custom_hostvars`, so a name with no matching ACL renders an interface bound to a list that does not exist.
 
 ### `EvpnDomain` — `Evpn.Domain`
 

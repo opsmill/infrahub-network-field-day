@@ -32,7 +32,9 @@ Key docs to read before larger changes:
 - `ansible/` - playbooks Semaphore runs, including ContainerLab deployment.
 - `schemas/` - Infrahub schema definitions, split between base schemas and
   project/feature extensions.
-- `objects/` - seed data loaded in filename order.
+- `objects/` - seed data loaded in filename order. This repository models one
+  fabric, `NFD41_FABRIC`, which is the containerlab lab in the NFD41 lab repo;
+  the upstream reference design's example fabrics were removed.
 - `menus/` - Infrahub UI menu definitions.
 - `docs/` - Docusaurus documentation.
 - `lab/` - ContainerLab artifact/deployment helpers.
@@ -52,7 +54,7 @@ Key docs to read before larger changes:
   configs are stored as `AvdStructuredConfigFile` nodes under the same artifact.
 - AVD transforms render artifacts from the stored files: EOS config, device docs,
   fabric docs, cabling plan, ANTA catalog, and computed interface descriptions.
-- PyAVD is version-sensitive; the project targets `pyavd>=6.3.0,<6.4.0`.
+- PyAVD is version-sensitive; the project targets `pyavd>=6.4.0,<6.5.0`.
 - The service portal is a Streamlit app for day-2 workflows; every workflow should
   operate on an Infrahub branch and produce a proposed change for review.
 
