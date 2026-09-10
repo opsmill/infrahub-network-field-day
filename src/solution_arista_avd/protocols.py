@@ -333,9 +333,19 @@ class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     workload_selector: ListAttributeOptional
     allowed_source_prefixes: RelationshipManager[IpamPrefix]
     cluster: RelationshipAttribute[ClusterKubernetes]
+    manifests_file: RelationshipAttribute[ServiceFabricAppManifestsFile]
     peering_service: RelationshipAttribute[ServiceFabricPeering]
+    values_file: RelationshipAttribute[ServiceFabricAppValuesFile]
     vip_block: RelationshipAttribute[IpamPrefix]
     vrf: RelationshipAttribute[IpamVRF]
+
+
+class ServiceFabricAppManifestsFile(CoreFileObject):
+    app: RelationshipAttribute[ServiceFabricApp]
+
+
+class ServiceFabricAppValuesFile(CoreFileObject):
+    app: RelationshipAttribute[ServiceFabricApp]
 
 
 class NetworkFabricDeviceDesign(NetworkDeviceDesign):
