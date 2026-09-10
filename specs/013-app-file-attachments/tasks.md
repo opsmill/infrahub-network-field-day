@@ -95,7 +95,7 @@ description: "Task list for the application file attachments schema feature"
 - [X] T027 [P] Add any new vocabulary to `.vale/config/vocabularies/OpsMill/accept.txt` only if `lint-prose` reports a new error; confirm the count is unchanged rather than assuming
 - [X] T028 Run the full gate: `uv run pytest tests/unit` and `uv run invoke lint`. `lint-prose` has a pre-existing baseline of 7 errors / 4 warnings; confirm it is unchanged
 - [X] T029 Write `specs/013-app-file-attachments/acceptance-evidence.md` recording SC-001 through SC-009 with real command output, following the format cycle 011 established
-- [ ] T030 Delete the throwaway branch once evidence is captured: `uv run infrahubctl branch delete app-files`
+- [X] T030 Delete the throwaway branch once evidence is captured: `uv run infrahubctl branch delete app-files`
 - [ ] T031 Obtain maintainer sign-off on the Principle IV exception recorded in [plan.md](./plan.md) Complexity Tracking — the same open decision as cycles 010, 011 and 012
 
 ---
