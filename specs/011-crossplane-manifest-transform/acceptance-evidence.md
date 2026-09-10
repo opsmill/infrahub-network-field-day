@@ -272,7 +272,7 @@ Artifact generation fired automatically as part of the sync
 | Status | `Ready` |
 | Content type | `application/yaml` |
 | Target | `nfd41-fabric-peering` |
-| Checksum | `a69b520a245e75fe1e6c3195f32f8229` |
+| Checksum | `a69b520a245e75fe1e6c3195f32f8229` (superseded — see below) |
 
 Fetched from storage, the artifact's bytes are identical to the `infrahubctl transform`
 render recorded under SC-001, and `md5sum` of those bytes equals the checksum Infrahub
@@ -300,6 +300,28 @@ failure would have looked like a passing stability test.
 
 This is SC-004 observed through the artifact rather than through stdout, and it is what
 makes a changed checksum meaningful to an operator.
+
+### The other direction: a real change moves the checksum
+
+Applying the `metadata.name` decision gave the complementary proof. Regenerating after the
+transform changed produced a new artifact:
+
+| | Before | After |
+| --- | --- | --- |
+| Checksum | `a69b520a245e75fe1e6c3195f32f8229` | `0d800c9d5005b5fdb6b371bb5627d143` |
+| Storage id | `18d412b3-786e-…` | `18d4133e-a9bd-…` |
+| `metadata.name` | `nfd41-fabric-peering` | `nfd41` |
+| Artifact count | 1 | 1 |
+
+`md5sum` of the fetched bytes again equals the checksum Infrahub recorded. Together with
+T027 this is the property an operator needs in both directions: unchanged model, unchanged
+checksum; changed output, changed checksum.
+
+**Operational note worth keeping**: a repository sync that picks up new *transform code*
+does not regenerate existing artifacts. The sync reached commit `a49ffcc` and reported
+`in-sync`, and the artifact still carried the old checksum until generation was triggered
+explicitly. Artifacts are regenerated when their target data changes, not when the code
+that renders them does.
 
 ## US2 acceptance, closed
 
