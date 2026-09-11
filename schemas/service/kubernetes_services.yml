@@ -252,3 +252,91 @@ nodes:
         description: "Which peering carries this application's advertisement"
         identifier: service__app_peering
         order_weight: 950
+      - name: values_file
+        peer: ServiceFabricAppValuesFile
+        label: Chart Values File
+        kind: Component
+        cardinality: one
+        optional: true
+        description: "Helm values as an attached file; takes precedence over chart_values"
+        identifier: fabricapp__values_file
+        order_weight: 960
+      - name: manifests_file
+        peer: ServiceFabricAppManifestsFile
+        label: Manifests File
+        kind: Component
+        cardinality: one
+        optional: true
+        description: "Raw manifests as an attached file; takes precedence over manifests"
+        identifier: fabricapp__manifests_file
+        order_weight: 970
+
+  # ---------------------------------------------------------------------------
+  # Application payload attachments
+  #
+  # Helm values and raw Kubernetes manifests are stored as files rather than as
+  # JSON attributes, for three reasons found by inspection:
+  #
+  #   1. They cannot be seeded as attributes. `infrahubctl object load` returns
+  #      HTTP 500 for a JSON key containing a dot or a slash, and every real
+  #      Kubernetes payload has them -- app.kubernetes.io/name, grafana.ini,
+  #      node-role.kubernetes.io/control-plane. The GraphQL path handles the same
+  #      payload correctly, so the defect is in the object-load path.
+  #   2. They are large and opaque. One chart's values run to ~150 lines of
+  #      nested Helm configuration, none of which is network intent.
+  #   3. They are human-authored and reviewed, and a file gives a real diff.
+  #
+  # Two kinds rather than one kind with a role, following AvdHostvarFile and
+  # AvdStructuredConfigFile: the role is carried by the kind, "one per
+  # application" falls out of cardinality one, and a consumer writes
+  # `app.values_file` instead of filtering a collection.
+  # ---------------------------------------------------------------------------
+  - name: FabricAppValuesFile
+    namespace: Service
+    # Precedence: this file wins over the inline chart_values attribute, which
+    # is read only when no file is attached. The description below is capped at
+    # 128 characters by Infrahub, so the rule is stated tersely there and in
+    # full here.
+    description: "Helm values as an attached file. Takes precedence over the inline chart_values attribute"
+    label: Application Chart Values File
+    icon: mdi:file-code-outline
+    include_in_menu: false
+    inherit_from:
+      - CoreFileObject
+    human_friendly_id:
+      - app__name__value
+    uniqueness_constraints:
+      - ["app"]
+    relationships:
+      - name: app
+        peer: ServiceFabricApp
+        label: Application
+        kind: Parent
+        cardinality: one
+        optional: false
+        identifier: fabricapp__values_file
+        order_weight: 900
+
+  - name: FabricAppManifestsFile
+    namespace: Service
+    # Precedence: this file wins over the inline manifests attribute, which is
+    # read only when no file is attached.
+    description: "Raw manifests as an attached file. Takes precedence over the inline manifests attribute"
+    label: Application Manifests File
+    icon: mdi:file-document-multiple-outline
+    include_in_menu: false
+    inherit_from:
+      - CoreFileObject
+    human_friendly_id:
+      - app__name__value
+    uniqueness_constraints:
+      - ["app"]
+    relationships:
+      - name: app
+        peer: ServiceFabricApp
+        label: Application
+        kind: Parent
+        cardinality: one
+        optional: false
+        identifier: fabricapp__manifests_file
+        order_weight: 900

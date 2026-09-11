@@ -297,6 +297,26 @@ def _concrete_service_nodes() -> list[tuple[str, dict[str, Any]]]:
     return [(path, node) for path in _existing_service_schemas() for node in _nodes(_load_yaml(path))]
 
 
+def _is_owned_attachment(node: dict[str, Any]) -> bool:
+    """Is this node a payload file owned by a service, rather than a service?
+
+    Introduced by specs/013-app-file-attachments. A node inheriting
+    ``CoreFileObject`` lives in the service directory because the service owns
+    it, but it is not itself a service: it has no ordered intent, no owner and
+    no status, so the service-kind invariants below do not apply to it.
+
+    This narrows two invariants to what they actually mean rather than to
+    "every node in the service directory", the same way ``NON_AVD_DEVICE_ROLES``
+    narrows the AVD role mapping in tests/unit/test_avd.py.
+    """
+    return "CoreFileObject" in (node.get("inherit_from") or [])
+
+
+def _owned_attachment_kinds() -> set[str]:
+    """The kinds a service may legitimately own and cascade to."""
+    return {f"{node['namespace']}{node['name']}" for _, node in _concrete_service_nodes() if _is_owned_attachment(node)}
+
+
 def test_every_concrete_service_kind_is_a_generator_target() -> None:
     """FR-081: a generator must be able to sit underneath each service kind.
 
@@ -305,6 +325,8 @@ def test_every_concrete_service_kind_is_a_generator_target() -> None:
     node, but every run does full work and has no field to compare against.
     """
     for path, node in _concrete_service_nodes():
+        if _is_owned_attachment(node):
+            continue
         kind = f"{node['namespace']}{node['name']}"
         inherits = node.get("inherit_from", [])
         assert "ServiceGeneric" in inherits, f"{kind} in {path} must inherit ServiceGeneric"
@@ -315,15 +337,23 @@ def test_no_service_relationship_cascades_into_infrastructure() -> None:
     """FR-053: deleting a service must never delete a device or a prefix.
 
     A service is a statement of intent about technical objects it references
-    but does not own. The only exception is a Parent relationship, where
-    ownership is the point.
+    but does not own. Two exceptions, both about genuine ownership: a Parent
+    relationship, and a payload file the service owns (specs/013).
     """
     offenders: list[str] = []
+    owned = _owned_attachment_kinds()
 
     for path, node in _concrete_service_nodes():
         kind = f"{node['namespace']}{node['name']}"
         for rel in node.get("relationships") or []:
             if rel.get("kind") == "Parent":
+                continue
+            # A payload file the service owns is not infrastructure. Cascading
+            # to it is the point -- deleting an application must not leave its
+            # manifests behind as orphans. The guarantee this test exists for
+            # is that deleting a service never deletes a device or a prefix,
+            # and that is untouched.
+            if rel.get("peer") in owned:
                 continue
             if rel.get("on_delete") != "no-action":
                 offenders.append(f"{path}: {kind}.{rel['name']} -> {rel.get('on_delete')!r}")
@@ -614,3 +644,111 @@ def test_no_tenant_cloud_to_tenant_cloud_relationship_exists() -> None:
     peers = {rel.get("peer") for rel in cloud.get("relationships") or []}
 
     assert "ServiceTenantCloud" not in peers
+
+
+# ---------------------------------------------------------------------------
+# Application file attachments (specs/013-app-file-attachments)
+# ---------------------------------------------------------------------------
+
+APP_FILE_KINDS = ("FabricAppValuesFile", "FabricAppManifestsFile")
+
+# Both sides of each relationship must carry these exact strings.
+APP_FILE_IDENTIFIERS = {
+    "FabricAppValuesFile": ("values_file", "fabricapp__values_file"),
+    "FabricAppManifestsFile": ("manifests_file", "fabricapp__manifests_file"),
+}
+
+# Supplied by CoreFileObject. Redeclaring any of them looks harmless and
+# silently stops it being inherited.
+CORE_FILE_OBJECT_FIELDS = {"file_name", "file_size", "file_type", "checksum", "storage_id"}
+
+
+@pytest.mark.parametrize("name", APP_FILE_KINDS)
+def test_app_file_kinds_exist_and_inherit_core_file_object(name: str) -> None:
+    """GI-4. The checksum arrives by inheritance, not by declaration.
+
+    `CoreFileObject` is Infrahub's file-attachment interface, already used
+    twice in this repository by AvdHostvarFile and AvdStructuredConfigFile.
+    """
+    node = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", name)
+
+    assert "CoreFileObject" in (node.get("inherit_from") or [])
+    assert node.get("include_in_menu") is False
+
+
+@pytest.mark.parametrize("name", APP_FILE_KINDS)
+def test_app_file_kinds_do_not_redeclare_inherited_fields(name: str) -> None:
+    """Redeclaring an inherited field is the quiet way to lose it."""
+    node = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", name)
+
+    assert not CORE_FILE_OBJECT_FIELDS & set(_attributes(node))
+
+
+@pytest.mark.parametrize("name", APP_FILE_KINDS)
+def test_app_file_parent_relationship(name: str) -> None:
+    """GI-1. A payload file cannot exist without the application it belongs to."""
+    node = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", name)
+    app_rel = _relationships(node)["app"]
+
+    assert app_rel["peer"] == "ServiceFabricApp"
+    assert app_rel["kind"] == "Parent"
+    assert app_rel["cardinality"] == "one"
+    assert app_rel["optional"] is False
+
+
+@pytest.mark.parametrize("name", APP_FILE_KINDS)
+def test_app_file_relationship_identifiers_match(name: str) -> None:
+    """GI-5, and the schema skill's CRITICAL relationship rule.
+
+    Both sides of a bidirectional relationship must share one identifier
+    string. Mismatched identifiers do not error -- they silently create two
+    one-way relationships instead of one link.
+    """
+    schema = _load_yaml(KUBERNETES_SERVICES_SCHEMA)
+    app_side_name, identifier = APP_FILE_IDENTIFIERS[name]
+
+    child = _node(schema, "Service", name)
+    assert _relationships(child)["app"]["identifier"] == identifier
+
+    parent_rel = _relationships(_node(schema, "Service", "FabricApp"))[app_side_name]
+    assert parent_rel["identifier"] == identifier
+    assert parent_rel["peer"] == f"Service{name}"
+    assert parent_rel["kind"] == "Component"
+    assert parent_rel["cardinality"] == "one"
+    assert parent_rel["optional"] is True
+
+
+@pytest.mark.parametrize("name", APP_FILE_KINDS)
+def test_app_file_uniqueness_and_hfid(name: str) -> None:
+    """GI-2, and the uniqueness-constraint format rule.
+
+    A relationship is named bare in a uniqueness constraint; an attribute
+    takes `__value`. Getting it the wrong way round fails at load with
+    "references unknown field".
+    """
+    node = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", name)
+
+    assert node["uniqueness_constraints"] == [["app"]]
+    assert node["human_friendly_id"] == ["app__name__value"]
+
+
+@pytest.mark.parametrize("name", APP_FILE_KINDS)
+def test_precedence_rule_is_documented(name: str) -> None:
+    """FR-011. The rule must be discoverable from the schema itself.
+
+    Two mechanisms for one payload need a stated winner, and a consumer
+    should not have to read a spec document to find it.
+    """
+    node = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", name)
+    description = (node.get("description") or "").lower()
+
+    assert "precedence" in description or "wins" in description
+
+
+def test_app_keeps_its_inline_payload_attributes() -> None:
+    """FR-010, GI-6. The attributes stay as an inline escape hatch."""
+    app = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", "FabricApp")
+    attributes = _attributes(app)
+
+    assert attributes["chart_values"]["kind"] == "JSON"
+    assert attributes["manifests"]["kind"] == "JSON"

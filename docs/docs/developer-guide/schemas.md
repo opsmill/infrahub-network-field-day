@@ -385,6 +385,39 @@ The workspace ID is derived deterministically from the proposed-change ID and th
 
 Fabrics opt in through `NetworkFabric.cloudvision_managed` (Boolean, default `false`) in `logical_design.yml`; the check skips everything else when it is false.
 
+## Application payload attachments
+
+### `ServiceFabricAppValuesFile` · `ServiceFabricAppManifestsFile`
+
+An application's deployment payload — Helm values and raw Kubernetes manifests — is stored as
+an attached file rather than as a JSON attribute. Both kinds inherit `CoreFileObject`, so they
+carry `file_name`, `file_size`, `file_type`, `checksum` and `storage_id` without declaring
+them, and the content lives in object storage rather than in the graph.
+
+Each is reached from its application as `values_file` or `manifests_file`: a `Component`
+relationship of cardinality one, so an application holds at most one of each and deleting the
+application removes them.
+
+**Why a file rather than an attribute.** Three reasons, all found by inspection:
+
+- A JSON attribute whose keys contain a dot or a slash cannot be seeded — `infrahubctl object
+  load` returns a server error for it, and every real Kubernetes payload has such keys
+  (`app.kubernetes.io/name`, `grafana.ini`, `node-role.kubernetes.io/control-plane`).
+- The payloads are large and opaque. One chart's values can run to 150 lines of nested
+  configuration, none of which is network intent.
+- They are human-authored and reviewed, and a file gives a real diff.
+
+**Precedence.** When both a file and its corresponding attribute are set, **the file wins**.
+`chart_values` and `manifests` remain as an inline escape hatch for payloads small enough not
+to need a file, and are read only when no file is attached. The schema documents this rule;
+it cannot enforce it.
+
+**Content is uploaded, not loaded.** `infrahubctl object load` cannot write file content. Use
+the SDK's `upload_from_bytes()` or `upload_from_path()` before the first `save()`, as
+`generators/generate_avd_device_hostvar.py` does for `AvdHostvarFile`. The
+`save_file_if_changed` helper in `src/solution_arista_avd/generator.py` compares checksums and
+skips an upload whose content has not changed.
+
 ## Generator target
 
 ### `GeneratorTarget` — `Generator.Target` (generic)
