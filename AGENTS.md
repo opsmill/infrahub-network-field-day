@@ -67,7 +67,8 @@ Current generator definitions are registered in `.infrahub.yml`:
 
 Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
-`containerlab_topology`, and `cv_workspace_submission_webhook_payload`.
+`containerlab_topology`, `cv_workspace_submission_webhook_payload`, `crossplane_fabric_peering`,
+and `crossplane_fabric_app`.
 
 Check definitions are `cv-config-validation` (`checks/cv_config_check.py`), with its
 workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and

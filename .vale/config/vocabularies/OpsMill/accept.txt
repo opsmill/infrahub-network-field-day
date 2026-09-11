@@ -72,6 +72,9 @@ idempotently
 upsert
 upserted
 upserting
+async
+namespace
+parseable
 
 # General technical usage
 checksumming

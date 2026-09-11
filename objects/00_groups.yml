@@ -23,3 +23,7 @@ spec:
     # Declared by specs/010-lab-service-layer-model/contracts/schema-kinds.md
     # section 6; created here because 011 is the cycle that renders it.
     - name: service_fabric_peerings
+    # Artifact target group for the Crossplane FabricApp manifest. A group per
+    # service kind, so an artifact definition cannot generate against a target
+    # whose kind it cannot render.
+    - name: service_fabric_apps
