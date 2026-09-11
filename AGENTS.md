@@ -69,9 +69,12 @@ Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
 `containerlab_topology`, and `cv_workspace_submission_webhook_payload`.
 
-The only check definition is `cv-config-validation` (`checks/cv_config_check.py`),
-with its workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and
-`checks/cv_helpers.py`.
+Check definitions are `cv-config-validation` (`checks/cv_config_check.py`), with its
+workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and
+`checks/cv_helpers.py`; `fabric-pool-validation` (`checks/fabric_pool_check.py`); and
+`peering-consistency` (`checks/peering_consistency_check.py`). The first two are targeted on
+`fabrics`; `peering-consistency` is **global** — it has no `targets`, because its rules are
+statements about the whole graph rather than about one fabric.
 
 ## Development workflow
 

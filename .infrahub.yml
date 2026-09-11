@@ -62,6 +62,9 @@ queries:
     file_path: "./checks/cv_config_check.gql"
   - name: fabric_pool_check
     file_path: "./checks/fabric_pool_check.gql"
+  # Global peering-consistency check
+  - name: peering_consistency_check
+    file_path: "./checks/peering_consistency_check.gql"
   - name: cv_workspace_submission_webhook
     file_path: "./transforms/cv_workspace_submission_webhook.gql"
 
@@ -177,6 +180,12 @@ check_definitions:
     targets: fabrics
     parameters:
       name: name__value
+  # Global: no targets. These rules are statements about the whole graph --
+  # "two services claim one cluster" has no natural group to iterate -- unlike
+  # the two checks above, which validate per-fabric pools.
+  - name: peering-consistency
+    file_path: "./checks/peering_consistency_check.py"
+    class_name: PeeringConsistencyCheck
 
 python_transforms:
   - name: computed_interface_description

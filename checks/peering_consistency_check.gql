@@ -1,0 +1,202 @@
+query PeeringConsistencyCheckQuery {
+  # C-3: a cluster must be claimed by at most one peering service.
+  ServiceFabricPeering {
+    edges {
+      node {
+        __typename
+        id
+        name {
+          value
+        }
+        cluster {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # The objects being validated. peer_device carries the authority for C-1
+  # (its RoutingAsn) and C-5 (its role).
+  ClusterFabricPeering {
+    edges {
+      node {
+        __typename
+        id
+        name {
+          value
+        }
+        peer_asn {
+          value
+        }
+        cluster {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        peer_device {
+          node {
+            __typename
+            id
+            display_label
+            ... on DcimDevice {
+              name {
+                value
+              }
+              role {
+                value
+              }
+              asn {
+                node {
+                  id
+                  asn {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
+        peer_address {
+          node {
+            id
+            address {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Queried globally and indexed by device rather than nested under each peer
+  # device: the same list answers C-2 (the peering SVI's address) and C-6 (the
+  # SVI to match an EvpnSviNode against), and avoids a second deep traversal.
+  InterfaceVirtual {
+    edges {
+      node {
+        __typename
+        id
+        name {
+          value
+        }
+        role {
+          value
+        }
+        dot1q_id {
+          value
+        }
+        device {
+          node {
+            __typename
+            id
+            display_label
+          }
+        }
+        ip_addresses {
+          edges {
+            node {
+              id
+              address {
+                value
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # C-6: the fabric's second record of the same address. Matched on device AND
+  # VLAN -- svi_id is the VLAN number -- because a device carries several.
+  EvpnSviNode {
+    edges {
+      node {
+        __typename
+        id
+        ip_address {
+          value
+        }
+        device {
+          node {
+            __typename
+            id
+            display_label
+          }
+        }
+        svi {
+          node {
+            id
+            svi_id {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # C-4: the set of fabric devices each cluster's nodes are actually cabled to.
+  ClusterKubernetes {
+    edges {
+      node {
+        __typename
+        id
+        name {
+          value
+        }
+        nodes {
+          edges {
+            node {
+              __typename
+              id
+              ... on ComputePhysicalServer {
+                interfaces {
+                  edges {
+                    node {
+                      __typename
+                      id
+                      ... on InterfacePhysical {
+                        connector {
+                          node {
+                            __typename
+                            ... on NetworkLink {
+                              id
+                              connected_endpoints {
+                                edges {
+                                  node {
+                                    __typename
+                                    id
+                                    ... on InterfacePhysical {
+                                      device {
+                                        node {
+                                          __typename
+                                          id
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
