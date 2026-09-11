@@ -1,0 +1,503 @@
+---
+# ============================================================================
+# NFD41 -- the WAN's addressing: what each router's ports are, and what is on
+# them.
+#
+# WHY THIS FILE EXISTS, AND WHY IT SITS AT 31a.
+#
+# objects/33 used to record a circuit end like this:
+#
+#     - side: a
+#       name: isp-pe1-eth2
+#       description: "Provider side, isp-pe1 eth2, 10.51.10.1/30"
+#
+# an interface as a string and an address inside an English sentence. Cycle 010
+# forbade exactly that -- assumption 4, "free-text CIDRs are the failure mode
+# this model exists to remove", and SC-008. Nothing read those fields at the
+# time, so nothing caught it. The FRR renderer reads them, which is what turns
+# a wart into a defect.
+#
+# The filename is load-bearing. Interfaces hang off the devices in file 31, and
+# the circuits and sites in file 33 name those interfaces, so this has to sort
+# between them. `31a` does; a rename that breaks that ordering breaks the load,
+# and tests/unit/test_wan_addressing_objects.py pins it.
+#
+# Sourced from ../lab/wan/tenants.yml. Every value here is transcribed, none is
+# derived -- the test compares both directions, so an invented address fails as
+# loudly as a missing one.
+#
+# ONE SHAPE TO WATCH. Relationships of cardinality one take an inline `data:`
+# MAPPING, never a list. A stray dash produces
+# `AttributeError: 'list' object has no attribute 'items'` from inside the SDK,
+# naming neither the file nor the field.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: InterfacePhysical
+  data:
+    - name: eth1
+      device: isp-pe1
+      role: core
+      mtu: 9214
+      status: active
+      description: "iBGP core link"
+    - name: eth1
+      device: isp-pe2
+      role: core
+      mtu: 9214
+      status: active
+      description: "iBGP core link"
+    - name: eth2
+      device: isp-pe2
+      role: peering
+      mtu: 9214
+      status: active
+      description: "border-leaf1, VRF WAN"
+    - name: eth3
+      device: isp-pe2
+      role: upstream
+      mtu: 9214
+      status: active
+      description: "internet transit, provider side"
+    - name: eth1
+      device: internet-rtr
+      role: peering
+      mtu: 9214
+      status: active
+      description: "internet transit, AS 64500 side"
+    - name: eth2
+      device: internet-rtr
+      role: access
+      mtu: 9214
+      status: active
+      description: "internet LAN"
+    - name: eth2
+      device: isp-pe1
+      role: cust
+      mtu: 9214
+      status: active
+      description: "acme/hq provider side"
+    - name: eth1
+      device: cust-acme-ce
+      role: upstream
+      mtu: 9214
+      status: active
+      description: "acme/hq customer side"
+    - name: eth2
+      device: cust-acme-ce
+      role: access
+      mtu: 9214
+      status: active
+      description: "acme/hq LAN"
+    - name: eth4
+      device: isp-pe1
+      role: cust
+      mtu: 9214
+      status: active
+      description: "acme/dr provider side"
+    - name: eth1
+      device: cust-acme-dr-ce
+      role: upstream
+      mtu: 9214
+      status: active
+      description: "acme/dr customer side"
+    - name: eth2
+      device: cust-acme-dr-ce
+      role: access
+      mtu: 9214
+      status: active
+      description: "acme/dr LAN"
+    - name: eth3
+      device: isp-pe1
+      role: cust
+      mtu: 9214
+      status: active
+      description: "globex/hq provider side"
+    - name: eth1
+      device: cust-globex-ce
+      role: upstream
+      mtu: 9214
+      status: active
+      description: "globex/hq customer side"
+    - name: eth2
+      device: cust-globex-ce
+      role: access
+      mtu: 9214
+      status: active
+      description: "globex/hq LAN"
+    - name: eth1
+      device: branch-rtr
+      role: upstream
+      mtu: 9214
+      status: active
+      description: "private fibre to border-leaf1"
+    - name: br-branch
+      device: branch-rtr
+      role: access
+      mtu: 9214
+      status: active
+      description: "branch LAN bridge"
+
+---
+# The three loopbacks. Virtual, and flagged `loopback` so the /32 a renderer
+# announces is identifiable without inferring it from the interface name.
+# cust-acme-dr-ce has none: it runs no routing protocol, so it has no router id
+# to carry.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: InterfaceVirtual
+  data:
+    - name: lo
+      device: isp-pe1
+      role: loopback
+      status: active
+      description: "isp-pe1 loopback / router id"
+    - name: lo
+      device: isp-pe2
+      role: loopback
+      status: active
+      description: "isp-pe2 loopback / router id"
+    - name: lo
+      device: branch-rtr
+      role: loopback
+      status: active
+      description: "branch loopback / router id"
+
+---
+# The addresses, attached from the address side.
+#
+# `IpamIPAddress.interface` peers with InterfaceLayer3, a GENERIC THAT DECLARES
+# NO human_friendly_id, so the ordinary `interface: [device, name]` reference
+# cannot work -- it fails with "Unable to lookup node by HFID, schema
+# 'InterfaceLayer3' does not have a HFID defined". The inline block naming the
+# concrete kind is the way in. Contrast DcimCircuitEndpoint.interface in file
+# 33, which DOES resolve by HFID because DcimInterface declares one.
+#
+# Attaching from this side rather than listing addresses on the interface keeps
+# each address written exactly once, which is the whole point of the file.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamIPAddress
+  data:
+    - address: 10.50.0.1/32
+      description: "isp-pe1 loopback / router id"
+      interface:
+        kind: InterfaceVirtual
+        data:
+          name: lo
+          device: isp-pe1
+    - address: 10.50.255.1/30
+      description: "iBGP core link"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth1
+          device: isp-pe1
+    - address: 10.50.0.2/32
+      description: "isp-pe2 loopback / router id"
+      interface:
+        kind: InterfaceVirtual
+        data:
+          name: lo
+          device: isp-pe2
+    - address: 10.50.255.2/30
+      description: "iBGP core link"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth1
+          device: isp-pe2
+    - address: 10.250.50.2/30
+      description: "border-leaf1, VRF WAN"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth2
+          device: isp-pe2
+    - address: 10.52.0.1/30
+      description: "internet transit, provider side"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth3
+          device: isp-pe2
+    - address: 10.52.0.2/30
+      description: "internet transit, AS 64500 side"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth1
+          device: internet-rtr
+    - address: 198.51.100.1/24
+      description: "internet LAN"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth2
+          device: internet-rtr
+    - address: 10.51.10.1/30
+      description: "acme/hq provider side"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth2
+          device: isp-pe1
+    - address: 10.51.10.2/30
+      description: "acme/hq customer side"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth1
+          device: cust-acme-ce
+    - address: 10.60.10.1/24
+      description: "acme/hq LAN"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth2
+          device: cust-acme-ce
+    - address: 10.51.11.1/30
+      description: "acme/dr provider side"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth4
+          device: isp-pe1
+    - address: 10.51.11.2/30
+      description: "acme/dr customer side"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth1
+          device: cust-acme-dr-ce
+    - address: 10.60.11.1/24
+      description: "acme/dr LAN"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth2
+          device: cust-acme-dr-ce
+    - address: 10.51.20.1/30
+      description: "globex/hq provider side"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth3
+          device: isp-pe1
+    - address: 10.51.20.2/30
+      description: "globex/hq customer side"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth1
+          device: cust-globex-ce
+    - address: 10.60.20.1/24
+      description: "globex/hq LAN"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth2
+          device: cust-globex-ce
+    - address: 10.70.255.1/32
+      description: "branch loopback / router id"
+      interface:
+        kind: InterfaceVirtual
+        data:
+          name: lo
+          device: branch-rtr
+    - address: 10.250.70.2/30
+      description: "private fibre to border-leaf1"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: eth1
+          device: branch-rtr
+    - address: 10.70.0.1/24
+      description: "branch LAN bridge"
+      interface:
+        kind: InterfacePhysical
+        data:
+          name: br-branch
+          device: branch-rtr
+
+---
+# The autonomous systems, stated once each with every device that uses them.
+#
+# Set from the ASN side deliberately. `RoutingAsn.devices` is the declared
+# reverse of `DcimDevice.asn`, so this avoids a DcimDevice upsert -- which would
+# drag in `status` and every other mandatory attribute, restating them in a
+# second file. `fabric` stays unset: none of these is a fabric ASN.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: RoutingAsn
+  data:
+    - asn: 65500
+      description: "The provider. One AS across both PE routers."
+      devices:
+        - isp-pe1
+        - isp-pe2
+    - asn: 64500
+      description: "The internet, such as it is: one AS behind isp-pe2."
+      devices:
+        - internet-rtr
+    - asn: 65010
+      description: "acme, at both of its sites -- one tenant, one AS."
+      devices:
+        - cust-acme-ce
+    - asn: 65020
+      description: "globex."
+      devices:
+        - cust-globex-ce
+    - asn: 65030
+      description: "The branch office, which is not a WAN customer."
+      devices:
+        - branch-rtr
+
+---
+# Both ends of every session, because a session between two devices is TWO
+# RoutingBGPNeighbor objects -- the kind is device-scoped and unique on
+# [device, peer_address]. Cycle 020 widened WanSite.bgp_sessions to many for
+# exactly this reason; file 33 names both ends from the site that justifies them.
+#
+# acme/dr is absent on purpose. It is `attachment_kind: static` and runs no
+# protocol at all -- its reachability comes from the static route below.
+#
+# `remote_as` is quoted: the attribute is Text, not Number.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: RoutingBGPNeighbor
+  data:
+    - device: isp-pe1
+      peer_address: 10.50.255.2
+      remote_as: "65500"
+      description: "iBGP core"
+    - device: isp-pe2
+      peer_address: 10.50.255.1
+      remote_as: "65500"
+      description: "iBGP core"
+    - device: isp-pe2
+      peer_address: 10.250.50.1
+      remote_as: "65103"
+      description: "border-leaf1 (VRF WAN)"
+    - device: isp-pe2
+      peer_address: 10.52.0.2
+      remote_as: "64500"
+      description: "internet-rtr (the internet)"
+    - device: internet-rtr
+      peer_address: 10.52.0.1
+      remote_as: "65500"
+      description: "isp-pe2 (provider)"
+    - device: isp-pe1
+      peer_address: 10.51.10.2
+      remote_as: "65010"
+      description: "cust-acme-ce (acme/hq)"
+    - device: cust-acme-ce
+      peer_address: 10.51.10.1
+      remote_as: "65500"
+      description: "isp-pe1 (provider)"
+    - device: isp-pe1
+      peer_address: 10.51.20.2
+      remote_as: "65020"
+      description: "cust-globex-ce (globex/hq)"
+    - device: cust-globex-ce
+      peer_address: 10.51.20.1
+      remote_as: "65500"
+      description: "isp-pe1 (provider)"
+    - device: branch-rtr
+      peer_address: 10.250.70.1
+      remote_as: "65103"
+      description: "border-leaf1 (VRF BRANCH)"
+
+---
+# The PE-side VRFs, moved here from objects/37 by cycle 021.
+#
+# A VRF is a technical-layer object; 37 is the service layer, and cycle 019
+# created them there only because it was the cycle that happened to need them.
+# Leaving them at 37 would make the static route below a forward reference --
+# 33 names it, and 33 sorts four files earlier.
+#
+# Distinct from the DC-side TENANT_* VRFs, and that distinction is load-bearing:
+# collapsing them would silently join two tenants' routing.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamVRF
+  data:
+    - name: CUST_ACME
+      description: "PE-side VRF for the acme tenant; one VRF, both sites"
+      namespace: default
+      vrf_id: 1010
+    - name: CUST_GLOBEX
+      description: "PE-side VRF for the globex tenant"
+      namespace: default
+      vrf_id: 1020
+
+---
+# acme's DR site, the one attachment with no routing protocol on it at all.
+#
+# The PE holds a route to the site LAN pointing at the CE and redistributes it
+# into the VRF, which is what makes it indistinguishable from the eBGP sites
+# downstream -- the DC, the internet and acme's other site all learn it the same
+# way.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: RoutingVrfStaticRoute
+  data:
+    - prefix: 10.60.11.0/24
+      next_hop: 10.51.11.2
+      description: "acme/dr, statically routed into CUST_ACME"
+      vrf: CUST_ACME
+      devices:
+        - isp-pe1
+
+---
+# The router IDs, explicit rather than derived.
+#
+# Three of these are loopbacks and three are not: the customer edges use their
+# LAN-side address and internet-rtr uses its peering address, which is what the
+# lab's own templates do. A renderer that inferred the router id from a loopback
+# would be wrong for half the fleet, and SILENTLY -- a BGP router-id that is
+# merely different still forms a session, so the error would never announce
+# itself.
+#
+# cust-acme-dr-ce is absent: it runs no routing protocol, so it has no router id.
+#
+# `status` is restated because a top-level upsert validates every mandatory
+# attribute, not just the fields being changed. Duplicating a constant is the
+# cheaper of two evils -- the alternative was creating these addresses inline in
+# objects/31, which would put six address strings in a second file.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDevice
+  data:
+    - name: isp-pe1
+      status: active
+      # loopback
+      router_id: ["10.50.0.1/32", "default"]
+    - name: isp-pe2
+      status: active
+      # loopback
+      router_id: ["10.50.0.2/32", "default"]
+    - name: internet-rtr
+      status: active
+      # its peering address, not a loopback
+      router_id: ["10.52.0.2/30", "default"]
+    - name: cust-acme-ce
+      status: active
+      # its LAN-side address, not a loopback
+      router_id: ["10.60.10.1/24", "default"]
+    - name: cust-globex-ce
+      status: active
+      # its LAN-side address, not a loopback
+      router_id: ["10.60.20.1/24", "default"]
+    - name: branch-rtr
+      status: active
+      # loopback
+      router_id: ["10.70.255.1/32", "default"]

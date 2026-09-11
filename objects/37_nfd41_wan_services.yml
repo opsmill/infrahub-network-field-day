@@ -19,20 +19,6 @@
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
-  kind: IpamVRF
-  data:
-    - name: CUST_ACME
-      description: "PE-side VRF for the acme tenant; one VRF, both sites"
-      namespace: default
-      vrf_id: 1010
-    - name: CUST_GLOBEX
-      description: "PE-side VRF for the globex tenant"
-      namespace: default
-      vrf_id: 1020
----
-apiVersion: infrahub.app/v1
-kind: Object
-spec:
   kind: ServiceL3vpn
   data:
     # Two sites in one VRF, which is what makes them reach each other without
@@ -46,8 +32,12 @@ spec:
       circuits:
         - acme-hq
         - acme-dr
+      # The SHARED DC service range, identical for every tenant: "what EVERY
+      # tenant may reach in the datacentre, regardless of what they buy".
+      # Cycle 019 seeded each tenant's own cloud subnet here by mistake; that
+      # is a different concept and already lives on ServiceTenantCloud.prefix.
       dc_service_prefixes:
-        - ["10.220.10.0/24", "default"]
+        - ["10.112.240.0/24", "default"]
 
     - name: globex-l3vpn
       description: "Globex's L3VPN from its single site"
@@ -57,8 +47,12 @@ spec:
       vrf: CUST_GLOBEX
       circuits:
         - globex-hq
+      # The SHARED DC service range, identical for every tenant: "what EVERY
+      # tenant may reach in the datacentre, regardless of what they buy".
+      # Cycle 019 seeded each tenant's own cloud subnet here by mistake; that
+      # is a different concept and already lives on ServiceTenantCloud.prefix.
       dc_service_prefixes:
-        - ["10.220.20.0/24", "default"]
+        - ["10.112.240.0/24", "default"]
 ---
 apiVersion: infrahub.app/v1
 kind: Object

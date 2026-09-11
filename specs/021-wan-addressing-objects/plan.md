@@ -137,7 +137,7 @@ because a top-level upsert restates mandatory attributes.
 | Cycle 020's schema is not on `main` | Certain, today | This cycle's branch must load `schemas/` before `objects/`. If 020 is merged first the step is redundant but harmless |
 | `wan-addr` carries partial probe data from Phase 0 | Certain | Recorded in research R8/risk 1. **It must not be merged.** Use a fresh branch; nothing is lost, since its schema comes from git and its objects from `objects/` |
 | Load order breaks silently if the file is renamed | Low | A unit test pins that `31a` sorts between `31` and `33` |
-| A second static route would collide on a weak HFID | Not this cycle | `RoutingVrfStaticRoute` HFID is `[vrf__name__value]` while uniqueness is `[vrf, prefix, next_hop]` (R7). One route here. Recorded for the next statically attached site |
+| ~~A second static route would collide on a weak HFID~~ | **Withdrawn** | R7 was wrong: the HFID has three elements and matches the uniqueness constraint. The real trap is that an `IPHost` HFID element must use the normalised `/32` form — see the corrected R7 |
 | Transcription drift from the lab file | Medium — 56 objects of hand-copied addresses | The test compares both directions, so an invented value fails as loudly as a missing one |
 
 ## Complexity Tracking
