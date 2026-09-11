@@ -1,0 +1,54 @@
+---
+# The demo application, as an ordered service.
+#
+# Transcribed from ../lab/crossplane/apps/10-demo.yaml, which is the oracle the
+# transform is measured against. Every field below has a counterpart in that
+# file's `spec`; the one thing NOT here is the manifests payload, which is a
+# file attachment uploaded by scripts/seed_app_payloads.py rather than an
+# attribute -- see objects/payloads/nfd41-demo-manifests.yaml for why.
+#
+# Selectors are `key=value` strings rather than JSON maps, because Infrahub
+# 1.10.6 returns HTTP 500 for a JSON attribute key containing a dot or a slash
+# and every Kubernetes label selector has both. The transform parses them back
+# into maps. See schemas/MARKETPLACE.md.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: ServiceFabricApp
+  data:
+    - name: nfd41-demo
+      description: "The two-tier whoami demo workload"
+      status: active
+      owner: branch
+      cluster: nfd41
+      namespace_name: nfd41-demo
+      vrf: K8S_PROD
+
+      # Exposure. The /28 is this app's own block out of the cluster-wide VIP
+      # pool, so a claim cannot hand itself an address from another app's range.
+      exposed: true
+      vip_block: ["10.112.240.0/28", "default"]
+      service_selector:
+        - "nfd41.lab/advertise=true"
+
+      # Policy. These three CIDRs are the third of three independent gates --
+      # the route has to exist, the firewall has to permit the session, and then
+      # this has to name the source. They are relationships rather than CIDR
+      # text precisely so all three gates reference the same objects.
+      policy_default_deny: true
+      policy_allow_dns: true
+      policy_allow_intra_namespace: false
+      policy_allow_egress_api_server: false
+      policy_allow_egress_internet: false
+      allowed_source_prefixes:
+        - ["10.210.0.0/24", "default"]
+        - ["10.60.0.0/16", "default"]
+        - ["10.70.0.0/24", "default"]
+      policy_allow_ports:
+        - port: "8080"
+          protocol: TCP
+      workload_selector:
+        - "app=frontend"
+
+      member_of_groups:
+        - service_fabric_apps

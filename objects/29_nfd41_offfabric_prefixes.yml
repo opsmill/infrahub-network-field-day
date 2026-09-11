@@ -35,6 +35,13 @@ spec:
       role: vip_pool
       status: active
       description: "LoadBalancer VIP pool; the only DC range re-advertised to the branch"
+    # The demo application's own /28 out of the pool above. Per-app rather than
+    # one cluster-wide block so a claim cannot hand itself an address out of
+    # another app's range -- the reason the XRD takes a vipBlock per FabricApp.
+    - prefix: 10.112.240.0/28
+      role: vip_pool
+      status: active
+      description: "VIP block for the nfd41-demo application"
 
     # ---- the classic application tier ------------------------------------
     - prefix: 10.210.0.0/24

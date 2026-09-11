@@ -1,0 +1,114 @@
+query CrossplaneFabricAppQuery($name: String!) {
+  target: ServiceFabricApp(name__value: $name) {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        namespace_name {
+          value
+        }
+        exposed {
+          value
+        }
+        chart_repository {
+          value
+        }
+        chart_name {
+          value
+        }
+        chart_version {
+          value
+        }
+        chart_values {
+          value
+        }
+        manifests {
+          value
+        }
+        service_selector {
+          value
+        }
+        communities {
+          value
+        }
+        workload_selector {
+          value
+        }
+        policy_default_deny {
+          value
+        }
+        policy_allow_dns {
+          value
+        }
+        policy_allow_intra_namespace {
+          value
+        }
+        policy_allow_egress_api_server {
+          value
+        }
+        policy_allow_egress_internet {
+          value
+        }
+        policy_allow_ports {
+          value
+        }
+        vrf {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        vip_block {
+          node {
+            id
+            prefix {
+              value
+            }
+          }
+        }
+        # A security control: these are the networks permitted to reach the
+        # application. Rendered as policy.allowFrom, and the field where a
+        # silent change is most damaging.
+        allowed_source_prefixes {
+          edges {
+            node {
+              id
+              prefix {
+                value
+              }
+            }
+          }
+        }
+        # The payload attachments added by cycle 013. Only metadata comes back
+        # here -- the content lives in object storage and is fetched with
+        # download_file(), which is why this transform is async.
+        manifests_file {
+          node {
+            id
+            file_name {
+              value
+            }
+            checksum {
+              value
+            }
+          }
+        }
+        values_file {
+          node {
+            id
+            file_name {
+              value
+            }
+            checksum {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+}

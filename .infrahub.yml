@@ -72,6 +72,9 @@ queries:
   - name: crossplane_fabric_peering
     file_path: "./transforms/crossplane_fabric_peering.gql"
 
+  - name: crossplane_fabric_app
+    file_path: "./transforms/crossplane_fabric_app.gql"
+
   # Service-layer generator: derives a cluster's fabric BGP sessions
   - name: generate_fabric_peering
     file_path: "./generators/generate_fabric_peering.gql"
@@ -216,6 +219,9 @@ python_transforms:
   - name: crossplane_fabric_peering
     class_name: CrossplaneFabricPeeringTransform
     file_path: "./transforms/crossplane_fabric_peering.py"
+  - name: crossplane_fabric_app
+    class_name: CrossplaneFabricAppTransform
+    file_path: "./transforms/crossplane_fabric_app.py"
 
 artifact_definitions:
   - name: "cabling_plan"
@@ -267,3 +273,13 @@ artifact_definitions:
     content_type: "application/yaml"
     targets: "service_fabric_peerings"
     transformation: "crossplane_fabric_peering"
+  # A separate target group from the peering artifact: applications and
+  # peerings are different sets, and an artifact definition pointed at the
+  # wrong one would try to render a resource it cannot.
+  - name: "crossplane_fabric_app"
+    artifact_name: "Crossplane FabricApp"
+    parameters:
+      name: "name__value"
+    content_type: "application/yaml"
+    targets: "service_fabric_apps"
+    transformation: "crossplane_fabric_app"

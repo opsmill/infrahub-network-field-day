@@ -1,0 +1,169 @@
+---
+# The demo application's Kubernetes payload, rendered verbatim into
+# spec.manifests of the FabricApp resource.
+#
+# Extracted from ../lab/crossplane/apps/10-demo.yaml rather than retyped, so
+# the seeded model and the hand-written manifest it replaces cannot diverge
+# through a transcription slip.
+#
+# This file lives outside objects/ on purpose: `infrahubctl object load objects/`
+# parses every YAML file in that tree as an Infrahub object file, and this is a
+# bare list of Kubernetes manifests. Putting it there aborts the whole load.
+#
+# This file is the reviewable source; `scripts/seed_app_payloads.py` uploads it
+# to the ServiceFabricAppManifestsFile attachment, which is what the transform
+# reads. `infrahubctl object load` cannot write file content, and this payload
+# is full of dotted keys (kubernetes.io/hostname, nfd41.lab/advertise) that the
+# object-load path rejects with HTTP 500 as a JSON attribute -- which is the
+# defect cycle 013's attachments exist to route around.
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: frontend
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: frontend
+    template:
+      metadata:
+        labels:
+          app: frontend
+      spec:
+        topologySpreadConstraints:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                app: frontend
+        containers:
+          - name: frontend
+            image: traefik/whoami:v1.10.4
+            args:
+              - --port=8080
+              - --name=frontend
+            ports:
+              - containerPort: 8080
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: 65532
+              capabilities:
+                drop:
+                  - ALL
+              seccompProfile:
+                type: RuntimeDefault
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: frontend
+    labels:
+      nfd41.lab/advertise: 'true'
+  spec:
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+    selector:
+      app: frontend
+    ports:
+      - port: 80
+        targetPort: 8080
+        protocol: TCP
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: backend
+  spec:
+    replicas: 2
+    selector:
+      matchLabels:
+        app: backend
+    template:
+      metadata:
+        labels:
+          app: backend
+      spec:
+        topologySpreadConstraints:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                app: backend
+        containers:
+          - name: backend
+            image: traefik/whoami:v1.10.4
+            args:
+              - --port=8080
+              - --name=backend
+            ports:
+              - containerPort: 8080
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: 65532
+              capabilities:
+                drop:
+                  - ALL
+              seccompProfile:
+                type: RuntimeDefault
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: backend
+  spec:
+    type: ClusterIP
+    selector:
+      app: backend
+    ports:
+      - port: 8080
+        targetPort: 8080
+        protocol: TCP
+- apiVersion: cilium.io/v2
+  kind: CiliumNetworkPolicy
+  metadata:
+    name: allow-frontend-to-backend
+  spec:
+    endpointSelector:
+      matchLabels:
+        app: frontend
+    egress:
+      - toEndpoints:
+          - matchLabels:
+              app: backend
+        toPorts:
+          - ports:
+              - port: '8080'
+                protocol: TCP
+            rules:
+              http:
+                - method: GET
+                  path: /api/.*
+- apiVersion: cilium.io/v2
+  kind: CiliumNetworkPolicy
+  metadata:
+    name: allow-backend-ingress
+  spec:
+    endpointSelector:
+      matchLabels:
+        app: backend
+    ingress:
+      - fromEndpoints:
+          - matchLabels:
+              app: frontend
+        toPorts:
+          - ports:
+              - port: '8080'
+                protocol: TCP
