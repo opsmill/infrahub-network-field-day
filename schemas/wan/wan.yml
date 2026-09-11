@@ -130,14 +130,41 @@ nodes:
         optional: true
         identifier: location__wan_sites
         order_weight: 930
+      # TOMBSTONE, cycle 020. `bgp_session` was cardinality one, which can hold
+      # only half of what it names: a session between a PE and a CE is TWO
+      # RoutingBGPNeighbor objects, one per device, because that kind is
+      # device-scoped and unique on [device, peer_address__value]. It is
+      # replaced by `bgp_sessions` below.
+      #
+      # `state: absent` is load-bearing and must not be tidied away. A schema
+      # load is an upsert: a relationship merely deleted from this file is left
+      # alone on the server, and `infrahubctl schema check` reports the rename
+      # as a pure addition with `removed: {}` — no warning, and the old
+      # cardinality-one relationship quietly survives. Verified both ways
+      # against a live instance; see specs/020-wan-addressing-schema/research.md
+      # R6.
+      #
+      # REMOVE THIS once the instance has been rebuilt from empty
+      # (`invoke destroy && invoke build && invoke load`), at which point there
+      # is no prior schema for it to remove.
       - name: bgp_session
         peer: RoutingBGPNeighbor
-        label: BGP Session
         kind: Attribute
         cardinality: one
         optional: true
-        description: "Present when attachment_kind is bgp"
         identifier: wan_site__bgp_session
+        state: absent
+      - name: bgp_sessions
+        peer: RoutingBGPNeighbor
+        label: BGP Sessions
+        kind: Attribute
+        cardinality: many
+        optional: true
+        # Both ends, not one. Optional as well as many: acme's DR site is
+        # `attachment_kind: static` and runs no routing protocol at all, so
+        # zero sessions is a valid state rather than a missing one.
+        description: "Both ends of the attachment session; present when attachment_kind is bgp"
+        identifier: wan_site__bgp_sessions
         order_weight: 940
       - name: static_routes
         peer: RoutingVrfStaticRoute
@@ -227,3 +254,21 @@ nodes:
         optional: true
         identifier: internet_peering__internet_prefixes
         order_weight: 940
+      # Many, for the same reason WanSite's is. The transit link is one wire
+      # and two objects: `neighbor 10.52.0.2 remote-as 64500` on isp-pe2 and
+      # `neighbor 10.52.0.1 remote-as 65500` on internet-rtr. Modelling it as
+      # cardinality one would make this the only place in the model where half
+      # a session is recorded.
+      #
+      # `peer_asn` above says who the neighbour is; this says where the session
+      # actually lives, so the line isp-pe2 emits is reachable from the peering
+      # that justifies it rather than only from the device that holds it.
+      - name: bgp_sessions
+        peer: RoutingBGPNeighbor
+        label: BGP Sessions
+        kind: Attribute
+        cardinality: many
+        optional: true
+        description: "Both ends of the transit session"
+        identifier: internet_peering__bgp_sessions
+        order_weight: 950

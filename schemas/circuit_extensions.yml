@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# NFD41 — what a circuit end actually lands on.
+#
+# `circuit/circuit.yml` is adopted from the marketplace (`infrahub/circuit`
+# 1.0.1) and is kept byte-identical to the published version so a re-download
+# diffs cleanly. It is never hand-edited — see schemas/MARKETPLACE.md. Anything
+# this project needs on top goes here.
+#
+# WHY THIS EXISTS. `DcimCircuitEndpoint` models a side, a name, a status and a
+# location, but not the interface the circuit terminates on. Without that, the
+# addresses on both ends of an attachment circuit have nowhere structural to
+# live, and objects/33_nfd41_wan.yml ended up recording them the only way it
+# could:
+#
+#   - side: a
+#     name: isp-pe1-eth2
+#     description: "Provider side, isp-pe1 eth2, 10.51.10.1/30"
+#
+# An interface as a string and an address inside an English sentence. Cycle 010
+# forbade exactly that (assumption 4, SC-008); nothing read those fields at the
+# time, so nothing caught it. An FRR renderer reads them, which is what makes
+# it a defect rather than a wart.
+#
+# ONE RELATIONSHIP IS ENOUGH. `InterfaceLayer3` already carries `ip_addresses`,
+# cardinality many and optional, so adding the interface completes the whole
+# path in one step:
+#
+#   circuit -> endpoints -> interface -> ip_addresses
+#
+# The peer is the `DcimInterface` GENERIC, not `InterfacePhysical`. Both
+# concrete kinds inherit it, so a circuit that one day terminates on a
+# sub-interface still fits; naming the physical kind would work for every
+# circuit in this lab and fail the first time that changed.
+#
+# OPTIONAL, DELIBERATELY. The branch office's link into border-leaf1 is a
+# private fibre with no provider in the path — `WanSite.circuit` is already
+# optional for that case — and a circuit may be recorded before it is cabled.
+# ============================================================================
+
+extensions:
+  nodes:
+    - kind: DcimCircuitEndpoint
+      relationships:
+        - name: interface
+          label: Terminating Interface
+          peer: DcimInterface
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: "The interface this circuit end terminates on"
+          identifier: "circuit_endpoint__interface"
+          order_weight: 960

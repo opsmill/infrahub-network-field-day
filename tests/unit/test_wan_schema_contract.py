@@ -21,6 +21,8 @@ REPO_ROOT = Path(__file__).parents[2]
 
 WAN_SCHEMA = "schemas/wan/wan.yml"
 TENANCY_EXTENSIONS = "schemas/tenancy_extensions.yml"
+CIRCUIT_EXTENSIONS = "schemas/circuit_extensions.yml"
+DCIM_EXTENSIONS = "schemas/dcim_extensions.yml"
 
 WAN_NODE_NAMES = ("Site", "InternetPeering")
 
@@ -228,6 +230,88 @@ def test_adopted_circuit_schema_models_two_sides() -> None:
     assert "DcimEndpoint" in (endpoint.get("inherit_from") or [])
 
 
+def test_circuit_endpoint_names_the_interface_it_terminates_on() -> None:
+    """Cycle 020: the change that makes the WAN's addressing queryable.
+
+    Without it, objects/33_nfd41_wan.yml can only record a circuit end as
+    `name: isp-pe1-eth2` plus an address inside a description sentence -- an
+    interface as a string and a CIDR as prose, which is what cycle 010's
+    assumption 4 and SC-008 forbid.
+
+    One relationship is enough because InterfaceLayer3 already carries
+    `ip_addresses`, so this completes circuit -> endpoint -> interface ->
+    address in a single step.
+    """
+    endpoint = _extension_node(_load_yaml(CIRCUIT_EXTENSIONS), "DcimCircuitEndpoint")
+    interface = _relationships(endpoint)["interface"]
+
+    assert interface["peer"] == "DcimInterface"
+    assert interface["cardinality"] == "one"
+    assert interface["optional"] is True
+    assert interface["identifier"] == "circuit_endpoint__interface"
+
+
+def test_the_interface_peer_is_the_generic_not_a_concrete_kind() -> None:
+    """InterfacePhysical would work today and fail on the first sub-interface.
+
+    Both InterfacePhysical and InterfaceVirtual inherit DcimInterface, so
+    peering with the generic accepts either.
+    """
+    endpoint = _extension_node(_load_yaml(CIRCUIT_EXTENSIONS), "DcimCircuitEndpoint")
+
+    assert _relationships(endpoint)["interface"]["peer"] not in {"InterfacePhysical", "InterfaceVirtual"}
+
+
+def test_the_adopted_circuit_file_declares_no_interface_relationship() -> None:
+    """SC-009: the addition lands in the extension, never in the adopted file.
+
+    infrahub/circuit is kept byte-identical to the published version so a
+    re-download diffs cleanly. This is the assertion that catches someone
+    editing it directly.
+    """
+    endpoint = _node(_load_yaml("schemas/circuit/circuit.yml"), "Dcim", "CircuitEndpoint")
+
+    assert "interface" not in _relationships(endpoint)
+
+
+def test_a_device_can_name_its_router_id() -> None:
+    """Cycle 020: `bgp router-id` needs a source that is not guesswork.
+
+    Three of the six routers the WAN renders take their router ID from a
+    loopback; the customer edges use their LAN address and internet-rtr uses
+    its peering address. Deriving it from an interface role would therefore be
+    wrong for half the fleet, and silently -- a router-id that is merely
+    different still forms a session.
+
+    Kept distinct from `loopback_ip`, which would record a falsehood for the
+    three that are not loopbacks.
+    """
+    device = _extension_node(_load_yaml(DCIM_EXTENSIONS), "DcimDevice")
+    relationships = _relationships(device)
+    router_id = relationships["router_id"]
+
+    assert router_id["peer"] == "IpamIPAddress"
+    assert router_id["cardinality"] == "one"
+    assert router_id["optional"] is True
+    assert router_id["identifier"] == "device__router_id"
+    assert router_id["identifier"] != relationships["loopback_ip"]["identifier"]
+
+
+def test_the_loopback_interface_role_was_already_modelled() -> None:
+    """FR-020 was withdrawn during Phase 0 research, and this records why.
+
+    The specification asked for a `loopback` role choice, reading the generic
+    in schemas/base/dcim.yml. That is not the effective list:
+    dcim_extensions.yml re-declares DcimInterface.role and already carries both
+    loopback choices. In this repository the base file is where a kind starts
+    and the extension is what it actually is.
+    """
+    interface = _extension_node(_load_yaml(DCIM_EXTENSIONS), "DcimInterface")
+    roles = _choice_names(_attributes(interface)["role"])
+
+    assert {"loopback", "vtep_loopback"} <= roles
+
+
 def test_site_reuses_existing_routing_kinds_for_both_handoffs() -> None:
     """FR-010: no parallel BGP-session or static-route model.
 
@@ -237,8 +321,64 @@ def test_site_reuses_existing_routing_kinds_for_both_handoffs() -> None:
     site = _node(_load_yaml(WAN_SCHEMA), "Wan", "Site")
     relationships = _relationships(site)
 
-    assert relationships["bgp_session"]["peer"] == "RoutingBGPNeighbor"
+    assert relationships["bgp_sessions"]["peer"] == "RoutingBGPNeighbor"
+    assert relationships["bgp_sessions"]["cardinality"] == "many"
     assert relationships["static_routes"]["peer"] == "RoutingVrfStaticRoute"
+
+
+def test_site_holds_both_ends_of_its_bgp_session() -> None:
+    """Cycle 020: a session between two devices is two objects, not one.
+
+    RoutingBGPNeighbor is device-scoped and unique on
+    [device, peer_address__value], so a PE-to-CE attachment produces one object
+    on the PE and one on the CE. The original cardinality-one `bgp_session`
+    could hold only half of that.
+
+    Optional as well as many: acme's DR site is statically attached and runs no
+    protocol at all, so zero sessions is valid rather than missing.
+    """
+    site = _node(_load_yaml(WAN_SCHEMA), "Wan", "Site")
+    sessions = _relationships(site)["bgp_sessions"]
+
+    assert sessions["cardinality"] == "many"
+    assert sessions["optional"] is True
+    assert sessions["identifier"] == "wan_site__bgp_sessions"
+
+
+def test_the_old_single_bgp_session_is_tombstoned_not_deleted() -> None:
+    """The tombstone is load-bearing; deleting it would be a silent regression.
+
+    A schema load is an upsert. A relationship merely removed from the YAML is
+    left alone on the server, and `infrahubctl schema check` reports the rename
+    as a pure addition with an empty `removed` block -- so the old
+    cardinality-one relationship survives with no warning anywhere. Only
+    `state: absent` actually removes it.
+
+    This test exists so that a future tidy-up of the tombstone has to be
+    deliberate. It may be removed once the instance is rebuilt from empty.
+    """
+    site = _node(_load_yaml(WAN_SCHEMA), "Wan", "Site")
+    relationships = _relationships(site)
+
+    assert "bgp_session" in relationships, "tombstone removed; the old relationship will linger on the server"
+    assert relationships["bgp_session"]["state"] == "absent"
+    assert relationships["bgp_session"]["cardinality"] == "one"
+
+
+def test_internet_peering_holds_both_ends_of_the_transit_session() -> None:
+    """The transit link is one wire and two objects.
+
+    isp-pe2 holds `neighbor 10.52.0.2 remote-as 64500` and internet-rtr holds
+    `neighbor 10.52.0.1 remote-as 65500`. Cardinality one here would make this
+    the only place in the model where half a session is recorded.
+    """
+    peering = _node(_load_yaml(WAN_SCHEMA), "Wan", "InternetPeering")
+    sessions = _relationships(peering)["bgp_sessions"]
+
+    assert sessions["peer"] == "RoutingBGPNeighbor"
+    assert sessions["cardinality"] == "many"
+    assert sessions["optional"] is True
+    assert sessions["identifier"] == "internet_peering__bgp_sessions"
 
 
 def test_internet_peering_names_two_distinct_providers() -> None:
