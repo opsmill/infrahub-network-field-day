@@ -53,8 +53,9 @@ Regenerate the typed protocol classes after any schema change (see [the command 
 | `security/security.yml` | **Marketplace** (`infrahub/security`): 22 kinds — zones, the polymorphic address book, service objects, zone-pair policy rules, `Security.Firewall` as a device kind, `Security.FirewallInterface` |
 | `security_extensions.yml` | Adds `trust_level` and a fabric `vrf` link to `Security.Zone`, and `managed_by_service` to `Security.PolicyRule` |
 | `circuit/circuit.yml` | **Marketplace** (`infrahub/circuit`): `Dcim.Circuit`, `Dcim.CircuitEndpoint` |
+| `circuit_extensions.yml` | Adds `interface` to `Dcim.CircuitEndpoint`, so a circuit end resolves to the interface it terminates on and through it to real IP addresses |
 | `tenancy/tenancy.yml` | **Marketplace** (`infrahub/tenancy`): `Organization.Tenant`, plus tenant back-references on device, prefix, address, and location |
-| `wan/wan.yml` | `Wan.Tenant`, `Wan.Site`, `Wan.InternetPeering` — the provider-edge construct only; the circuit itself comes from the marketplace |
+| `wan/wan.yml` | `Wan.Tenant`, `Wan.Site`, `Wan.InternetPeering` — the provider-edge construct only; the circuit itself comes from the marketplace. `bgp_sessions` is cardinality many on both `Wan.Site` and `Wan.InternetPeering`: a session between two devices is two `Routing.BGPNeighbor` objects, one per device |
 
 The device and interface `role` dropdowns that the fabric uses are defined in `dcim_extensions.yml`, not in the base `dcim.yml` — the extension redefines the base lists.
 
@@ -226,7 +227,7 @@ A cabled connection between interfaces. Inherits `Dcim.Connector`, so it has `na
 The concrete network device (switch). Inherits `Dcim.GenericDevice`, `Dcim.PhysicalDevice`, and `CoreArtifactTarget`.
 
 - **Attributes**: `name` (unique), `description`, `os_version`, `status` (`active`, `provisioning`, `maintenance`, `drained`). Fabric extensions (via `dcim_extensions.yml`): `role` (`super_spine`, `spine`, `leaf`, `border_leaf`, `l2leaf`), `index`, `node_id`.
-- **Relationships**: `interfaces` → `DcimInterface`, `device_type` → `DcimDeviceType`, `platform` → `DcimPlatform`, `primary_address` / `loopback_ip` / `mgmt_ip` → `IpamIPAddress`, `pod` → `NetworkPod`, `rack` → `LocationRack`, `asn` → `RoutingAsn` (device BGP ASN), `avd_artifact` → `AvdArtifact`, `mlag_domain` → `MlagDomain`, plus routing relations (`bgp_peer_groups`, `bgp_neighbors`, `prefix_lists`, `route_maps`, `static_routes`).
+- **Relationships**: `interfaces` → `DcimInterface`, `device_type` → `DcimDeviceType`, `platform` → `DcimPlatform`, `primary_address` / `loopback_ip` / `mgmt_ip` / `router_id` → `IpamIPAddress` (`router_id` is explicit rather than derived, because a customer edge's router ID is its LAN address and not a loopback), `pod` → `NetworkPod`, `rack` → `LocationRack`, `asn` → `RoutingAsn` (device BGP ASN), `avd_artifact` → `AvdArtifact`, `mlag_domain` → `MlagDomain`, plus routing relations (`bgp_peer_groups`, `bgp_neighbors`, `prefix_lists`, `route_maps`, `static_routes`).
 
 ### Interface kinds
 

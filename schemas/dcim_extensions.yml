@@ -136,6 +136,23 @@ extensions:
           cardinality: one
           optional: true
           identifier: "device__mgmt_ip"
+        # Explicit, not derived, and deliberately NOT folded into loopback_ip.
+        # Of the six routers the WAN renders, three take their router ID from a
+        # loopback (isp-pe1, isp-pe2, branch-rtr) and three do not: the customer
+        # edges use their LAN-side address and internet-rtr uses its peering
+        # address. Recording either of those in `loopback_ip` would be false,
+        # and inferring the router ID from an interface role would be wrong for
+        # half the fleet — silently, because a BGP router-id that is merely
+        # different still forms a session.
+        - name: router_id
+          label: Router ID
+          peer: IpamIPAddress
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: "The address used as this device's BGP router ID"
+          identifier: "device__router_id"
+          order_weight: 1660
         - name: rack
           peer: LocationRack
           kind: Attribute

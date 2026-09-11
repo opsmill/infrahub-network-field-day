@@ -455,6 +455,7 @@ class WanInternetPeering(CoreNode):
     description: StringOptional
     name: String
     peer_asn: Integer
+    bgp_sessions: RelationshipManager[RoutingBGPNeighbor]
     circuit: RelationshipAttribute[DcimCircuit]
     customer_aggregate: RelationshipAttribute[IpamPrefix]
     internet_prefixes: RelationshipManager[IpamPrefix]
@@ -691,6 +692,7 @@ class WanSite(CoreNode):
     name: String
     site_asn: IntegerOptional
     bgp_session: RelationshipAttribute[RoutingBGPNeighbor]
+    bgp_sessions: RelationshipManager[RoutingBGPNeighbor]
     circuit: RelationshipAttribute[DcimCircuit]
     lan_prefix: RelationshipAttribute[IpamPrefix]
     location: RelationshipAttribute[LocationGeneric]
