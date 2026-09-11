@@ -101,6 +101,37 @@ query GenerateFabricPeeringQuery($name: String!) {
                                                     }
                                                   }
                                                 }
+                                                # The peering SVI, added by cycle
+                                                # 015. Selected by interface role
+                                                # rather than by VLAN id or name,
+                                                # so a second cluster on a
+                                                # different VLAN still resolves.
+                                                interfaces {
+                                                  edges {
+                                                    node {
+                                                      __typename
+                                                      id
+                                                      ... on InterfaceVirtual {
+                                                        name {
+                                                          value
+                                                        }
+                                                        role {
+                                                          value
+                                                        }
+                                                        ip_addresses {
+                                                          edges {
+                                                            node {
+                                                              id
+                                                              address {
+                                                                value
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
                                               }
                                             }
                                           }

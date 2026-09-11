@@ -97,48 +97,31 @@ spec:
 # One session per leaf. The peer address is each leaf's OWN Vlan110 SVI
 # address, never the MLAG pair's shared VARP gateway 10.110.0.1 — an anycast
 # address is ambiguous across the pair and cannot identify a single peer.
-# Ownership of these rows is split, deliberately, as of the service-layer
-# generator (specs/012-service-layer-generator):
+# Ownership of these rows is split, and cycle 015 moved the line again:
 #
-#   name, peer_address, description, svi -> declared HERE and authoritative.
-#     `name` is a lab-facing label -- `k8s-leaf1` is the containerlab hostname
-#     of the switch the fabric model calls `leaf-nfd41-pod1-1-1`.
+#   name -> declared HERE and authoritative. It is a lab-facing label:
+#     `k8s-leaf1` is the containerlab hostname of the switch the fabric model
+#     calls `leaf-nfd41-pod1-1-1`. The lab models the same two switches twice,
+#     so the label is not derivable from the device, and a session the
+#     generator creates from scratch is named after the device instead.
 #
-#     peer_address was in this list for the same reason as the rest: nothing in
-#     the fabric model connected a peering address to a device, so the generator
-#     had no traversal to derive it from and was forbidden to invent one
-#     (FR-027). That is no longer true -- see below.
+#   peer_asn, peer_address -> SEEDS only. `generate-fabric-peering` derives
+#     both -- the ASN from the peer device's RoutingAsn (cycle 012) and the
+#     address from its Vlan110 peering SVI (cycles 014 and 015) -- and
+#     overwrites whatever is below, logging a warning when it disagrees.
 #
-#   peer_asn -> a SEED only. `generate-fabric-peering` overwrites it from the
-#     peer device's own RoutingAsn, which is the number AVD renders onto the
-#     switch. If the value below ever disagrees with the fabric, the generator
-#     wins and the drift is corrected rather than shipped.
+# Why the seeds remain despite being derived: both fields are `optional: false`
+# on ClusterFabricPeering, so an object file cannot declare a session without
+# them. Removing them means removing the rows entirely, and the rows are what
+# carry `name`. Doing that was tested: the generator then recreates the
+# sessions named after their devices, which changes the peer names in the
+# rendered Crossplane manifest. Keeping the rows keeps the manifest stable,
+# which is the stronger guarantee.
 #
-# These rows are therefore NOT removed. They are the only record of each
-# session's address, and deleting them would leave a deleted session
-# unrecreatable.
-#
-# THE PRECONDITION FOR REMOVING peer_address IS NOW MET
-# (specs/014-k8s-leaf-peering-svi). 36_nfd41_peering_svis.yml gives each leaf a
-# Vlan110 interface holding its own address, so
-#
-#     IpamIPAddress -> interface -> device
-#
-# now resolves and the address is derivable from the peer device exactly as the
-# ASN already is. Nothing consumes that yet: `peer_address` below is still
-# authoritative, and cycle 014 deliberately changed no generator so that the
-# data change could be proved inert on its own.
-#
-# The follow-up is to make generate-fabric-peering set `peer_address` from the
-# traversal -- the single address the peer device owns inside the cluster's
-# node_prefix -- and only then drop the values here, the way `peer_asn` was
-# demoted to a seed. Two things that follow-up must not get wrong:
-#
-#   * traverse `IpamIPAddress.interface`, NOT `InterfaceVirtual.ip_address`.
-#     They are different relationships and only the former is bidirectional;
-#     36_nfd41_peering_svis.yml explains this at length.
-#   * 10.110.0.1 is the pair's shared VARP gateway and is deliberately not an
-#     address object, so it cannot be selected. Do not "helpfully" seed it.
+# Deleting a session and letting the generator recreate it is therefore not
+# reversible through `object load`: the file matches by (cluster, name) while
+# uniqueness is by (cluster, peer_device), so a renamed session cannot be
+# matched back. Rename it directly if that happens.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
