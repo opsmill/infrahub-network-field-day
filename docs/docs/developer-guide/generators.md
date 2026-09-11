@@ -278,11 +278,22 @@ rather than `Dcim.Device`. And adoption fetches the existing session and sets on
 rather than upserting: an upsert validates every mandatory field, so a payload that omits
 `name` and `peer_address` in order to preserve them is rejected outright.
 
-**What it does not do.** It never creates a session from nothing. `peer_address` is mandatory
-and is recorded only on an existing session, so a newly cabled leaf has no address the
-generator is permitted to supply — it raises naming the device instead. Modelling the leaves'
-peering SVIs would make the address derivable exactly as the ASN now is; until then the
-address stays declared in object data.
+**It creates as well as adopts.** `peer_address` is derived from the peer device's
+`peering`-role SVI, selected by interface role rather than by VLAN id or position — every leaf
+carries a `Loopback0` alongside its `Vlan110`, so a positional rule picks the wrong one. A
+newly cabled leaf with a peering SVI is therefore provisioned without anyone writing the
+session first. A leaf with no such SVI, with more than one, or with one carrying more than one address,
+fails naming the device: the address is derived, never invented.
+
+**Two fields are derived; one is not.** `name` remains a lab-facing label — `k8s-leaf1` is the
+containerlab hostname of the switch the fabric model calls `leaf-nfd41-pod1-1-1`, and the lab
+models the same switches twice — so a session created from scratch takes its device's name.
+That means delete-and-recreate is **not** artifact-neutral: the peer labels in the rendered
+manifest change even though addresses and ASNs do not.
+
+**Drift is reported, not silently corrected.** When a session's recorded address disagrees
+with the derived one, the run logs the device and the old value before correcting it. An
+address change moves where BGP points, and that belongs in the run output.
 
 **Cleanup.** Sessions the generator previously produced and no longer derives are removed by
 the tracking context. Sessions it never produced are outside that context and are never

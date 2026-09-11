@@ -111,7 +111,7 @@ Deriving the address must not alter what reaches the cluster.
 - **FR-007**: Adoption MUST still preserve `name` and `enabled`; only `peer_asn` and `peer_address` are derived
 - **FR-008**: An existing session whose recorded address differs from the derived one MUST be reported, so drift is surfaced rather than silently corrected
 - **FR-009**: The generator MUST remain idempotent: an unchanged model leaves objects, attributes and the artifact checksum unchanged
-- **FR-010**: `objects/34_nfd41_cluster.yml` MUST lose its hand-declared `peer_address` values, and the annotation describing split ownership MUST be updated to match
+- **FR-010**: ~~`objects/34_nfd41_cluster.yml` MUST lose its hand-declared `peer_address` values~~ — **revised during implementation.** Both `peer_asn` and `peer_address` are `optional: false`, so an object file cannot declare a session without them; removing them means removing the rows, and the rows carry `name`. The file keeps them as **seeds the generator overwrites**, and the annotation MUST say so
 - **FR-011**: All existing guarantees MUST hold — distinct peers, near-end exclusion, role filtering, deterministic ordering, and no deletion of objects the generator did not create
 
 ### Key Entities
@@ -140,7 +140,7 @@ Deriving the address must not alter what reaches the cluster.
 - **SC-005**: A cabled leaf with no peering SVI fails naming the device, with nothing written
 - **SC-006**: An ambiguous SVI selection fails rather than guessing
 - **SC-007**: Two runs against an unchanged model change nothing
-- **SC-008**: `objects/34_nfd41_cluster.yml` contains no `peer_address`
+- **SC-008**: ~~`objects/34_nfd41_cluster.yml` contains no `peer_address`~~ — **unachievable, see FR-010.** Replaced by: the file's `peer_asn` and `peer_address` are documented as seeds, and the generator's derived values win over them
 - **SC-009**: All unit tests and the repository's linters pass
 
 ## Assumptions
