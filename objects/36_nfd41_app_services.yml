@@ -37,7 +37,11 @@ spec:
       # text precisely so all three gates reference the same objects.
       policy_default_deny: true
       policy_allow_dns: true
-      policy_allow_intra_namespace: false
+      # The XRD defaults this to true and the hand-written manifest omits it,
+      # so it is true in the deployed app. Seeding false would have rendered a
+      # manifest that denies intra-namespace traffic where the live one permits
+      # it -- caught by the field-by-field comparison against 10-demo.yaml.
+      policy_allow_intra_namespace: true
       policy_allow_egress_api_server: false
       policy_allow_egress_internet: false
       allowed_source_prefixes:

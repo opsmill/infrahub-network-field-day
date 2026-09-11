@@ -203,6 +203,42 @@ byte-identical artifact and a changed checksum means something real. Sequences a
 under the key that owns them, matching the hand-written manifest the artifact replaces, so a
 diff between the two reads as a field comparison.
 
+### CrossplaneFabricAppTransform
+
+**File**: `transforms/crossplane_fabric_app.py`
+
+**Purpose**: Render the `FabricApp` custom resource for an application deployed on the cluster
+
+**Input**: ServiceFabricApp
+**Output**: YAML — one Kubernetes custom resource
+
+The counterpart to the peering transform: that one renders the cluster's BGP session, this
+one renders an application deployed on top of it.
+
+**It is async, and that is why.** The deployment payload — the Kubernetes manifests, and any
+Helm values — is stored as a `CoreFileObject` attachment rather than a JSON attribute, so its
+content is fetched with `download_file()` rather than arriving in the query response. The query
+returns only the attachment's metadata, and the node is re-fetched by id before the content can
+be read, exactly as `AvdAntaCatalogTransform` does for stored structured config.
+
+**Why the payload is an attachment.** A JSON attribute cannot be seeded: Infrahub's object-load
+path returns a server error for a JSON key containing a dot or a slash, and a Kubernetes
+payload is full of them — `app.kubernetes.io/name`, `kubernetes.io/hostname`,
+`nfd41.lab/advertise`. When both an attachment and the inline attribute are set, **the
+attachment wins**.
+
+**Seeding needs a script.** `infrahubctl object load` cannot upload file content, so
+`scripts/seed_app_payloads.py` uploads `payloads/*.yaml` into the attachments. Run it after
+`invoke load`, or an application renders with no workload. The payload files live outside
+`objects/` deliberately — everything in that tree is parsed as an Infrahub object file.
+
+**Type discipline.** `true` is a label value and `8080` is a port; both would be rejected by the
+Kubernetes API as a boolean or an integer. The dumper decides quoting from the value's type, and
+a colon-bearing scalar is force-quoted — the same approach as the peering transform.
+
+**It refuses an incomplete model**: no namespace, exposed with no VIP block, neither chart nor
+manifests, or an attachment whose content is not parseable YAML.
+
 ### ContainerLabTopology
 
 **File**: `transforms/containerlab_topology.py`
