@@ -330,3 +330,219 @@ spec:
             label: Local Users
             kind: NetworkLocalUser
             icon: "mdi:account-key"
+
+    # --------- Services ---------
+    # FR-065: the service layer gets its own top-level grouping, so the UI
+    # reflects the two-layer split the schema enforces structurally. These are
+    # ordered intent -- what somebody asked for -- and every one of them
+    # inherits ServiceGeneric.
+    - namespace: Service
+      name: ServiceMenu
+      label: Services
+      icon: "mdi:clipboard-text-outline"
+      children:
+        data:
+          - namespace: Service
+            name: FabricPeeringServices
+            label: Fabric Peering
+            kind: ServiceFabricPeering
+            icon: "mdi:handshake"
+
+          - namespace: Service
+            name: FabricAppServices
+            label: Fabric Applications
+            kind: ServiceFabricApp
+            icon: "mdi:apps"
+
+          - namespace: Service
+            name: AppAccessServices
+            label: Application Access
+            kind: ServiceAppAccess
+            icon: "mdi:key-chain"
+
+          - namespace: Service
+            name: L3vpnServices
+            label: Tenant L3VPN
+            kind: ServiceL3vpn
+            icon: "mdi:lan-connect"
+
+          - namespace: Service
+            name: InternetAccessServices
+            label: Internet Access
+            kind: ServiceInternetAccess
+            icon: "mdi:web-check"
+
+          - namespace: Service
+            name: TenantCloudServices
+            label: Tenant Cloud
+            kind: ServiceTenantCloud
+            icon: "mdi:cloud-lock"
+
+    # --------- Security ---------
+    # Technical layer: what exists on the firewall. The address book and the
+    # service catalogue are nested rather than flat, because sixteen sibling
+    # entries is a list nobody reads.
+    - namespace: Security
+      name: SecurityMenu
+      label: Security
+      icon: "mdi:security"
+      children:
+        data:
+          - namespace: Security
+            name: Firewalls
+            label: Firewalls
+            kind: SecurityFirewall
+            icon: "mdi:firewall"
+
+          - namespace: Security
+            name: SecurityZones
+            label: Zones
+            kind: SecurityZone
+            icon: "game-icons:fire-zone"
+
+          - namespace: Security
+            name: SecurityPolicies
+            label: Policies
+            kind: SecurityPolicy
+            icon: "material-symbols:policy"
+
+          - namespace: Security
+            name: SecurityPolicyRules
+            label: Policy Rules
+            kind: SecurityPolicyRule
+            icon: "material-symbols:policy"
+
+          - namespace: Security
+            name: AddressBookMenu
+            label: Address Book
+            icon: "material-symbols:menu-book-outline-rounded"
+            children:
+              data:
+                - namespace: Security
+                  name: SecurityAddresses
+                  label: IP Addresses
+                  kind: SecurityIPAddress
+                  icon: "mdi:ip-outline"
+
+                - namespace: Security
+                  name: SecurityPrefixes
+                  label: Prefixes
+                  kind: SecurityPrefix
+                  icon: "mdi:ip-network-outline"
+
+                - namespace: Security
+                  name: SecurityIPRanges
+                  label: IP Ranges
+                  kind: SecurityIPRange
+                  icon: "mdi:ip-outline"
+
+                - namespace: Security
+                  name: SecurityFQDNs
+                  label: FQDNs
+                  kind: SecurityFQDN
+                  icon: "eos-icons:dns"
+
+                - namespace: Security
+                  name: SecurityAddressGroups
+                  label: Address Groups
+                  kind: SecurityAddressGroup
+                  icon: "material-symbols:menu-book-outline-rounded"
+
+                - namespace: Security
+                  name: SecurityIpamAddresses
+                  label: IPAM Addresses
+                  kind: SecurityIPAMIPAddress
+                  icon: "mdi:ip-outline"
+
+                - namespace: Security
+                  name: SecurityIpamPrefixes
+                  label: IPAM Prefixes
+                  kind: SecurityIPAMIPPrefix
+                  icon: "mdi:ip-network-outline"
+
+          - namespace: Security
+            name: ServiceCatalogueMenu
+            label: Applications
+            icon: "eos-icons:application-outlined"
+            children:
+              data:
+                - namespace: Security
+                  name: SecurityServices
+                  label: Services
+                  kind: SecurityService
+                  icon: "eos-icons:application-outlined"
+
+                - namespace: Security
+                  name: SecurityServiceRanges
+                  label: Service Ranges
+                  kind: SecurityServiceRange
+                  icon: "eos-icons:application-outlined"
+
+                - namespace: Security
+                  name: SecurityServiceGroups
+                  label: Service Groups
+                  kind: SecurityServiceGroup
+                  icon: "material-symbols:menu-book-outline-rounded"
+
+                - namespace: Security
+                  name: SecurityIpProtocols
+                  label: IP Protocols
+                  kind: SecurityIPProtocol
+                  icon: "mdi:protocol"
+
+    # --------- Kubernetes ---------
+    - namespace: Cluster
+      name: ClusterMenu
+      label: Kubernetes
+      icon: "mdi:kubernetes"
+      children:
+        data:
+          - namespace: Cluster
+            name: KubernetesClusters
+            label: Clusters
+            kind: ClusterKubernetes
+            icon: "mdi:kubernetes"
+
+    # --------- WAN ---------
+    - namespace: Wan
+      name: WanMenu
+      label: WAN
+      icon: "mdi:wan"
+      children:
+        data:
+          - namespace: Wan
+            name: WanSites
+            label: Sites
+            kind: WanSite
+            icon: "mdi:office-building-marker"
+
+          - namespace: Wan
+            name: WanInternetPeerings
+            label: Internet Peerings
+            kind: WanInternetPeering
+            icon: "mdi:web"
+
+          - namespace: Wan
+            name: WanCircuits
+            label: Circuits
+            kind: DcimCircuit
+            icon: "mdi:cable-data"
+
+          - namespace: Wan
+            name: WanCircuitEndpoints
+            label: Circuit Endpoints
+            kind: DcimCircuitEndpoint
+            icon: "mdi:ethernet"
+
+    # --------- Tenancy ---------
+    - namespace: Organization
+      name: TenancyMenu
+      label: Tenancy
+      icon: "mdi:domain"
+      children:
+        data:
+          - namespace: Organization
+            name: Tenants
+            label: Tenants
+            kind: OrganizationTenant
+            icon: "mdi:domain"
