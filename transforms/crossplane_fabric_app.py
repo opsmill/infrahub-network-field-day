@@ -209,8 +209,12 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
             msg = f"application {name!r} has no namespace_name; the XRD requires spec.namespace"
             raise ValueError(msg)
 
-        manifests = await self._payload(app.manifests_file, _value(app.manifests), name=name)
-        values = await self._payload(app.values_file, _value(app.chart_values), name=name)
+        manifests = await self._payload(
+            app.manifests_file, _value(app.manifests), kind="ServiceFabricAppManifestsFile", name=name
+        )
+        values = await self._payload(
+            app.values_file, _value(app.chart_values), kind="ServiceFabricAppValuesFile", name=name
+        )
         chart = build_chart(app, values)
 
         if not chart and not manifests:
@@ -242,26 +246,32 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
         }
         return self._dump(manifest)
 
-    async def _payload(self, attachment: Any, inline: Any, *, name: str) -> Any:
+    async def _payload(self, attachment: Any, inline: Any, *, kind: str, name: str) -> Any:
         """The attachment's content if there is one, else the inline attribute.
 
         The attachment wins, per cycle 013's documented precedence: it is the
         only one of the two that can hold a payload whose keys contain dots and
         slashes.
 
+        The query returns the file's *metadata* only -- its content lives in
+        object storage. `download_file()` is a method on an SDK node, not on the
+        generated query model, so the node is re-fetched by id before the
+        content can be read.
+
         Raises:
             ValueError: if an attachment's content is not parseable YAML.
         """
-        file_node = _node_of(attachment)
-        if file_node is None:
+        stub = _node_of(attachment)
+        if stub is None:
             return inline
 
+        file_node = await self.client.get(kind=kind, id=stub.id)
         content = await file_node.download_file()
         text = content.decode() if isinstance(content, bytes) else content
         try:
             return yaml.safe_load(text)
         except yaml.YAMLError as exc:
-            file_name = _value(file_node.file_name)
+            file_name = _value(stub.file_name)
             msg = f"application {name!r}: attachment {file_name!r} is not parseable YAML: {exc}"
             raise ValueError(msg) from exc
 
