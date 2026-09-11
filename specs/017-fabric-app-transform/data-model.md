@@ -10,7 +10,7 @@ No schema change. Cycle 013 added the attachments this reads.
 | --- | --- | --- |
 | `name` | `metadata.name` | verbatim |
 | `namespace_name` | `spec.namespace` | verbatim, **required** |
-| `vrf` → name | `spec.tenant` | lower-cased (R3) |
+| `vrf` → name | `spec.tenant` | lower-cased **and** `_`→`-` — `K8S_PROD` becomes `k8s-prod` (R3) |
 | `chart_repository` / `chart_name` / `chart_version` | `spec.chart.{repository,name,version}` | verbatim |
 | `values_file` attachment, else `chart_values` | `spec.chart.values` | parsed, emitted verbatim |
 | `manifests_file` attachment, else `manifests` | `spec.manifests` | parsed, emitted verbatim |

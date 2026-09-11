@@ -32,8 +32,10 @@ unreachable in exactly the case it was added for.
 **Decision**: From the VRF's name, lower-cased.
 
 The XRD defaults `tenant` to `k8s-prod`; all three lab instances set exactly that; and
-`ServiceFabricApp.vrf` points at VRF `K8S_PROD`. Lower-casing bridges the naming conventions —
-Infrahub VRFs are upper-case by convention here, Kubernetes tenants are not.
+`ServiceFabricApp.vrf` points at VRF `K8S_PROD`. Lower-casing **and** replacing underscores with hyphens bridges the naming conventions:
+Infrahub VRFs here are upper snake case, Kubernetes tenants are lower kebab. Lower-casing alone
+yields `k8s_prod`, which is neither the XRD's default nor what the hand-written manifest says —
+caught by the oracle comparison rather than by reading the schema.
 
 **Alternatives considered**: a new attribute on the service — rejected, a schema change for a
 value already modelled. Hardcoding `k8s-prod` — rejected, it would silently mislabel a second

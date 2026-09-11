@@ -228,7 +228,11 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
         spec: dict[str, Any] = {"namespace": namespace}
         vrf = _node_of(app.vrf)
         if vrf is not None and _value(vrf.name):
-            spec["tenant"] = str(_value(vrf.name)).lower()
+            # K8S_PROD -> k8s-prod. Infrahub VRFs are upper snake case by
+            # convention here; Kubernetes tenants are lower kebab. Lower-casing
+            # alone leaves k8s_prod, which is not the XRD's default and not what
+            # the hand-written manifest says.
+            spec["tenant"] = str(_value(vrf.name)).lower().replace("_", "-")
         if chart:
             spec["chart"] = chart
         if manifests:
