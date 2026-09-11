@@ -90,6 +90,17 @@ This runs, in order:
 5. Register this repository with Infrahub and wait for it to reach `in-sync`.
 6. Load the check queries from `repository_checks.yml`, which depend on the repository being synced.
 7. Load event triggers and rules from `triggers.yml`.
+8. Upload application payloads from `payloads/` into their Infrahub attachments.
+
+Step 8 needs `INFRAHUB_API_TOKEN` exported, the same token `infrahubctl` uses. It exists
+because application payloads — Kubernetes manifests and Helm values — are stored as file
+attachments rather than JSON attributes, and `infrahubctl object load` cannot upload file
+content. Skip it and an application loads with no workload, so its Crossplane artifact renders
+an empty `manifests` list.
+
+The payload files live in `payloads/` rather than `objects/` deliberately: everything under
+`objects/` is parsed as an Infrahub object file, and a bare list of Kubernetes manifests aborts
+the whole load.
 
 Seed data loads in filename order, and the numeric prefixes encode that order: shared data first
 (`00`–`06` — groups, manufacturers, device types, IPAM, management, profiles, device templates),

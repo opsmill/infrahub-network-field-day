@@ -46,10 +46,19 @@ PAYLOADS: dict[str, tuple[str, str, str]] = {
 
 async def seed(branch: str) -> int:
     """Upload every payload. Returns the number of files actually written."""
+    token = os.environ.get("INFRAHUB_API_TOKEN")
+    if not token:
+        msg = (
+            "INFRAHUB_API_TOKEN is not set. Export it first -- the same token infrahubctl "
+            "uses, which for a local stack is INFRAHUB_INITIAL_ADMIN_TOKEN from "
+            "docker-compose.override.yml."
+        )
+        raise SystemExit(msg)
+
     client = InfrahubClient(
         config=Config(
             address=os.environ.get("INFRAHUB_ADDRESS", "http://localhost:8000"),
-            api_token=os.environ["INFRAHUB_API_TOKEN"],
+            api_token=token,
             default_branch=branch,
         )
     )

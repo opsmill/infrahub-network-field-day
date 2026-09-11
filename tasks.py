@@ -387,6 +387,10 @@ def load(ctx: Context) -> None:
     wait_for_repository_sync("test-repository")
     ctx.run("infrahubctl object load repository_checks.yml")
     ctx.run("infrahubctl object load triggers.yml")
+    # Application payloads are CoreFileObject attachments, and `object load`
+    # cannot upload file content. Without this an application loads with no
+    # workload and its Crossplane artifact renders an empty manifests list.
+    ctx.run("python scripts/seed_app_payloads.py --branch main")
 
 
 @task
