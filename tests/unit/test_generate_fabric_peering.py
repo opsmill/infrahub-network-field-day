@@ -29,11 +29,39 @@ from generators.generate_fabric_peering_query import GenerateFabricPeeringQuery
 # generator changed rather than the lab did.
 LEAF1 = "leaf-nfd41-pod1-1-1"
 LEAF2 = "leaf-nfd41-pod1-1-2"
+# The addresses cycle 014 modelled onto each leaf's Vlan110 peering SVI, and
+# which cycle 015 derives instead of reading from an object file.
+LEAF_ADDRESSES = {LEAF1: "10.110.0.2/24", LEAF2: "10.110.0.3/24"}
 PEER_ASN = 65101
 LOCAL_ASN = 65401
 
 
-def _device(name: str, *, role: str = "leaf", asn: int | None = PEER_ASN) -> dict[str, Any]:
+def _svi(role: str, addresses: list[str], *, name: str = "Vlan110") -> dict[str, Any]:
+    """One InterfaceVirtual on a peer device.
+
+    Real leaves carry two: a `loopback` SVI with no address and a `peering`
+    SVI with one. Any positional selection rule picks the loopback, which is
+    why selection is by role (research R1).
+    """
+    return {
+        "node": {
+            "__typename": "InterfaceVirtual",
+            "id": f"svi-{name}-{role}",
+            "name": {"value": name},
+            "role": {"value": role},
+            "ip_addresses": {"edges": [{"node": {"id": f"ip-{a}", "address": {"value": a}}} for a in addresses]},
+        }
+    }
+
+
+def _device(
+    name: str,
+    *,
+    role: str = "leaf",
+    asn: int | None = PEER_ASN,
+    svis: list[dict[str, Any]] | None = None,
+    address: str | None = None,
+) -> dict[str, Any]:
     """A far-end DcimDevice.
 
     Note the shape of an absent relationship throughout these fixtures: it is
@@ -45,6 +73,12 @@ def _device(name: str, *, role: str = "leaf", asn: int | None = PEER_ASN) -> dic
     variant carrying only `id` -- with no `role` or `asn` field at all. That is
     exactly why the derivation reads those attributes defensively.
     """
+    if svis is None:
+        # The live shape: a loopback with no address, plus a peering SVI.
+        svis = [_svi("loopback", [], name="Loopback0")]
+        resolved = address if address is not None else LEAF_ADDRESSES.get(name)
+        if resolved is not None:
+            svis.append(_svi("peering", [resolved]))
     return {
         "node": {
             "__typename": "DcimDevice",
@@ -52,6 +86,7 @@ def _device(name: str, *, role: str = "leaf", asn: int | None = PEER_ASN) -> dic
             "name": {"value": name},
             "role": {"value": role},
             "asn": ({"node": {"id": f"asn-{name}", "asn": {"value": asn}}} if asn is not None else {"node": None}),
+            "interfaces": {"edges": svis},
         }
     }
 
@@ -290,50 +325,6 @@ def test_uncabled_interface_contributes_nothing() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_adopt_payload_omits_preserved_fields() -> None:
-    """FR-026, FR-027, FR-017.
-
-    `save(allow_upsert=True)` writes whatever the payload contains, so
-    preserving a value is expressed by NOT passing it.
-    """
-    parsed = _parsed()
-    cluster = parsed.target.edges[0].node.cluster.node
-    payloads = build_session_payloads(cluster, derive_peers(cluster))
-
-    assert len(payloads) == 2
-    for payload in payloads:
-        assert payload.is_adoption is True
-        assert payload.existing_id is not None
-        # Only the derived field is named. The rest are preserved by never
-        # being touched -- the update fetches the node and sets this one
-        # attribute, because an upsert would demand every mandatory field.
-        assert set(payload.data) == {"peer_asn"}
-        assert "name" not in payload.data
-        assert "enabled" not in payload.data
-        assert "peer_address" not in payload.data
-
-
-def test_there_is_no_create_shape_at_all() -> None:
-    """Discovered during implementation, and it is a real limitation.
-
-    ``peer_address`` is mandatory on the node and is recorded ONLY on an
-    existing session, so a peer with no session has no address the generator
-    is permitted to supply -- FR-027 forbids inventing or allocating one.
-    Every payload is therefore an adoption, and a peer without a session is
-    refused by validate_model rather than half-created here.
-    """
-    parsed = _parsed(sessions=[_session("k8s-leaf2", LEAF2, "10.110.0.3/24")])
-    cluster = parsed.target.edges[0].node.cluster.node
-
-    # LEAF1 is cabled but has no session, so validation refuses the whole run.
-    with pytest.raises(ValueError, match="peer_address"):
-        validate_model(parsed)
-
-    # And nothing in the payload builder can produce a create shape.
-    payloads = build_session_payloads(cluster, [p for p in derive_peers(cluster) if p.device_name == LEAF2])
-    assert all(p.is_adoption for p in payloads)
-
-
 def test_adoption_rewrites_only_the_asn() -> None:
     """The first run against the live model must be a pure adoption (FR-028)."""
     parsed = _parsed(nodes=[_node("k8s-node1", "if-1", _device(LEAF1, asn=64999))])
@@ -402,14 +393,6 @@ def test_peer_without_routing_asn_raises_naming_the_device() -> None:
     assert LEAF1 in str(excinfo.value)
 
 
-def test_new_peer_without_recorded_address_raises_naming_the_device() -> None:
-    """V-6. FR-027 -- the generator must not invent or allocate an address."""
-    with pytest.raises(ValueError, match="peer_address") as excinfo:
-        validate_model(_parsed(nodes=[_node("k8s-node1", "if-1", _device("leaf-new-1"))], sessions=[]))
-
-    assert "leaf-new-1" in str(excinfo.value)
-
-
 def test_empty_peer_set_raises_before_writing() -> None:
     """V-7. Cycle 011 established that an empty peers list yields a manifest
     that applies cleanly, reports healthy, and carries no routes."""
@@ -430,3 +413,106 @@ def test_validation_runs_before_any_write_is_attempted() -> None:
     # build_session_payloads is never reached; assert it is a separate step
     # rather than something validate_model performs as a side effect.
     assert not hasattr(validate_model, "_wrote_anything")
+
+
+# ---------------------------------------------------------------------------
+# Derived peering address -- specs/015-derive-peer-address
+# ---------------------------------------------------------------------------
+
+
+def test_peer_address_comes_from_the_peering_svi() -> None:
+    """D-9, D-10. The second of the two hand-maintained facts becomes derived.
+
+    Cycle 012 made peer_asn derived and could not do the same for the address,
+    because nothing connected an address to a device. Cycle 014 modelled the
+    SVIs; this reads them.
+    """
+    peers = _peers()
+
+    assert [p.peer_address for p in peers] == ["ip-10.110.0.2/24", "ip-10.110.0.3/24"]
+
+
+def test_loopback_is_never_selected() -> None:
+    """R1. Every real leaf carries a loopback SVI with no address alongside
+    the peering one, so any positional rule picks the wrong interface."""
+    peers = _peers(
+        nodes=[
+            _node(
+                "k8s-node1",
+                "if-1",
+                _device(
+                    LEAF1,
+                    svis=[_svi("loopback", ["10.255.0.1/32"], name="Loopback0"), _svi("peering", ["10.110.0.2/24"])],
+                ),
+            )
+        ]
+    )
+
+    assert [p.peer_address for p in peers] == ["ip-10.110.0.2/24"]
+
+
+def test_adopt_payload_now_carries_the_address() -> None:
+    """Revised G-4. `name` and `enabled` are still preserved by omission;
+    `peer_address` has moved from preserved to derived."""
+    parsed = _parsed()
+    cluster = parsed.target.edges[0].node.cluster.node
+    payloads = build_session_payloads(cluster, derive_peers(cluster))
+
+    for payload in payloads:
+        assert set(payload.data) == {"peer_asn", "peer_address"}
+        assert "name" not in payload.data
+        assert "enabled" not in payload.data
+
+
+def test_create_payload_is_reachable_again() -> None:
+    """US2. Cycle 012 asserted the opposite and that test is replaced.
+
+    Its reason was sound at the time -- an address existed only on an existing
+    session -- and is now false, so a cabled leaf with a peering SVI can be
+    provisioned without a human writing the session first.
+    """
+    parsed = _parsed(sessions=[_session("k8s-leaf2", LEAF2, "10.110.0.3/24")])
+    cluster = parsed.target.edges[0].node.cluster.node
+
+    validate_model(parsed)  # must NOT raise -- the address is derivable now
+    payloads = build_session_payloads(cluster, derive_peers(cluster))
+
+    created = [p for p in payloads if not p.is_adoption]
+    assert len(created) == 1
+    assert set(created[0].data) == {"cluster", "peer_device", "peer_asn", "peer_address", "name", "enabled"}
+    assert created[0].data["name"] == LEAF1
+    assert created[0].data["peer_address"] == "ip-10.110.0.2/24"
+
+
+def test_peer_without_a_peering_svi_raises_naming_the_device() -> None:
+    """V-6'. An address still cannot be invented -- only derived."""
+    with pytest.raises(ValueError, match="peering") as excinfo:
+        validate_model(
+            _parsed(nodes=[_node("k8s-node1", "if-1", _device(LEAF1, svis=[_svi("loopback", [], name="Loopback0")]))])
+        )
+
+    assert LEAF1 in str(excinfo.value)
+
+
+def test_multiple_peering_svis_raises() -> None:
+    """V-8. Choosing between two would be choosing which neighbour the
+    session points at, which is not a silent decision to make."""
+    device = _device(
+        LEAF1, svis=[_svi("peering", ["10.110.0.2/24"]), _svi("peering", ["10.110.0.9/24"], name="Vlan111")]
+    )
+
+    with pytest.raises(ValueError, match="peering") as excinfo:
+        validate_model(_parsed(nodes=[_node("k8s-node1", "if-1", device)]))
+
+    assert LEAF1 in str(excinfo.value)
+
+
+def test_svi_with_multiple_addresses_raises() -> None:
+    """V-9. The schema warns that an MLAG shared VARP gateway cannot identify
+    a single BGP peer; an ambiguous SVI is the same problem."""
+    device = _device(LEAF1, svis=[_svi("peering", ["10.110.0.2/24", "10.110.0.254/24"])])
+
+    with pytest.raises(ValueError, match="address") as excinfo:
+        validate_model(_parsed(nodes=[_node("k8s-node1", "if-1", device)]))
+
+    assert LEAF1 in str(excinfo.value)

@@ -67,6 +67,12 @@ class DerivedPeer:
     peer_asn: int | None
     interface_id: str
     """The far-end interface. Kept so the near end can be proven excluded."""
+    peer_address: str | None = None
+    """The IpamIPAddress id on the device's peering SVI (cycle 015)."""
+    address_error: str | None = None
+    """Why the address could not be derived, if it could not. Reported by
+    validate_model rather than raised here, so every peer is inspected before
+    the first failure is reported."""
 
 
 @dataclass
@@ -94,6 +100,44 @@ def _edges_of(relationship: Any) -> list[Any]:
     if relationship is None:
         return []
     return [edge.node for edge in relationship.edges if edge.node is not None]
+
+
+PEERING_INTERFACE_ROLE = "peering"
+
+
+def _peering_address(device: Any) -> tuple[str | None, str | None]:
+    """The address on the device's peering SVI, or why there isn't one.
+
+    Selected by interface **role**, not by VLAN id, name or position. Every
+    real leaf carries a ``Loopback0`` alongside its ``Vlan110``, so a
+    positional rule picks the wrong interface; and matching on the VLAN number
+    would hardcode this lab's 110 into the generator, so a second cluster on a
+    different VLAN would silently get no address.
+
+    Returns:
+        ``(address_id, None)`` on success, or ``(None, reason)``.
+    """
+    svis = [
+        interface
+        for interface in _edges_of(getattr(device, "interfaces", None))
+        if _value(getattr(interface, "role", None)) == PEERING_INTERFACE_ROLE
+    ]
+
+    if not svis:
+        return None, "has no interface with role 'peering'; the address cannot be derived"
+    if len(svis) > 1:
+        return None, f"has {len(svis)} interfaces with role 'peering'; the peering address is ambiguous"
+
+    addresses = _edges_of(getattr(svis[0], "ip_addresses", None))
+    if not addresses:
+        return None, "has a peering interface carrying no address"
+    if len(addresses) > 1:
+        found = ", ".join(sorted(_value(a.address) or "?" for a in addresses))
+        return None, (
+            f"has a peering interface carrying several addresses ({found}); which one is the neighbour is ambiguous"
+        )
+
+    return addresses[0].id, None
 
 
 def derive_peers(cluster: ClusterNode) -> list[DerivedPeer]:
@@ -128,11 +172,14 @@ def derive_peers(cluster: ClusterNode) -> list[DerivedPeer]:
                     continue
 
                 asn_node = _node_of(getattr(device, "asn", None))
+                address_id, address_error = _peering_address(device)
                 peers[device.id] = DerivedPeer(
                     device_id=device.id,
                     device_name=_value(getattr(device, "name", None)),
                     peer_asn=_value(getattr(asn_node, "asn", None)) if asn_node else None,
                     interface_id=endpoint.id,
+                    peer_address=address_id,
+                    address_error=address_error,
                 )
 
     return sorted(peers.values(), key=lambda peer: peer.device_name or "")
@@ -185,20 +232,18 @@ def validate_model(parsed: GenerateFabricPeeringQuery) -> ClusterNode:
         )
         raise ValueError(msg)
 
-    existing = _existing_by_device(cluster)
     for peer in peers:
         if peer.peer_asn is None:
             msg = f"peer device {peer.device_name!r} has no asn; peer_asn cannot be derived"
             raise ValueError(msg)
 
-        if peer.device_id not in existing:
-            msg = (
-                f"peer device {peer.device_name!r} is cabled to the cluster but has no "
-                "ClusterFabricPeering recording its peer_address; this generator derives "
-                "peer_asn but does not invent or allocate an address (FR-027). Add the "
-                "session with its address, or model the leaf's peering SVI so the address "
-                "becomes derivable"
-            )
+        # V-6', V-8, V-9. Cycle 012 refused here because an address existed
+        # only on an existing session, which made creating one impossible.
+        # Cycle 014 modelled the leaves' peering SVIs, so the address is now
+        # derived from the device -- and only a device that cannot supply one
+        # is an error.
+        if peer.address_error is not None:
+            msg = f"peer device {peer.device_name!r} {peer.address_error}"
             raise ValueError(msg)
 
     return cluster
@@ -211,30 +256,54 @@ def build_session_payloads(cluster: ClusterNode, peers: list[DerivedPeer]) -> li
     ``name``, ``enabled`` and ``peer_address`` are preserved by being left out,
     because ``save(allow_upsert=True)`` writes whatever it is given.
 
-    There is deliberately no "create" shape. ``peer_address`` is mandatory on
-    the node and is recorded only on an existing session, so a peer with no
-    session has no address this generator is allowed to supply -- FR-027
-    forbids inventing or allocating one. ``validate_model`` refuses that case
-    before this function is reached, which is what keeps the two shapes from
-    collapsing into a half-populated third.
+    Two shapes, because cycle 015 made the create path reachable again.
 
-    The payload names only the field to change. It is applied by fetching the
-    existing node and setting that attribute, NOT by an upsert: an upsert
-    validates every mandatory field on the node, so "omit a field to preserve
-    it" is not expressible that way. Fetch-and-modify preserves ``name``,
-    ``enabled`` and ``peer_address`` because it never touches them.
+    An **adoption** names only the derived fields -- ``peer_asn`` and
+    ``peer_address``. It is applied by fetching the existing node and setting
+    those attributes, NOT by an upsert: an upsert validates every mandatory
+    field, so "omit a field to preserve it" is not expressible that way.
+    Fetch-and-modify preserves ``name`` and ``enabled`` by never touching them.
+
+    A **create** carries the full set. Cycle 012 had no create shape and said
+    so, correctly at the time: ``peer_address`` was recorded only on an
+    existing session, so a peer without one had no address the generator was
+    permitted to supply. Cycle 014 modelled the leaves' peering SVIs, so a
+    cabled leaf now carries everything a session needs.
     """
     existing = _existing_by_device(cluster)
+    payloads: list[SessionPayload] = []
 
-    return [
-        SessionPayload(
-            device_name=peer.device_name,
-            is_adoption=True,
-            data={"peer_asn": peer.peer_asn},
-            existing_id=existing[peer.device_id].id,
+    for peer in peers:
+        session = existing.get(peer.device_id)
+        if session is not None:
+            payloads.append(
+                SessionPayload(
+                    device_name=peer.device_name,
+                    is_adoption=True,
+                    data={"peer_asn": peer.peer_asn, "peer_address": peer.peer_address},
+                    existing_id=session.id,
+                )
+            )
+            continue
+
+        payloads.append(
+            SessionPayload(
+                device_name=peer.device_name,
+                is_adoption=False,
+                data={
+                    "cluster": cluster.id,
+                    "peer_device": peer.device_id,
+                    "peer_asn": peer.peer_asn,
+                    "peer_address": peer.peer_address,
+                    # Not derivable -- a lab-facing label, per cycle 012's Q1.
+                    # A genuinely new peer takes its device's name.
+                    "name": peer.device_name,
+                    "enabled": True,
+                },
+            )
         )
-        for peer in peers
-    ]
+
+    return payloads
 
 
 class FabricPeeringGenerator(InfrahubGenerator):
@@ -248,18 +317,41 @@ class FabricPeeringGenerator(InfrahubGenerator):
         peers = derive_peers(cluster)
         payloads = build_session_payloads(cluster, peers)
 
+        # R4: a derived value can now disagree with one that has been live.
+        # Silently overwriting is defensible for peer_asn -- the fabric is
+        # authoritative -- but an address change moves where BGP points, and an
+        # operator should see that in the run output rather than in a later diff.
+        existing = _existing_by_device(cluster)
+        for peer in peers:
+            session = existing.get(peer.device_id)
+            if session is None:
+                continue
+            recorded = _node_of(session.peer_address)
+            if recorded is not None and peer.peer_address and recorded.id != peer.peer_address:
+                self.logger.warning(
+                    "peer_address drift on %s: recorded %s, derived from the peering SVI; correcting",
+                    peer.device_name,
+                    _value(recorded.address),
+                )
+
         session_ids: list[str] = []
         for payload in payloads:
             # Fetch and modify rather than upsert. An upsert mutation validates
             # every mandatory field on the node -- name, peer_address, peer_asn
             # -- so a payload that omits them to preserve them is rejected
             # outright. Fetching leaves untouched fields exactly as they were.
-            session = await self.client.get(kind="ClusterFabricPeering", id=payload.existing_id)
-            session.peer_asn.value = payload.data["peer_asn"]  # type: ignore[attr-defined]
-            await session.save()
+            if payload.is_adoption:
+                session = await self.client.get(kind="ClusterFabricPeering", id=payload.existing_id)
+                session.peer_asn.value = payload.data["peer_asn"]  # type: ignore[attr-defined]
+                session.peer_address = payload.data["peer_address"]  # type: ignore[attr-defined]
+                await session.save()
+            else:
+                session = await self.client.create(kind="ClusterFabricPeering", data=payload.data)
+                await session.save(allow_upsert=True)
             session_ids.append(session.id)
             self.logger.info(
-                "Adopted fabric peering to %s (asn %s)",
+                "%s fabric peering to %s (asn %s)",
+                "Adopted" if payload.is_adoption else "Created",
                 payload.device_name,
                 payload.data["peer_asn"],
             )
