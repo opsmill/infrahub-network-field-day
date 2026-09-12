@@ -9,8 +9,10 @@ firewall's configuration is worse than one that does not exist:
 
 * ``system { … }`` -- two ``encrypted-password`` hashes. These must never enter
   the model and must never be rendered. Permanent, not deferred.
-* ``routing-options { static { … } }`` -- eight routes with no device-level
-  home in the schema. A schema cycle first.
+* ``routing-options { static { … } }`` -- eight routes. The schema gap closed
+  in cycle 024: ``RoutingStaticRoute`` always existed, and its ``device``
+  relationship now peers the device generic, so ``fw1`` can own one. Waiting on
+  seed data and a template, not on schema.
 * ``security { flow { tcp-mss … } }`` -- nothing models it.
 
 573 of the file's 677 lines; the excluded 104 are enumerated in the spec and

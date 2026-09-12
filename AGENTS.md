@@ -90,9 +90,13 @@ targeting the `junos_firewalls` group. Three things to know:
 
 - **It covers 573 of `junos.conf`'s 677 lines, and the gap is deliberate.** The `system` stanza
   holds two credential hashes and is excluded permanently — they must never enter the model and
-  the query must never ask. `routing-options` needs a device-level static route the schema does
-  not have, and the `flow` block is unmodelled. `test_the_exclusions_add_up` makes the total an
-  assertion rather than a caveat.
+  the query must never ask. The `flow` block is unmodelled. `routing-options` was described here
+  as needing "a device-level static route the schema does not have" — that was wrong:
+  `RoutingStaticRoute` existed all along, and cycle 024 fixed the real blocker, which was that its
+  `device` relationship peered `DcimDevice` while a firewall is a `SecurityFirewall`. What remains
+  is seed data (cycle 025) and the render itself (cycle 026).
+  `test_the_exclusions_add_up` makes the total an assertion rather than a caveat, so it is the
+  thing to update when those twelve lines move in scope.
 - **Order is checked where it is behaviour and relaxed where it is not.** Junos evaluates
   first-match within a zone pair, so rule order is semantic and pinned; the sequence *between*
   pairs is presentational and asserted as a set. The address book's order *is* pinned, through

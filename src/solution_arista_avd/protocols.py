@@ -715,7 +715,7 @@ class RoutingStaticRoute(CoreNode):
     route_name: StringOptional
     tag: IntegerOptional
     vrf: String
-    device: RelationshipAttribute[DcimDevice]
+    device: RelationshipAttribute[DcimGenericDevice]
 
 
 class AvdStructuredConfigFile(CoreFileObject):
