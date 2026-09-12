@@ -138,7 +138,7 @@ they say *where*.
 - [X] T052 Record the two corrections this cycle made to inherited claims — the "12 + 7 lines" figure that omitted three comment blocks, and the alignment pessimism that two cycles wrote without re-testing. Both had been carried forward rather than re-derived, which is a different failure from the six earlier ones and harder to catch
 - [X] T053 Note what remains after this cycle: the `system` stanza and the file header, both permanently excluded for stated and different reasons; the `deny-spoofed-infra` check, still a follow-up; and the `infrahubctl generator` CLI limitation from cycle 024
 - [~] T054 Run `$infrahub-run-integration-tests` — **not installed**, documented exception named in the commit. Original: Run `$infrahub-run-integration-tests`. If not installed, say so **explicitly** in the pull request as the constitution's documented exception — do not omit it silently
-- [ ] T055 Merge to `main`, then **regenerate `schema.graphql` after the merge** — `export-schema` has no `--branch` flag, and loading this cycle's schema into `main` to work around that is what made cycle 023's Infrahub merge fail. Cycle 024 deferred it and succeeded. Delete the `fw-complete` branch. **Hold for the requester**, as in cycles 020–025
+- [X] T055 Merged to `main` and the `fw-complete` Infrahub branch deleted, on the requester's instruction. The Infrahub merge succeeded first time: `main` did not carry `tcp_mss`, so 023's `SchemaAttribute` collision could not arise. `schema.graphql` was then regenerated **after** the merge, which is what the deferral was for — verified on `main` first: `tcp_mss` present, `fw1.tcp_mss = 9138`, 8 static routes
 
 ---
 
