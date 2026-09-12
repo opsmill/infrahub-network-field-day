@@ -209,10 +209,15 @@ approach worked at all, and again here against the real implementation.
 
 ## Deferred, with reasons
 
-- **`schema.graphql` is not regenerated.** `infrahubctl graphql export-schema` has no `--branch`
-  flag; it exports Infrahub `main`. Loading this cycle's schema into `main` to work around that is
-  exactly what made cycle 023's Infrahub branch merge fail on a `SchemaAttribute` uniqueness
-  violation. The file lags one cycle by choice. Regenerate after merge.
+- **`schema.graphql` was regenerated after the merge, not before** — which is what the deferral
+  was for, and it worked. `export-schema` has no `--branch` flag, so running it earlier would have
+  exported the old schema; loading the new one into `main` to work around that is exactly what
+  broke cycle 023. Post-merge the export is simply correct: `device: NestedEdgedDcimGenericDevice!`,
+  and `DcimDevice`, `ComputePhysicalServer` and `SecurityFirewall` all expose `static_routes`
+  while `IpamVRF` and `WanSite` keep their own, separate one.
+
+  **The Infrahub branch merge then succeeded first time**, in contrast to cycle 023's, and for
+  exactly that reason: `main` never held a competing copy of the change.
 - **The `export-schema --branch` gap itself.** It has now cost two cycles. Worth either a
   branch-aware export or a convention that the schema load to `main` happens only at merge time.
 - **`infrahubctl generator` cannot run any generator whose target members lack a `name`

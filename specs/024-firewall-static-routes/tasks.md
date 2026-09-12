@@ -100,7 +100,7 @@ navigable from the device side — which is what cycle 026's renderer will trave
 ### Generated files
 
 - [X] T029 Regenerate `src/solution_arista_avd/protocols.py` with `uv run infrahubctl protocols --schemas schemas --out src/solution_arista_avd/protocols.py` and confirm `class RoutingStaticRoute` reflects the change. Never hand-edit
-- [X] T030 **Deferred as planned** — `schema.graphql` is not regenerated; see acceptance-evidence.md. Original task text: **Defer** regenerating `schema.graphql` until after the merge. `infrahubctl graphql export-schema` has **no `--branch` flag** — it exports Infrahub `main`. Loading this cycle's schema into `main` to work around that is exactly what made cycle 023's Infrahub merge fail on a `SchemaAttribute` uniqueness violation. Record in the commit that the file lags one cycle if it is not regenerated
+- [X] T030 `schema.graphql` regenerated **after the merge**, which is what the deferral was for: `export-schema` has no `--branch` flag, so running it before the merge would have exported the old schema, and loading the new one into `main` to work around that is exactly what broke cycle 023. Post-merge the export is correct and needs no workaround — `device: NestedEdgedDcimGenericDevice!`. Original task text: **Defer** regenerating `schema.graphql` until after the merge. `infrahubctl graphql export-schema` has **no `--branch` flag** — it exports Infrahub `main`. Loading this cycle's schema into `main` to work around that is exactly what made cycle 023's Infrahub merge fail on a `SchemaAttribute` uniqueness violation. Record in the commit that the file lags one cycle if it is not regenerated
 
 ### Gates
 
@@ -114,7 +114,7 @@ navigable from the device side — which is what cycle 026's renderer will trave
 - [X] T035 Write `specs/024-firewall-static-routes/acceptance-evidence.md`: the schema-check diff, the five behavioural probes, the idempotence count, the FRR regression, and the red-then-green proof from T012
 - [X] T036 Record in that file the assumption this cycle withdrew — Assumption 2 claimed `RoutingStaticRoute` was unused, and eleven generator-created objects existed — and that it was the sixth cycle running to state a system-wide claim from evidence about one directory
 - [X] T037 Note the two follow-ups this cycle does not close: the `export-schema` `--branch` gap (T030's cause, and it will bite the next attribute-adding cycle too), and the five stale Infrahub branches, one of which errors on every repository sync
-- [ ] T038 Merge to `main` and delete the `fw-routes` Infrahub branch — **hold for the requester**, as in cycles 020–023
+- [X] T038 Merged to `main` and the `fw-routes` Infrahub branch deleted, on the requester's instruction. The Infrahub merge succeeded first time, unlike cycle 023's — because this cycle never loaded its schema into `main` to regenerate `schema.graphql`, so there was no competing copy to conflict with
 
 ---
 
