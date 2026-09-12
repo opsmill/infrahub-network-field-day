@@ -117,6 +117,7 @@ exclude = [
     "transforms/crossplane_fabric_peering_query.py",
     "transforms/crossplane_fabric_app_query.py",
     "transforms/frr_config_query.py",
+    "transforms/junos_config_query.py",
 ]
 
 

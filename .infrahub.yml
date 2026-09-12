@@ -80,6 +80,10 @@ queries:
   - name: frr_config
     file_path: "./transforms/frr_config.gql"
 
+  # The perimeter firewall's Junos configuration
+  - name: junos_config
+    file_path: "./transforms/junos_config.gql"
+
   # Service-layer generator: derives a cluster's fabric BGP sessions
   - name: generate_fabric_peering
     file_path: "./generators/generate_fabric_peering.gql"
@@ -230,6 +234,9 @@ python_transforms:
   - name: frr_config
     class_name: FrrConfig
     file_path: "./transforms/frr_config.py"
+  - name: junos_config
+    class_name: JunosConfig
+    file_path: "./transforms/junos_config.py"
 
 artifact_definitions:
   - name: "cabling_plan"
@@ -299,6 +306,17 @@ artifact_definitions:
   # `frr_routers` names its six members explicitly rather than deriving them
   # from the device role, because cust-acme-dr-ce shares the `customer_edge`
   # role and the lab renders no FRR config for it.
+  # The perimeter firewall. 573 of junos.conf's 677 lines: the `system` stanza
+  # is excluded permanently (two credential hashes), `routing-options` pending a
+  # schema cycle, and the `flow` block because nothing models it.
+  - name: "junos_config"
+    artifact_name: "Junos Configuration"
+    parameters:
+      device: "name__value"
+    content_type: "text/plain"
+    targets: "junos_firewalls"
+    transformation: "junos_config"
+
   - name: "frr_config"
     artifact_name: "FRR Configuration"
     parameters:

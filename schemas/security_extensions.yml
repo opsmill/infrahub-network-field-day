@@ -59,8 +59,50 @@ extensions:
           identifier: security_zone__vrf
           order_weight: 930
 
+    # The address book's ORDER, which Junos writes deliberately and Infrahub
+    # does not otherwise store.
+    #
+    # `junos.conf` lists the infrastructure addresses first and the per-tenant
+    # ones after, and that order is not derivable: it is neither alphabetical
+    # nor by network address nor by prefix length. Without this the rendered
+    # book is semantically identical and textually different -- Junos does not
+    # care, because address-book entries are name-keyed definitions, but a
+    # reviewer diffing the artifact against the device does.
+    #
+    # Added on the generic rather than on each of the six concrete address
+    # kinds, so one attribute covers the whole polymorphic book.
+    #
+    # Contrast SecurityPolicyRule.index, which upstream already provides:
+    # policy order inside a zone pair is first-match and therefore semantic,
+    # so the marketplace models it. This one is presentational, which is
+    # probably why it does not.
+    - kind: SecurityGenericAddress
+      attributes:
+        - name: book_index
+          kind: Number
+          label: Address-Book Index
+          optional: true
+          description: "Position in the rendered address book; Junos' order is authoring order"
+
     - kind: SecurityPolicyRule
       attributes:
+        # WHICH log events, not merely whether to log.
+        #
+        # Upstream models `log` as a Boolean, and the device distinguishes two
+        # behaviours: every rule here logs `session-init`, and the long-lived
+        # permits also log `session-close`. The two ICMP permits do not --
+        # closing a ping session is noise.
+        #
+        # It could be inferred ("permit, unless the application is junos-ping")
+        # and that would reproduce the file today, but it encodes an unstated
+        # policy in the renderer. Which events a firewall logs is behaviour,
+        # not formatting, so it is data.
+        - name: log_session_close
+          kind: Boolean
+          label: Log Session Close
+          optional: false
+          default_value: false
+          description: "Whether the rule logs session-close as well as session-init"
         - name: managed_by_service
           kind: Boolean
           label: Managed by a Service

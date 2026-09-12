@@ -33,6 +33,8 @@ spec:
       description: "Perimeter vSRX; every tenant VRF's only route out points at one of its zones"
       role: edge_firewall
       rack_face: front
+      member_of_groups:
+        - junos_firewalls
 
 ---
 apiVersion: infrahub.app/v1
