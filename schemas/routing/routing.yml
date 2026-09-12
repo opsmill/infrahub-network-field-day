@@ -400,8 +400,19 @@ nodes:
         default_value: "default"
         order_weight: 8000
     relationships:
+      # The peer is the device GENERIC, not DcimDevice, and that is load-bearing.
+      # SecurityFirewall inherits DcimGenericDevice but NOT DcimDevice, so a
+      # concrete peer here silently excludes the perimeter firewall -- which is
+      # exactly why cycle 023 could not render its `routing-options` stanza and
+      # had to enumerate those twelve lines as a documented gap.
+      #
+      # Widening also admits ComputePhysicalServer, which likewise inherits the
+      # generic. That is accepted rather than prevented: no peer names exactly
+      # two kinds, and the alternative -- a second, firewall-specific
+      # relationship -- would make `device` ambiguous and give a renderer two
+      # places to look.
       - name: device
-        peer: DcimDevice
+        peer: DcimGenericDevice
         kind: Attribute
         cardinality: one
         optional: false
@@ -440,6 +451,16 @@ extensions:
           cardinality: many
           kind: Generic
           identifier: device__route_map
+    # `static_routes` lives on the GENERIC while the four relationships above
+    # stay on DcimDevice, because only this one has a non-DcimDevice owner:
+    # the perimeter firewall is a SecurityFirewall. Both ends of
+    # `device__static_route` must name the same peer -- a forward side on the
+    # generic with the reverse side still here produces two one-way
+    # relationships, and nothing reports it.
+    #
+    # DcimDevice keeps `static_routes` by INHERITING this, not by declaring it.
+    - kind: DcimGenericDevice
+      relationships:
         - name: static_routes
           label: Static Routes
           peer: RoutingStaticRoute

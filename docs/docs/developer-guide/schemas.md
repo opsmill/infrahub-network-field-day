@@ -325,6 +325,16 @@ service-insertion design expressible: a tenant VRF whose only route out is a
 default pointing at a firewall handoff. Each names the devices it applies to,
 because a VRF is fabric-wide but a handoff or a peering is not.
 
+### `RoutingStaticRoute` — `Routing.StaticRoute`
+
+A device-level static route, in the global routing table unless `vrf` says otherwise. Attributes: `prefix`, `gateway`, `next_hop`, `interface`, `distance`, `tag`, `route_name`, `vrf` (default `"default"`). Relationships: `device` → **`DcimGenericDevice`** (mandatory, cardinality one). Unique per `[device, prefix, vrf]`.
+
+The peer is the device *generic*, not `DcimDevice`, and that is deliberate. `SecurityFirewall` inherits `DcimGenericDevice` but not `DcimDevice`, so a concrete peer would exclude the perimeter firewall — which is what kept `routing-options` out of the Junos artifact until cycle 024. `ComputePhysicalServer` inherits the same generic and can therefore hold a route too; no peer names exactly two kinds, so that breadth is accepted rather than prevented.
+
+`route_name` is the "Route Description" field and is where a device's own per-route comment belongs.
+
+**Do not confuse this with `RoutingVrfStaticRoute` below.** They are separate kinds with separate identifiers: this one is device-level and reached through `DcimGenericDevice.static_routes`; that one is VRF-scoped, reached through `IpamVRF` and `WanSite`, and is what `transforms/frr_config.py` reads. `tests/unit/test_routing_schema_contract.py` pins both so a tidy-up cannot merge them.
+
 ### `RoutingVrfStaticRoute` — `Routing.VrfStaticRoute`
 
 A static route originated inside a VRF. Attributes: `prefix`, `next_hop`, `description`. Relationships: `vrf` → `IpamVRF` (parent), `devices` → `DcimDevice`.
