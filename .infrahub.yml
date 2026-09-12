@@ -75,6 +75,11 @@ queries:
   - name: crossplane_fabric_app
     file_path: "./transforms/crossplane_fabric_app.gql"
 
+  # The WAN's FRR configuration: one device plus the whole WAN context, because
+  # a provider edge's import policy is assembled from every tenant's services.
+  - name: frr_config
+    file_path: "./transforms/frr_config.gql"
+
   # Service-layer generator: derives a cluster's fabric BGP sessions
   - name: generate_fabric_peering
     file_path: "./generators/generate_fabric_peering.gql"
@@ -222,6 +227,9 @@ python_transforms:
   - name: crossplane_fabric_app
     class_name: CrossplaneFabricAppTransform
     file_path: "./transforms/crossplane_fabric_app.py"
+  - name: frr_config
+    class_name: FrrConfig
+    file_path: "./transforms/frr_config.py"
 
 artifact_definitions:
   - name: "cabling_plan"
@@ -283,3 +291,18 @@ artifact_definitions:
     content_type: "application/yaml"
     targets: "service_fabric_apps"
     transformation: "crossplane_fabric_app"
+
+  # The WAN's FRR configuration, one artifact per router. `text/plain` because
+  # the transform returns a str; a dict would make it application/json and wrap
+  # the config in JSON.
+  #
+  # `frr_routers` names its six members explicitly rather than deriving them
+  # from the device role, because cust-acme-dr-ce shares the `customer_edge`
+  # role and the lab renders no FRR config for it.
+  - name: "frr_config"
+    artifact_name: "FRR Configuration"
+    parameters:
+      device: "name__value"
+    content_type: "text/plain"
+    targets: "frr_routers"
+    transformation: "frr_config"

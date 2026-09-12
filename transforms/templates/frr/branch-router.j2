@@ -1,0 +1,34 @@
+! Rendered by Infrahub for {{ node }} -- do not edit.
+!
+! Branch office router, AS {{ branch.asn }}.
+!
+! The branch peers straight with border-leaf1 over a private circuit -- no ISP
+! in the path at all. That is why it gets its own VRF on the border leaf and
+! its own firewall zone: it is a different trust level from a WAN customer, and
+! the policy on the firewall is what expresses that.
+frr defaults traditional
+hostname {{ node }}
+log stdout
+service integrated-vtysh-config
+!
+ip prefix-list PL-OUR-LAN seq 10 permit {{ branch.lan }}
+!
+route-map RM-TO-DC permit 10
+ match ip address prefix-list PL-OUR-LAN
+!
+route-map RM-TO-DC deny 99
+!
+router bgp {{ branch.asn }}
+ bgp router-id {{ branch.loopback }}
+ no bgp ebgp-requires-policy
+ neighbor {{ branch.router.dc_peer }} remote-as {{ branch.router.dc_peer_asn }}
+ neighbor {{ branch.router.dc_peer }} description border-leaf1 (VRF BRANCH)
+ !
+ address-family ipv4 unicast
+  network {{ branch.lan }}
+  neighbor {{ branch.router.dc_peer }} activate
+  neighbor {{ branch.router.dc_peer }} route-map RM-TO-DC out
+ exit-address-family
+!
+line vty
+!

@@ -46,11 +46,15 @@ spec:
       role: isp_edge
       status: active
       rack_face: front
+      member_of_groups:
+        - frr_routers
     - name: isp-pe2
       description: "Provider core; default VRF transit and the datacentre handoff"
       role: isp_core
       status: active
       rack_face: front
+      member_of_groups:
+        - frr_routers
     - name: internet-rtr
       description: "AS 64500 border router"
       role: internet_edge
@@ -61,6 +65,8 @@ spec:
         data:
           name: internet-edge
 
+      member_of_groups:
+        - frr_routers
     # ---- customer edge ---------------------------------------------------
     - name: cust-acme-ce
       description: "acme hq CE; runs eBGP with the provider edge"
@@ -71,6 +77,8 @@ spec:
         kind: LocationSite
         data:
           name: acme-hq
+      member_of_groups:
+        - frr_routers
     - name: cust-acme-dr-ce
       description: "acme dr CE; statically routed, no routing protocol at all"
       role: customer_edge
@@ -90,6 +98,8 @@ spec:
         data:
           name: globex-hq
 
+      member_of_groups:
+        - frr_routers
     # ---- the branch ------------------------------------------------------
     - name: branch-rtr
       description: "Branch router with an integrated switched LAN; private circuit to the border leaf"
@@ -100,3 +110,6 @@ spec:
         kind: LocationSite
         data:
           name: branch-office
+
+      member_of_groups:
+        - frr_routers

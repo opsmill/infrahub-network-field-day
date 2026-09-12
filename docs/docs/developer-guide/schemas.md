@@ -57,6 +57,12 @@ Regenerate the typed protocol classes after any schema change (see [the command 
 | `tenancy/tenancy.yml` | **Marketplace** (`infrahub/tenancy`): `Organization.Tenant`, plus tenant back-references on device, prefix, address, and location |
 | `wan/wan.yml` | `Wan.Tenant`, `Wan.Site`, `Wan.InternetPeering` — the provider-edge construct only; the circuit itself comes from the marketplace. `bgp_sessions` is cardinality many on both `Wan.Site` and `Wan.InternetPeering`: a session between two devices is two `Routing.BGPNeighbor` objects, one per device |
 
+> The WAN's addressing — the routers' interfaces, their IP addresses, their ASNs, both ends of
+> every BGP session, and each router's ID — is seeded in `objects/31a_nfd41_wan_addressing.yml`.
+> That file sorts between the off-fabric devices (31) and the circuits and sites that name its
+> interfaces (33), and the PE-side `CUST_*` VRFs live there too rather than in the service-layer
+> file 37, because a VRF is a technical-layer object.
+
 The device and interface `role` dropdowns that the fabric uses are defined in `dcim_extensions.yml`, not in the base `dcim.yml` — the extension redefines the base lists.
 
 ## Check the marketplace before authoring

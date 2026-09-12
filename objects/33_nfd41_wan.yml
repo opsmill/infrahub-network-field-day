@@ -35,20 +35,22 @@ spec:
           - side: a
             name: isp-pe1-eth2
             status: active
-            description: "Provider side, isp-pe1 eth2, 10.51.10.1/30"
+            description: "Provider side"
             location:
               kind: LocationSite
               data:
                 name: provider-edge
+            interface: ["isp-pe1", "eth2"]
           - side: z
             name: cust-acme-ce-eth1
             status: active
-            description: "Customer side, cust-acme-ce eth1, 10.51.10.2/30"
+            description: "Customer side"
             location:
               kind: LocationSite
               data:
                 name: acme-hq
 
+            interface: ["cust-acme-ce", "eth1"]
     - circuit_id: acme-dr
       description: "acme DR attachment; statically routed, no routing protocol at all"
       circuit_type: mpls
@@ -61,20 +63,22 @@ spec:
           - side: a
             name: isp-pe1-eth4
             status: active
-            description: "Provider side, isp-pe1 eth4, 10.51.11.1/30"
+            description: "Provider side"
             location:
               kind: LocationSite
               data:
                 name: provider-edge
+            interface: ["isp-pe1", "eth4"]
           - side: z
             name: cust-acme-dr-ce-eth1
             status: active
-            description: "Customer side, cust-acme-dr-ce eth1, 10.51.11.2/30"
+            description: "Customer side"
             location:
               kind: LocationSite
               data:
                 name: acme-dr
 
+            interface: ["cust-acme-dr-ce", "eth1"]
     - circuit_id: globex-hq
       description: "globex headquarters attachment; eBGP with the provider edge"
       circuit_type: mpls
@@ -87,20 +91,22 @@ spec:
           - side: a
             name: isp-pe1-eth3
             status: active
-            description: "Provider side, isp-pe1 eth3, 10.51.20.1/30"
+            description: "Provider side"
             location:
               kind: LocationSite
               data:
                 name: provider-edge
+            interface: ["isp-pe1", "eth3"]
           - side: z
             name: cust-globex-ce-eth1
             status: active
-            description: "Customer side, cust-globex-ce eth1, 10.51.20.2/30"
+            description: "Customer side"
             location:
               kind: LocationSite
               data:
                 name: globex-hq
 
+            interface: ["cust-globex-ce", "eth1"]
     - circuit_id: isp-to-internet
       description: "Provider transit to AS 64500"
       circuit_type: internet_access
@@ -112,20 +118,22 @@ spec:
           - side: a
             name: isp-pe2-eth3
             status: active
-            description: "Provider side, isp-pe2 eth3, 10.52.0.1/30"
+            description: "Provider side"
             location:
               kind: LocationSite
               data:
                 name: provider-edge
+            interface: ["isp-pe2", "eth3"]
           - side: z
             name: internet-rtr-eth1
             status: active
-            description: "Internet side, internet-rtr eth1, 10.52.0.2/30"
+            description: "Internet side"
             location:
               kind: LocationSite
               data:
                 name: internet-edge
 
+            interface: ["internet-rtr", "eth1"]
 ---
 apiVersion: infrahub.app/v1
 kind: Object
@@ -141,6 +149,11 @@ spec:
       lan_prefix: ["10.60.10.0/24", "default"]
       location: acme-hq
       circuit: acme-hq
+      # Both ends. A session between two devices is two RoutingBGPNeighbor
+      # objects, one per device; cycle 020 widened this to many for that reason.
+      bgp_sessions:
+        - ["isp-pe1", "10.51.10.2"]
+        - ["cust-acme-ce", "10.51.10.1"]
     - name: dr
       description: "A different KIND of edge for the same tenant: no BGP session at all"
       tenant: acme
@@ -148,6 +161,11 @@ spec:
       lan_prefix: ["10.60.11.0/24", "default"]
       location: acme-dr
       circuit: acme-dr
+      # Deliberately NO bgp_sessions. This site runs no protocol at all, which
+      # is the whole reason the relationship is optional. Its reachability is
+      # the static route instead.
+      static_routes:
+        - ["CUST_ACME", "10.60.11.0/24", "10.51.11.2/32"]
 
     # The control. Configured identically apart from what it bought.
     - name: hq
@@ -158,6 +176,9 @@ spec:
       lan_prefix: ["10.60.20.0/24", "default"]
       location: globex-hq
       circuit: globex-hq
+      bgp_sessions:
+        - ["isp-pe1", "10.51.20.2"]
+        - ["cust-globex-ce", "10.51.20.1"]
 
     # No circuit: a private fibre into the border leaf, with no provider in the
     # path. A different trust level, which is why its tenant is classified
@@ -169,6 +190,10 @@ spec:
       site_asn: 65030
       lan_prefix: ["10.70.0.0/24", "default"]
       location: branch-office
+      # Peers straight with border-leaf1 over a private fibre -- no ISP in the
+      # path, so only the branch side of the session is modelled here.
+      bgp_sessions:
+        - ["branch-rtr", "10.250.70.1"]
 
 ---
 apiVersion: infrahub.app/v1
@@ -183,5 +208,11 @@ spec:
       internet_provider: NFD41-Internet
       circuit: isp-to-internet
       customer_aggregate: ["10.60.0.0/16", "default"]
+      # Both ends again: `neighbor 10.52.0.2 remote-as 64500` on isp-pe2 and
+      # `neighbor 10.52.0.1 remote-as 65500` on internet-rtr. One wire, two
+      # device-scoped objects.
+      bgp_sessions:
+        - ["isp-pe2", "10.52.0.2"]
+        - ["internet-rtr", "10.52.0.1"]
       internet_prefixes:
         - ["198.51.100.0/24", "default"]

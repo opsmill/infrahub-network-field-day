@@ -68,7 +68,22 @@ Current generator definitions are registered in `.infrahub.yml`:
 Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
 `containerlab_topology`, `cv_workspace_submission_webhook_payload`, `crossplane_fabric_peering`,
-and `crossplane_fabric_app`.
+`crossplane_fabric_app`, and `frr_config`.
+
+`frr_config` renders the WAN's FRR configuration — the two ISP provider-edge routers, the
+internet router, the two customer edges and the branch router — as one `text/plain` artifact per
+device, targeting the `frr_routers` group. It is the half of the lab PyAVD does not cover, and
+it is held byte-for-byte against `../lab/wan/rendered/*/frr.conf` by
+`tests/unit/test_frr_config.py`. Two things to know before changing it:
+
+- It reads the **service** layer as well as the technical one. A provider edge's per-tenant
+  import route-map is assembled from `ServiceL3vpn.dc_service_prefixes`,
+  `ServiceTenantCloud.prefix` and whether a `ServiceInternetAccess` exists. That is the
+  documented exception to "renderers read technical objects" — the provider edge's policy *is*
+  the service intent.
+- Its templates are ported from `../lab/wan/templates/` with exactly one line changed, the
+  provenance header. Every comment is deliberate; they are most of the teaching value of those
+  configs.
 
 Check definitions are `cv-config-validation` (`checks/cv_config_check.py`), with its
 workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and

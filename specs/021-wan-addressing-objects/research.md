@@ -156,23 +156,39 @@ WanSite globex/hq -> sessions: []
 Both ends of one session hang off one site, and the site that has no data correctly returns
 nothing rather than erroring. Cycle 020's schema does what it was built for.
 
-## R7 — `RoutingVrfStaticRoute` has a weaker HFID than its uniqueness constraint
+## R7 — WITHDRAWN: `RoutingVrfStaticRoute`'s HFID is not weak (corrected during implementation)
 
-**Finding, carried rather than fixed**: the kind declares
+**This finding was wrong and is retracted.** Phase 0 claimed the kind declares
+`human_friendly_id: [vrf__name__value]` only, weaker than its uniqueness constraint, and drew a
+parallel to the `SecurityPolicyRule` defect in `schemas/MARKETPLACE.md`. The claim came from a
+`grep -A` that truncated the list at its first element.
 
-```yaml
-human_friendly_id: [vrf__name__value]
-uniqueness_constraints: [[vrf, prefix__value, next_hop__value]]
+The actual HFID has three elements and matches the uniqueness constraint exactly:
+
+```text
+HFID:       ['vrf__name__value', 'prefix__value', 'next_hop__value']
+uniqueness: [['vrf', 'prefix__value', 'next_hop__value']]
 ```
 
-so every static route in one VRF shares an HFID. `infrahubctl object load` upserts by HFID, so
-a second route in `CUST_ACME` would match the first and overwrite it, or collide on the
-uniqueness constraint — the same defect `schemas/MARKETPLACE.md` documents for
-`SecurityPolicyRule`, whose fix was re-declaring the node with a stronger HFID.
+There is no defect, nothing is carried forward, and a second static route in one VRF is fine.
 
-This cycle seeds exactly one static route, so it does not bite. It is recorded because the next
-statically attached site would hit it, and because the repository has a documented remedy for
-exactly this shape.
+**What the reference actually needs** — found by the load failing twice:
+
+```yaml
+static_routes:
+  - ["CUST_ACME", "10.60.11.0/24", "10.51.11.2/32"]
+```
+
+All three elements, and the next hop in its **normalised** form. `next_hop` is an `IPHost`
+attribute, which Infrahub stores as `10.51.11.2/32` even when written as `10.51.11.2`; every
+pre-existing static route in the graph shows the same. An HFID referencing an `IPHost` must use
+the stored form, not the written one. The first attempt failed with *"HFID does not contain the
+same number of elements"* and the second with *"Unable to find the node"* — two different
+messages for one under-specified reference.
+
+**Method note.** This is the second finding in two cycles where a truncated `grep` produced a
+confident wrong claim about a schema; cycle 020's R1 made the same mistake in the opposite
+direction about `DcimInterface.role`. Read the whole block, or query the live schema.
 
 ## R8 — The load-order problem, and where the VRFs belong
 

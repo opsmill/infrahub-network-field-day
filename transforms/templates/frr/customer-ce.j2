@@ -1,0 +1,43 @@
+! Rendered by Infrahub for {{ node }} -- do not edit.
+!
+! {{ tenant.name }} / site {{ site.name }} CE, AS {{ site.asn }}.
+!
+! A customer edge router as a customer would actually run it: announce our own
+! LAN, take what the provider gives us, and default toward the provider. It
+! knows nothing about VRFs, the DC, the internet, or the other tenants --
+! everything that makes this tenant isolated is enforced on the PE, not here,
+! which is exactly why it is worth checking on the PE rather than trusting
+! this file.
+!
+! Note it does not know about its own sibling site either. {{ tenant.name }}'s other
+! sites appear here as ordinary routes learned from the provider, because they
+! share a VRF on the PE.
+frr defaults traditional
+hostname {{ node }}
+log stdout
+service integrated-vtysh-config
+!
+! Announce only our own LAN, so a fat-fingered redistribute here cannot leak
+! anything to the provider (which would refuse it anyway -- see
+! RM-{{ tenant.name | upper }}-{{ site.name | upper }}-IN on isp-pe1).
+ip prefix-list PL-OUR-LAN seq 10 permit {{ site.lan }}
+!
+route-map RM-TO-ISP permit 10
+ match ip address prefix-list PL-OUR-LAN
+!
+route-map RM-TO-ISP deny 99
+!
+router bgp {{ site.asn }}
+ bgp router-id {{ site.ce.lan_address | replace('/24','') }}
+ no bgp ebgp-requires-policy
+ neighbor {{ site.pe.address | replace('/30','') }} remote-as {{ isp.asn }}
+ neighbor {{ site.pe.address | replace('/30','') }} description {{ isp.edge.node }} (provider)
+ !
+ address-family ipv4 unicast
+  network {{ site.lan }}
+  neighbor {{ site.pe.address | replace('/30','') }} activate
+  neighbor {{ site.pe.address | replace('/30','') }} route-map RM-TO-ISP out
+ exit-address-family
+!
+line vty
+!

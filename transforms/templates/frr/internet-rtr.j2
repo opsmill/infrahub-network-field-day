@@ -1,0 +1,61 @@
+! Rendered by Infrahub for {{ node }} -- do not edit.
+!
+! "The internet", AS {{ isp.internet.asn }}.
+!
+! One router and one web server standing in for everything outside the
+! provider. It announces a default route to the ISP and accepts whatever
+! customer prefixes the ISP chooses to announce back -- which is the point of
+! the exercise: only tenants that bought internet access appear here.
+!
+! What this is NOT: there is no NAT anywhere in this lab, so this router holds
+! a route back to RFC1918 customer space, which a real internet plainly does
+! not. A production design gives the customer public addressing or NATs at the
+! provider edge. See docs/design.md "Internet access is a product".
+frr defaults traditional
+hostname {{ node }}
+log stdout
+service integrated-vtysh-config
+!
+! Originate a default. `ip route 0.0.0.0/0 blackhole` gives BGP something to
+! advertise -- without a matching route in the table, `network 0.0.0.0/0` is
+! silently not announced and the customer never gets a default.
+ip route 0.0.0.0/0 blackhole
+!
+ip prefix-list PL-FROM-ISP description customer space the ISP announces to us
+ip prefix-list PL-FROM-ISP seq 10 permit {{ isp.internet.customer_aggregate }} le 24
+ip prefix-list PL-FROM-ISP seq 99 deny any
+!
+route-map RM-FROM-ISP permit 10
+ match ip address prefix-list PL-FROM-ISP
+!
+route-map RM-FROM-ISP deny 99
+!
+! The default, plus our own LAN. The specific prefix is what actually gets
+! used: every node in this lab has a management default route via eth0, and a
+! kernel default beats a BGP-learned one, so a provider that only had
+! 0.0.0.0/0 would send internet traffic out of its management interface. See
+! the matching note on PL-INTERNET-IN in isp-core.frr.conf.j2.
+ip prefix-list PL-TO-ISP seq 10 permit 0.0.0.0/0
+ip prefix-list PL-TO-ISP seq 20 permit {{ isp.internet.lan }}
+!
+route-map RM-TO-ISP permit 10
+ match ip address prefix-list PL-TO-ISP
+!
+route-map RM-TO-ISP deny 99
+!
+router bgp {{ isp.internet.asn }}
+ bgp router-id {{ isp.internet.peering.peer }}
+ no bgp ebgp-requires-policy
+ neighbor {{ isp.internet.peering.address | replace('/30','') }} remote-as {{ isp.asn }}
+ neighbor {{ isp.internet.peering.address | replace('/30','') }} description {{ isp.internet.peering.node }} (provider)
+ !
+ address-family ipv4 unicast
+  network 0.0.0.0/0
+  network {{ isp.internet.lan }}
+  neighbor {{ isp.internet.peering.address | replace('/30','') }} activate
+  neighbor {{ isp.internet.peering.address | replace('/30','') }} route-map RM-FROM-ISP in
+  neighbor {{ isp.internet.peering.address | replace('/30','') }} route-map RM-TO-ISP out
+ exit-address-family
+!
+line vty
+!
