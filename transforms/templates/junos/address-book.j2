@@ -1,0 +1,25 @@
+    address-book {
+        global {
+{% for entry in addresses %}
+{# The file introduces its per-tenant entries with this note. Anchored on the
+   first of them rather than on a position, so adding an infrastructure address
+   above cannot detach the comment from what it describes. #}
+{% if entry.name == 'acme-hq' %}
+            /*
+             * Per-tenant objects. A tenant's sites are an address-set rather
+             * than one prefix, because a tenant is not a site: acme has two,
+             * attached two different ways, and both must reach acme's cloud.
+             * Adding a third site is one line here, not a new policy.
+             */
+{% endif %}
+            address {{ entry.name }} {{ entry.value }};
+{% endfor %}
+{% for group in address_groups %}
+            address-set {{ group.name }} {
+{% for member in group.members %}
+                address {{ member }};
+{% endfor %}
+            }
+{% endfor %}
+        }
+    }

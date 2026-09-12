@@ -1,0 +1,144 @@
+query JunosConfigQuery($device: String!) {
+  # The render target. SecurityFirewall, not DcimDevice -- fw1 is declared as
+  # that kind, and it inherits CoreArtifactTarget so it can carry artifacts.
+  target: SecurityFirewall(name__value: $device) {
+    edges {
+      node {
+        id
+        name { value }
+        description { value }
+        interfaces {
+          edges {
+            node {
+              __typename
+              # `interfaces` peers with the DcimInterface generic, so the
+              # firewall-specific fields need a fragment on the concrete kind.
+              ... on SecurityFirewallInterface {
+                name { value }
+                description { value }
+                mtu { value }
+                security_zone { node { name { value } } }
+                ip_addresses { edges { node { address { value } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  SecurityZone {
+    edges {
+      node {
+        name { value }
+        trust_level { value }
+        interfaces { edges { node { name { value } } } }
+      }
+    }
+  }
+
+  # The address book is polymorphic and the value field differs per concrete
+  # kind, so a fragment per kind is mandatory. `... on SecurityGenericAddress`
+  # would be accepted by GraphQL and then yield None in the generated model,
+  # because it discriminates on __typename -- which is always the concrete kind.
+  SecurityGenericAddress {
+    edges {
+      node {
+        __typename
+        ... on SecurityIPAMIPPrefix {
+          name { value }
+          description { value }
+          # The address book's order, which Junos writes deliberately and
+          # Infrahub does not otherwise store. `any` has none: it is a keyword,
+          # referenced by rules and never declared, so an absent book_index is
+          # also the signal to leave it out of the book.
+          book_index { value }
+          ip_prefix { node { prefix { value } } }
+        }
+        ... on SecurityIPAMIPAddress {
+          name { value }
+          description { value }
+          # The address book's order, which Junos writes deliberately and
+          # Infrahub does not otherwise store. `any` has none: it is a keyword,
+          # referenced by rules and never declared, so an absent book_index is
+          # also the signal to leave it out of the book.
+          book_index { value }
+          ip_address { node { address { value } } }
+        }
+        ... on SecurityPrefix {
+          name { value }
+          description { value }
+          # The address book's order, which Junos writes deliberately and
+          # Infrahub does not otherwise store. `any` has none: it is a keyword,
+          # referenced by rules and never declared, so an absent book_index is
+          # also the signal to leave it out of the book.
+          book_index { value }
+          prefix { value }
+        }
+      }
+    }
+  }
+
+  SecurityAddressGroup {
+    edges {
+      node {
+        name { value }
+        description { value }
+        addresses { edges { node { __typename display_label } } }
+      }
+    }
+  }
+
+  SecurityGenericService {
+    edges {
+      node {
+        __typename
+        ... on SecurityService { name { value } }
+        ... on SecurityIPProtocol { name { value } }
+      }
+    }
+  }
+
+  # One policy, nineteen rules. Zone pairs are DERIVED from each rule's
+  # source_zone and destination_zone -- both cardinality one and mandatory --
+  # and evaluation order within a pair is `index` order, because Junos
+  # evaluates first-match.
+  SecurityPolicy {
+    edges {
+      node {
+        name { value }
+        device_target { node { __typename display_label } }
+        rules {
+          edges {
+            node {
+              name { value }
+              index { value }
+              action { value }
+              log { value }
+              log_session_close { value }
+              source_zone { node { name { value } } }
+              destination_zone { node { name { value } } }
+              # Addresses and GROUPS are separate relationships on the adopted
+              # schema. A rule saying `destination-address acme-sites;` links a
+              # SecurityAddressGroup through `destination_groups`, not through
+              # `destination_address` -- reading only the latter drops six
+              # references and renders six rules wrong.
+              source_address { edges { node { __typename display_label
+                  # display_label on SecurityPrefix is "any (0.0.0.0/0)"; a
+                  # match clause needs the bare name.
+                  ... on SecurityPrefix { name { value } } } } }
+              destination_address { edges { node { __typename display_label
+                  # display_label on SecurityPrefix is "any (0.0.0.0/0)"; a
+                  # match clause needs the bare name.
+                  ... on SecurityPrefix { name { value } } } } }
+              source_groups { edges { node { __typename display_label } } }
+              destination_groups { edges { node { __typename display_label } } }
+              source_services { edges { node { __typename display_label } } }
+              destination_services { edges { node { __typename display_label } } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

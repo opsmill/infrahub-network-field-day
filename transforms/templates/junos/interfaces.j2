@@ -1,0 +1,33 @@
+interfaces {
+    /*
+     * MTU, and the one place this profile cannot match the rest of the lab.
+     *
+     * The fabric runs an IP MTU of 9214. Junos counts MTU including the 14-byte
+     * Ethernet header, so matching it would need 9228 -- and vSRX rejects that:
+     *
+     *   Value 9228 is not within range (256..9192)
+     *
+     * 9192 is the platform maximum, which is an IP MTU of 9178: 36 bytes short
+     * of the fabric. A full-size 9214-byte packet from a host therefore does
+     * not fit through the firewall, and the symptom is the expensive one this
+     * lab warns about everywhere else -- ping works, sessions establish, bulk
+     * transfers stall with data stuck in Send-Q.
+     *
+     * `security flow tcp-mss` below is what makes that safe rather than
+     * theoretical: the firewall rewrites the MSS in every TCP handshake it
+     * forwards, so endpoints never build a segment too large for the path
+     * instead of relying on PMTUD and ICMP getting back to them through a
+     * default-deny firewall.
+     */
+{% for iface in interfaces %}
+    {{ iface.name }} {
+        description "{{ iface.description }}";
+        mtu {{ iface.mtu }};
+        unit 0 {
+            family inet {
+                address {{ iface.address }};
+            }
+        }
+    }
+{% endfor %}
+}

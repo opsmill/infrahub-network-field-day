@@ -1,0 +1,24 @@
+    zones {
+{% for zone in zones %}
+        security-zone {{ zone.name }} {
+{% if loop.first %}
+            /*
+             * host-inbound-traffic ping only: the firewall answers traceroute
+             * and reachability tests from either tenant, and nothing else. No
+             * SSH and no HTTPS on a data interface -- management is fxp0.
+             */
+{% endif %}
+            interfaces {
+{% for iface in zone.interfaces %}
+                {{ iface }}.0 {
+                    host-inbound-traffic {
+                        system-services {
+                            ping;
+                        }
+                    }
+                }
+{% endfor %}
+            }
+        }
+{% endfor %}
+    }

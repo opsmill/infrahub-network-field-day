@@ -1,0 +1,116 @@
+    policies {
+        /*
+         * Junos evaluates the policies of the matching from-zone/to-zone pair
+         * in order, then falls through to the default policy. Global policies
+         * are consulted AFTER zone-pair policies, not before -- so the
+         * anti-spoofing deny cannot be one global rule at the top. It is
+         * repeated as the first policy of each pair instead, which costs
+         * nothing because Junos does not cap policy count.
+         */
+{% for pair in zone_pairs %}
+{# The file's commentary is anchored to the pair or rule it describes, not to a
+   line number, so reordering or inserting cannot detach it from its subject. #}
+{% if pair.source == 'wan' and pair.destination == 'acme-cloud' %}
+        /*
+         * ---- tenant cloud access ------------------------------------------
+         *
+         * The rule that makes a tenant's cloud its own. Traffic from a tenant
+         * site arrives in zone `wan` -- the provider handoff is shared, all
+         * tenants come in over it -- and leaves into that tenant's own zone.
+         * The source match is what separates them: acme's sites are permitted
+         * into acme-cloud, and globex's packets simply do not match, so the
+         * default policy drops them.
+         *
+         * There is no `from-zone wan to-zone globex-cloud` rule naming acme,
+         * and there does not need to be. Isolation here is the absence of a
+         * permit, backed by the VRFs in the fabric having no route between
+         * them in the first place. That is two independent gates, and
+         * `make verify` asserts the negative as well as the positive.
+         *
+         * `application any` rather than a port list, unlike the DC service
+         * rules: a tenant owns both ends of this conversation. What the
+         * provider polices is WHO may open the session, not what they run
+         * over it.
+         */
+{% endif %}
+{% if pair.source == 'acme-cloud' and pair.destination == 'wan' %}
+        /*
+         * The return direction, for sessions the cloud instance starts itself
+         * -- a backup pushing to the tenant's site, say. Stateful return
+         * traffic for sessions opened from the site needs no rule; this is
+         * only for the cloud initiating.
+         *
+         * Deliberately NOT a permit to `any`: acme's cloud may reach acme's
+         * sites and nothing else, so a compromised instance cannot use the
+         * provider handoff to reach another tenant or the internet.
+         */
+{% endif %}
+{% if pair.source == 'wan' and pair.destination == 'app-prod' %}
+        /*
+         * A transit customer has no business in the classic app tenant, and
+         * customers and our own office never meet through this firewall. The
+         * default policy already denies all three; these exist so the drop is
+         * counted and named where `make fw-log` can show it.
+         */
+{% endif %}
+        from-zone {{ pair.source }} to-zone {{ pair.destination }} {
+{% for rule in pair.rules %}
+{% if rule.name == 'wan-to-k8s-services' %}
+            /*
+             * A WAN customer consumes published DC services. Destination is the
+             * service range only -- no node address, no pod address -- and this
+             * is standing access, in contrast to the branch below.
+             */
+{% endif %}
+{% if rule.name == 'branch-to-access-portal' %}
+            /*
+             * The branch's ONLY standing permit into the DC: the portal it asks
+             * for access through. Everything else a branch user can reach was
+             * granted by an AppAccess and appears in this zone pair as a policy
+             * named aa-<request>, appended after this one by
+             * k8s/access/fw-controller.
+             *
+             * Appending is correct: there is no explicit trailing deny to
+             * get above, because the default policy is consulted only after
+             * every policy in the pair has been tried, so a grant added at the
+             * end is reached normally.
+             */
+{% endif %}
+{% if rule.name == 'branch-to-k8s-icmp' %}
+            /*
+             * Our own office may troubleshoot; a WAN customer may not. The
+             * branch gets the node subnet as well as the service range, which
+             * is the trust difference made real -- and note it is NOT given the
+             * pod CIDR, which the app tenant does get above.
+             */
+{% endif %}
+            policy {{ rule.name }} {
+                match {
+                    source-address {{ rule.source }};
+                    destination-address {{ rule.destination }};
+                    application {{ rule.application }};
+                }
+                then {
+                    {{ rule.action }};
+                    log {
+                        session-init;
+{% if rule.log_session_close %}
+                        session-close;
+{% endif %}
+                    }
+                }
+            }
+{% endfor %}
+        }
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}
+
+        /* Everything not named above. Junos denies by default; saying so
+         * explicitly means the intent is in the config rather than in the
+         * reader's knowledge of Junos. */
+        default-policy {
+            deny-all;
+        }
+    }

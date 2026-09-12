@@ -33,3 +33,7 @@ spec:
     # FRR config for it, so a role-derived group would produce a seventh
     # artifact with nothing in it.
     - name: frr_routers
+    # Artifact target for the perimeter firewall's Junos configuration. One
+    # member, and a group rather than a direct target because an artifact
+    # definition cannot point at an object.
+    - name: junos_firewalls

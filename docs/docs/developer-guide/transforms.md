@@ -283,6 +283,45 @@ clause, and the tenant header re-rendering from `internet: yes` to `internet: no
 - A tenant's sites render BGP-first then static, each by name. The lab's order is authoring
   order, which Infrahub does not store.
 
+### JunosConfig
+
+Renders the perimeter firewall's Junos configuration — one `text/plain` artifact for `fw1`,
+targeting the `junos_firewalls` group. The fourth and last of the lab domains held in a
+hand-maintained file outside Infrahub.
+
+**It covers 573 of `junos.conf`'s 677 lines, and says which 104 it does not.** The `system`
+stanza holds two `encrypted-password` hashes and is excluded permanently — they must never enter
+the model and the query must never ask for them. `routing-options` needs a device-level static
+route the schema has no home for, and the `flow` block is unmodelled. A renderer that silently
+omits part of a firewall's configuration is more dangerous than one that does not exist, so the
+exclusion total is a test rather than a note.
+
+**Order is asserted where it is behaviour and relaxed where it is not:**
+
+| Order | Semantic? | How it is handled |
+| --- | --- | --- |
+| Rules within a zone pair | **Yes** — Junos is first-match | Pinned, from `SecurityPolicyRule.index` |
+| Zone pairs among themselves | No — the pair is selected by from/to-zone | Asserted as a set; pairs are derived, so there is no object to index |
+| The address book | No, but the device's file has one | Pinned, through the locally added `book_index` |
+
+**Two attributes are local additions**, in `schemas/security_extensions.yml`:
+
+- `book_index` on `SecurityGenericAddress`. Junos writes the address book in authoring order and
+  nothing derives it — not alphabetical, not by network address, not by prefix length. Added on
+  the generic so one attribute covers all six concrete address kinds.
+- `log_session_close` on `SecurityPolicyRule`. Upstream models `log` as a Boolean; the device
+  distinguishes `session-init` alone from `session-init` plus `session-close`. It could be
+  inferred — "permit, unless the application is `junos-ping`" — but which events a firewall logs
+  is behaviour, not formatting.
+
+**Polymorphic relationships need a fragment per concrete kind.** This is the third cycle to hit
+it, and the failure is silent: a fragment naming an intermediate generic is accepted by GraphQL,
+and the generated Pydantic model then discriminates on `__typename` and falls back to a variant
+without the field. Here it applies in four places — the address book (`ip_prefix`, `ip_address`
+and `prefix` are different fields on different kinds), the service list,
+`SecurityFirewall.interfaces`, and `display_label` on `SecurityPrefix`, which carries the value
+(`any (0.0.0.0/0)`) where a match clause needs the bare name.
+
 ### ContainerLabTopology
 
 **File**: `transforms/containerlab_topology.py`

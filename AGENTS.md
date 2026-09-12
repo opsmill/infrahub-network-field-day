@@ -68,7 +68,7 @@ Current generator definitions are registered in `.infrahub.yml`:
 Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
 `containerlab_topology`, `cv_workspace_submission_webhook_payload`, `crossplane_fabric_peering`,
-`crossplane_fabric_app`, and `frr_config`.
+`crossplane_fabric_app`, `frr_config`, and `junos_config`.
 
 `frr_config` renders the WAN's FRR configuration — the two ISP provider-edge routers, the
 internet router, the two customer edges and the branch router — as one `text/plain` artifact per
@@ -84,6 +84,22 @@ it is held byte-for-byte against `../lab/wan/rendered/*/frr.conf` by
 - Its templates are ported from `../lab/wan/templates/` with exactly one line changed, the
   provenance header. Every comment is deliberate; they are most of the teaching value of those
   configs.
+
+`junos_config` renders the perimeter firewall's Junos configuration as one `text/plain` artifact
+targeting the `junos_firewalls` group. Three things to know:
+
+- **It covers 573 of `junos.conf`'s 677 lines, and the gap is deliberate.** The `system` stanza
+  holds two credential hashes and is excluded permanently — they must never enter the model and
+  the query must never ask. `routing-options` needs a device-level static route the schema does
+  not have, and the `flow` block is unmodelled. `test_the_exclusions_add_up` makes the total an
+  assertion rather than a caveat.
+- **Order is checked where it is behaviour and relaxed where it is not.** Junos evaluates
+  first-match within a zone pair, so rule order is semantic and pinned; the sequence *between*
+  pairs is presentational and asserted as a set. The address book's order *is* pinned, through
+  `book_index` — added locally because Junos writes it in authoring order and nothing derives it.
+- **Two attributes are local additions** in `schemas/security_extensions.yml`: `book_index` on
+  `SecurityGenericAddress` and `log_session_close` on `SecurityPolicyRule`. Upstream models `log`
+  as a Boolean; the device distinguishes `session-init` from `session-init` plus `session-close`.
 
 Check definitions are `cv-config-validation` (`checks/cv_config_check.py`), with its
 workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and

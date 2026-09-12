@@ -1,0 +1,2246 @@
+{
+ "SecurityAddressGroup": {
+  "edges": [
+   {
+    "node": {
+     "addresses": {
+      "edges": [
+       {
+        "node": {
+         "__typename": "SecurityIPAMIPPrefix",
+         "display_label": "k8s-nodes"
+        }
+       },
+       {
+        "node": {
+         "__typename": "SecurityIPAMIPPrefix",
+         "display_label": "k8s-pods"
+        }
+       }
+      ]
+     },
+     "description": {
+      "value": "Kubernetes nodes and pods"
+     },
+     "name": {
+      "value": "k8s-all"
+     }
+    }
+   },
+   {
+    "node": {
+     "addresses": {
+      "edges": [
+       {
+        "node": {
+         "__typename": "SecurityIPAMIPPrefix",
+         "display_label": "k8s-nodes"
+        }
+       },
+       {
+        "node": {
+         "__typename": "SecurityIPAMIPPrefix",
+         "display_label": "k8s-services"
+        }
+       }
+      ]
+     },
+     "description": {
+      "value": "What the branch may ping: nodes and services, not pods"
+     },
+     "name": {
+      "value": "k8s-reachable"
+     }
+    }
+   },
+   {
+    "node": {
+     "addresses": {
+      "edges": [
+       {
+        "node": {
+         "__typename": "SecurityIPAMIPPrefix",
+         "display_label": "acme-hq"
+        }
+       },
+       {
+        "node": {
+         "__typename": "SecurityIPAMIPPrefix",
+         "display_label": "acme-dr"
+        }
+       }
+      ]
+     },
+     "description": {
+      "value": "Every acme site; both must reach acme's cloud"
+     },
+     "name": {
+      "value": "acme-sites"
+     }
+    }
+   },
+   {
+    "node": {
+     "addresses": {
+      "edges": [
+       {
+        "node": {
+         "__typename": "SecurityIPAMIPPrefix",
+         "display_label": "globex-hq"
+        }
+       }
+      ]
+     },
+     "description": {
+      "value": "Every globex site"
+     },
+     "name": {
+      "value": "globex-sites"
+     }
+    }
+   }
+  ]
+ },
+ "SecurityGenericAddress": {
+  "edges": [
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 10
+     },
+     "description": {
+      "value": "Kubernetes node subnet"
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.110.0.0/24"
+       }
+      }
+     },
+     "name": {
+      "value": "k8s-nodes"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 20
+     },
+     "description": {
+      "value": "Cilium pod CIDR"
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.111.0.0/16"
+       }
+      }
+     },
+     "name": {
+      "value": "k8s-pods"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 30
+     },
+     "description": {
+      "value": "Kubernetes service CIDR"
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.112.0.0/16"
+       }
+      }
+     },
+     "name": {
+      "value": "k8s-services"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 50
+     },
+     "description": {
+      "value": "Bare-metal application tier"
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.210.0.0/24"
+       }
+      }
+     },
+     "name": {
+      "value": "app-hosts"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 60
+     },
+     "description": {
+      "value": "Fabric infrastructure; never a legitimate session source"
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.41.0.0/16"
+       }
+      }
+     },
+     "name": {
+      "value": "fabric-infra"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 70
+     },
+     "description": {
+      "value": "All WAN customer space"
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.60.0.0/16"
+       }
+      }
+     },
+     "name": {
+      "value": "wan-customers"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 80
+     },
+     "description": {
+      "value": "Branch office LAN"
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.70.0.0/24"
+       }
+      }
+     },
+     "name": {
+      "value": "branch-users"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 90
+     },
+     "description": {
+      "value": null
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.60.10.0/24"
+       }
+      }
+     },
+     "name": {
+      "value": "acme-hq"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 100
+     },
+     "description": {
+      "value": null
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.60.11.0/24"
+       }
+      }
+     },
+     "name": {
+      "value": "acme-dr"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 110
+     },
+     "description": {
+      "value": null
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.220.10.0/24"
+       }
+      }
+     },
+     "name": {
+      "value": "acme-cloud"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 120
+     },
+     "description": {
+      "value": null
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.60.20.0/24"
+       }
+      }
+     },
+     "name": {
+      "value": "globex-hq"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPPrefix",
+     "book_index": {
+      "value": 130
+     },
+     "description": {
+      "value": null
+     },
+     "ip_prefix": {
+      "node": {
+       "prefix": {
+        "value": "10.220.20.0/24"
+       }
+      }
+     },
+     "name": {
+      "value": "globex-cloud"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPAMIPAddress",
+     "book_index": {
+      "value": 40
+     },
+     "description": {
+      "value": "The only DC service the branch may reach before requesting access"
+     },
+     "ip_address": {
+      "node": {
+       "address": {
+        "value": "10.112.240.33/32"
+       }
+      }
+     },
+     "name": {
+      "value": "access-portal"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityPrefix",
+     "book_index": {
+      "value": null
+     },
+     "description": {
+      "value": "Matches everything; used where Junos says destination-address any"
+     },
+     "name": {
+      "value": "any"
+     },
+     "prefix": {
+      "value": "0.0.0.0/0"
+     }
+    }
+   }
+  ]
+ },
+ "SecurityGenericService": {
+  "edges": [
+   {
+    "node": {
+     "__typename": "SecurityIPProtocol",
+     "name": {
+      "value": "tcp"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityIPProtocol",
+     "name": {
+      "value": "icmp"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityService",
+     "name": {
+      "value": "junos-http"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityService",
+     "name": {
+      "value": "junos-https"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityService",
+     "name": {
+      "value": "junos-ping"
+     }
+    }
+   },
+   {
+    "node": {
+     "__typename": "SecurityService",
+     "name": {
+      "value": "any"
+     }
+    }
+   }
+  ]
+ },
+ "SecurityPolicy": {
+  "edges": [
+   {
+    "node": {
+     "device_target": {
+      "node": {
+       "__typename": "SecurityFirewall",
+       "display_label": "fw1"
+      }
+     },
+     "name": {
+      "value": "nfd41-perimeter"
+     },
+     "rules": {
+      "edges": [
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": []
+         },
+         "destination_groups": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityAddressGroup",
+             "display_label": "acme-sites"
+            }
+           }
+          ]
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": true
+         },
+         "name": {
+          "value": "acme-cloud-to-acme-sites"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "acme-cloud"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "acme-cloud"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-spoofed-infra"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "fabric-infra"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "app-prod"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "k8s-services"
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "junos-http"
+            }
+           },
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "junos-https"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 20
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": true
+         },
+         "name": {
+          "value": "app-to-k8s-services"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "app-hosts"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "app-prod"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "k8s-nodes"
+            }
+           },
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "k8s-pods"
+            }
+           },
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "k8s-services"
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "junos-ping"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 30
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "app-to-k8s-icmp"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "app-hosts"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "app-prod"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-spoofed-infra"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "fabric-infra"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "branch"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPAddress",
+             "display_label": "access-portal"
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "junos-http"
+            }
+           },
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "junos-https"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 20
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": true
+         },
+         "name": {
+          "value": "branch-to-access-portal"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "branch-users"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "branch"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": []
+         },
+         "destination_groups": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityAddressGroup",
+             "display_label": "k8s-reachable"
+            }
+           }
+          ]
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "junos-ping"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 30
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "branch-to-k8s-icmp"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "branch-users"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "branch"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-branch-to-wan"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "branch"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": []
+         },
+         "destination_groups": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityAddressGroup",
+             "display_label": "globex-sites"
+            }
+           }
+          ]
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": true
+         },
+         "name": {
+          "value": "globex-cloud-to-globex-sites"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "globex-cloud"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "globex-cloud"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "app-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-spoofed-infra"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "fabric-infra"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "app-hosts"
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "app-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 20
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": true
+         },
+         "name": {
+          "value": "k8s-to-app"
+         },
+         "source_address": {
+          "edges": []
+         },
+         "source_groups": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityAddressGroup",
+             "display_label": "k8s-all"
+            }
+           }
+          ]
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "acme-cloud"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-spoofed-infra"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "fabric-infra"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "acme-cloud"
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "acme-cloud"
+           }
+          }
+         },
+         "index": {
+          "value": 20
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": true
+         },
+         "name": {
+          "value": "acme-sites-to-acme-cloud"
+         },
+         "source_address": {
+          "edges": []
+         },
+         "source_groups": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityAddressGroup",
+             "display_label": "acme-sites"
+            }
+           }
+          ]
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "app-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-wan-to-app"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "branch"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-wan-to-branch"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "globex-cloud"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-spoofed-infra"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "fabric-infra"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "globex-cloud"
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "globex-cloud"
+           }
+          }
+         },
+         "index": {
+          "value": 20
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": true
+         },
+         "name": {
+          "value": "globex-sites-to-globex-cloud"
+         },
+         "source_address": {
+          "edges": []
+         },
+         "source_groups": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityAddressGroup",
+             "display_label": "globex-sites"
+            }
+           }
+          ]
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "deny"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityPrefix",
+             "display_label": "any (0.0.0.0/0)",
+             "name": {
+              "value": "any"
+             }
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "any"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 10
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": false
+         },
+         "name": {
+          "value": "deny-spoofed-infra"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "fabric-infra"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "action": {
+          "value": "permit"
+         },
+         "destination_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "k8s-services"
+            }
+           }
+          ]
+         },
+         "destination_groups": {
+          "edges": []
+         },
+         "destination_services": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "junos-http"
+            }
+           },
+           {
+            "node": {
+             "__typename": "SecurityService",
+             "display_label": "junos-https"
+            }
+           }
+          ]
+         },
+         "destination_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         },
+         "index": {
+          "value": 20
+         },
+         "log": {
+          "value": true
+         },
+         "log_session_close": {
+          "value": true
+         },
+         "name": {
+          "value": "wan-to-k8s-services"
+         },
+         "source_address": {
+          "edges": [
+           {
+            "node": {
+             "__typename": "SecurityIPAMIPPrefix",
+             "display_label": "wan-customers"
+            }
+           }
+          ]
+         },
+         "source_groups": {
+          "edges": []
+         },
+         "source_services": {
+          "edges": []
+         },
+         "source_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       }
+      ]
+     }
+    }
+   }
+  ]
+ },
+ "SecurityZone": {
+  "edges": [
+   {
+    "node": {
+     "interfaces": {
+      "edges": [
+       {
+        "node": {
+         "name": {
+          "value": "ge-0/0/0"
+         }
+        }
+       }
+      ]
+     },
+     "name": {
+      "value": "k8s-prod"
+     },
+     "trust_level": {
+      "value": 70
+     }
+    }
+   },
+   {
+    "node": {
+     "interfaces": {
+      "edges": [
+       {
+        "node": {
+         "name": {
+          "value": "ge-0/0/1"
+         }
+        }
+       }
+      ]
+     },
+     "name": {
+      "value": "app-prod"
+     },
+     "trust_level": {
+      "value": 70
+     }
+    }
+   },
+   {
+    "node": {
+     "interfaces": {
+      "edges": [
+       {
+        "node": {
+         "name": {
+          "value": "ge-0/0/4"
+         }
+        }
+       }
+      ]
+     },
+     "name": {
+      "value": "acme-cloud"
+     },
+     "trust_level": {
+      "value": 60
+     }
+    }
+   },
+   {
+    "node": {
+     "interfaces": {
+      "edges": [
+       {
+        "node": {
+         "name": {
+          "value": "ge-0/0/5"
+         }
+        }
+       }
+      ]
+     },
+     "name": {
+      "value": "globex-cloud"
+     },
+     "trust_level": {
+      "value": 60
+     }
+    }
+   },
+   {
+    "node": {
+     "interfaces": {
+      "edges": [
+       {
+        "node": {
+         "name": {
+          "value": "ge-0/0/3"
+         }
+        }
+       }
+      ]
+     },
+     "name": {
+      "value": "branch"
+     },
+     "trust_level": {
+      "value": 40
+     }
+    }
+   },
+   {
+    "node": {
+     "interfaces": {
+      "edges": [
+       {
+        "node": {
+         "name": {
+          "value": "ge-0/0/2"
+         }
+        }
+       }
+      ]
+     },
+     "name": {
+      "value": "wan"
+     },
+     "trust_level": {
+      "value": 20
+     }
+    }
+   }
+  ]
+ },
+ "target": {
+  "edges": [
+   {
+    "node": {
+     "description": {
+      "value": "Perimeter vSRX; every tenant VRF's only route out points at one of its zones"
+     },
+     "id": "18d43558-5eb0-e3ce-3610-c51adfa9f572",
+     "interfaces": {
+      "edges": [
+       {
+        "node": {
+         "__typename": "SecurityFirewallInterface",
+         "description": {
+          "value": "ZONE-K8S-PROD handoff - border-leaf1 Et10"
+         },
+         "ip_addresses": {
+          "edges": [
+           {
+            "node": {
+             "address": {
+              "value": "10.250.110.2/30"
+             }
+            }
+           }
+          ]
+         },
+         "mtu": {
+          "value": 9192
+         },
+         "name": {
+          "value": "ge-0/0/0"
+         },
+         "security_zone": {
+          "node": {
+           "name": {
+            "value": "k8s-prod"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "__typename": "SecurityFirewallInterface",
+         "description": {
+          "value": "ZONE-APP-PROD handoff - border-leaf1 Et11"
+         },
+         "ip_addresses": {
+          "edges": [
+           {
+            "node": {
+             "address": {
+              "value": "10.250.210.2/30"
+             }
+            }
+           }
+          ]
+         },
+         "mtu": {
+          "value": 9192
+         },
+         "name": {
+          "value": "ge-0/0/1"
+         },
+         "security_zone": {
+          "node": {
+           "name": {
+            "value": "app-prod"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "__typename": "SecurityFirewallInterface",
+         "description": {
+          "value": "ZONE-WAN handoff - ISP transit customers"
+         },
+         "ip_addresses": {
+          "edges": [
+           {
+            "node": {
+             "address": {
+              "value": "10.250.150.2/30"
+             }
+            }
+           }
+          ]
+         },
+         "mtu": {
+          "value": 9192
+         },
+         "name": {
+          "value": "ge-0/0/2"
+         },
+         "security_zone": {
+          "node": {
+           "name": {
+            "value": "wan"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "__typename": "SecurityFirewallInterface",
+         "description": {
+          "value": "ZONE-BRANCH handoff - private circuit"
+         },
+         "ip_addresses": {
+          "edges": [
+           {
+            "node": {
+             "address": {
+              "value": "10.250.170.2/30"
+             }
+            }
+           }
+          ]
+         },
+         "mtu": {
+          "value": 9192
+         },
+         "name": {
+          "value": "ge-0/0/3"
+         },
+         "security_zone": {
+          "node": {
+           "name": {
+            "value": "branch"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "__typename": "SecurityFirewallInterface",
+         "description": {
+          "value": "ZONE-ACME-CLOUD handoff - VRF TENANT_ACME"
+         },
+         "ip_addresses": {
+          "edges": [
+           {
+            "node": {
+             "address": {
+              "value": "10.250.10.2/30"
+             }
+            }
+           }
+          ]
+         },
+         "mtu": {
+          "value": 9192
+         },
+         "name": {
+          "value": "ge-0/0/4"
+         },
+         "security_zone": {
+          "node": {
+           "name": {
+            "value": "acme-cloud"
+           }
+          }
+         }
+        }
+       },
+       {
+        "node": {
+         "__typename": "SecurityFirewallInterface",
+         "description": {
+          "value": "ZONE-GLOBEX-CLOUD handoff - VRF TENANT_GLOBEX"
+         },
+         "ip_addresses": {
+          "edges": [
+           {
+            "node": {
+             "address": {
+              "value": "10.250.20.2/30"
+             }
+            }
+           }
+          ]
+         },
+         "mtu": {
+          "value": 9192
+         },
+         "name": {
+          "value": "ge-0/0/5"
+         },
+         "security_zone": {
+          "node": {
+           "name": {
+            "value": "globex-cloud"
+           }
+          }
+         }
+        }
+       }
+      ]
+     },
+     "name": {
+      "value": "fw1"
+     }
+    }
+   }
+  ]
+ }
+}

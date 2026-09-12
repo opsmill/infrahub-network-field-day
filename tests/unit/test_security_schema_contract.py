@@ -202,11 +202,29 @@ def test_policy_rule_gains_the_unmanaged_object_guard() -> None:
     assert managed["optional"] is False
 
 
-def test_extensions_touch_only_the_two_intended_kinds() -> None:
-    """Keeps local divergence from upstream small and reviewable."""
+def test_extensions_touch_only_the_three_intended_kinds() -> None:
+    """Keeps local divergence from upstream small and reviewable.
+
+    SecurityGenericAddress joined in cycle 023, for `book_index`: Junos writes
+    the address book in authoring order and Infrahub stores none, so without it
+    the rendered book is semantically identical to the device's and textually
+    different. It is added on the generic so one attribute covers all six
+    concrete address kinds.
+    """
     extended = {node["kind"] for node in _extension_nodes(_load_yaml(SECURITY_EXTENSIONS))}
 
-    assert extended == {"SecurityZone", "SecurityPolicyRule"}
+    assert extended == {"SecurityZone", "SecurityPolicyRule", "SecurityGenericAddress"}
+
+
+def test_the_address_book_index_is_optional_and_numeric() -> None:
+    """Optional because `any` has none -- it is a keyword Junos never declares,
+    so an absent index is also the signal to leave it out of the rendered book.
+    """
+    address = _extension_node(_load_yaml(SECURITY_EXTENSIONS), "SecurityGenericAddress")
+    book_index = _attributes(address)["book_index"]
+
+    assert book_index["kind"] == "Number"
+    assert book_index["optional"] is True
 
 
 def test_the_adopted_file_is_not_extended_in_place() -> None:

@@ -50,8 +50,16 @@ kind: Object
 spec:
   kind: SecurityFirewallInterface
   data:
+    # Descriptions and MTU are the device's own, not a paraphrase of them.
+    #
+    # MTU 9192 rather than the fabric's 9214: Junos counts the 14-byte Ethernet
+    # header, so matching the fabric would need 9228, which vSRX rejects --
+    # "Value 9228 is not within range (256..9192)". 9192 is the platform
+    # maximum, an IP MTU of 9178, and `security flow tcp-mss` is what makes the
+    # 36-byte shortfall safe rather than a stall with data stuck in Send-Q.
     - name: ge-0/0/0
-      description: "Zone k8s-prod, toward the border leaf"
+      description: "ZONE-K8S-PROD handoff - border-leaf1 Et10"
+      mtu: 9192
       device: fw1
       security_zone: k8s-prod
       ip_addresses:
@@ -59,7 +67,8 @@ spec:
         data:
           - address: 10.250.110.2/30
     - name: ge-0/0/1
-      description: "Zone app-prod, toward the border leaf"
+      description: "ZONE-APP-PROD handoff - border-leaf1 Et11"
+      mtu: 9192
       device: fw1
       security_zone: app-prod
       ip_addresses:
@@ -67,7 +76,8 @@ spec:
         data:
           - address: 10.250.210.2/30
     - name: ge-0/0/2
-      description: "Zone wan, toward the border leaf"
+      description: "ZONE-WAN handoff - ISP transit customers"
+      mtu: 9192
       device: fw1
       security_zone: wan
       ip_addresses:
@@ -75,7 +85,8 @@ spec:
         data:
           - address: 10.250.150.2/30
     - name: ge-0/0/3
-      description: "Zone branch, toward the border leaf"
+      description: "ZONE-BRANCH handoff - private circuit"
+      mtu: 9192
       device: fw1
       security_zone: branch
       ip_addresses:
@@ -83,7 +94,8 @@ spec:
         data:
           - address: 10.250.170.2/30
     - name: ge-0/0/4
-      description: "Zone acme-cloud, toward the border leaf"
+      description: "ZONE-ACME-CLOUD handoff - VRF TENANT_ACME"
+      mtu: 9192
       device: fw1
       security_zone: acme-cloud
       ip_addresses:
@@ -91,7 +103,8 @@ spec:
         data:
           - address: 10.250.10.2/30
     - name: ge-0/0/5
-      description: "Zone globex-cloud, toward the border leaf"
+      description: "ZONE-GLOBEX-CLOUD handoff - VRF TENANT_GLOBEX"
+      mtu: 9192
       device: fw1
       security_zone: globex-cloud
       ip_addresses:
@@ -109,6 +122,7 @@ spec:
   kind: SecurityIPAMIPPrefix
   data:
     - name: k8s-nodes
+      book_index: 10
       description: "Kubernetes node subnet"
       ip_prefix: ["10.110.0.0/24", "default"]
       address_groups:
@@ -117,6 +131,7 @@ spec:
           - name: k8s-all
           - name: k8s-reachable
     - name: k8s-pods
+      book_index: 20
       description: "Cilium pod CIDR"
       ip_prefix: ["10.111.0.0/16", "default"]
       address_groups:
@@ -124,6 +139,7 @@ spec:
         data:
           - name: k8s-all
     - name: k8s-services
+      book_index: 30
       description: "Kubernetes service CIDR"
       ip_prefix: ["10.112.0.0/16", "default"]
       address_groups:
@@ -131,38 +147,47 @@ spec:
         data:
           - name: k8s-reachable
     - name: app-hosts
+      book_index: 50
       description: "Bare-metal application tier"
       ip_prefix: ["10.210.0.0/24", "default"]
     - name: fabric-infra
+      book_index: 60
       description: "Fabric infrastructure; never a legitimate session source"
       ip_prefix: ["10.41.0.0/16", "default"]
     - name: wan-customers
+      book_index: 70
       description: "All WAN customer space"
       ip_prefix: ["10.60.0.0/16", "default"]
     - name: branch-users
+      book_index: 80
       description: "Branch office LAN"
       ip_prefix: ["10.70.0.0/24", "default"]
     - name: acme-hq
+      book_index: 90
       ip_prefix: ["10.60.10.0/24", "default"]
       address_groups:
         kind: SecurityAddressGroup
         data:
           - name: acme-sites
     - name: acme-dr
+      book_index: 100
       ip_prefix: ["10.60.11.0/24", "default"]
       address_groups:
         kind: SecurityAddressGroup
         data:
           - name: acme-sites
     - name: acme-cloud
+      book_index: 110
       ip_prefix: ["10.220.10.0/24", "default"]
     - name: globex-hq
+      book_index: 120
       ip_prefix: ["10.60.20.0/24", "default"]
       address_groups:
         kind: SecurityAddressGroup
         data:
           - name: globex-sites
     - name: globex-cloud
+      book_index: 130
       ip_prefix: ["10.220.20.0/24", "default"]
 
 ---
@@ -181,6 +206,7 @@ spec:
   kind: SecurityIPAMIPAddress
   data:
     - name: access-portal
+      book_index: 40
       description: "The only DC service the branch may reach before requesting access"
       ip_address: ["10.112.240.33/32", "default"]
 
@@ -244,6 +270,14 @@ spec:
       description: "ICMP echo"
       port: 0
       ip_protocol: icmp
+    # Junos' built-in wildcard. Fourteen rules match `application any`, and the
+    # address book carries an `any` SecurityPrefix for the same reason: a rule's
+    # relationship needs an object to point at, even though Junos declares
+    # neither in the configuration it emits.
+    - name: any
+      description: "Any application"
+      port: 0
+      ip_protocol: tcp
 
 ---
 apiVersion: infrahub.app/v1
@@ -289,10 +323,17 @@ spec:
         - fabric-infra
       destination_address:
         - any
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: app-to-k8s-services
       index: 20
       action: permit
       log: true
+      log_session_close: true
       managed_by_service: false
       policy: nfd41-perimeter
       source_zone: app-prod
@@ -343,10 +384,17 @@ spec:
         - fabric-infra
       destination_address:
         - any
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: k8s-to-app
       index: 20
       action: permit
       log: true
+      log_session_close: true
       managed_by_service: false
       policy: nfd41-perimeter
       source_zone: k8s-prod
@@ -356,6 +404,12 @@ spec:
       destination_address:
         - app-hosts
     # ---- wan -> k8s-prod -----------------------------------------
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: deny-spoofed-infra
       index: 10
       action: deny
@@ -368,10 +422,17 @@ spec:
         - fabric-infra
       destination_address:
         - any
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: wan-to-k8s-services
       index: 20
       action: permit
       log: true
+      log_session_close: true
       managed_by_service: false
       policy: nfd41-perimeter
       source_zone: wan
@@ -402,10 +463,17 @@ spec:
         - fabric-infra
       destination_address:
         - any
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: branch-to-access-portal
       index: 20
       action: permit
       log: true
+      log_session_close: true
       managed_by_service: false
       policy: nfd41-perimeter
       source_zone: branch
@@ -454,10 +522,17 @@ spec:
         - fabric-infra
       destination_address:
         - any
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: acme-sites-to-acme-cloud
       index: 20
       action: permit
       log: true
+      log_session_close: true
       managed_by_service: false
       policy: nfd41-perimeter
       source_zone: wan
@@ -467,6 +542,12 @@ spec:
       destination_address:
         - acme-cloud
     # ---- wan -> globex-cloud -------------------------------------
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: deny-spoofed-infra
       index: 10
       action: deny
@@ -479,10 +560,17 @@ spec:
         - fabric-infra
       destination_address:
         - any
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: globex-sites-to-globex-cloud
       index: 20
       action: permit
       log: true
+      log_session_close: true
       managed_by_service: false
       policy: nfd41-perimeter
       source_zone: wan
@@ -492,10 +580,17 @@ spec:
       destination_address:
         - globex-cloud
     # ---- acme-cloud -> wan ---------------------------------------
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: acme-cloud-to-acme-sites
       index: 10
       action: permit
       log: true
+      log_session_close: true
       managed_by_service: false
       policy: nfd41-perimeter
       source_zone: acme-cloud
@@ -505,10 +600,17 @@ spec:
       destination_groups:
         - acme-sites
     # ---- globex-cloud -> wan -------------------------------------
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: globex-cloud-to-globex-sites
       index: 10
       action: permit
       log: true
+      log_session_close: true
       managed_by_service: false
       policy: nfd41-perimeter
       source_zone: globex-cloud
@@ -518,6 +620,12 @@ spec:
       destination_groups:
         - globex-sites
     # ---- wan -> app-prod -----------------------------------------
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: deny-wan-to-app
       index: 10
       action: deny
@@ -531,6 +639,12 @@ spec:
       destination_address:
         - any
     # ---- wan -> branch -------------------------------------------
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: deny-wan-to-branch
       index: 10
       action: deny
@@ -544,6 +658,12 @@ spec:
       destination_address:
         - any
     # ---- branch -> wan -------------------------------------------
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
     - name: deny-branch-to-wan
       index: 10
       action: deny
@@ -556,3 +676,9 @@ spec:
         - any
       destination_address:
         - any
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
