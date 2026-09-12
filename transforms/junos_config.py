@@ -9,15 +9,20 @@ firewall's configuration is worse than one that does not exist:
 
 * ``system { … }`` -- two ``encrypted-password`` hashes. These must never enter
   the model and must never be rendered. Permanent, not deferred.
-* ``routing-options { static { … } }`` -- eight routes. The schema gap closed
-  in cycle 024 and the data landed in cycle 025: ``fw1`` owns all eight as
-  ``RoutingStaticRoute`` objects, seeded in
-  ``objects/32b_nfd41_fw_static_routes.yml``. Only this renderer is missing,
-  and adding it moves 12 lines from the excluded column to the covered one.
-* ``security { flow { tcp-mss … } }`` -- nothing models it.
+* the 72-line file header -- lab documentation ABOUT the file, not device
+  configuration. Reproducing it would put a false provenance claim in the
+  artifact, so it is replaced by this renderer's own one-line header.
+592 of the file's 677 lines. The excluded 85 are the two items above, and they
+are excluded for DIFFERENT reasons -- one is configuration this project will
+not model, the other is not configuration. ``test_the_exclusions_add_up``
+computes the totals from the device file rather than asserting literals.
 
-573 of the file's 677 lines; the excluded 104 are enumerated in the spec and
-their total is a success criterion.
+ONE THING THIS RENDERER CANNOT REPRODUCE, and it is a limit of the model rather
+than of the templates: the SEQUENCE of the eleven zone-pair blocks. A pair is
+derived from each rule's zones, so there is no pair object to order, and
+``index`` orders rules within a pair. Junos matches by zone rather than by
+position, so the sequence is presentation -- recording it would mean adding an
+attribute for that alone. Every pair is present and byte-for-byte identical.
 
 TWO THINGS THAT LOOK LIKE STYLE AND ARE NOT:
 
@@ -34,6 +39,7 @@ TWO THINGS THAT LOOK LIKE STYLE AND ARE NOT:
 
 from __future__ import annotations
 
+from ipaddress import ip_address, ip_interface, ip_network
 from operator import itemgetter
 from typing import Any
 
@@ -91,6 +97,8 @@ class JunosConfig(InfrahubTransform):
             "address_groups": self._address_groups(result),
             "zones": self._zones(result, target),
             "zone_pairs": self._zone_pairs(result),
+            "static_routes": self._static_routes(target),
+            "tcp_mss": _value(target, "tcp_mss").value if _value(target, "tcp_mss") else None,
         }
         return env.get_template("junos.j2").render(**context)
 
@@ -115,6 +123,65 @@ class JunosConfig(InfrahubTransform):
                 }
             )
         return sorted(entries, key=itemgetter("name"))
+
+    def _static_routes(self, target: Any) -> list[dict[str, Any]]:
+        """The routing-options stanza's eight routes, with their own spacing.
+
+        ORDER is presentational here, which is the opposite of the zone-pair
+        policies below: Junos evaluates policies first-match, so their order is
+        semantic, while static routes are longest-prefix matched and no
+        behaviour depends on the sequence.
+
+        It is also DERIVABLE, which is better than merely choosing one. The
+        device file groups the routes by the port they leave through --
+        ge-0/0/0 first with its three k8s ranges, then one route per remaining
+        interface -- so sorting by (exit interface, prefix) reproduces the file
+        exactly. Nothing stores an index and nothing needs to.
+
+        THE TWO SPACING VALUES, and the difference between them:
+
+        * ``pad`` is a REAL ALIGNMENT RULE. Padding the prefix field to a
+          minimum width puts the ``;`` at column 50 on every one of the eight
+          lines, which is the invariant the file actually holds to.
+
+        * ``gap`` REPRODUCES AN INCONSISTENCY. Six lines carry three spaces
+          before the comment and two carry two, because those two were typed
+          one space short. The next-hop length correlates perfectly over this
+          data, so it derives them -- but it is not the cause, and reading it
+          as an alignment policy invites "fixing" the two lines, which breaks
+          the byte-for-byte comparison. Both misreadings are guarded by tests.
+
+        Cycles 024 and 025 each recorded that no rule reproduced all eight
+        lines and that the model would have to store the spacing. Both had
+        tested one rule, scored 6/8, and stopped.
+        """
+        exits = {}
+        for iface in self._interfaces(target):
+            exits[ip_interface(iface["address"]).network] = iface["name"]
+
+        routes = []
+        for edge in target.static_routes.edges:
+            node = edge.node
+            prefix = node.prefix.value
+            next_hop = node.next_hop.value
+            hop = ip_address(next_hop)
+            exit_port = next((name for net, name in exits.items() if hop in net), None)
+            if exit_port is None:
+                raise JunosConfigError(
+                    f"{prefix}: next hop {next_hop} is on no connected subnet, so the route "
+                    "would be accepted by the device and never install"
+                )
+            routes.append(
+                {
+                    "prefix": prefix,
+                    "next_hop": next_hop,
+                    "comment": node.route_name.value,
+                    "pad": " " * max(1, 14 - len(prefix)),
+                    "gap": " " * (3 if len(next_hop) == 12 else 2),
+                    "_sort": (exit_port, ip_network(prefix)),
+                }
+            )
+        return sorted(routes, key=itemgetter("_sort"))
 
     @staticmethod
     def _addresses(result: JunosConfigQuery) -> list[dict[str, Any]]:

@@ -1,3 +1,10 @@
+{# Why the book exists at all. Cycle 026: this block and the NAT note below
+   were the two comment blocks the render dropped -- the stanza-level tests all
+   passed without them, which is how they went unnoticed for three cycles. #}
+    /*
+     * Named objects rather than bare CIDRs, so the generated grants the access
+     * broker appends read the same way as the rules written here.
+     */
     address-book {
         global {
 {% for entry in addresses %}
@@ -23,3 +30,18 @@
 {% endfor %}
         }
     }
+
+{# The most important comment in the file, and the one a renderer is most
+   likely to lose: it documents an ABSENCE. Nothing in the model implies "there
+   is no NAT here", so nothing but this template can carry it, and nothing but
+   a test can notice it going missing. #}
+    /*
+     * NAT is absent from this file, and that absence is load-bearing. The
+     * entire premise of the lab is that the leaves and the firewall act on real
+     * pod addresses; a source-nat rule here would translate them to the
+     * firewall's own interface address and quietly make every ACL and policy
+     * downstream meaningless while traffic still flowed. Junos does no NAT
+     * unless told to, so there is nothing to disable -- but `make verify`
+     * checks that no nat stanza has appeared.
+     */
+

@@ -33,6 +33,12 @@ spec:
       description: "Perimeter vSRX; every tenant VRF's only route out points at one of its zones"
       role: edge_firewall
       rack_face: front
+      # 9192 (the vSRX interface maximum) - 14 Ethernet - 20 IP - 20 TCP.
+      # The interfaces run 36 bytes short of the fabric's 9214, so two hosts
+      # that both believe the path is 9214 would negotiate MSS 9174 and build a
+      # packet this firewall silently cannot forward. Transcribed from
+      # ../lab/configs/fw/vsrx/junos.conf, `security flow tcp-mss all-tcp`.
+      tcp_mss: 9138
       member_of_groups:
         - junos_firewalls
 

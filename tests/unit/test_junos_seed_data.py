@@ -305,3 +305,38 @@ def test_book_indexes_are_unique() -> None:
     indexes = [i for i, _ in _seeded_book()]
 
     assert len(indexes) == len(set(indexes))
+
+
+# ---------------------------------------------------------------------------
+# Cycle 026: the TCP-MSS clamp.
+# ---------------------------------------------------------------------------
+
+DEVICE_FILE = Path("objects/31_nfd41_offfabric_devices.yml")
+
+
+def test_the_tcp_mss_clamp_matches_the_device() -> None:
+    """C9. Read from the oracle, not hard-coded a second time.
+
+    Writing 9138 in both the object file and the test would make them agree
+    with each other and prove nothing about the device. This reads the `mss`
+    line out of junos.conf.
+
+    `fw1` lives in 31_nfd41_offfabric_devices.yml, not in the security file --
+    it is a SecurityFirewall declared with the other off-fabric devices. The
+    cycle-026 task named the security file and was wrong about it.
+    """
+    if not JUNOS_CONF.is_file():
+        pytest.skip("lab repo not checked out alongside this one")
+
+    device = re.search(r"^\s*mss (\d+);", JUNOS_CONF.read_text(encoding="utf-8"), re.MULTILINE)
+    assert device, "no `mss` line in the device file"
+
+    firewall = next(
+        item
+        for doc in yaml.safe_load_all(DEVICE_FILE.read_text(encoding="utf-8"))
+        if doc and doc.get("spec", {}).get("kind") == "SecurityFirewall"
+        for item in doc["spec"]["data"]
+        if item["name"] == "fw1"
+    )
+
+    assert firewall["tcp_mss"] == int(device.group(1))

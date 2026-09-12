@@ -202,7 +202,7 @@ def test_policy_rule_gains_the_unmanaged_object_guard() -> None:
     assert managed["optional"] is False
 
 
-def test_extensions_touch_only_the_three_intended_kinds() -> None:
+def test_extensions_touch_only_the_four_intended_kinds() -> None:
     """Keeps local divergence from upstream small and reviewable.
 
     SecurityGenericAddress joined in cycle 023, for `book_index`: Junos writes
@@ -210,10 +210,37 @@ def test_extensions_touch_only_the_three_intended_kinds() -> None:
     the rendered book is semantically identical to the device's and textually
     different. It is added on the generic so one attribute covers all six
     concrete address kinds.
+
+    SecurityFirewall joined in cycle 026, for `tcp_mss`. The count is raised
+    deliberately each time a kind is added -- never loosened to "at least" --
+    so that growing the local divergence is a visible decision rather than a
+    test quietly accommodating it.
     """
     extended = {node["kind"] for node in _extension_nodes(_load_yaml(SECURITY_EXTENSIONS))}
 
-    assert extended == {"SecurityZone", "SecurityPolicyRule", "SecurityGenericAddress"}
+    assert extended == {
+        "SecurityZone",
+        "SecurityPolicyRule",
+        "SecurityGenericAddress",
+        "SecurityFirewall",
+    }
+
+
+def test_the_tcp_mss_clamp_is_optional_with_no_default() -> None:
+    """C8. The pair that makes an unset clamp render nothing.
+
+    `optional: true` alone is not enough: a default would still give every
+    firewall a value, and the template would emit `mss 0` or an empty `flow`
+    block on one that needs no clamp.
+    """
+    firewall = next(
+        node for node in _extension_nodes(_load_yaml(SECURITY_EXTENSIONS)) if node["kind"] == "SecurityFirewall"
+    )
+    tcp_mss = next(a for a in firewall["attributes"] if a["name"] == "tcp_mss")
+
+    assert tcp_mss["kind"] == "Number"
+    assert tcp_mss["optional"] is True
+    assert "default_value" not in tcp_mss
 
 
 def test_the_address_book_index_is_optional_and_numeric() -> None:

@@ -1,0 +1,9 @@
+{% if static_routes %}
+routing-options {
+    static {
+{% for route in static_routes %}
+        route {{ route.prefix }}{{ route.pad }}next-hop {{ route.next_hop }};{{ route.gap }}/* {{ route.comment }} */
+{% endfor %}
+    }
+}
+{% endif %}

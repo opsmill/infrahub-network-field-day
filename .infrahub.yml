@@ -306,12 +306,13 @@ artifact_definitions:
   # `frr_routers` names its six members explicitly rather than deriving them
   # from the device role, because cust-acme-dr-ce shares the `customer_edge`
   # role and the lab renders no FRR config for it.
-  # The perimeter firewall. 573 of junos.conf's 677 lines: the `system` stanza
-  # is excluded permanently (two credential hashes), and the `flow` block because
-  # nothing models it. `routing-options` is no longer blocked on schema or on
-  # data -- cycle 024 widened RoutingStaticRoute.device to the device generic so
-  # a firewall can own one, and cycle 025 seeded the eight routes. Only the
-  # template remains.
+  # The perimeter firewall. 592 of junos.conf's 677 lines, complete as of cycle
+  # 026. The 85 it omits are two different things: the `system` stanza (13
+  # lines) is configuration deliberately never modelled -- two credential
+  # hashes -- and the file header (72 lines) is lab documentation about the
+  # file rather than configuration, replaced by the artifact's provenance line.
+  # The one thing the model cannot reproduce is the SEQUENCE of the eleven
+  # zone-pair blocks; every pair is present and byte-for-byte identical.
   - name: "junos_config"
     artifact_name: "Junos Configuration"
     parameters:

@@ -7,6 +7,23 @@ query JunosConfigQuery($device: String!) {
         id
         name { value }
         description { value }
+        # Cycle 026. The clamp that keeps a full-size packet forwardable: the
+        # interfaces stanza's own comment has explained it since cycle 023
+        # while the artifact did not emit it. Optional with no default, so an
+        # unset value renders no `flow` stanza rather than `mss 0`.
+        tcp_mss { value }
+        # Cycle 026. Seeded in cycle 025, reachable because cycle 024 widened
+        # RoutingStaticRoute.device to DcimGenericDevice -- a SecurityFirewall
+        # does not inherit DcimDevice.
+        static_routes {
+          edges {
+            node {
+              prefix { value }
+              next_hop { value }
+              route_name { value }
+            }
+          }
+        }
         interfaces {
           edges {
             node {
