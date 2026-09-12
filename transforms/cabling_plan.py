@@ -68,8 +68,19 @@ class CablingPlan(InfrahubTransform):
                                             name { value }
                                             device {
                                                 node {
-                                                    ... on DcimDevice {
+                                                    # `name` comes from the GENERIC, because the far
+                                                    # end of a fabric cable is not always a
+                                                    # DcimDevice. Every link in this lab is
+                                                    # leaf <-> ComputePhysicalServer, and a query
+                                                    # spreading only `... on DcimDevice` resolved
+                                                    # the server end to an empty object -- so every
+                                                    # row was dropped and the artifact was a bare
+                                                    # CSV header. `rack` stays on the concrete kind
+                                                    # because a server has none.
+                                                    ... on DcimGenericDevice {
                                                         name { value }
+                                                    }
+                                                    ... on DcimDevice {
                                                         rack { node { name { value } } }
                                                     }
                                                 }
@@ -79,8 +90,10 @@ class CablingPlan(InfrahubTransform):
                                             name { value }
                                             device {
                                                 node {
-                                                    ... on DcimDevice {
+                                                    ... on DcimGenericDevice {
                                                         name { value }
+                                                    }
+                                                    ... on DcimDevice {
                                                         rack { node { name { value } } }
                                                     }
                                                 }
