@@ -27,7 +27,7 @@ from transforms.cabling_plan import CablingPlan
 QUERY = re.search(
     r'query = """(.*?)"""',
     inspect.getsource(CablingPlan._fetch_links_with_details),
-    re.S,
+    re.DOTALL,
 ).group(1)
 
 
