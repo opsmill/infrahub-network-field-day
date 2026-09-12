@@ -116,7 +116,7 @@ address-book prefix.
 - [X] T031 Record in that file the research self-correction — `access-portal` was cited as `10.112.240.10` from memory when the seeded value is `10.112.240.33/32`; the conclusion survived because both sit inside `10.112.0.0/16`, but a right answer from a guess is not evidence
 - [X] T032 Note the follow-ups this cycle does not close: the `$infrahub-run-integration-tests` exception, the `infrahubctl generator` CLI limitation found in cycle 024, and the stale Infrahub branches — one of which (`023-junos-config-render`) errors on every repository sync
 - [~] T033 Run `$infrahub-run-integration-tests` — **not installed**, documented exception named in the commit. Original: Run `$infrahub-run-integration-tests`. If not installed, say so **explicitly** in the pull request as the constitution's documented exception — do not omit it silently
-- [ ] T034 Merge to `main` and delete the `fw-routes-obj` Infrahub branch — **hold for the requester**, as in cycles 020–024. Note that this cycle changes no schema, so cycle 023's `export-schema` merge trap does not arise
+- [X] T034 Merged to `main` and the `fw-routes-obj` Infrahub branch deleted, on the requester's instruction. The Infrahub merge succeeded first time and needed no conflict resolution — `main` held none of these objects, and this cycle changed no schema, so neither 023's `SchemaAttribute` collision nor its `export-schema` trap could arise. Verified on `main` afterwards: 19 routes, `{DcimDevice: 11, SecurityFirewall: 8}`, all eight firewall routes at `vrf=default`
 
 ---
 
