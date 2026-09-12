@@ -130,6 +130,51 @@ confidence than it had earned. The tests now pin all three, including
 `test_the_oracle_parser_handles_the_bracket_form`, which guards the specific parser bug that
 overstated the gap.
 
+## T070 — the Infrahub branch merge was refused, and correctly
+
+The git merge to `main` is clean and pushed. The **Infrahub** branch merge is not, and the
+reason is worth keeping.
+
+`infrahubctl branch merge fw-render` reported conflicts. Twenty-one of them, every one the same
+shape: `book_index` NULL on base against the transcribed value on the branch,
+`log_session_close` False against True. Those are schema defaults on one side and intended
+values on the other, so all twenty-one resolved to the branch. The merge still refused.
+
+The CLI's own advice — create a proposed change — produced the real error, in the task worker
+rather than at the client:
+
+```text
+MergeConstraintsViolatedError: Node-level 'uniqueness_constraints' constraint violation on
+schema 'SchemaAttribute' ... field name.value='book_index'
+... field name.value='log_session_close'
+```
+
+**Both branches already carry both attributes.** `infrahubctl graphql export-schema` has no
+`--branch`, so regenerating `schema.graphql` mid-cycle required loading the schema into
+Infrahub `main`; that load created the two attributes on `main` independently of the copies the
+branch had. Merging would have added a *second* `SchemaAttribute` of each name to the same node,
+which the uniqueness constraint exists to refuse. Confirmed against the schema API afterwards:
+each attribute is present exactly once on each branch.
+
+So the merge was not merely blocked, it was the wrong operation. `main` needed **no** schema
+change from the branch — only the twenty-one object values, which are committed to git. Those
+were loaded onto `main` directly with `infrahubctl object load`, which is the path
+`invoke load` and any fresh clone already take.
+
+Verified on `main` after the load: 13 of 14 addresses carry a `book_index` (`any` deliberately
+does not), 8 of 19 rules carry `log_session_close`, and `infrahubctl transform junos_config
+--branch main` renders output identical to the fixture render — the single trailing newline the
+CLI adds to stdout is the only difference. The `fw-render` branch is deleted and its proposed
+change is closed with this explanation on it.
+
+Two things this did **not** do: the failed merge rolled back on its own, so `main` was never
+left half-merged; and nothing was forced past the constraint.
+
+The follow-up this leaves: `export-schema` having no `--branch` is what put the schema on `main`
+early, and it will do the same to the next cycle that adds an attribute on a branch. Worth
+either a branch-aware export or a convention that the schema load to `main` happens only at
+merge time.
+
 ## Integration tests: documented exception
 
 `$infrahub-run-integration-tests` is not installed in this environment, as in cycles 020 to 022.

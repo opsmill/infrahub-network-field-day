@@ -253,7 +253,7 @@ identically.
 - [X] T067 Run `uv run invoke test` and `uv run invoke lint`
 - [~] T068 Run `$infrahub-run-integration-tests`. If not installed, say so explicitly in the pull request as the constitution's documented exception — do not omit it silently
 - [X] T069 Note the two follow-ups R2 identified: a check asserting the six anti-spoofing rules stay identical, and a schema cycle for device-level static routes so `routing-options` can join the artifact
-- [X] T070 Merge to `main` and delete the `fw-render` Infrahub branch — on the requester's instruction, T068 named as the documented exception in the merge commit
+- [X] T070 Merge to `main` and delete the `fw-render` Infrahub branch — git merged and pushed, T068 named as the documented exception in the merge commit. The **Infrahub** branch merge was refused on a `SchemaAttribute` uniqueness constraint, correctly: both branches already carried `book_index` and `log_session_close`, because `export-schema` has no `--branch`. `main` needed only the object values, which were loaded from git. See acceptance-evidence.md
 
 ---
 
