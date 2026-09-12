@@ -58,8 +58,7 @@ def test_both_interface_fragments_carry_the_generic() -> None:
     is harder to notice than none of them.
     """
     assert QUERY.count("... on DcimGenericDevice {") == 2, (
-        "both the InterfacePhysical and DcimInterface fragments must read the "
-        "device name from the generic"
+        "both the InterfacePhysical and DcimInterface fragments must read the device name from the generic"
     )
 
 
