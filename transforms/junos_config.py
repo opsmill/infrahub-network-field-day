@@ -10,9 +10,10 @@ firewall's configuration is worse than one that does not exist:
 * ``system { … }`` -- two ``encrypted-password`` hashes. These must never enter
   the model and must never be rendered. Permanent, not deferred.
 * ``routing-options { static { … } }`` -- eight routes. The schema gap closed
-  in cycle 024: ``RoutingStaticRoute`` always existed, and its ``device``
-  relationship now peers the device generic, so ``fw1`` can own one. Waiting on
-  seed data and a template, not on schema.
+  in cycle 024 and the data landed in cycle 025: ``fw1`` owns all eight as
+  ``RoutingStaticRoute`` objects, seeded in
+  ``objects/32b_nfd41_fw_static_routes.yml``. Only this renderer is missing,
+  and adding it moves 12 lines from the excluded column to the covered one.
 * ``security { flow { tcp-mss … } }`` -- nothing models it.
 
 573 of the file's 677 lines; the excluded 104 are enumerated in the spec and

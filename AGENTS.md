@@ -93,8 +93,15 @@ targeting the `junos_firewalls` group. Three things to know:
   the query must never ask. The `flow` block is unmodelled. `routing-options` was described here
   as needing "a device-level static route the schema does not have" — that was wrong:
   `RoutingStaticRoute` existed all along, and cycle 024 fixed the real blocker, which was that its
-  `device` relationship peered `DcimDevice` while a firewall is a `SecurityFirewall`. What remains
-  is seed data (cycle 025) and the render itself (cycle 026).
+  `device` relationship peered `DcimDevice` while a firewall is a `SecurityFirewall`. Cycle 025
+  then seeded the eight routes in `objects/32b_nfd41_fw_static_routes.yml`, so **only the render
+  remains** (cycle 026), at which point the artifact goes 573 -> 585 of 677 lines and the
+  exclusion total drops from 104 to 92.
+
+  Those eight routes are held against three sources by `tests/unit/test_fw_static_route_objects.py`,
+  and the third is the interesting one: every next hop must lie on a subnet `fw1` has an interface
+  on. A comparison against `junos.conf` cannot catch a typo *in* `junos.conf`, so the interface
+  addresses are an independent witness.
   `test_the_exclusions_add_up` makes the total an assertion rather than a caveat, so it is the
   thing to update when those twelve lines move in scope.
 - **Order is checked where it is behaviour and relaxed where it is not.** Junos evaluates

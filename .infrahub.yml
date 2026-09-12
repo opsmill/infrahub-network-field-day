@@ -308,9 +308,10 @@ artifact_definitions:
   # role and the lab renders no FRR config for it.
   # The perimeter firewall. 573 of junos.conf's 677 lines: the `system` stanza
   # is excluded permanently (two credential hashes), and the `flow` block because
-  # nothing models it. `routing-options` is no longer blocked on schema -- cycle
-  # 024 widened RoutingStaticRoute.device to the device generic so a firewall can
-  # own one -- it now waits on seed data and a template.
+  # nothing models it. `routing-options` is no longer blocked on schema or on
+  # data -- cycle 024 widened RoutingStaticRoute.device to the device generic so
+  # a firewall can own one, and cycle 025 seeded the eight routes. Only the
+  # template remains.
   - name: "junos_config"
     artifact_name: "Junos Configuration"
     parameters:
