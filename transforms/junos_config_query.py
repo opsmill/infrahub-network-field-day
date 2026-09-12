@@ -32,6 +32,8 @@ class JunosConfigQueryTargetEdgesNode(BaseModel):
     id: str
     name: Optional["JunosConfigQueryTargetEdgesNodeName"]
     description: Optional["JunosConfigQueryTargetEdgesNodeDescription"]
+    tcp_mss: Optional["JunosConfigQueryTargetEdgesNodeTcpMss"]
+    static_routes: "JunosConfigQueryTargetEdgesNodeStaticRoutes"
     interfaces: "JunosConfigQueryTargetEdgesNodeInterfaces"
 
 
@@ -40,6 +42,38 @@ class JunosConfigQueryTargetEdgesNodeName(BaseModel):
 
 
 class JunosConfigQueryTargetEdgesNodeDescription(BaseModel):
+    value: Optional[str]
+
+
+class JunosConfigQueryTargetEdgesNodeTcpMss(BaseModel):
+    value: Optional[Any]
+
+
+class JunosConfigQueryTargetEdgesNodeStaticRoutes(BaseModel):
+    edges: list["JunosConfigQueryTargetEdgesNodeStaticRoutesEdges"]
+
+
+class JunosConfigQueryTargetEdgesNodeStaticRoutesEdges(BaseModel):
+    node: Optional["JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNode"]
+
+
+class JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNode(BaseModel):
+    prefix: Optional["JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNodePrefix"]
+    next_hop: Optional["JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNodeNextHop"]
+    route_name: Optional[
+        "JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNodeRouteName"
+    ]
+
+
+class JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNodePrefix(BaseModel):
+    value: Optional[str]
+
+
+class JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNodeNextHop(BaseModel):
+    value: Optional[str]
+
+
+class JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNodeRouteName(BaseModel):
     value: Optional[str]
 
 
@@ -774,6 +808,9 @@ JunosConfigQuery.model_rebuild()
 JunosConfigQueryTarget.model_rebuild()
 JunosConfigQueryTargetEdges.model_rebuild()
 JunosConfigQueryTargetEdgesNode.model_rebuild()
+JunosConfigQueryTargetEdgesNodeStaticRoutes.model_rebuild()
+JunosConfigQueryTargetEdgesNodeStaticRoutesEdges.model_rebuild()
+JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNode.model_rebuild()
 JunosConfigQueryTargetEdgesNodeInterfaces.model_rebuild()
 JunosConfigQueryTargetEdgesNodeInterfacesEdges.model_rebuild()
 JunosConfigQueryTargetEdgesNodeInterfacesEdgesNodeSecurityFirewallInterface.model_rebuild()

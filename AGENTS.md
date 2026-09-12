@@ -88,20 +88,26 @@ it is held byte-for-byte against `../lab/wan/rendered/*/frr.conf` by
 `junos_config` renders the perimeter firewall's Junos configuration as one `text/plain` artifact
 targeting the `junos_firewalls` group. Three things to know:
 
-- **It covers 573 of `junos.conf`'s 677 lines, and the gap is deliberate.** The `system` stanza
-  holds two credential hashes and is excluded permanently — they must never enter the model and
-  the query must never ask. The `flow` block is unmodelled. `routing-options` was described here
-  as needing "a device-level static route the schema does not have" — that was wrong:
-  `RoutingStaticRoute` existed all along, and cycle 024 fixed the real blocker, which was that its
-  `device` relationship peered `DcimDevice` while a firewall is a `SecurityFirewall`. Cycle 025
-  then seeded the eight routes in `objects/32b_nfd41_fw_static_routes.yml`, so **only the render
-  remains** (cycle 026), at which point the artifact goes 573 -> 585 of 677 lines and the
-  exclusion total drops from 104 to 92.
+- **It covers 592 of `junos.conf`'s 677 lines, and the 85 it does not are two different things.**
+  The `system` stanza (13 lines) is *configuration deliberately never modelled*: two credential
+  hashes that must never enter the model, and the query must never ask. The file header (72 lines)
+  is *not configuration at all* — 68 comments and 4 blanks of lab documentation about the file,
+  including how vrnetlab appends it to `init.conf`; the artifact replaces it with its own
+  provenance line, because reproducing it would make a false claim about where the file came from.
+  Grouping the two as "excluded lines" hides that difference, which is why they are named
+  separately here and asserted separately in `test_the_exclusions_add_up`.
 
-  Those eight routes are held against three sources by `tests/unit/test_fw_static_route_objects.py`,
-  and the third is the interesting one: every next hop must lie on a subnet `fw1` has an interface
-  on. A comparison against `junos.conf` cannot catch a typo *in* `junos.conf`, so the interface
-  addresses are an independent witness.
+  Everything else matches the device byte for byte, **with one exception the model cannot close**:
+  the *sequence* of the eleven zone-pair blocks. A zone pair is derived from each rule's source and
+  destination zone, so no pair object exists to carry an order, and `SecurityPolicyRule.index`
+  orders rules *within* a pair — it holds only 10, 20 and 30 across all nineteen. Junos matches a
+  packet to its pair by zone, not by position, so the sequence is presentation. Every pair is
+  present and each is byte-for-byte identical.
+
+  The eight static routes are held against three sources by
+  `tests/unit/test_fw_static_route_objects.py`, and the third is the interesting one: every next
+  hop must lie on a subnet `fw1` has an interface on. A comparison against `junos.conf` cannot
+  catch a typo *in* `junos.conf`, so the interface addresses are an independent witness.
   `test_the_exclusions_add_up` makes the total an assertion rather than a caveat, so it is the
   thing to update when those twelve lines move in scope.
 - **Order is checked where it is behaviour and relaxed where it is not.** Junos evaluates

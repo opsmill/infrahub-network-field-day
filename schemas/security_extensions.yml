@@ -84,6 +84,27 @@ extensions:
           optional: true
           description: "Position in the rendered address book; Junos' order is authoring order"
 
+    - kind: SecurityFirewall
+      attributes:
+        # The TCP-MSS clamp, and the one number that keeps a full-size packet
+        # forwardable across this firewall.
+        #
+        # The interfaces stanza runs MTU 9192 -- the vSRX maximum, and 36 bytes
+        # short of the fabric's 9214. Two hosts that both believe the path is
+        # 9214 would negotiate an MSS of 9174, build a 9214-byte packet, and
+        # the firewall would silently fail to forward it. Clamping to
+        # 9192 - 14 (Ethernet) - 20 (IP) - 20 (TCP) = 9138 is what makes the
+        # shortfall safe rather than a stall with data stuck in Send-Q.
+        #
+        # OPTIONAL WITH NO DEFAULT, deliberately. A firewall without a clamp
+        # must render no `flow` stanza at all; a default would emit `mss 0` or
+        # an empty block on every future firewall that does not need one.
+        - name: tcp_mss
+          kind: Number
+          label: TCP MSS Clamp
+          optional: true
+          description: "Clamps TCP MSS in security flow; unset renders no flow stanza"
+
     - kind: SecurityPolicyRule
       attributes:
         # WHICH log events, not merely whether to log.

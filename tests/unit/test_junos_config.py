@@ -16,8 +16,10 @@ rather than a prose caveat, and `test_the_exclusions_add_up` checks it.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -129,30 +131,15 @@ def test_braces_balance_and_never_go_negative() -> None:
     assert depth == 0
 
 
-def test_the_exclusions_add_up() -> None:
-    """SC-010: what is not covered is enumerated, and the enumeration totals.
-
-    A renderer that silently omits part of a firewall's configuration is worse
-    than one that does not exist, so this is arithmetic rather than a caveat.
-    """
-    lines = _conf()
-    spans: dict[str, int] = {}
-    cur, start = None, 0
-    for i, line in enumerate(lines, 1):
-        m = re.match(r"^([a-z-]+) \{", line)
-        if m:
-            cur, start = m.group(1), i
-        if line == "}" and cur:
-            spans[cur] = i - start + 1
-            cur = None
-
-    flow = len(_stanza(lines, "flow", "    "))
-    in_scope = spans["interfaces"] + spans["security"] - flow
-    excluded = len(lines) - in_scope
-
-    assert in_scope == 573
-    assert excluded == 104
-    assert spans["system"] + spans["routing-options"] + flow <= excluded
+# Cycle 023's version of `test_the_exclusions_add_up` stood here. It asserted
+# `in_scope == 573` and `excluded == 104`, the figures from a scope where
+# `routing-options` and the `flow` clamp were both unrendered. Cycle 026
+# renders both, so those literals describe a world that no longer exists.
+#
+# It is REPLACED rather than renamed, and the replacement lives further down
+# with the other cycle-026 clauses. Two functions of the same name in one
+# module do not collide loudly -- the second silently shadows the first, and
+# the first stops running. Ruff caught exactly that here.
 
 
 # ---------------------------------------------------------------------------
@@ -261,3 +248,288 @@ def test_the_policies_stanza_opens_with_the_devices_own_commentary() -> None:
     head = _stanza(_rendered(), "policies", "    ")[1:9]
 
     assert "Junos evaluates the policies of the matching from-zone/to-zone pair" in "\n".join(head)
+
+
+# ---------------------------------------------------------------------------
+# Cycle 026: the whole-file comparison.
+#
+# The stanza-level assertions above pass while three explanatory comment blocks
+# are missing from the rendered `security` stanza -- which is how that gap
+# survived cycles 023, 024 and 025. Each of those cycles re-read the previous
+# cycle's spec instead of diffing the artifact.
+#
+# C1 turns "is the artifact complete?" into one number. The stanza checks stay:
+# C1 says WHETHER, they say WHERE.
+# ---------------------------------------------------------------------------
+
+PROVENANCE_PREFIX = "! Rendered by Infrahub"
+
+
+def _top_level_stanza_of(lines: list[str]) -> list[str | None]:
+    """Tag each line with the top-level stanza it belongs to, or None."""
+    tags: list[str | None] = []
+    current: str | None = None
+    depth = 0
+    for line in lines:
+        if depth == 0 and re.match(r"^\S+.*\{$", line):
+            current = line.split()[0]
+        if current:
+            tags.append(current)
+            depth += line.count("{") - line.count("}")
+            if depth == 0:
+                current = None
+        else:
+            tags.append(None)
+    return tags
+
+
+def _oracle_in_scope() -> list[str]:
+    """The device file minus the two regions the artifact deliberately omits.
+
+    `system` holds two `encrypted-password` hashes -- configuration this
+    project will never model. The 72-line header is 68 comments and 4 blanks
+    of lab documentation ABOUT the file, including how vrnetlab appends it to
+    init.conf; the artifact replaces it with its own provenance line, because
+    reproducing it would make a false claim about where the file came from.
+
+    Two different reasons, which is why they are named separately rather than
+    lumped together as "excluded lines".
+    """
+    lines = _conf()
+    tags = _top_level_stanza_of(lines)
+    return [line for line, tag in zip(lines, tags, strict=True) if tag not in (None, "system")]
+
+
+def _rendered_body() -> list[str]:
+    return [line for line in _rendered() if not line.startswith(PROVENANCE_PREFIX)]
+
+
+def _split_at_policies(lines: list[str]) -> tuple[list[str], list[str]]:
+    index = lines.index("    policies {")
+    return lines[:index], lines[index:]
+
+
+def _zone_pair_blocks(lines: list[str]) -> dict[tuple[str, str], list[str]]:
+    """Each `from-zone X to-zone Y { ... }` block, keyed by its pair."""
+    blocks: dict[tuple[str, str], list[str]] = {}
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^        from-zone (\S+) to-zone (\S+) \{$", lines[index])
+        if match:
+            depth, end = 0, index
+            while True:
+                depth += lines[end].count("{") - lines[end].count("}")
+                if depth == 0:
+                    break
+                end += 1
+            blocks[match.groups()] = lines[index : end + 1]
+            index = end
+        index += 1
+    return blocks
+
+
+def test_everything_outside_the_policies_stanza_matches_exactly() -> None:
+    """C1a. Byte-for-byte, no exceptions.
+
+    Interfaces, routing-options, the flow clamp, the address book, every
+    comment block and the zones. This is the part of SC-001 that holds without
+    qualification.
+    """
+    oracle, rendered = _split_at_policies(_oracle_in_scope())[0], _split_at_policies(_rendered_body())[0]
+    diff = list(difflib.unified_diff(oracle, rendered, "device file", "artifact", lineterm="", n=1))
+    assert not diff, "artifact differs outside `policies`:\n" + "\n".join(diff[:60])
+
+
+def test_every_zone_pair_matches_byte_for_byte() -> None:
+    """C1b. The same eleven pairs, each identical in content.
+
+    What is NOT asserted is the SEQUENCE of the eleven blocks, and that is a
+    limitation of the model rather than of this renderer. Cycle 023 established
+    it and cycle 026 re-confirmed it: a zone pair is DERIVED from each rule's
+    source and destination zone, so there is no pair object to carry an order.
+    `SecurityPolicyRule.index` orders rules WITHIN a pair -- it holds only 10,
+    20 and 30 across all nineteen rules -- and carries nothing about the pairs
+    themselves.
+
+    Reproducing the file's sequence would mean adding an attribute whose only
+    purpose is to record it. Junos matches a packet to its zone pair by zone
+    and not by position, so that sequence is presentation, and this cycle
+    declined to put presentation in the model for the same reason it declined
+    to store the route-line spacing.
+    """
+    oracle = _zone_pair_blocks(_split_at_policies(_oracle_in_scope())[1])
+    rendered = _zone_pair_blocks(_split_at_policies(_rendered_body())[1])
+
+    assert set(oracle) == set(rendered)
+    assert len(oracle) == 11
+
+    differing = {pair: (oracle[pair], rendered[pair]) for pair in oracle if oracle[pair] != rendered[pair]}
+    assert not differing, f"zone pairs differing in content: {sorted(differing)}"
+
+
+def test_the_artifact_and_the_device_file_hold_the_same_lines() -> None:
+    """C1c. Nothing is added or lost -- only the pair blocks move.
+
+    Blank-line placement inside `policies` follows the sequence, so it moves
+    with it; every non-blank line is accounted for in both directions.
+    """
+    oracle = [line for line in _oracle_in_scope() if line.strip()]
+    rendered = [line for line in _rendered_body() if line.strip()]
+    assert Counter(oracle) == Counter(rendered)
+
+
+def test_the_exclusions_add_up() -> None:
+    """C2. Computed from the file, not hard-coded.
+
+    Cycle 023 carried a prose comment claiming its total and the total was
+    wrong by seven lines. Three literals here would drift from the file the
+    same way; these are derived from it at test time.
+    """
+    lines = _conf()
+    tags = _top_level_stanza_of(lines)
+
+    header = sum(1 for tag in tags if tag is None)
+    system = sum(1 for tag in tags if tag == "system")
+    rendered = len(lines) - header - system
+
+    assert header + system + rendered == len(lines)
+    assert rendered == len(_oracle_in_scope())
+
+    # Non-blank, because blank-line placement inside `policies` follows the
+    # zone-pair sequence, which the model cannot reproduce -- see
+    # test_every_zone_pair_matches_byte_for_byte. Every line of content is
+    # present; three blanks fall in different places.
+    assert len([line for line in _rendered_body() if line.strip()]) == len(
+        [line for line in _oracle_in_scope() if line.strip()]
+    )
+
+
+def _config_lines(lines: list[str]) -> list[str]:
+    return [line for line in lines if line.strip() and not line.strip().startswith(("/*", "*", "*/"))]
+
+
+def test_the_artifact_invents_no_configuration() -> None:
+    """C10. Zero before this cycle, and it must stay zero.
+
+    The direction that catches a template emitting something plausible and
+    wrong -- which the byte-for-byte diff also catches, but this one keeps
+    saying so if the diff is ever relaxed.
+    """
+    invented = Counter(_config_lines(_rendered_body())) - Counter(_config_lines(_oracle_in_scope()))
+    assert not invented, f"configuration in the artifact and not on the device: {dict(invented)}"
+
+
+# ---------------------------------------------------------------------------
+# Cycle 026: the route lines' spacing.
+# ---------------------------------------------------------------------------
+
+
+def _route_lines(lines: list[str]) -> list[str]:
+    return [line for line in lines if line.strip().startswith("route ")]
+
+
+def test_every_route_line_puts_its_semicolon_at_column_fifty() -> None:
+    """C4. The real alignment invariant, asserted directly.
+
+    Padding the prefix field is what produces it. Stating it separately from
+    the byte comparison means a failure says "the alignment rule broke" rather
+    than "something differs".
+    """
+    rendered = _route_lines(_rendered())
+    assert len(rendered) == 8
+    for line in rendered:
+        assert line.index(";") + 1 == 50, f"semicolon not at column 50: {line!r}"
+
+
+def test_the_three_route_spacing_cases_are_reproduced() -> None:
+    """C3. Named cases, not just the aggregate diff.
+
+    The third is the one that matters: six lines carry three spaces before the
+    comment and two carry two, because those two were typed one space short.
+    A whole-file diff catches a "tidy-up" only while the oracle is untouched;
+    naming the case catches it regardless.
+    """
+    by_prefix = {line.split()[1]: line for line in _route_lines(_rendered())}
+
+    # 13-character prefix, 12-character next hop: one space, then three.
+    assert by_prefix["10.110.0.0/24"] == ("        route 10.110.0.0/24 next-hop 10.250.110.1;   /* k8s nodes */")
+    # 12-character prefix: padded with two spaces to hold the column.
+    assert by_prefix["10.60.0.0/16"] == (
+        "        route 10.60.0.0/16  next-hop 10.250.150.1;   /* WAN customer supernet */"
+    )
+    # 11-character next hop: TWO spaces before the comment, not three.
+    assert by_prefix["10.220.10.0/24"] == (
+        "        route 10.220.10.0/24 next-hop 10.250.10.1;  /* acme cloud instances */"
+    )
+
+
+def test_routes_are_ordered_by_the_port_they_leave_through() -> None:
+    """The file's order, and it is derived rather than chosen.
+
+    ge-0/0/0 first with its three k8s ranges, then one route per remaining
+    interface. Nothing stores an index.
+    """
+    prefixes = [line.split()[1] for line in _route_lines(_rendered())]
+    assert prefixes == [
+        "10.110.0.0/24",
+        "10.111.0.0/16",
+        "10.112.0.0/16",
+        "10.210.0.0/24",
+        "10.60.0.0/16",
+        "10.70.0.0/24",
+        "10.220.10.0/24",
+        "10.220.20.0/24",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Cycle 026: emptiness. An absent value must render nothing, not a zero.
+# ---------------------------------------------------------------------------
+
+
+def _render_without(key: str) -> list[str]:
+    data: dict[str, Any] = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    node = data["target"]["edges"][0]["node"]
+    if key == "static_routes":
+        node["static_routes"]["edges"] = []
+    else:
+        node[key] = {"value": None}
+    transform = JunosConfig.__new__(JunosConfig)
+    transform.root_directory = str(REPO_ROOT)
+    return asyncio.run(transform.transform(data)).splitlines()
+
+
+def test_a_firewall_with_no_routes_renders_no_routing_options_stanza() -> None:
+    """C6. Not an empty `static { }` -- the device would hold no stanza."""
+    rendered = _render_without("static_routes")
+    assert not any(line.startswith("routing-options") for line in rendered)
+    assert not any("static {" in line for line in rendered)
+
+
+def test_a_firewall_with_no_clamp_renders_no_flow_stanza() -> None:
+    """C6. And emphatically not `mss 0`, which an attribute default would give."""
+    rendered = _render_without("tcp_mss")
+    assert not any(line.strip().startswith("flow {") for line in rendered)
+    assert not any(line.strip().startswith("tcp-mss {") for line in rendered)
+    assert not any("mss 0" in line for line in rendered)
+
+    # Asserted on the STANZA, not on the string "tcp-mss": the interfaces
+    # comment transcribed from the device refers to "`security flow tcp-mss`
+    # below", and that prose survives. It is fw1's own text, so on a firewall
+    # with no clamp it would point at a stanza that is not there -- a wart in
+    # the transcribed comment rather than in this renderer, and out of scope
+    # here because the comment is the device's words, not ours.
+
+
+def test_the_three_recovered_comment_blocks_are_present() -> None:
+    """C7. The NAT block gets its own assertion because it documents an ABSENCE.
+
+    Nothing in the model implies "there is no NAT here", so nothing but the
+    template can carry it and nothing but a test can notice it going missing --
+    which is exactly what happened for three cycles.
+    """
+    rendered = "\n".join(_rendered())
+    assert "Clamp TCP to what the 9192-byte interface MTU can actually carry" in rendered
+    assert "Named objects rather than bare CIDRs" in rendered
+    assert "NAT is absent from this file, and that absence is load-bearing" in rendered
+    assert "`make verify`" in rendered

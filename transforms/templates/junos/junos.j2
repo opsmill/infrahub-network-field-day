@@ -1,6 +1,23 @@
 ! Rendered by Infrahub for {{ node }} -- do not edit.
 {% include "interfaces.j2" %}
+{% include "routing-options.j2" %}
 security {
+{% if tcp_mss %}
+    /*
+     * Clamp TCP to what the 9192-byte interface MTU can actually carry:
+     * 9192 - 14 (Ethernet) - 20 (IP) - 20 (TCP) = {{ tcp_mss }}. Without this, two hosts
+     * that both think the path is 9214 negotiate an MSS of 9174, build a
+     * 9214-byte packet, and the firewall silently cannot forward it.
+     */
+    flow {
+        tcp-mss {
+            all-tcp {
+                mss {{ tcp_mss }};
+            }
+        }
+    }
+
+{% endif %}
 {% include "address-book.j2" %}
 {% include "zones.j2" %}
 {% include "policies.j2" %}

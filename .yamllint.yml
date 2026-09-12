@@ -18,6 +18,13 @@ ignore: |
   /lab/avd/intended
   # ContainerLab runtime state; generated on deploy and git-ignored.
   /lab/clab-*
+  # Agent worktrees. Each carries its own copy of the whole repository,
+  # including lab/avd/intended -- and the ignore above is anchored, so it does
+  # not cover a nested copy. One stray worktree put 623 errors in front of
+  # every `invoke lint-yaml` run until cycle 026 removed it; this is what stops
+  # the next one doing the same. yamllint does not read .gitignore, so being
+  # git-excluded is not enough.
+  /.claude
 
 rules:
   new-lines: disable
