@@ -239,6 +239,50 @@ a colon-bearing scalar is force-quoted — the same approach as the peering tran
 **It refuses an incomplete model**: no namespace, exposed with no VIP block, neither chart nor
 manifests, or an attachment whose content is not parseable YAML.
 
+### FrrConfig
+
+Renders the WAN's FRR configuration: the two ISP provider-edge routers, the internet router,
+the two customer edges and the branch router. One `text/plain` artifact per device, targeting
+the `frr_routers` group.
+
+This is the half of the lab PyAVD does not cover. The fabric renders through
+[AvdEosConfigTransform](#avdeosconfigtransform); these six routers render here, from the same
+graph, with the same property — change the model, re-render, review the diff.
+
+**Hybrid Python + Jinja2.** Python assembles a per-device context from one GraphQL query and
+selects one of five templates from the device's `role`; the templates under
+`transforms/templates/frr/` are ported from `../lab/wan/templates/` with exactly one line
+changed, the provenance header. `tests/unit/test_frr_config.py` holds the output byte-for-byte
+against `../lab/wan/rendered/*/frr.conf` — 448 lines the lab actually runs.
+
+**It reads the service layer.** Cycle 010's layering rule says renderers read technical
+objects, and the provider edge is the documented exception, because its per-tenant import
+policy *is* the service intent:
+
+```text
+route-map RM-ACME-IMPORT permit 10   <- ServiceL3vpn.dc_service_prefixes
+route-map RM-ACME-IMPORT permit 20   <- ServiceTenantCloud.prefix
+route-map RM-ACME-IMPORT permit 30   <- a ServiceInternetAccess EXISTS
+```
+
+globex has no `permit 30` because globex bought no internet access. Deleting acme's
+`ServiceInternetAccess` on a branch changes exactly six lines of `isp-pe1`: the four-line
+clause, and the tenant header re-rendering from `internet: yes` to `internet: no`.
+
+**Four things that will bite a change here:**
+
+- `StrictUndefined` is mandatory. A BGP neighbor line with a blank address is accepted by
+  vtysh and the session never comes up, so a missing value must fail the render instead.
+- Inline fragments are needed in both directions, and on the **concrete** kind. Going
+  interface → address needs `... on InterfaceLayer3`; going address → interface needs
+  `... on InterfacePhysical` and `... on InterfaceVirtual`, because the generated Pydantic
+  model discriminates on `__typename`, which is never the generic's name. `__typename` is also
+  needed at every nested union point.
+- Three of the ten BGP sessions belong to no `WanSite` — the iBGP pair between the PEs and the
+  two fabric handoffs are provider infrastructure, so they are read from the device.
+- A tenant's sites render BGP-first then static, each by name. The lab's order is authoring
+  order, which Infrahub does not store.
+
 ### ContainerLabTopology
 
 **File**: `transforms/containerlab_topology.py`

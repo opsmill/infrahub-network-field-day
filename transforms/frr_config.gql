@@ -1,0 +1,146 @@
+query FrrConfigQuery($device: String!) {
+  # The render target. `RoutingBGPNeighbor` is fetched from the DEVICE as well as
+  # from each site, because three of the ten sessions belong to no site at all:
+  # the iBGP pair between the PEs and the two fabric handoffs are provider
+  # infrastructure rather than tenant attachments.
+  target: DcimDevice(name__value: $device) {
+    edges {
+      node {
+        id
+        name { value }
+        role { value }
+        description { value }
+        router_id { node { address { value } } }
+        asn { node { asn { value } } }
+        bgp_neighbors {
+          edges {
+            node {
+              peer_address { value }
+              remote_as { value }
+              description { value }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # The provider's own devices, needed by every template: a CE names its PE, and
+  # the PEs name each other.
+  DcimDevice(role__values: ["isp_edge", "isp_core", "internet_edge", "branch_router"]) {
+    edges {
+      node {
+        name { value }
+        role { value }
+        router_id { node { address { value } } }
+        asn { node { asn { value } } }
+        bgp_neighbors {
+          edges {
+            node { peer_address { value } remote_as { value } description { value } }
+          }
+        }
+      }
+    }
+  }
+
+  WanSite {
+    edges {
+      node {
+        name { value }
+        attachment_kind { value }
+        site_asn { value }
+        tenant { node { name { value } } }
+        lan_prefix { node { prefix { value } } }
+        bgp_sessions {
+          edges {
+            node {
+              peer_address { value }
+              remote_as { value }
+              device { node { name { value } role { value } } }
+            }
+          }
+        }
+        static_routes {
+          edges { node { prefix { value } next_hop { value } } }
+        }
+      }
+    }
+  }
+
+  # The service layer. `dc_service_prefixes` is the shared DC range; the tenant
+  # cloud subnet and the PE VRF come from their own kinds; and the PRESENCE of a
+  # ServiceInternetAccess is what decides whether a tenant gets a default route.
+  ServiceL3vpn {
+    edges {
+      node {
+        name { value }
+        tenant { node { name { value } } }
+        vrf { node { name { value } } }
+        dc_service_prefixes { edges { node { prefix { value } } } }
+      }
+    }
+  }
+
+  ServiceTenantCloud {
+    edges {
+      node {
+        name { value }
+        tenant { node { name { value } } }
+        prefix { node { prefix { value } } }
+      }
+    }
+  }
+
+  ServiceInternetAccess {
+    edges {
+      node {
+        name { value }
+        l3vpn { node { tenant { node { name { value } } } } }
+      }
+    }
+  }
+
+  WanInternetPeering {
+    edges {
+      node {
+        name { value }
+        peer_asn { value }
+        customer_aggregate { node { prefix { value } } }
+        internet_prefixes { edges { node { prefix { value } } } }
+      }
+    }
+  }
+
+  # Address -> interface -> device, so a statically attached site's CE can be
+  # resolved from its static route's next hop. `name` and `device` are NOT
+  # selectable on InterfaceLayer3, which is what `interface` peers with, so the
+  # inline fragment is mandatory.
+  IpamIPAddress {
+    edges {
+      node {
+        address { value }
+        interface {
+          node {
+            __typename
+            # The fragment must name the CONCRETE kinds the server returns.
+            # `... on DcimInterface` is accepted by GraphQL, but the generated
+            # Pydantic model discriminates on __typename -- which is
+            # InterfacePhysical or InterfaceVirtual, never DcimInterface -- so
+            # the typed result would silently fall back to a variant with no
+            # `device` field.
+            ... on InterfacePhysical {
+              name { value }
+              role { value }
+              device { node { __typename name { value } } }
+            }
+            ... on InterfaceVirtual {
+              name { value }
+              role { value }
+              device { node { __typename name { value } } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

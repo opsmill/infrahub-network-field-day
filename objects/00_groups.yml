@@ -27,3 +27,9 @@ spec:
     # service kind, so an artifact definition cannot generate against a target
     # whose kind it cannot render.
     - name: service_fabric_apps
+    # Artifact target group for the WAN's FRR configuration. Membership is
+    # EXPLICIT, not derived from the device role: cust-acme-dr-ce is also a
+    # `customer_edge`, but it runs no routing protocol and the lab renders no
+    # FRR config for it, so a role-derived group would produce a seventh
+    # artifact with nothing in it.
+    - name: frr_routers

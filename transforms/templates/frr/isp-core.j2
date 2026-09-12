@@ -1,0 +1,127 @@
+! Rendered by Infrahub for {{ node }} -- do not edit.
+!
+! ISP DC-facing PE, AS {{ isp.asn }}. Default VRF only -- plain transit.
+!
+! Customer VRFs terminate on isp-pe1, so by the time routes reach here they are
+! ordinary unicast routes in one table. That is the trade for not running MPLS:
+! one hop of the provider carries customer traffic without per-customer
+! separation, which is honest for a lab and would not be acceptable in a real
+! carrier core. See docs/design.md "The WAN".
+frr defaults traditional
+hostname {{ node }}
+log stdout
+service integrated-vtysh-config
+!
+! ---- what we accept from the datacentre --------------------------------
+! The DC is a peer, not an authority: accept the service prefixes it is
+! supposed to announce and nothing else. A misconfigured border leaf cannot
+! black-hole the provider.
+{% for p in isp.dc_service_prefixes %}
+ip prefix-list PL-DC-IN seq {{ 10 + loop.index0 * 5 }} permit {{ p }}
+{% endfor %}
+{% for t in tenants %}
+ip prefix-list PL-DC-IN seq {{ 50 + loop.index0 * 5 }} permit {{ t.dc.subnet }}
+{% endfor %}
+ip prefix-list PL-DC-IN seq 99 deny any
+!
+route-map RM-DC-IN permit 10
+ match ip address prefix-list PL-DC-IN
+!
+route-map RM-DC-IN deny 99
+!
+! ---- what we announce to the datacentre --------------------------------
+! Customer prefixes only. The provider's own infrastructure addresses are not
+! the DC's business.
+{% set ns = namespace(seq=10) %}
+{% for t in tenants %}
+{% for site in t.sites %}
+! {{ t.name }}/{{ site.name }}
+ip prefix-list PL-DC-OUT seq {{ ns.seq }} permit {{ site.lan }}
+{% set ns.seq = ns.seq + 5 %}
+{% endfor %}
+{% endfor %}
+ip prefix-list PL-DC-OUT seq 99 deny any
+!
+route-map RM-DC-OUT permit 10
+ match ip address prefix-list PL-DC-OUT
+!
+route-map RM-DC-OUT deny 99
+!
+{% if isp.internet is defined %}
+! ---- the internet ------------------------------------------------------
+! Accept a default route, plus the one prefix that is actually out there.
+!
+! The specific /24 is not decoration, and it is a containerlab artefact rather
+! than a design choice: every node here has a management default route via
+! eth0 to the docker bridge, and a kernel default beats a BGP-learned one. Take
+! only 0.0.0.0/0 from the upstream and internet-bound packets leave through the
+! management interface instead of the provider -- which looks exactly like a
+! routing policy failure and is not one. A more specific route wins, so the
+! internet's own LAN is accepted alongside the default.
+!
+! The product story is unaffected: tenants still get, or do not get, a DEFAULT
+! route, and that is what decides whether they can reach any of this.
+ip prefix-list PL-INTERNET-IN seq 10 permit 0.0.0.0/0
+ip prefix-list PL-INTERNET-IN seq 20 permit {{ isp.internet.lan }}
+ip prefix-list PL-INTERNET-IN seq 99 deny any
+!
+route-map RM-INTERNET-IN permit 10
+ match ip address prefix-list PL-INTERNET-IN
+!
+route-map RM-INTERNET-IN deny 99
+!
+! Announce only the sites of tenants that actually bought internet access.
+! This is the outbound half of the product: globex's prefixes are in this
+! router's table and are deliberately not advertised, so nothing on the
+! internet has a route back to it even by accident.
+{% set ns2 = namespace(seq=10, any=false) %}
+{% for t in tenants if t.internet %}
+{% for site in t.sites %}
+! {{ t.name }}/{{ site.name }}
+ip prefix-list PL-INTERNET-OUT seq {{ ns2.seq }} permit {{ site.lan }}
+{% set ns2.seq = ns2.seq + 5 %}
+{% set ns2.any = true %}
+{% endfor %}
+{% endfor %}
+{% if not ns2.any %}
+ip prefix-list PL-INTERNET-OUT seq 10 deny any
+{% endif %}
+ip prefix-list PL-INTERNET-OUT seq 99 deny any
+!
+route-map RM-INTERNET-OUT permit 10
+ match ip address prefix-list PL-INTERNET-OUT
+!
+route-map RM-INTERNET-OUT deny 99
+!
+{% endif %}
+router bgp {{ isp.asn }}
+ bgp router-id {{ isp.core.loopback }}
+ no bgp ebgp-requires-policy
+ neighbor {{ isp.core.core.peer }} remote-as {{ isp.asn }}
+ neighbor {{ isp.core.core.peer }} description isp-pe1 (edge)
+ neighbor {{ isp.core.dc.peer }} remote-as {{ isp.core.dc.peer_asn }}
+ neighbor {{ isp.core.dc.peer }} description border-leaf1 (VRF WAN)
+{% if isp.internet is defined %}
+ neighbor {{ isp.internet.peering.peer }} remote-as {{ isp.internet.asn }}
+ neighbor {{ isp.internet.peering.peer }} description {{ isp.internet.router }} (the internet)
+{% endif %}
+ !
+ address-family ipv4 unicast
+  network {{ isp.core.loopback }}/32
+  neighbor {{ isp.core.core.peer }} activate
+  neighbor {{ isp.core.core.peer }} next-hop-self
+  neighbor {{ isp.core.dc.peer }} activate
+  neighbor {{ isp.core.dc.peer }} route-map RM-DC-IN in
+  neighbor {{ isp.core.dc.peer }} route-map RM-DC-OUT out
+{% if isp.internet is defined %}
+  neighbor {{ isp.internet.peering.peer }} activate
+  neighbor {{ isp.internet.peering.peer }} route-map RM-INTERNET-IN in
+  neighbor {{ isp.internet.peering.peer }} route-map RM-INTERNET-OUT out
+  ! next-hop-self towards pe1 covers the default route too, so the edge PE
+  ! resolves it via the core link rather than via an internet address it has
+  ! no route to.
+{% endif %}
+ exit-address-family
+!
+line vty
+!

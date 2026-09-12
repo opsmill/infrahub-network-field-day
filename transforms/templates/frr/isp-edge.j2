@@ -1,0 +1,144 @@
+! Rendered by Infrahub for {{ node }} -- do not edit.
+!
+! ISP customer-facing PE, AS {{ isp.asn }}.
+!
+! Every TENANT terminates in its own VRF here, and this is the only device
+! where tenant routes, DC routes and the internet all meet, so it is the only
+! place isolation has to be enforced.
+!
+! How a tenant reaches what it is entitled to, and nothing else:
+!
+!   1. each of the tenant's sites lands in VRF CUST_x -- an eBGP session for a
+!      `kind: bgp` site, a static route for a `kind: static` one
+!   2. the default table imports VRF CUST_x, so the DC and the internet learn
+!      a route back
+!   3. VRF CUST_x imports the default table -- but through RM-<TENANT>-IMPORT,
+!      which permits the shared DC services, that tenant's own cloud subnet,
+!      and a default route only if the tenant buys internet
+!
+! Step 3 is the whole design. EVERY tenant's prefixes are in the default table
+! after step 2; without the per-tenant route-map, step 3 would hand each tenant
+! the others' routes and the provider would be transiting between them.
+!
+! Note what step 1 does NOT need: anything to make a tenant's sites reach each
+! other. Two sites of one tenant share a VRF, so hq and dr have a route to one
+! another the moment both are up. Site-to-site connectivity is a consequence of
+! the tenant model, not a feature bolted onto it.
+frr defaults traditional
+hostname {{ node }}
+log stdout
+service integrated-vtysh-config
+!
+{% for t in tenants %}
+vrf {{ t.vrf }}
+{% for site in t.sites if site.kind == 'static' %}
+ ! {{ t.name }}/{{ site.name }} is statically routed -- no protocol with this
+ ! CE at all. The route lives in the VRF and is redistributed into BGP below,
+ ! which is what makes it indistinguishable from the eBGP sites downstream.
+ ip route {{ site.lan }} {{ site.ce.wan_address | replace('/30','') }}
+{% endfor %}
+ exit-vrf
+!
+{% endfor %}
+! ---- the shared half of what a tenant may learn -------------------------
+ip prefix-list PL-DC-SERVICES description DC services every tenant may reach
+{% for p in isp.dc_service_prefixes %}
+ip prefix-list PL-DC-SERVICES seq {{ 10 + loop.index0 * 5 }} permit {{ p }}
+{% endfor %}
+!
+{% if isp.internet is defined %}
+ip prefix-list PL-DEFAULT seq 10 permit 0.0.0.0/0
+!
+{% endif %}
+! ---- per-tenant import policy -------------------------------------------
+! Shared DC services, plus this tenant's own cloud subnet, plus a default
+! route if it bought internet. Anything else in the provider table -- which
+! includes every other tenant -- is denied.
+{% for t in tenants %}
+ip prefix-list PL-{{ t.name | upper }}-CLOUD seq 10 permit {{ t.dc.subnet }}
+!
+route-map RM-{{ t.name | upper }}-IMPORT permit 10
+ description shared DC services
+ match ip address prefix-list PL-DC-SERVICES
+!
+route-map RM-{{ t.name | upper }}-IMPORT permit 20
+ description {{ t.name }}'s own isolated cloud subnet
+ match ip address prefix-list PL-{{ t.name | upper }}-CLOUD
+!
+{% if t.internet %}
+route-map RM-{{ t.name | upper }}-IMPORT permit 30
+ description {{ t.name }} buys internet access
+ match ip address prefix-list PL-DEFAULT
+!
+{% endif %}
+route-map RM-{{ t.name | upper }}-IMPORT deny 99
+!
+{% endfor %}
+! ---- what each site is allowed to announce to us ------------------------
+! A site may only originate its own assigned prefix. Without this a CE could
+! announce a default route, another tenant's LAN, or its own sibling site's,
+! and the provider would believe it.
+{% for t in tenants %}
+{% for site in t.sites if site.kind == 'bgp' %}
+ip prefix-list PL-{{ t.name | upper }}-{{ site.name | upper }}-IN seq 10 permit {{ site.lan }}
+ip prefix-list PL-{{ t.name | upper }}-{{ site.name | upper }}-IN seq 99 deny any
+!
+route-map RM-{{ t.name | upper }}-{{ site.name | upper }}-IN permit 10
+ match ip address prefix-list PL-{{ t.name | upper }}-{{ site.name | upper }}-IN
+!
+route-map RM-{{ t.name | upper }}-{{ site.name | upper }}-IN deny 99
+!
+{% endfor %}
+{% endfor %}
+! ---- provider core: default VRF -----------------------------------------
+router bgp {{ isp.asn }}
+ bgp router-id {{ isp.edge.loopback }}
+ no bgp ebgp-requires-policy
+ neighbor {{ isp.edge.core.peer }} remote-as {{ isp.asn }}
+ neighbor {{ isp.edge.core.peer }} description isp-pe2 (core)
+ !
+ address-family ipv4 unicast
+  network {{ isp.edge.loopback }}/32
+  neighbor {{ isp.edge.core.peer }} activate
+  ! iBGP to a directly-connected peer: without next-hop-self the DC-bound
+  ! next hop stays the customer-facing address, which pe2 cannot resolve.
+  neighbor {{ isp.edge.core.peer }} next-hop-self
+{% for t in tenants %}
+  ! tenant {{ t.name }} reachability, so the DC and the internet can route back
+  import vrf {{ t.vrf }}
+{% endfor %}
+ exit-address-family
+!
+{% for t in tenants %}
+! ==== tenant {{ t.name }} (VRF {{ t.vrf }}, internet: {{ 'yes' if t.internet else 'no' }}) ====
+{% for site in t.sites %}
+!   site {{ site.name }}: {{ site.lan }} via {{ site.ce.node }} ({{ site.kind }}{% if site.kind == 'bgp' %}, AS {{ site.asn }}{% endif %})
+{% endfor %}
+router bgp {{ isp.asn }} vrf {{ t.vrf }}
+ bgp router-id {{ isp.edge.loopback }}
+ no bgp ebgp-requires-policy
+{% for site in t.sites if site.kind == 'bgp' %}
+ neighbor {{ site.ce.wan_address | replace('/30','') }} remote-as {{ site.asn }}
+ neighbor {{ site.ce.wan_address | replace('/30','') }} description {{ site.ce.node }} ({{ t.name }}/{{ site.name }})
+{% endfor %}
+ !
+ address-family ipv4 unicast
+{% for site in t.sites if site.kind == 'bgp' %}
+  neighbor {{ site.ce.wan_address | replace('/30','') }} activate
+  neighbor {{ site.ce.wan_address | replace('/30','') }} route-map RM-{{ t.name | upper }}-{{ site.name | upper }}-IN in
+{% endfor %}
+{% if t.sites | selectattr('kind', 'equalto', 'static') | list %}
+  ! The statically routed sites. redistribute static is what puts them into
+  ! the tenant's VRF table alongside the eBGP ones, so the DC, the internet
+  ! and the tenant's other sites all learn them the same way.
+  redistribute static
+{% endif %}
+  ! Import the provider table, filtered to what this tenant is entitled to.
+  ! This is what keeps {{ t.name }} from seeing the other tenants.
+  import vrf default
+  import vrf route-map RM-{{ t.name | upper }}-IMPORT
+ exit-address-family
+!
+{% endfor %}
+line vty
+!

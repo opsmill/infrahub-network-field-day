@@ -116,6 +116,7 @@ exclude = [
     "transforms/fabric_cabling_plan_query.py",
     "transforms/crossplane_fabric_peering_query.py",
     "transforms/crossplane_fabric_app_query.py",
+    "transforms/frr_config_query.py",
 ]
 
 
