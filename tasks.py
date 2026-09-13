@@ -393,6 +393,120 @@ def load(ctx: Context) -> None:
     ctx.run("python scripts/seed_app_payloads.py --branch main")
 
 
+# The AVD chain, and the reason it is split in two.
+#
+# TOPOLOGY_GENERATORS build the fabric: devices, racks and -- the part that
+# matters most -- the spine-to-leaf cabling. They are BUILD-TIME ONLY. Re-running
+# them against a fabric that already exists is destructive: `generate-pod` takes
+# each spine from nine interfaces to four, deleting the leaf-role ports that
+# racks 1 and 2 are cabled to, and `generate-rack` then fails on rack 3 with an
+# IndexError because its slice of spine ports is empty. Measured, not supposed.
+#
+# AVD_GENERATORS turn the topology into PyAVD inputs and then into per-device
+# AVD facts. These ARE idempotent: a second run on a branch reports "Hostvars
+# unchanged" and "0 updated, 7 unchanged", and leaves every interface alone.
+#
+# So the default is the safe pair. Building a fabric from nothing is the
+# exception and asks for it explicitly.
+TOPOLOGY_GENERATORS = (
+    "generate-fabric",
+    "generate-pod",
+    "generate-rack",
+)
+
+AVD_GENERATORS = (
+    "generate-avd-device-hostvar",
+    "generate-avd-device-structured-config",
+)
+
+
+def _artifact_definition_ids(branch: str = "") -> dict[str, str]:
+    """Every artifact definition, by name, as the given branch sees them."""
+    query = "query{CoreArtifactDefinition{edges{node{id name{value}}}}}"
+    response = httpx.post(
+        f"{INFRAHUB_ADDRESS}/graphql/{branch}" if branch else f"{INFRAHUB_ADDRESS}/graphql",
+        json={"query": query},
+        headers={"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")},
+        timeout=60,
+    )
+    response.raise_for_status()
+    edges = response.json()["data"]["CoreArtifactDefinition"]["edges"]
+    return {e["node"]["name"]["value"]: e["node"]["id"] for e in edges}
+
+
+@task(
+    help={
+        "branch": "Branch to run on. Created if absent. Omit to run against main.",
+        "topology": (
+            "Also run the fabric/pod/rack generators. BUILD-TIME ONLY -- they are "
+            "destructive against a fabric that already has cabling."
+        ),
+        "artifacts": "Regenerate every artifact definition once the chain completes.",
+    }
+)
+def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool = True) -> None:
+    """
+    Run the AVD generation chain, optionally on its own branch.
+
+    The usual case is data changing -- a new VRF, a re-addressed interface, a
+    service added -- and wanting the switch configuration to follow. That is the
+    default: regenerate the PyAVD hostvars, the structured configs, and the
+    artifacts rendered from them.
+
+    Use `--branch` for anything you intend to review. The chain writes a lot of
+    derived data, and doing that straight onto `main` leaves nowhere to see what
+    changed before it becomes the source of truth. On a branch you can diff it,
+    raise a proposed change, and merge or discard.
+
+    Use `--topology` only on an instance where the fabric has not been built yet,
+    such as immediately after `invoke load`. A fresh load seeds objects but runs
+    no generators, so there is no spine-to-leaf cabling and PyAVD renders
+    switches with no uplinks and no underlay or overlay BGP -- roughly 155 lines
+    for a spine instead of 239, with every artifact still reporting Ready. That
+    silence is what this flag is for. Against an existing fabric it will damage
+    it; see the note above TOPOLOGY_GENERATORS.
+    """
+    if branch:
+        existing = ctx.run("infrahubctl branch list", hide=True, warn=True)
+        if existing and branch in (existing.stdout or ""):
+            print(f" - Branch '{branch}' already exists, reusing it")
+        else:
+            print(f" - Creating branch '{branch}'")
+            ctx.run(f"infrahubctl branch create {branch}", pty=True)
+
+    target = f" --branch {branch}" if branch else ""
+
+    generators = (*TOPOLOGY_GENERATORS, *AVD_GENERATORS) if topology else AVD_GENERATORS
+    if topology:
+        print(" - Building topology as well (destructive against an existing fabric)")
+
+    for generator in generators:
+        print(f" - Running {generator}")
+        ctx.run(f"infrahubctl generator {generator}{target}", pty=True)
+
+    if artifacts:
+        # Artifacts render from data the chain has just rewritten, and one
+        # generated beforehand keeps its old content until something asks again.
+        # There is no GraphQL mutation for this; the REST endpoint is the only
+        # way to ask.
+        print(" - Regenerating artifacts")
+        for name, definition_id in sorted(_artifact_definition_ids(branch).items()):
+            response = httpx.post(
+                f"{INFRAHUB_ADDRESS}/api/artifact/generate/{definition_id}",
+                # The branch matters. Without it the endpoint regenerates against
+                # main, and on a branch you get the confusing result that
+                # `infrahubctl transform --branch X` renders your change while the
+                # stored artifact never moves.
+                params={"branch": branch} if branch else None,
+                headers={"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")},
+                timeout=300,
+            )
+            print(f"   {name}: HTTP {response.status_code}")
+
+    if branch:
+        print(f"\n - Done on '{branch}'. Review the diff, then merge with `infrahubctl branch merge {branch}`.")
+
+
 @task
 def stop(ctx: Context) -> None:
     """

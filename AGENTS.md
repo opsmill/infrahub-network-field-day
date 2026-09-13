@@ -142,6 +142,35 @@ statements about the whole graph rather than about one fabric.
    or utility behavior.
 7. Run local unit/lint validation, integration tests and generator idempotence test as applicable.
 
+## Running the AVD chain
+
+`invoke load` seeds objects and runs **no generators**. A freshly loaded instance
+therefore has no spine-to-leaf cabling, and PyAVD renders switches with no
+uplinks and no underlay or overlay BGP — about 155 lines for a spine instead of
+239 — while every artifact still reports `Ready`. Nothing errors. Use
+`invoke avd --topology` once after a fresh load to build the fabric.
+
+Thereafter use `invoke avd`, which runs only the two idempotent stages:
+
+| Stage | Idempotent | When |
+| --- | --- | --- |
+| `generate-fabric`, `generate-pod`, `generate-rack` | **No — destructive on re-run** | `--topology`, build time only |
+| `generate-avd-device-hostvar`, `generate-avd-device-structured-config` | Yes | every run |
+
+The topology generators must not be re-run against a fabric that already has
+cabling. `generate-pod` takes each spine from nine interfaces to four, deleting
+the leaf-role ports racks 1 and 2 are cabled to, and `generate-rack` then fails
+on rack 3 with an `IndexError` because its slice of spine ports is empty. That
+is why they are behind a flag rather than in the default path.
+
+**Use `--branch` for anything you intend to review.** The chain writes a great
+deal of derived data, and doing that straight onto `main` leaves nowhere to see
+what changed first. Artifact regeneration passes the branch through to
+`POST /api/artifact/generate/{id}`; omit it and the endpoint regenerates against
+`main`, which produces the confusing result that
+`infrahubctl transform --branch X` renders your change while the stored artifact
+never moves.
+
 ## Naming conventions
 
 - Generators: `generate_<entity>.py`.
@@ -220,6 +249,9 @@ uv run invoke restart --component=service-catalog
 uv run invoke load
 uv run invoke load-schema
 uv run invoke load-menu
+uv run invoke avd                       # regenerate AVD hostvars, structured configs and artifacts
+uv run invoke avd --branch my-change    # ... on a branch, so the result can be reviewed
+uv run invoke avd --topology            # BUILD-TIME ONLY: also build the fabric and its cabling
 uv run invoke init-semaphore
 uv run invoke test
 uv run invoke lint
