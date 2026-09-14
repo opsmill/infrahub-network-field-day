@@ -58,22 +58,27 @@ spec:
       icon: "mdi:server"
       children:
         data:
-          # Two entries since cycle 027 split the kinds. "All Devices" now points
-          # at the GENERIC, so it still lists every device -- the fabric's
-          # switches, the WAN's routers, the firewall and the servers -- which is
-          # what the label promises. Pointing it at either concrete kind would
-          # silently show half the estate.
-          - namespace: Dcim
-            name: AllDevices
-            label: All Devices
-            kind: DcimGenericDevice
-            icon: "mdi:server"
-
+          # One entry per CONCRETE kind, since cycle 027 split DcimDevice.
+          #
+          # An earlier attempt pointed a single "All Devices" item at
+          # DcimGenericDevice, reasoning that the generic lists every kind at
+          # once. That was wrong twice over: the generic carries
+          # `include_in_menu: false`, and no other item in this file -- out of
+          # roughly sixty -- names a generic. ComputePhysicalServer and
+          # SecurityFirewall already have their own concrete entries further
+          # down, so per-kind is the convention here. It also left the WAN's
+          # routers with no menu entry at all.
           - namespace: Dcim
             name: FabricSwitches
             label: Fabric Switches
             kind: DcimFabricSwitch
             icon: "clarity:network-switch-solid"
+
+          - namespace: Dcim
+            name: Routers
+            label: Routers
+            kind: DcimDevice
+            icon: "mdi:router"
 
           - namespace: Interface
             name: InterfacesMenu
