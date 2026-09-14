@@ -951,6 +951,8 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
     print(" - Installing Cilium (the CNI; nodes stay NotReady until it is ready)")
     ctx.run(f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-cilium.sh'))}", pty=True)
 
+    _wait_for_cluster_dns(ctx, kubeconfig)
+
     print(" - Installing Vidra before the platform, so it owns what it delivers")
     ctx.run("scripts/install_vidra.sh", pty=True, env={"KUBECONFIG": str(kubeconfig)})
 
@@ -1002,6 +1004,32 @@ def vidra(ctx: Context, lab_dir: str = "", wait: bool = True) -> None:
     if wait:
         print("\n - Waiting for both syncs to reach a terminal state")
         _wait_for_syncs(ctx, kubeconfig)
+
+
+def _wait_for_cluster_dns(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
+    """Wait for in-cluster DNS before anything that needs the cluster from inside.
+
+    Crossplane's own bootstrap preflights ClusterIP reachability, external DNS
+    and pod egress, and dies with `in-cluster networking preflight failed` if any
+    of them is not up yet. Run by hand there is always a gap between installing
+    the CNI and installing Crossplane, and the check passes. Run back to back by
+    `invoke cluster` there is not, and it fails -- measured: CoreDNS cannot
+    schedule at all until Cilium exists, so it is still starting when Crossplane
+    asks.
+
+    `install-cilium.sh` already waits for the nodes to go Ready, which is not the
+    same thing: a node is Ready as soon as the CNI answers, while CoreDNS is a
+    pod that then has to be scheduled and become available.
+
+    Note that Vidra's own preflight passing says nothing about this one. It
+    checks egress to the management gateway on the node network; Crossplane needs
+    DNS and a ClusterIP.
+    """
+    kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
+    print(" - Waiting for in-cluster DNS (Crossplane preflights it and dies if it is not up)")
+    result = ctx.run(f"{kube} -n kube-system rollout status deploy/coredns --timeout={timeout}s", pty=True, warn=True)
+    if not (result and result.ok):
+        print("   CoreDNS did not report available; Crossplane's preflight may fail")
 
 
 def _wait_for_teardown(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
