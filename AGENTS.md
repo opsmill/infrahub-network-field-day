@@ -184,6 +184,38 @@ what changed first. Artifact regeneration passes the branch through to
 `infrahubctl transform --branch X` renders your change while the stored artifact
 never moves.
 
+## Bootstrapping the whole environment
+
+```bash
+uv run invoke bootstrap            # everything, in one command
+uv run invoke bootstrap --fresh    # ... destroying the stack and the lab first
+```
+
+That runs `start` → `load` → `avd` (on a branch, then merged) → `lab` →
+`provision` → `cluster`. Each step is still available on its own; `bootstrap`
+only removes the need to remember the order and the flags.
+
+**The AVD chain runs on a branch and `--merge` merges it, rather than you
+running `infrahubctl branch merge` by hand.** That is not ceremony. The topology
+generators write a great deal of derived data, and running them onto `main`
+leaves nowhere to see what changed — and no way back if they damage a fabric
+that already has cabling. The merge then **waits for the artifacts to render**,
+because generation is asynchronous: the REST endpoint returns 200 and the
+rendering happens afterwards. Without that wait `provision` can read an artifact
+that exists, reports `Ready`, and is empty — and push nothing onto a switch.
+
+`invoke avd --branch X --merge` does the same thing outside a bootstrap.
+
+**Compose commands are pinned to the real project directory.** `docker compose`
+derives its project name from the working directory, so from a git worktree
+`invoke destroy` used to address a project that does not exist and silently do
+nothing, while `invoke start` raised a second stack fighting for port 8000.
+`compose_root()` resolves the main checkout through
+`git rev-parse --git-common-dir`, which also matters because
+docker-compose.override.yml mounts `./:/upstream` and Infrahub clones that path
+over git — a worktree's `.git` is a file pointing into the main repository, so a
+clone of it fails outright.
+
 ## Bringing the lab up from Infrahub
 
 Two tasks, in order. The topology belongs to the sibling NFD41 lab repository;
@@ -412,6 +444,9 @@ uv run invoke load-menu
 uv run invoke avd                       # regenerate AVD hostvars, structured configs and artifacts
 uv run invoke avd --branch my-change    # ... on a branch, so the result can be reviewed
 uv run invoke avd --topology            # BUILD-TIME ONLY: also build the fabric and its cabling
+uv run invoke avd --branch b --merge    # ... on a branch, merged when it succeeds
+uv run invoke bootstrap                 # the whole environment, one command
+uv run invoke bootstrap --fresh         # ... destroying the stack and the lab first
 uv run invoke lab                       # deploy ../lab's topology with management connectivity
 uv run invoke lab --destroy             # tear it down
 uv run invoke provision                 # push every rendered artifact onto the running devices

@@ -2,6 +2,7 @@ import json
 import os
 import shlex
 import shutil
+import subprocess  # noqa: S404 - one fixed-argv git call, never a shell string
 import sys
 import time
 from pathlib import Path
@@ -16,6 +17,53 @@ CURRENT_DIRECTORY = Path(__file__).resolve()
 MAIN_DIRECTORY_PATH = Path(__file__).parent
 
 COMPOSE_FILES = "-f docker-compose.yml -f docker-compose.override.yml"
+
+
+def compose_root() -> Path:
+    """The checkout whose compose files define the stack.
+
+    From a normal checkout this is simply the repository. From a **git worktree**
+    it is the main checkout, and the difference matters twice over:
+
+      - `docker compose` derives its project name from the directory, so running
+        it from a worktree makes a SECOND stack rather than acting on the running
+        one. Both then want port 8000, and `invoke destroy` from a worktree
+        silently does nothing because it is addressing a project that does not
+        exist.
+      - docker-compose.override.yml mounts `./:/upstream`, and Infrahub clones
+        that path over git. A worktree's `.git` is a file pointing into the main
+        repository, so a clone of it fails outright -- the worktree cannot be the
+        repository Infrahub reads.
+
+    `git rev-parse --git-common-dir` gives the shared git directory for both
+    cases; its parent is the checkout to use.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=MAIN_DIRECTORY_PATH,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        common = Path(result.stdout.strip())
+        if not common.is_absolute():
+            common = (MAIN_DIRECTORY_PATH / common).resolve()
+        if common.name == ".git":
+            return common.parent
+    return MAIN_DIRECTORY_PATH
+
+
+def compose_cmd() -> str:
+    """`docker compose` pinned to the stack's real project directory."""
+    root = compose_root()
+    return (
+        f"docker compose --project-directory {shlex.quote(str(root))} "
+        f"-f {shlex.quote(str(root / 'docker-compose.yml'))} "
+        f"-f {shlex.quote(str(root / 'docker-compose.override.yml'))}"
+    )
+
+
 INFRAHUB_ADDRESS = os.getenv("INFRAHUB_ADDRESS", "http://localhost:8000")
 
 os.environ.setdefault("INFRAHUB_USERNAME", "admin")
@@ -58,11 +106,11 @@ def build(ctx: Context, cache: bool = True) -> None:
     """
     Build the docker image.
     """
-    compose_cmd = f"docker compose {COMPOSE_FILES} build"
+    command = f"{compose_cmd()} build"
     if not cache:
-        compose_cmd += " --no-cache"
+        command += " --no-cache"
     with ctx.cd(MAIN_DIRECTORY_PATH):
-        ctx.run(compose_cmd, pty=True)
+        ctx.run(command, pty=True)
 
 
 @task
@@ -70,7 +118,7 @@ def destroy(ctx: Context) -> None:
     """
     Stop and remove containers, networks, and volumes.
     """
-    ctx.run(f"docker compose {COMPOSE_FILES} down -v", pty=True)
+    ctx.run(f"{compose_cmd()} down -v", pty=True)
 
 
 class _SemaphoreClient:
@@ -451,9 +499,10 @@ def _artifact_definition_ids(branch: str = "") -> dict[str, str]:
             "destructive against a fabric that already has cabling."
         ),
         "artifacts": "Regenerate every artifact definition once the chain completes.",
+        "merge": "Merge the branch into main when the chain succeeds, then wait for the artifacts to render.",
     }
 )
-def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool = True) -> None:
+def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool = True, merge: bool = False) -> None:
     """
     Run the AVD generation chain, optionally on its own branch.
 
@@ -512,8 +561,55 @@ def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool 
             )
             print(f"   {name}: HTTP {response.status_code}")
 
-    if branch:
-        print(f"\n - Done on '{branch}'. Review the diff, then merge with `infrahubctl branch merge {branch}`.")
+    if branch and merge:
+        print(f"\n - Merging '{branch}' into main")
+        ctx.run(f"infrahubctl branch merge {shlex.quote(branch)}", pty=True)
+        _wait_for_artifacts(ctx)
+        print(f"\n - Merged. Main now carries the chain's output; '{branch}' can be deleted.")
+    elif branch:
+        print(f"\n - Done on '{branch}'. Review the diff, then merge with `invoke avd --branch {branch} --merge`.")
+
+
+def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG001
+    """Block until every configuration artifact on main has content.
+
+    Artifact generation is **asynchronous**: the REST endpoint returns 200 and
+    the rendering happens in a task afterwards, and a merge kicks off another
+    round through Infrahub's branch-merge-post-process flow. Sampling right after
+    either one finds artifacts that exist, report `Ready`, and are empty.
+
+    That matters because `invoke provision` reads these. Pushing an empty
+    artifact would replace a switch's configuration with nothing, so the
+    bootstrap waits here rather than racing.
+    """
+    names = ("AVD EOS Configuration", "FRR Configuration", "Junos Configuration")
+    headers = {"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")}
+    query = "{CoreArtifact{edges{node{id name{value}}}}}"
+    print(" - Waiting for the rendered artifacts to carry content")
+    deadline = time.time() + timeout
+    empty = -1
+    wanted: list[str] = []
+    while time.time() < deadline:
+        try:
+            response = httpx.post(
+                f"{INFRAHUB_ADDRESS}/graphql/main", json={"query": query}, headers=headers, timeout=60
+            )
+            response.raise_for_status()
+            edges = response.json()["data"]["CoreArtifact"]["edges"]
+            wanted = [e["node"]["id"] for e in edges if e["node"]["name"]["value"] in names]
+            empty = sum(
+                1
+                for aid in wanted
+                if not httpx.get(f"{INFRAHUB_ADDRESS}/api/artifact/{aid}", headers=headers, timeout=60).text.strip()
+            )
+        except (httpx.HTTPError, KeyError, TypeError):
+            empty = -1
+        if empty == 0 and wanted:
+            print(f"   all {len(wanted)} configuration artifacts populated")
+            return
+        sleep(10)
+
+    print(f"   WARNING: {empty} artifact(s) still empty after {timeout}s -- `invoke provision` would push nothing")
 
 
 def find_lab_directory(explicit: str = "") -> Path:
@@ -943,12 +1039,100 @@ def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
         )
 
 
+# `bootstrap` takes a --cluster flag, which shadows the task of the same name
+# inside its body. Alias it here so the call site stays readable.
+_cluster_task = cluster
+
+
+@task(
+    help={
+        "branch": "Branch the AVD chain runs on before being merged. Created if absent.",
+        "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
+        "cluster": "Also bring up Kubernetes: Cilium, Vidra, Crossplane and the handover.",
+        "fresh": "Destroy the stack and the lab first, so the run starts from nothing.",
+    }
+)
+def bootstrap(
+    ctx: Context, branch: str = "build-fabric", lab_dir: str = "", cluster: bool = True, fresh: bool = False
+) -> None:
+    """
+    Bring the whole environment up, from nothing, in one command.
+
+    Everything this project can automate, in the order the dependencies actually
+    impose:
+
+        start      the Infrahub stack
+        load       schema, menus, seed data
+        avd        the generation chain ON A BRANCH, then merged to main
+        lab        the ContainerLab topology, management connectivity only
+        provision  every device configured from its rendered artifact
+        cluster    Cilium, Vidra, Crossplane, and the resource handover
+
+    **The chain runs on a branch and is merged here rather than by hand.** That
+    is not ceremony: the topology generators write a great deal of derived data,
+    and running them straight onto main leaves nowhere to see what changed --
+    and no way back if they damage a fabric that already has cabling. The merge
+    then waits for the artifacts to render, because generation is asynchronous
+    and `provision` would otherwise push empty configuration onto the switches.
+
+    Use `--fresh` to destroy the stack and the lab first. Without it the task is
+    safe to re-run, with one exception worth stating: the topology generators
+    inside `avd --topology` are destructive against a fabric that already has
+    cabling, so a second bootstrap onto a populated instance wants `--fresh`.
+    """
+    if fresh:
+        print("=== Destroying the lab ===")
+        lab(ctx, lab_dir=lab_dir, destroy=True)
+        print("\n=== Destroying the Infrahub stack ===")
+        destroy(ctx)
+
+    print("\n=== Starting Infrahub ===")
+    start(ctx)
+    _wait_for_infrahub()
+
+    print("\n=== Loading schema, menus and seed data ===")
+    load(ctx)
+
+    print(f"\n=== Running the AVD chain on '{branch}' and merging it ===")
+    avd(ctx, branch=branch, topology=True, merge=True)
+
+    print("\n=== Deploying the lab ===")
+    lab(ctx, lab_dir=lab_dir)
+
+    print("\n=== Provisioning every device from Infrahub ===")
+    provision(ctx)
+
+    if cluster:
+        print("\n=== Bringing up Kubernetes ===")
+        _cluster_task(ctx, lab_dir=lab_dir)
+
+    print("\n=== Bootstrap complete ===")
+    print("   The lab is running and every device matches Infrahub.")
+    if cluster:
+        print("   Merging a service-layer change on main now reaches the cluster through Vidra.")
+
+
+def _wait_for_infrahub(timeout: int = 600) -> None:
+    """Block until the API answers, so the next step is not racing the stack."""
+    print(" - Waiting for Infrahub to answer")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            if httpx.get(f"{INFRAHUB_ADDRESS}/api/config", timeout=5).status_code == 200:
+                print("   reachable")
+                return
+        except httpx.HTTPError:
+            pass
+        sleep(10)
+    raise SystemExit(f"Infrahub did not answer on {INFRAHUB_ADDRESS} within {timeout}s")
+
+
 @task
 def stop(ctx: Context) -> None:
     """
     Stop containers and remove networks.
     """
-    ctx.run(f"docker compose {COMPOSE_FILES} down", pty=True)
+    ctx.run(f"{compose_cmd()} down", pty=True)
 
 
 @task(help={"component": "Optional name of a specific service to restart."})
@@ -957,10 +1141,10 @@ def restart(ctx: Context, component: str = "") -> None:
     Restart all services or a specific one using docker-compose.
     """
     if component:
-        ctx.run(f"docker compose {COMPOSE_FILES} restart {component}", pty=True)
+        ctx.run(f"{compose_cmd()} restart {component}", pty=True)
         return
 
-    ctx.run(f"docker compose {COMPOSE_FILES} restart", pty=True)
+    ctx.run(f"{compose_cmd()} restart", pty=True)
 
 
 @task
@@ -1117,4 +1301,4 @@ def start(ctx: Context) -> None:
     # exist yet is created by Docker as root, which the Semaphore container then
     # cannot write to.
     ensure_clab_staging_dir()
-    ctx.run(f"docker compose {COMPOSE_FILES} up -d", pty=True)
+    ctx.run(f"{compose_cmd()} up -d", pty=True)

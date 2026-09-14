@@ -5,6 +5,7 @@ import logging
 from ipaddress import IPv4Network, IPv6Network, ip_network
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+import httpx
 from infrahub_sdk.exceptions import ServerNotResponsiveError
 from infrahub_sdk.protocols import CoreIPAddressPool, CoreIPPrefixPool, CoreNumberPool
 
@@ -1291,6 +1292,45 @@ async def _trigger_generator(
             "Timed out while triggering %s; downstream generator state is ambiguous and will be observed later",
             name,
         )
+    except httpx.HTTPStatusError as exc:
+        # A 5xx is the same situation as a timeout and is tolerated the same way.
+        #
+        # Triggering hostvar generation for seven devices at once, straight after
+        # the rack generators finish, makes the server answer
+        # /api/query/avd_device_hostvar?update_group=true with 502 Bad Gateway --
+        # reproducibly, on a cold instance, on two runs out of two. The SDK
+        # raises that as an HTTP error rather than ServerNotResponsiveError, so
+        # it escaped the tolerance this call already asked for and took the whole
+        # chain down with it: `invoke avd` exited 1 with the cabling built but the
+        # hostvars generated against an intermediate state, which renders a fabric
+        # whose spines are missing half their leaves.
+        #
+        # Tolerating it is correct rather than merely convenient. This trigger is
+        # a pre-warm: `invoke avd` runs generate-avd-device-hostvar explicitly as
+        # its next step, and the structured-config generator refuses to proceed if
+        # hostvars are genuinely missing. So the work is done, or loudly not done,
+        # either way -- and a transient 502 here should not abort a chain that is
+        # about to redo the same work synchronously.
+        if not tolerate_timeout or not _is_server_error(exc):
+            raise
+        logger.warning(
+            "Server error while triggering %s (%s); the explicit generator step will redo this work",
+            name,
+            exc,
+        )
+
+
+def _is_server_error(exc: Exception) -> bool:
+    """True for a 5xx, which is transient, and False for a 4xx, which is not.
+
+    A 502 under load deserves tolerance; a 404 for a generator that does not
+    exist is a real fault and must still surface.
+    """
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return 500 <= status < 600
+    # Some SDK versions carry the status only in the message.
+    return any(code in str(exc) for code in ("500", "502", "503", "504"))
 
 
 async def trigger_hostvar_generation(

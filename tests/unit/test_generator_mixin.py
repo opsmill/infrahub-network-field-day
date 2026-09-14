@@ -4,6 +4,7 @@ from ipaddress import ip_network
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from infrahub_sdk.exceptions import ServerNotResponsiveError
 
@@ -1157,6 +1158,59 @@ async def test_trigger_generator_tolerant_mode_propagates_non_timeout_errors() -
             timeout=300,
             tolerate_timeout=True,
         )
+
+
+@pytest.mark.asyncio
+async def test_trigger_generator_tolerates_a_5xx_the_way_it_tolerates_a_timeout() -> None:
+    """A 502 from the trigger must not take the whole chain down.
+
+    Triggering hostvar generation for seven devices at once, right after the rack
+    generators finish, makes the server answer
+    /api/query/avd_device_hostvar?update_group=true with 502 Bad Gateway --
+    reproducibly, on a cold instance. httpx raises that rather than
+    ServerNotResponsiveError, so it used to escape the tolerance this call already
+    asks for and exit `invoke avd` with the cabling built but the hostvars
+    generated against an intermediate state: a fabric whose spines are missing
+    half their leaves, from artifacts that look complete.
+
+    Tolerating it is safe because the trigger is a pre-warm -- the explicit
+    generate-avd-device-hostvar step runs next and redoes the same work.
+    """
+    client = MagicMock()
+    client.filters = AsyncMock(return_value=[SimpleNamespace(id="generator-1")])
+    response = httpx.Response(502, request=httpx.Request("POST", "http://infrahub/graphql"))
+    client.execute_graphql = AsyncMock(
+        side_effect=httpx.HTTPStatusError("502 Bad Gateway", request=response.request, response=response)
+    )
+
+    await trigger_hostvar_generation(client, node_ids=["device-1"], timeout=300, tolerate_timeout=True)
+
+
+@pytest.mark.asyncio
+async def test_trigger_generator_still_raises_a_4xx() -> None:
+    """A 404 is a real fault -- a generator that does not exist -- not load."""
+    client = MagicMock()
+    client.filters = AsyncMock(return_value=[SimpleNamespace(id="generator-1")])
+    response = httpx.Response(404, request=httpx.Request("POST", "http://infrahub/graphql"))
+    client.execute_graphql = AsyncMock(
+        side_effect=httpx.HTTPStatusError("404 Not Found", request=response.request, response=response)
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await trigger_hostvar_generation(client, node_ids=["device-1"], timeout=300, tolerate_timeout=True)
+
+
+@pytest.mark.asyncio
+async def test_trigger_generator_does_not_tolerate_a_5xx_without_the_flag() -> None:
+    client = MagicMock()
+    client.filters = AsyncMock(return_value=[SimpleNamespace(id="generator-1")])
+    response = httpx.Response(502, request=httpx.Request("POST", "http://infrahub/graphql"))
+    client.execute_graphql = AsyncMock(
+        side_effect=httpx.HTTPStatusError("502 Bad Gateway", request=response.request, response=response)
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await trigger_hostvar_generation(client, node_ids=["device-1"], timeout=300)
 
 
 # --- Optional device naming override ------------------------------------------
