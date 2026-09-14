@@ -7,7 +7,7 @@ spec:
     - name: cv_config_check
       repository: test-repository
       query: |
-        query CVConfigCheck($name: String!) {
+        query CVConfigCheckQuery($name: String!) {
           NetworkFabric(name__value: $name) {
             edges {
               node {
@@ -21,7 +21,7 @@ spec:
               }
             }
           }
-          DcimDevice {
+          DcimFabricSwitch {
             edges {
               node {
                 id

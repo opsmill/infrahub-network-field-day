@@ -422,6 +422,7 @@ def push_junos(target: Target, config: str) -> str:
         raise ProvisionError(f"{target.device}: container {target.container} is not running")
 
     _assert_junos_scope(target, config)
+    _wait_for_vsrx(target)
     tagged = _junos_replace_tagged(config)
     remote_path = "/var/tmp/infrahub.conf"  # noqa: S108 - on the vSRX, the conventional load location
     staged_path = "/tmp/infrahub-fw.conf"  # noqa: S108 - inside the node's own container
@@ -455,6 +456,37 @@ def push_junos(target: Target, config: str) -> str:
     _assert_junos_ok(target, confirm, "confirm")
 
     return f"loaded and committed on {target.container} (replace: interfaces, routing-options, security)"
+
+
+def _wait_for_vsrx(target: Target, timeout: int = 600) -> None:
+    """Block until the vSRX answers its CLI, or give up with a useful message.
+
+    The container starts in seconds; the VM inside it takes minutes. Provisioning
+    straight after `invoke lab` therefore hits a container that is running and a
+    Junos that is not, and the failure reads "Connection timed out during banner
+    exchange" -- which looks like a network or credential problem rather than a
+    device that simply has not booted yet. Measured on a cold deploy: every other
+    device was configured and committed before the vSRX would accept a session.
+
+    Ten minutes because vrnetlab's vSRX boot is genuinely that slow on a busy
+    host, and waiting costs nothing when the device is already up.
+    """
+    deadline = time.time() + timeout
+    attempt = 0
+    while time.time() < deadline:
+        attempt += 1
+        probe = _vsrx_cli(target, "show version | match Hostname\nexit\n")
+        if "Hostname:" in probe.stdout:
+            if attempt > 1:
+                print(f"        {target.device}: vSRX ready after {attempt} probe(s)")
+            return
+        time.sleep(15)
+
+    raise ProvisionError(
+        f"{target.device}: the vSRX did not answer its CLI within {timeout}s. "
+        "The container is running but the VM inside it is still booting -- wait and re-run, "
+        "or check `docker logs` for the node."
+    )
 
 
 _SSH_OPTS = (
