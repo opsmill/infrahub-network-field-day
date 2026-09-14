@@ -5,8 +5,10 @@ import shutil
 import subprocess  # noqa: S404 - one fixed-argv git call, never a shell string
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from time import sleep
+from typing import Any
 
 import httpx
 from invoke import Context, task
@@ -534,11 +536,11 @@ def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool 
 
     target = f" --branch {branch}" if branch else ""
 
-    generators = (*TOPOLOGY_GENERATORS, *AVD_GENERATORS) if topology else AVD_GENERATORS
     if topology:
-        print(" - Building topology as well (destructive against an existing fabric)")
+        print(" - Building the topology")
+        _run_topology_generators(ctx, branch, target)
 
-    for generator in generators:
+    for generator in AVD_GENERATORS:
         print(f" - Running {generator}")
         ctx.run(f"infrahubctl generator {generator}{target}", pty=True)
 
@@ -568,6 +570,91 @@ def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool 
         print(f"\n - Merged. Main now carries the chain's output; '{branch}' can be deleted.")
     elif branch:
         print(f"\n - Done on '{branch}'. Review the diff, then merge with `invoke avd --branch {branch} --merge`.")
+
+
+def _graphql(query: str, branch: str = "") -> dict[str, Any]:
+    """One GraphQL read against a branch, returning `data` or an empty mapping."""
+    url = f"{INFRAHUB_ADDRESS}/graphql/{branch}" if branch else f"{INFRAHUB_ADDRESS}/graphql"
+    try:
+        response = httpx.post(
+            url,
+            json={"query": query},
+            headers={"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json().get("data") or {}
+    except (httpx.HTTPError, ValueError):
+        return {}
+
+
+def _rack_generation(branch: str) -> tuple[int, int]:
+    """`(racks, racks whose generation_complete is true)` on this branch."""
+    data = _graphql("{LocationRack{edges{node{generation_complete{value}}}}}", branch)
+    edges = (data.get("LocationRack") or {}).get("edges") or []
+    done = sum(1 for e in edges if ((e["node"].get("generation_complete") or {}).get("value")) is True)
+    return len(edges), done
+
+
+def _wait_until(predicate: Callable[[], bool], timeout: int, interval: int = 10) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        sleep(interval)
+    return predicate()
+
+
+def _run_topology_generators(ctx: Context, branch: str, target: str, timeout: int = 420) -> None:
+    """Build fabric, pods and racks -- running each stage only if it has not already run.
+
+    **The generators cascade, and running them all explicitly runs them twice.**
+    `generate-fabric` writes each pod's checksum, and that write fires
+    `trigger-pod-generator-update-checksum`; `generate-pod` writes each rack's
+    checksum and fires the rack generator the same way, calling
+    `trigger_rack_generation` directly for the racks whose checksum it did not
+    change. Every pod and rack is therefore generated exactly once already.
+
+    Running `generate-pod` and `generate-rack` on top of that is a second pass,
+    and the second pass is destructive: it trims each spine's leaf-role ports and
+    re-allocates them, deleting the cabling the first pass created. Measured
+    across three clean rebuilds, which produced 10, 0 and 4 of the 10 expected
+    spine-leaf links -- and a spine rendered with no `router bgp` at all, from
+    artifacts that reported Ready.
+
+    So each stage waits for the cascade and runs explicitly only if nothing
+    happened. That also makes `--topology` safe to re-run against a built fabric,
+    which it previously was not: with every rack already complete, both stages
+    are skipped rather than destroying the cabling.
+    """
+    print(" - Running generate-fabric")
+    ctx.run(f"infrahubctl generator generate-fabric{target}", pty=True)
+
+    racks, complete = _rack_generation(branch)
+    if racks == 0:
+        print(" - Waiting for the pod cascade to create the racks")
+        if not _wait_until(lambda: _rack_generation(branch)[0] > 0, timeout):
+            print("   no racks appeared; running generate-pod explicitly")
+            ctx.run(f"infrahubctl generator generate-pod{target}", pty=True)
+            _wait_until(lambda: _rack_generation(branch)[0] > 0, timeout)
+    else:
+        print(f" - {racks} rack(s) already present; not running generate-pod again")
+
+    racks, complete = _rack_generation(branch)
+    if complete < racks or racks == 0:
+        print(f" - Waiting for the rack cascade to finish cabling ({complete}/{racks} complete)")
+        if not _wait_until(lambda: _all_racks_done(branch), timeout):
+            racks, complete = _rack_generation(branch)
+            print(f"   {complete}/{racks} complete; running generate-rack explicitly")
+            ctx.run(f"infrahubctl generator generate-rack{target}", pty=True)
+            _wait_until(lambda: _all_racks_done(branch), timeout)
+    racks, complete = _rack_generation(branch)
+    print(f" - Topology built: {complete}/{racks} rack(s) generated")
+
+
+def _all_racks_done(branch: str) -> bool:
+    racks, complete = _rack_generation(branch)
+    return racks > 0 and complete == racks
 
 
 def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG001
