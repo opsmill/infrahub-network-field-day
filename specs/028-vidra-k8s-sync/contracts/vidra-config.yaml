@@ -1,0 +1,26 @@
+---
+# Contract: operator behaviour. Found by its `app: vidra` label, not by name or
+# namespace -- the label is how the operator locates it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vidra-config
+  namespace: vidra-system
+  labels:
+    app: vidra
+data:
+  # Points the operator at this repository's registered query name. Without this
+  # it looks for `ArtifactIDs`, which would be the only PascalCase entry in
+  # .infrahub.yml.
+  queryName: "artifact_ids"
+
+  # Merge-to-cluster latency. One stored-query call per interval; a download only
+  # when a checksum moved.
+  requeueSyncAfter: "1m"
+
+  # Drift correction cadence -- the timer behind user story 2.
+  requeueResourcesAfter: "10m"
+
+  # Keys off Kubernetes events, not Infrahub ones, and disables the timed requeue
+  # that story 1 depends on. Left off deliberately.
+  eventBasedReconcile: "false"

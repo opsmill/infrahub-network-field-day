@@ -1,0 +1,11 @@
+---
+# Contract: the only override the upstream chart needs.
+#
+# The chart's default is ghcr.io/infrahub-operator/vidra:v0.0.6. This pins the
+# OpsMill build, which pulls without credentials (verified: digest
+# sha256:d137c2f9b61e7ea30585285162a1b0023084a24559347fdc132e3b63d39ba5cd).
+controllerManager:
+  manager:
+    image:
+      repository: registry.opsmill.io/opsmill/vidra
+      tag: v0.0.6-opsmill2

@@ -38,6 +38,12 @@ Key docs to read before larger changes:
 - `menus/` - Infrahub UI menu definitions.
 - `docs/` - Docusaurus documentation.
 - `lab/` - ContainerLab artifact/deployment helpers.
+- `queries/` - GraphQL queries with no Python consumer in this repository. Currently
+  one: `artifact_ids.gql`, polled by the Vidra operator.
+- `vidra/` - deployment assets for the Vidra operator, which applies the Crossplane
+  artifacts into the lab's Kubernetes cluster on merge. Helm values, the operator
+  ConfigMap, the two `InfrahubSync` declarations, and the **shape** of the credential
+  Secret - never the credential itself.
 - `.infrahub.yml` - menus, queries, generators, transforms, and artifact
   definitions.
 - `repository.yml` - CoreRepository definition.

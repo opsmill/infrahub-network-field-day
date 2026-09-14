@@ -11,6 +11,14 @@ menus:
   - menus/menu.yml
 
 queries:
+  # Polled by the Vidra operator, which turns a merge into cluster state. Not
+  # consumed by any Python in this repository -- that is why it lives in
+  # `queries/` rather than beside a transform. The operator's own default name
+  # is `ArtifactIDs`; vidra/vidra-config.yaml points it here instead so the
+  # registration can stay snake_case like every other entry below.
+  - name: artifact_ids
+    file_path: "./queries/artifact_ids.gql"
+
   - name: avd_device_hostvar
     file_path: "./generators/avd_device_hostvar.gql"
   - name: generate_fabric

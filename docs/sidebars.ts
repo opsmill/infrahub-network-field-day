@@ -33,6 +33,7 @@ const sidebars: SidebarsConfig = {
         'developer-guide/generators',
         'developer-guide/transforms',
         'developer-guide/checks',
+        'developer-guide/vidra-delivery',
         'developer-guide/concepts',
         {
           type: 'category',

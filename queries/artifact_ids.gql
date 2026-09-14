@@ -1,0 +1,38 @@
+# The query the Vidra operator polls, and the only Infrahub-side artifact this
+# feature adds.
+#
+# Registered in .infrahub.yml as `artifact_ids`; the operator is pointed at that
+# name through `queryName` in vidra/vidra-config.yaml, overriding its own
+# `ArtifactIDs` default. Registration is snake_case and the operation name is
+# PascalCase because that is what every other query in this repository does --
+# see `crossplane_fabric_app` / `CrossplaneFabricAppQuery`.
+#
+# Called as POST /api/query/artifact_ids?branch=main with
+# {"variables": {"artifactname": ["Crossplane FabricApp"]}}.
+#
+# `checksum` is the whole point: the operator downloads an artifact only when it
+# differs from what it last saw, which is what makes an unchanged merge a no-op.
+# `storage_id` is queried because the operator's response decoder expects the
+# field, but the download path does not use it -- artifacts are fetched by `id`.
+#
+# It lives in `queries/` rather than beside a transform because it has no Python
+# consumer to be co-located with: the consumer is a Go operator outside this
+# repository.
+query ArtifactIDs($artifactname: [String]) {
+  CoreArtifact(name__values: $artifactname) {
+    edges {
+      node {
+        id
+        storage_id {
+          id
+        }
+        checksum {
+          value
+        }
+        name {
+          value
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+---
+# Contract: the two sync declarations. Cluster-scoped; one per artifact name.
+#
+# `artefactName` values MUST equal the `artifact_name` fields in .infrahub.yml
+# exactly -- spaces and capitals included. They are display names, and a mismatch
+# fails silently: the query returns no artifacts and the sync reports success
+# over an empty set.
+#
+# `targetBranch: main` is what makes the trigger a *merge*. A feature branch
+# regenerates its own artifacts and they must not reach the cluster.
+apiVersion: infrahub.operators.com/v1alpha1
+kind: InfrahubSync
+metadata:
+  name: crossplane-fabric-peering
+spec:
+  source:
+    infrahubAPIURL: "http://172.20.41.1:8000"
+    targetBranch: "main"
+    artefactName: "Crossplane FabricPeering"
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: "default"
+    reconcileOnEvents: false
+
+---
+# A separate declaration from the peering one, for the reason already recorded in
+# .infrahub.yml: applications and peerings are different target groups, and one
+# declaration pointed at both would try to deliver a resource it cannot render.
+apiVersion: infrahub.operators.com/v1alpha1
+kind: InfrahubSync
+metadata:
+  name: crossplane-fabric-app
+spec:
+  source:
+    infrahubAPIURL: "http://172.20.41.1:8000"
+    targetBranch: "main"
+    artefactName: "Crossplane FabricApp"
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: "default"
+    reconcileOnEvents: false

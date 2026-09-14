@@ -166,7 +166,9 @@ consumes, from the Infrahub model
 **Output**: YAML — one Kubernetes custom resource
 
 This closes the loop the service-layer schema was built for: change the model, re-render,
-review the diff, then push.
+review the diff, merge — and the cluster follows on its own. The last step used to be a person
+running `kubectl apply`; the [Vidra delivery path](./vidra-delivery.md) polls this artifact's
+checksum on `main` and applies it when it moves.
 
 **Why the target is a service, not the cluster.** Artifact targets must inherit
 `CoreArtifactTarget`, and only the service kinds do — `Cluster.Kubernetes` deliberately

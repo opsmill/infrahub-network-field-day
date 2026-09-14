@@ -142,6 +142,16 @@ PyAVD
 Crossplane
 Cilium
 
+# The Kubernetes operator that delivers the Crossplane artifacts into the
+# cluster. `requeue` is its own term for a timed reconcile, and appears in the
+# keys of its ConfigMap, so it cannot be reworded.
+Vidra
+requeue
+
+# British spellings this repository uses consistently. Already in use in
+# developer-guide/transforms.md, where it errored before this entry existed.
+unmodelled
+
 # The reference design's own name, used as the landing-page heading.
 Arista AVD Reference Design
 

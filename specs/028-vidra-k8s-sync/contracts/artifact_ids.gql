@@ -1,0 +1,31 @@
+# Contract: the query the Vidra operator polls.
+#
+# Registered in .infrahub.yml as `artifact_ids`; the operator is pointed at that
+# name through `queryName` in the vidra-config ConfigMap, overriding its own
+# `ArtifactIDs` default. The operation name below stays PascalCase to match every
+# other .gql in this repository.
+#
+# The operator calls this as POST /api/query/artifact_ids?branch=main with
+# {"variables": {"artifactname": ["Crossplane FabricApp"]}}.
+#
+# Every field is load-bearing except storage_id, which the operator's response
+# decoder expects but the download path does not use -- artifacts are fetched by
+# `id`, not by `storage_id`.
+query ArtifactIDs($artifactname: [String]) {
+  CoreArtifact(name__values: $artifactname) {
+    edges {
+      node {
+        id
+        storage_id {
+          id
+        }
+        checksum {
+          value
+        }
+        name {
+          value
+        }
+      }
+    }
+  }
+}

@@ -278,3 +278,10 @@ node_modules/
 credentials.json
 secrets.yaml
 secrets.yml
+# Cluster access for the Vidra delivery path. vidra/ holds the SHAPE of the
+# Infrahub credential Secret; the real one is created with kubectl and never
+# committed, and a kubeconfig exported from the lab's k3s node is a credential
+# in its own right.
+kubeconfig
+kubeconfig-*
+*.kubeconfig
