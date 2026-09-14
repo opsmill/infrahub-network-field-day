@@ -239,3 +239,125 @@ often.
 **Alternatives considered**: `eventBasedReconcile: "true"` (rejected — it keys off Kubernetes
 events, not Infrahub ones, so it does nothing for merge latency and disables the timed requeue
 that story 1 depends on).
+
+---
+
+## Addendum: what implementation found that research got wrong
+
+Four findings from actually running the thing. Two of them contradict decisions above, and one
+cancelled a task.
+
+### A1. The operator adopts. It does not refuse. (Contradicts §4)
+
+§4 predicted the first sync would fail against the two pre-existing resources, and the cycle was
+planned around deleting them — accepting an outage — so the operator could create them itself.
+
+**It adopted both, in place, with no error and no recreation.**
+
+```text
+fabricapp.nfd41.lab/nfd41-demo    labels={"managed-by":"vidra"}  created=2026-09-10T08:43:14Z
+fabricpeering.nfd41.lab/nfd41     labels={"managed-by":"vidra"}  created=2026-09-10T08:43:11Z
+```
+
+The `creationTimestamp` values are the originals, four days old. The demo workload never went
+down — `frontend` and `backend` stayed at 4d7h uptime across the cut-over — and both specs came
+through byte-identical to the pre-delivery baseline.
+
+The guard is real but never fires on this path:
+
+```go
+if existing.GetAnnotations()["managed-by"] != vidraOperator && res.Status.LastSyncTime.IsZero() {
+```
+
+`LastSyncTime` is already stamped on the `VidraResource` by the sync controller before the
+resource controller applies, so `IsZero()` is false on the very first apply. The guard only
+protects a `VidraResource` that has never synced at all — which, in the sync-driven flow, is
+never. **T017 was therefore not executed**: its entire justification was an adoption refusal that
+does not happen, and running it would have caused the outage it was meant to be the price of.
+
+The lesson for next time: reading a guard's condition is not the same as knowing when it is
+evaluated.
+
+### A2. The ConfigMap is read once, at startup
+
+`InitConfigWithClient` runs at boot, not per reconcile. Creating the ConfigMap after `helm
+install` — the order §8 and the first draft of the quickstart implied — leaves the operator on its
+built-in defaults, including `queryName: ArtifactIDs`, which this repository does not register:
+
+```text
+ERROR  Failed to execute query  {"error": "query failed with status 404 Not Found: "}
+```
+
+Both syncs failed this way until the deployment was restarted, after which they reached
+`Succeeded` within one interval. **The ConfigMap and Secret must exist before the chart is
+installed**, and any later change to either needs a `rollout restart`. The install order in
+[quickstart.md](./quickstart.md) and the documentation page were corrected.
+
+### A3. The OpsMill image expects a CRD the upstream chart does not ship — and it is fatal
+
+`registry.opsmill.io/opsmill/vidra:v0.0.6-opsmill2` runs a third controller for an
+`InfrahubWriteBack` kind. The upstream `vidra-operator` 0.0.6 chart — the only published one —
+installs `infrahubsyncs` and `vidraresources` and nothing else, and the kind appears nowhere in
+the public repository or in GitHub code search. It is an OpsMill-only addition, and the image and
+the chart are out of step.
+
+**This was first written up here as harmless log noise. That was wrong, and the way it was wrong
+is worth recording.** The controllers do start, the syncs do reach `Succeeded`, and delivery does
+work — so a stack trace repeating in the logs looks like something to file and move past. What it
+actually is:
+
+```text
+ERROR  setup  problem running manager  {"error": "failed to wait for infrahubwriteback caches to
+       sync kind source: *v1alpha1.InfrahubWriteBack: timed out waiting for cache to be synced"}
+```
+
+The informer cannot build a cache for a kind the API server does not know. After roughly two
+minutes, the manager gives up and the process exits. The pod restarts, works for two minutes, and
+exits again — five restarts in the first nineteen minutes. Every observation made before this was
+found is therefore suspect, because **each restart re-reconciles everything**: the system looked
+healthy precisely because it was being rebooted often enough to hide the gaps.
+
+It was found only by asking why `lastSyncTime` had stopped advancing, and the answer was in
+`kubectl get pod`, not in the logs the failure was writing.
+
+**Workaround, in `vidra/writeback-crd-shim.yaml`**: register the kind with a permissive schema
+(`x-kubernetes-preserve-unknown-fields`, since the real schema is unknown and guessing one would
+reject objects the real controller accepts) plus a ClusterRole, because the chart's manager role
+predates the kind and cannot list or watch it either. No `InfrahubWriteBack` object is ever
+created, so the controller idles.
+
+Verified: zero restarts across a continuous run well past the two-minute mark that previously
+killed it.
+
+**The clean fix is an OpsMill chart matching the image.** The shim is an apology for a version
+skew, and its file says to delete it when one exists.
+
+### A4. Drift correction, measured twice — and why the first numbers were fiction
+
+The first measurements were taken against the crash-looping operator of §A3, so they measured
+**restart frequency**, not reconcile cadence: a hand-edited field reverted in 1m45s and a deleted
+resource returned in 3m28s, both because the pod happened to restart and re-reconcile everything.
+Neither number described the configured behaviour, and both would have gone into the documentation
+as fact.
+
+Repeated against the stabilised operator, with `restarts=0` throughout, the same hand edit took
+**437 seconds** — 7m17s, consistent with a 10-minute `requeueResourcesAfter` and a patch landing
+part-way through an interval. That is the number to plan against: it is four times the first
+measurement, and the difference is the whole value of re-running it.
+
+What holds regardless of which operator was running:
+
+| Drift | Corrected by | Not corrected by |
+| --- | --- | --- |
+| A field edited by hand | the `VidraResource` reconcile | the sync interval |
+| A delivered resource deleted | the `VidraResource` reconcile | the sync interval |
+
+The 1-minute sync does **not** correct drift. The sync controller compares the artifact checksum,
+finds it unchanged, and skips the apply entirely — which is exactly what makes an unchanged merge
+free, and exactly why it cannot notice that the cluster has moved underneath it. A sync can
+therefore report `Succeeded`, with checksums matching Infrahub, while the delivered resource is
+**absent**: the checksum describes the artifact, not the cluster.
+
+Deleting a delivered resource is the same mechanism with a much bigger blast radius. Crossplane
+tears down the composed Objects behind the composite, so the demo workload went down and stayed
+down until the reconcile restored it — after which it came back complete, same VIP, 3/3 and 2/2.

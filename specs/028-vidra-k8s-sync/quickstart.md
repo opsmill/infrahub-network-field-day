@@ -52,51 +52,57 @@ curl -s -X POST "http://localhost:8000/api/query/artifact_ids?branch=main" \
 Expect two nodes back, each with an `id` and a `checksum`. **If this returns an empty list the
 whole feature is inert** — nothing downstream will report an error, so do not continue past it.
 
-### 3. Install the operator
+### 3. Configuration and credentials — **before** the operator starts
+
+The operator reads its ConfigMap **once, at boot** (`InitConfigWithClient`). Apply it afterwards
+and it keeps `queryName: ArtifactIDs`, which this repository does not register, and every sync
+fails with `query failed with status 404 Not Found`. This cost a restart during implementation;
+done in this order it costs nothing.
 
 ```bash
-helm repo add vidra https://infrahub-operator.github.io/vidra && helm repo update
 kubectl create namespace vidra-system
-helm install vidra vidra/vidra-operator -n vidra-system -f vidra/helm-values.yaml
-kubectl -n vidra-system rollout status deploy -l app.kubernetes.io/name=vidra-operator
-```
+kubectl apply -f vidra/vidra-config.yaml
 
-### 4. Create the credential Secret
-
-Never committed. Shape and traps in
-[contracts/infrahub-credentials.example.yaml](./contracts/infrahub-credentials.example.yaml) — the
-label value is the host **without scheme or port**.
-
-```bash
 kubectl -n vidra-system create secret generic infrahub-credentials \
   --from-literal=username=admin --from-literal=password=infrahub
 kubectl -n vidra-system label secret infrahub-credentials infrahub-api-url=172.20.41.1
 ```
 
-### 5. Clear the way for the first sync
+The Secret's label value is the host **without scheme or port** — shape and reasoning in
+[contracts/infrahub-credentials.example.yaml](./contracts/infrahub-credentials.example.yaml).
 
-The two resources the lab bootstrap applied carry no `managed-by` annotation, and the operator
-refuses to adopt an unannotated resource **on its first sync**. Per the recorded decision they are
-deleted so the operator creates them itself:
+### 4. Install the operator
 
 ```bash
-kubectl delete fabricapp.nfd41.lab/nfd41-demo fabricpeering.nfd41.lab/nfd41
+helm repo add vidra https://infrahub-operator.github.io/vidra && helm repo update
+helm install vidra vidra/vidra-operator -n vidra-system -f vidra/helm-values.yaml
+kubectl -n vidra-system rollout status deploy/vidra-vidra-operator-controller-manager
 ```
 
-> **This bounces the demo workload and the fabric BGP session.** Crossplane tears down the composed
-> Objects and rebuilds them from what the operator delivers. It is accepted, and it is the reason
-> this step is here rather than buried in the apply.
->
-> Afterwards, `crossplane/apps/10-demo.yaml` and `crossplane/platform/10-peering.yaml` in the lab
-> repository are **dead files**. Re-applying either restores a second writer for a resource
-> Infrahub now owns.
+Expect a repeating `Failed to list InfrahubWriteBack resources` stack trace in the logs. The
+OpsMill image runs a third controller whose CRD the upstream 0.0.6 chart does not ship. It is
+noise: `infrahubsync` and `vidraresource` both start workers and work normally.
 
-### 6. Apply the configuration and the syncs
+After any later change to the ConfigMap:
 
 ```bash
-kubectl apply -f vidra/vidra-config.yaml
+kubectl -n vidra-system rollout restart deploy/vidra-vidra-operator-controller-manager
+```
+
+### 5. Apply the syncs
+
+```bash
 kubectl apply -f vidra/infrahub-syncs.yaml
 ```
+
+**Nothing needs deleting first.** An earlier draft deleted the two resources the lab bootstrap
+applied, believing the operator refuses to adopt what it did not create. It adopts them in place:
+both kept their original `creationTimestamp` and the demo workload stayed up throughout. See
+[research.md](./research.md) §A1.
+
+> Once delivery is live, `crossplane/apps/10-demo.yaml` and `crossplane/platform/10-peering.yaml`
+> in the lab repository are **dead files**. Re-applying either restores a second writer for a
+> resource Infrahub now owns.
 
 ## Validation scenarios
 
@@ -140,8 +146,14 @@ cluster must not move. This is the property that makes "on merge" mean something
 kubectl patch fabricapp.nfd41.lab/nfd41-demo --type=merge -p '{"spec":{"tenant":"wrong"}}'
 ```
 
-Within one `requeueResourcesAfter` interval the value returns to what the artifact declares, with
-no Infrahub-side change.
+The value returns to what the artifact declares, with no Infrahub-side change. **Do not expect it
+within the sync interval**: the sync path compares the artifact checksum, finds it unchanged and
+skips the apply entirely, so drift is corrected only by the `VidraResource` reconcile. Measured at **437 seconds** for a hand
+edit against a stable operator — consistent with `requeueResourcesAfter: 10m` and a patch landing
+part-way through an interval, not with the 1-minute sync.
+
+Deleting a delivered resource is the same story with a bigger blast radius: Crossplane tears down
+the composed Objects, and the workload is down until the reconcile restores it.
 
 ### SC-006 — failures are visible, and never destructive
 
@@ -176,6 +188,7 @@ committed. The loop must come back with no undocumented step.
 | --- | --- |
 | Sync `Succeeded`, nothing delivered | `artefactName` does not match `artifact_name` in `.infrahub.yml`. Empty result sets are a success. |
 | "no secret found with InfrahubAPIURL" | Label value carries the scheme or the port. It is the bare host: `172.20.41.1`. |
-| "already exists but is not managed by this operator" | A pre-existing unannotated resource. Step 5 was skipped, or the lab file was re-applied. |
+| `query failed with status 404 Not Found` | The ConfigMap was applied after the operator started, so `queryName` is still the default. Restart the deployment. |
+| A sync reports `Succeeded` but the resource is gone | Checksum equality describes the *artifact*, not the cluster. Deletion is healed by the `VidraResource` reconcile, not the sync. |
 | Query returns nothing | Query not imported, or registered under a different name than `queryName`. |
 | Connection refused to Infrahub | `localhost` used instead of `172.20.41.1` — inside the node, `localhost` is the node. |

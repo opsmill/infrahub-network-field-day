@@ -1,0 +1,73 @@
+---
+# WORKAROUND, not a design choice.
+#
+# The image this repository pins -- registry.opsmill.io/opsmill/vidra:v0.0.6-opsmill2 -- runs a
+# third controller for an `InfrahubWriteBack` kind. The only published chart, upstream
+# vidra-operator 0.0.6, installs `infrahubsyncs` and `vidraresources` and nothing else, and the
+# kind does not exist anywhere in the public repository.
+#
+# The consequence is NOT cosmetic. The controller's informer cannot sync a cache for a kind the
+# API server does not know, and after roughly two minutes the manager gives up and exits:
+#
+#   ERROR setup problem running manager {"error": "failed to wait for infrahubwriteback caches to
+#   sync kind source: *v1alpha1.InfrahubWriteBack: timed out waiting for cache to be synced"}
+#
+# The pod then restarts, works for two minutes, and exits again. Delivery still appears to
+# function, because each restart re-reconciles everything -- which is exactly what makes it
+# dangerous to leave: the observed reconcile timings are restart artefacts, not the configured
+# intervals, and a longer outage is only ever two minutes away from looking like normal operation.
+#
+# This registers the kind so the informer has something to watch. No InfrahubWriteBack object is
+# ever created, so the controller idles. `x-kubernetes-preserve-unknown-fields` is deliberate:
+# the real schema is unknown, and guessing one would reject objects the real controller accepts.
+#
+# DELETE THIS FILE once OpsMill publishes a chart matching the image. Applying the real CRD over
+# this one is the intended upgrade path.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: infrahubwritebacks.infrahub.operators.com
+spec:
+  group: infrahub.operators.com
+  scope: Cluster
+  names:
+    kind: InfrahubWriteBack
+    listKind: InfrahubWriteBackList
+    plural: infrahubwritebacks
+    singular: infrahubwriteback
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+
+---
+# The chart's manager role predates the kind, so the ServiceAccount cannot list or watch it even
+# once the CRD exists. Same lifetime as the shim above: remove both together.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vidra-writeback-shim
+rules:
+  - apiGroups: ["infrahub.operators.com"]
+    resources: ["infrahubwritebacks", "infrahubwritebacks/status", "infrahubwritebacks/finalizers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vidra-writeback-shim
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vidra-writeback-shim
+subjects:
+  - kind: ServiceAccount
+    name: vidra-vidra-operator-controller-manager
+    namespace: vidra-system

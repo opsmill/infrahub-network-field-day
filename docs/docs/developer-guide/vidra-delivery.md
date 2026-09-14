@@ -61,23 +61,53 @@ never created are invisible to it, which is what keeps the two unmodelled applic
 
 Everything committed lives in `vidra/`. The one thing that is not committed is the credential.
 
+**Create the namespace, the ConfigMap and the Secret before installing the chart.** The
+operator reads its configuration once, at startup — see the warning below.
+
 ```bash
 helm repo add vidra https://infrahub-operator.github.io/vidra && helm repo update
 kubectl create namespace vidra-system
-helm install vidra vidra/vidra-operator -n vidra-system -f vidra/helm-values.yaml
-```
 
-Then the credential Secret, and the configuration:
-
-```bash
+kubectl apply -f vidra/vidra-config.yaml
 kubectl -n vidra-system create secret generic infrahub-credentials \
   --from-literal=username="$INFRAHUB_USERNAME" \
   --from-literal=password="$INFRAHUB_PASSWORD"
 kubectl -n vidra-system label secret infrahub-credentials infrahub-api-url=172.20.41.1
 
-kubectl apply -f vidra/vidra-config.yaml
+kubectl apply -f vidra/writeback-crd-shim.yaml
+helm install vidra vidra/vidra-operator -n vidra-system -f vidra/helm-values.yaml
 kubectl apply -f vidra/infrahub-syncs.yaml
 ```
+
+:::danger The shim is load-bearing — without it the operator crash-loops
+The pinned image runs a third controller for an `InfrahubWriteBack` kind that the upstream 0.0.6
+chart does not install. Its informer cannot build a cache for a kind the API server does not know,
+so after about two minutes the manager exits:
+
+```text
+problem running manager {"error": "failed to wait for infrahubwriteback caches to sync ..."}
+```
+
+The pod then restarts, works for two minutes, and exits again. **Delivery appears to work**,
+because each restart re-reconciles everything — which is what makes this worth stating plainly
+rather than filing as log noise. `vidra/writeback-crd-shim.yaml` registers the kind and grants the
+ServiceAccount access to it. No object of that kind is ever created.
+
+Delete the shim when OpsMill publishes a chart matching the image.
+:::
+
+:::warning The ConfigMap is read at startup, not per sync
+`InitConfigWithClient` runs once when the operator boots. Apply the ConfigMap afterwards and the
+operator keeps its defaults — including `queryName: ArtifactIDs`, which this repository does not
+register, giving `query failed with status 404 Not Found` on every sync.
+
+After any change to `vidra-config.yaml`:
+
+```bash
+kubectl -n vidra-system rollout restart deploy/vidra-vidra-operator-controller-manager
+```
+
+:::
 
 :::danger Two ways to get the Secret wrong, both silent
 **The label value is the bare host — no scheme, no port.** The operator derives it from the API
@@ -100,7 +130,7 @@ applied.
 | --- | --- | --- |
 | `queryName` | `artifact_ids` | Points the operator at this repository's registered query. Its own default is `ArtifactIDs`. |
 | `requeueSyncAfter` | `1m` | How long a merge takes to reach the cluster. |
-| `requeueResourcesAfter` | `10m` | How long a hand edit survives before being reverted. |
+| `requeueResourcesAfter` | `10m` | How long drift survives before being reverted — an edited field or a deleted resource. This is the real bound; the sync interval does not correct drift. |
 | `eventBasedReconcile` | `false` | Keys off Kubernetes events, not Infrahub ones, and disables the timed requeue. Leave it off. |
 
 ## Reading the state
@@ -127,6 +157,15 @@ kubectl get vidraresource <name> -o jsonpath='{.status.managedResources}'
 A `Failed` sync leaves what is already delivered in place. An unreachable Infrahub or an expired
 credential degrades to stale-but-serving, never to an empty cluster.
 
+:::warning `Succeeded` does not mean the resource exists
+The sync compares the artifact's **checksum**. Unchanged means it skips the download and the apply
+entirely — which is what makes an unchanged merge free, and also why a sync can sit at `Succeeded`,
+checksums matching Infrahub, while the delivered resource has been deleted out from under it.
+
+Drift of any kind is corrected by the `VidraResource` reconcile, on `requeueResourcesAfter`,
+**not** by the sync. Check the resource, not just the sync.
+:::
+
 ## When a merge does not arrive
 
 | Symptom | Cause |
@@ -135,6 +174,8 @@ credential degrades to stale-but-serving, never to an empty cluster.
 | `no secret found with InfrahubAPIURL` | The label value carries the scheme or the port. It is the bare host |
 | `already exists but is not managed by this operator` | A resource exists that the operator did not create. It refuses to adopt on its first sync — delete the resource, or a dead lab file was re-applied |
 | The query returns nothing | Not imported, or registered under a name other than `queryName` |
+| `query failed with status 404 Not Found` | The operator is calling a query name that is not registered — almost always the ConfigMap was applied after the operator started. Restart it |
+| `Failed to list InfrahubWriteBack resources` | Harmless. The OpsMill image carries a third controller whose CRD the upstream 0.0.6 chart does not ship. The sync and resource controllers start normally |
 | Connection refused reaching Infrahub | `localhost` was used. Inside a node, that is the node — use the management gateway address |
 | The artifact never changes | Check the checksum in Infrahub first. If it did not move, the merge changed nothing either renderer reads, and the cluster is correct to ignore it |
 

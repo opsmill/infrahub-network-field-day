@@ -222,11 +222,13 @@ documentation in `docs/docs/` explains how to read each.
 - **FR-021**: The deployment MUST make the destination explicit rather than relying on the
   in-cluster default, so a later move to a separate cluster is a configuration change rather than
   a rediscovery.
-- **FR-022**: The two resources the lab bootstrap applied (`fabricapp/nfd41-demo`,
-  `fabricpeering/nfd41`) MUST be deleted so the operator creates them itself. The operator refuses
-  to adopt an unannotated pre-existing resource on its first sync, and the requester chose
-  recreation over annotation. **This bounces the demo workload and the fabric BGP session** —
-  accepted for unambiguous provenance.
+- **FR-022**: ~~The two resources the lab bootstrap applied MUST be deleted so the operator
+  creates them itself.~~ **Withdrawn during implementation — the premise was false.** The operator
+  adopted `fabricapp/nfd41-demo` and `fabricpeering/nfd41` in place, labelling them
+  `managed-by: vidra` without recreating them; both kept their original four-day-old
+  `creationTimestamp` and the demo workload never went down. The refusal guard is only evaluated
+  when a `VidraResource` has never synced, which does not happen on the sync-driven path. Deleting
+  them would have caused an outage to buy nothing. See [research.md](./research.md) §A1.
 - **FR-023**: After cut-over the lab repository's `crossplane/apps/10-demo.yaml` and
   `crossplane/platform/10-peering.yaml` MUST be treated as dead files. Re-applying either restores
   a second writer for a resource Infrahub now owns. `10-access.yaml` and `20-observability.yaml`
@@ -279,7 +281,9 @@ documentation in `docs/docs/` explains how to read each.
   manual commands between the merge and the cluster reflecting it.
 - **SC-002**: A merge that changes nothing either renderer reads produces no change to any cluster
   resource — verified by resource generation or resourceVersion staying put across a full interval.
-- **SC-003**: A hand edit to a delivered resource is reverted within one reconcile interval.
+- **SC-003**: A hand edit to a delivered resource is reverted within one `requeueResourcesAfter`
+  interval. Note this is **not** the sync interval: the sync path short-circuits on an unchanged
+  checksum, so drift is corrected only by the resource reconcile. See [research.md](./research.md) §A4.
 - **SC-004**: Both artifact kinds deliver: at least one `FabricApp` and one `FabricPeering` resource
   are present in the cluster and carry values traceable to their Infrahub source objects.
 - **SC-005**: A change made on a feature branch and *not* merged produces no change in the cluster,

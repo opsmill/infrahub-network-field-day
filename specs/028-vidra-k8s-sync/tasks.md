@@ -44,8 +44,8 @@ non-live substitute, and the PR body must say so (T040).
 - [X] T001 Create `queries/artifact_ids.gql` from [contracts/artifact_ids.gql](./contracts/artifact_ids.gql), keeping the comment header — it records why `storage_id` is queried but unused, and why the operation name is PascalCase while the registration is not
 - [X] T002 Register the query in `.infrahub.yml` under `queries` as `name: artifact_ids`, `file_path: "./queries/artifact_ids.gql"`. **This is the only line this cycle adds to that file** — no transform, no artifact definition
 - [X] T003 Run `uv run yamllint .infrahub.yml` and confirm clean
-- [ ] T004 Sync the repository into Infrahub so the query is imported, then confirm it exists: `CoreGraphQLQuery(name__value: "artifact_ids")` returns one node
-- [ ] T005 **GATE** (half done — the query *body* was verified against live Infrahub and returns both artifacts with non-empty checksums; the `/api/query/artifact_ids` path still needs T004) — call the query the way the operator will, and confirm two artifacts come back with non-empty `id` and `checksum`: `POST http://localhost:8000/api/query/artifact_ids?branch=main` with `{"variables":{"artifactname":["Crossplane FabricApp","Crossplane FabricPeering"]}}`. An empty `edges` list means the artifact names do not match `artifact_name` in `.infrahub.yml`; fix that before continuing, because nothing downstream will tell you
+- [X] T004 Sync the repository into Infrahub so the query is imported, then confirm it exists: `CoreGraphQLQuery(name__value: "artifact_ids")` returns one node
+- [X] T005 **GATE** — call the query the way the operator will, and confirm two artifacts come back with non-empty `id` and `checksum`: `POST http://localhost:8000/api/query/artifact_ids?branch=main` with `{"variables":{"artifactname":["Crossplane FabricApp","Crossplane FabricPeering"]}}`. An empty `edges` list means the artifact names do not match `artifact_name` in `.infrahub.yml`; fix that before continuing, because nothing downstream will tell you
 
 **Checkpoint**: Infrahub answers the operator's only read query, under the operator's configured name.
 
@@ -63,11 +63,11 @@ attempted before T015.
 - [X] T008 [P] Create `vidra/infrahub-syncs.yaml` from [contracts/infrahub-syncs.yaml](./contracts/infrahub-syncs.yaml). Check three fields by eye: `artefactName` (the operator's spelling, not `artifactName`), the exact artifact display names including spaces and capitals, and `targetBranch: "main"`
 - [X] T009 [P] Create `vidra/infrahub-credentials.example.yaml` from [contracts/infrahub-credentials.example.yaml](./contracts/infrahub-credentials.example.yaml). **Shape only** — the real Secret is never committed
 - [X] T010 Run `uv run yamllint vidra/` and confirm clean
-- [ ] T011 Point `kubectl` at the lab cluster (`docker exec clab-nfd41-k8s-node1 cat /etc/rancher/k3s/k3s.yaml`) and confirm three nodes `Ready` and both CRDs present: `kubectl get crd fabricapps.nfd41.lab fabricpeerings.nfd41.lab`. If either is missing, stop — that is the lab repository's bootstrap, not this cycle's work
-- [ ] T012 Install the operator: `helm repo add vidra https://infrahub-operator.github.io/vidra`, create namespace `vidra-system`, `helm install vidra vidra/vidra-operator -n vidra-system -f vidra/helm-values.yaml`, and confirm the deployment rolls out
-- [ ] T013 Create the credential Secret in `vidra-system` with `username`/`password` (**not** an API token) and label it `infrahub-api-url=172.20.41.1` — **scheme and port stripped**, per [research.md](./research.md) §6. The full URL yields "no secret found" with nothing to suggest why
-- [ ] T014 Apply `vidra/vidra-config.yaml` and confirm the ConfigMap carries the `app: vidra` label, which is how the operator finds it — name and namespace are not what it matches on
-- [ ] T015 Confirm the operator pod is `Running` and its logs show no credential or config errors before any sync exists
+- [X] T011 Point `kubectl` at the lab cluster (`docker exec clab-nfd41-k8s-node1 cat /etc/rancher/k3s/k3s.yaml`) and confirm three nodes `Ready` and both CRDs present: `kubectl get crd fabricapps.nfd41.lab fabricpeerings.nfd41.lab`. If either is missing, stop — that is the lab repository's bootstrap, not this cycle's work
+- [X] T012 Install the operator: `helm repo add vidra https://infrahub-operator.github.io/vidra`, create namespace `vidra-system`, `helm install vidra vidra/vidra-operator -n vidra-system -f vidra/helm-values.yaml`, and confirm the deployment rolls out
+- [X] T013 Create the credential Secret in `vidra-system` with `username`/`password` (**not** an API token) and label it `infrahub-api-url=172.20.41.1` — **scheme and port stripped**, per [research.md](./research.md) §6. The full URL yields "no secret found" with nothing to suggest why
+- [X] T014 Apply `vidra/vidra-config.yaml` and confirm the ConfigMap carries the `app: vidra` label, which is how the operator finds it — name and namespace are not what it matches on
+- [X] T015 Confirm the operator pod is `Running` and its logs show no credential or config errors before any sync exists
 
 **Checkpoint**: the operator is running, can authenticate, and knows which query to call — but has been given nothing to deliver.
 
@@ -81,15 +81,15 @@ attempted before T015.
 proposed change, and watch `fabricapp.nfd41.lab/nfd41-demo` carry the new value — no `kubectl
 apply`, no artifact download.
 
-- [ ] T016 [US1] Capture the baseline **before** anything is deleted: `kubectl get fabricapp.nfd41.lab/nfd41-demo fabricpeering.nfd41.lab/nfd41 -o yaml` and both artifact checksums, saved outside the repository. T021 compares against this, and it cannot be recovered afterwards
-- [ ] T017 [US1] **DESTRUCTIVE** — delete `fabricapp.nfd41.lab/nfd41-demo` and `fabricpeering.nfd41.lab/nfd41`. Crossplane tears down the composed Objects; **the demo workload and the fabric BGP session bounce**. Do this only once T015 has passed, so the resources are absent for seconds
-- [ ] T018 [US1] Apply `vidra/infrahub-syncs.yaml`
-- [ ] T019 [US1] Confirm both `InfrahubSync` objects reach `syncState: Succeeded`, and that both resources are recreated and reach `SYNCED=True READY=True` (SC-004)
-- [ ] T020 [US1] Confirm `fabricapp.nfd41.lab/nfd41-access` and `nfd41-observability` are **still present and untouched** — the operator never sees resources it did not deliver, and this is the evidence
-- [ ] T021 [US1] Compare the recreated resources against the T016 baseline. They must match apart from XRD-defaulted fields and Crossplane's own bookkeeping (`spec.crossplane`, `resourceRefs`, timestamps). **Any other difference is a bug**, because research established the artifacts already describe what was running
-- [ ] T022 [US1] Prove the merge path (SC-001): create a branch, change one field the transform actually renders on the `ServiceFabricApp`, open and merge a proposed change, then observe the artifact checksum move and the cluster resource carry the new value within one sync interval. Record the elapsed time
-- [ ] T023 [US1] Prove the no-op path (SC-002): merge a change to a field neither renderer reads. The artifact must re-render to the same checksum and the resource's `resourceVersion` must not move across a full sync interval
-- [ ] T024 [US1] Prove branch isolation (SC-005): make the same edit on a branch and **do not merge**. Nothing in the cluster may change over at least one full sync interval. This is the property that makes "on merge" mean something rather than "on any edit"
+- [X] T016 [US1] Capture the baseline **before** anything is deleted: `kubectl get fabricapp.nfd41.lab/nfd41-demo fabricpeering.nfd41.lab/nfd41 -o yaml` and both artifact checksums, saved outside the repository. T021 compares against this, and it cannot be recovered afterwards
+- [~] T017 [US1] **WITHDRAWN — not executed.** The operator adopted both resources in place (`managed-by: vidra`, original `creationTimestamp`, workload never down), so the premise was false and deleting would have caused an outage to buy nothing. See [research.md](./research.md) §A1. Original text: **DESTRUCTIVE** — delete `fabricapp.nfd41.lab/nfd41-demo` and `fabricpeering.nfd41.lab/nfd41`. Crossplane tears down the composed Objects; **the demo workload and the fabric BGP session bounce**. Do this only once T015 has passed, so the resources are absent for seconds
+- [X] T018 [US1] Apply `vidra/infrahub-syncs.yaml`
+- [X] T019 [US1] Confirm both `InfrahubSync` objects reach `syncState: Succeeded`, and that both resources are recreated and reach `SYNCED=True READY=True` (SC-004)
+- [X] T020 [US1] Confirm `fabricapp.nfd41.lab/nfd41-access` and `nfd41-observability` are **still present and untouched** — the operator never sees resources it did not deliver, and this is the evidence
+- [X] T021 [US1] Compare the recreated resources against the T016 baseline. They must match apart from XRD-defaulted fields and Crossplane's own bookkeeping (`spec.crossplane`, `resourceRefs`, timestamps). **Any other difference is a bug**, because research established the artifacts already describe what was running
+- [X] T022 [US1] Prove the merge path (SC-001): create a branch, change one field the transform actually renders on the `ServiceFabricApp`, open and merge a proposed change, then observe the artifact checksum move and the cluster resource carry the new value within one sync interval. Record the elapsed time
+- [X] T023 [US1] Prove the no-op path (SC-002): merge a change to a field neither renderer reads. The artifact must re-render to the same checksum and the resource's `resourceVersion` must not move across a full sync interval
+- [X] T024 [US1] Prove branch isolation (SC-005): make the same edit on a branch and **do not merge**. Nothing in the cluster may change over at least one full sync interval. This is the property that makes "on merge" mean something rather than "on any edit"
 
 **Checkpoint**: the loop is closed and demonstrated. This alone is a shippable feature.
 
@@ -102,9 +102,9 @@ apply`, no artifact download.
 **Independent Test**: edit a delivered resource with `kubectl`, wait one reconcile interval, watch
 it revert.
 
-- [ ] T025 [US2] Patch a field of `fabricapp.nfd41.lab/nfd41-demo` that the artifact sets, and confirm it returns to the artifact's value within one `requeueResourcesAfter` interval, with no Infrahub-side change and no new artifact generation (SC-003)
-- [ ] T026 [US2] Delete a delivered resource by hand and confirm it is re-created from the stored manifest
-- [ ] T027 [US2] Record the observed reconcile latency against the configured `requeueResourcesAfter: 10m`, so the documented number is measured rather than assumed
+- [X] T025 [US2] Patch a field of `fabricapp.nfd41.lab/nfd41-demo` that the artifact sets, and confirm it returns to the artifact's value within one `requeueResourcesAfter` interval, with no Infrahub-side change and no new artifact generation (SC-003)
+- [X] T026 [US2] Delete a delivered resource by hand and confirm it is re-created from the stored manifest
+- [X] T027 [US2] Record the observed reconcile latency against the configured `requeueResourcesAfter: 10m`, so the documented number is measured rather than assumed
 
 **Checkpoint**: Infrahub is the source of truth, not merely the starting point.
 
@@ -117,9 +117,9 @@ it revert.
 **Independent Test**: a documented command sequence reports state, freshness, checksums in effect
 and last error, and the docs explain how to read each.
 
-- [ ] T028 [US3] Confirm `kubectl get infrahubsync -o …` surfaces `syncState`, `checksums`, `lastSyncTime` and `lastError`, and that comparing `checksums` against Infrahub answers "is the cluster current?" directly
-- [ ] T029 [US3] Prove failures are visible and non-destructive (SC-006): delete the credential Secret, wait a sync interval, confirm `syncState: Failed` with a reason **and that the delivered resources are still present**. A delivery pipeline that empties a cluster when its credentials expire is worse than no pipeline
-- [ ] T030 [US3] Restore the Secret and confirm recovery without intervention
+- [X] T028 [US3] Confirm `kubectl get infrahubsync -o …` surfaces `syncState`, `checksums`, `lastSyncTime` and `lastError`, and that comparing `checksums` against Infrahub answers "is the cluster current?" directly
+- [X] T029 [US3] Prove failures are visible and non-destructive (SC-006): delete the credential Secret, wait a sync interval, confirm `syncState: Failed` with a reason **and that the delivered resources are still present**. A delivery pipeline that empties a cluster when its credentials expire is worse than no pipeline
+- [X] T030 [US3] Restore the Secret and confirm recovery without intervention
 - [X] T031 [US3] Write `docs/docs/developer-guide/vidra-delivery.md`: deployment, credentials (including the label trap), reading sync state, and what to check when a merge does not reach the cluster. Use **relative** Markdown links only — the aggregation site sets `onBrokenLinks: 'throw'`
 - [X] T032 [US3] Register the page in `docs/sidebars.ts` under the `developer-guide` items, after `developer-guide/transforms`
 
@@ -132,7 +132,7 @@ and last error, and the docs explain how to read each.
 - [X] T033 [P] Finish the sentence this feature exists to complete (FR-024): `docs/docs/developer-guide/transforms.md` describes the Crossplane loop as "change the model, re-render, review the diff, then push". Rewrite the ending now that "then push" is automatic, and link the new page
 - [X] T034 [P] Record the `vidra/` directory in `AGENTS.md`'s repository-layout section — it is the cycle's one convention deviation and the constitution requires it to be visible
 - [X] T035 [P] Document the dead-file consequence in `docs/docs/developer-guide/vidra-delivery.md`: the NFD41 lab repository's `crossplane/apps/10-demo.yaml` and `crossplane/platform/10-peering.yaml` must not be re-applied, because Infrahub now owns those resources. `10-access.yaml` and `20-observability.yaml` are unaffected
-- [ ] T036 Prove the deployment is reproducible (SC-009): delete the `vidra-system` namespace and both syncs, rebuild from committed files plus the documented Secret command alone, and confirm the loop returns with no undocumented step
+- [X] T036 Prove the deployment is reproducible (SC-009) — **scoped**: the operator Deployment, ConfigMap and Secret were torn down and rebuilt from committed files. A full `helm uninstall` was not run because it removes the CRDs, which cascades through the finalizers to the delivered resources and takes the workload down for up to a reconcile interval. Original text: delete the `vidra-system` namespace and both syncs, rebuild from committed files plus the documented Secret command alone, and confirm the loop returns with no undocumented step
 - [X] T037 Run `uv run pytest tests/unit` and confirm `git diff --stat main -- transforms/` is **empty** (SC-008) — delivery was added without disturbing rendering, which is FR-011 as an assertion rather than an intention
 - [X] T038 Run `uv run invoke lint` (ruff, ruff-format, yamllint, mypy, rumdl) and confirm clean
 - [X] T039 Run `uv run rumdl check` and Vale over the new and changed Markdown
