@@ -236,6 +236,63 @@ deletes it from the device. Three things are worth knowing before changing
   diff showing the password hashes changing is Junos, not a credential rewrite.
   Re-loading the device's own unmodified configuration produces the same diff.
 
+## The Kubernetes half, and who owns which resource
+
+```bash
+uv run invoke cluster      # Cilium, then Crossplane, then hand two resources over
+uv run invoke vidra        # the operator that turns a merge into cluster state
+```
+
+`invoke cluster` runs the **lab repository's** two installers rather than
+reimplementing them — the CNI and the Crossplane compositions are the lab's, the
+same way the topology is. Cilium has to be first and cannot be managed by
+Crossplane: it *is* the pod network, so a controller needing a pod network cannot
+be what creates one. The k3s nodes sit `NotReady` until it lands; that is
+expected, not a fault.
+
+**The handover is the part that is easy to get wrong.** The lab's bootstrap
+applies `crossplane/platform/10-peering.yaml` and `crossplane/apps/10-demo.yaml`,
+which declare the same two resources Infrahub models and Vidra delivers. Vidra
+refuses to adopt a resource it did not create — `already exists but is not
+managed by this operator` — so whichever copy exists first wins and the other
+never arrives. `invoke cluster` therefore deletes those two after the lab script
+runs, and `invoke vidra` recreates them from Infrahub's artifacts:
+
+| Resource | Owner |
+| --- | --- |
+| `fabricpeering.nfd41.lab/nfd41` | **Infrahub**, via `ServiceFabricPeering` |
+| `fabricapp.nfd41.lab/nfd41-demo` | **Infrahub**, via `ServiceFabricApp` |
+| `fabricapp.nfd41.lab/nfd41-observability` | the lab repository |
+| `fabricapp.nfd41.lab/nfd41-access` | the lab repository |
+
+The lab's two are safe because the operator only ever deletes a resource that
+leaves a manifest **it delivered**. Pass `--no-handover` to keep the lab in
+charge of all four and skip Vidra.
+
+`invoke vidra` runs `scripts/install_vidra.sh`, which follows the order the
+operator requires: namespace, ConfigMap, Secret and the CRD shim **before** the
+chart, because `InitConfigWithClient` reads the configuration once at startup.
+Install the chart first and the operator keeps `queryName: ArtifactIDs`, which
+this repository does not register, and every sync returns
+`query failed with status 404 Not Found`.
+
+Three failure modes worth knowing before debugging a merge that does not arrive:
+
+- **`syncState: Succeeded` is not evidence anything arrived.** The sync compares
+  a checksum, and an `artefactName` that does not match `.infrahub.yml` exactly
+  returns an empty set — which succeeds. Check the `VidraResource` count, which
+  is what `invoke vidra` prints alongside the sync state.
+- **The Secret's label is the bare host**, no scheme and no port, because a colon
+  is not legal in a label value. `http://172.20.41.1:8000` becomes
+  `172.20.41.1`. Get it wrong and the operator reports `no secret found`, having
+  looked straight past an otherwise perfect Secret.
+- **Those are a username and password, not an API token.** The operator exchanges
+  them at `POST /api/auth/login`; an `INFRAHUB_API_TOKEN`-shaped Secret does not
+  authenticate.
+
+See [docs/docs/developer-guide/vidra-delivery.md](docs/docs/developer-guide/vidra-delivery.md)
+for the full loop and its diagnostics.
+
 ## Naming conventions
 
 - Generators: `generate_<entity>.py`.
@@ -327,6 +384,9 @@ uv run invoke lab --destroy             # tear it down
 uv run invoke provision                 # push every rendered artifact onto the running devices
 uv run invoke provision --dry-run       # ... showing what would be pushed, changing nothing
 uv run invoke provision --kind eos      # ... one family only: eos, frr, or junos
+uv run invoke cluster                   # Cilium + Crossplane, then hand two resources to Vidra
+uv run invoke cluster --no-handover     # ... leaving the lab in charge of all four
+uv run invoke vidra                     # install the operator that delivers on merge
 uv run invoke init-semaphore
 uv run invoke test
 uv run invoke lint

@@ -681,6 +681,141 @@ def provision(ctx: Context, branch: str = "", dry_run: bool = False, only: str =
     ctx.run(f"python scripts/provision_lab.py {' '.join(flags)}".strip(), pty=True)
 
 
+# The two Crossplane resources Infrahub models and Vidra delivers. The lab
+# repository declares the same two in crossplane/platform/10-peering.yaml and
+# crossplane/apps/10-demo.yaml, and its bootstrap applies them -- which is right
+# for a standalone lab and wrong here. Vidra refuses to adopt a resource it did
+# not create ("already exists but is not managed by this operator"), so whichever
+# copy exists first wins and the other never arrives. These are handed over
+# before the operator is installed.
+INFRAHUB_OWNED_RESOURCES = (
+    ("fabricapp", "nfd41-demo"),
+    ("fabricpeering", "nfd41"),
+)
+
+# The lab's own two applications, which Infrahub does not model. They stay the
+# lab's, and the operator never sees them: it only ever deletes a resource that
+# leaves a manifest it delivered itself.
+LAB_OWNED_APPS = ("nfd41-access", "nfd41-observability")
+
+
+def _lab_kubeconfig(lab_dir: str = "") -> Path:
+    return find_lab_directory(lab_dir) / "k8s/.kubeconfig/kubeconfig.yaml"
+
+
+@task(
+    help={
+        "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
+        "handover": "Delete the lab's copies of the resources Infrahub models, so Vidra can own them.",
+    }
+)
+def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
+    """
+    Bring up the Kubernetes half: Cilium, then Crossplane and the platform APIs.
+
+    Both installers belong to the lab repository and are run from here rather
+    than reimplemented -- the CNI and the Crossplane compositions are the lab's,
+    the same way the topology is.
+
+    Cilium has to come first and cannot be managed by Crossplane: it *is* the pod
+    network, so a controller that needs a pod network to run cannot be the thing
+    that creates one. The k3s nodes sit NotReady until it lands, which is
+    expected rather than a fault.
+
+    `--handover` (the default) then deletes the two claims the lab's bootstrap
+    applied which Infrahub models -- the demo application and the fabric peering.
+    They are recreated by `invoke vidra` from Infrahub's own artifacts, which is
+    the point of the exercise. Pass `--no-handover` to leave the lab in charge of
+    them and skip Vidra entirely.
+    """
+    lab_path = find_lab_directory(lab_dir)
+    kubeconfig = _lab_kubeconfig(lab_dir)
+    print(f" - Lab repository: {lab_path}")
+
+    print(" - Installing Cilium (the CNI; nodes stay NotReady until it is ready)")
+    ctx.run(f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-cilium.sh'))}", pty=True)
+
+    print(" - Installing Crossplane, the providers, the XRDs and the compositions")
+    ctx.run(f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-crossplane.sh'))}", pty=True)
+
+    if handover:
+        print("\n - Handing the Infrahub-modelled resources over to Vidra")
+        for kind, name in INFRAHUB_OWNED_RESOURCES:
+            ctx.run(
+                f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))} delete {kind} {name} --ignore-not-found",
+                pty=True,
+                warn=True,
+            )
+        print(f"   The lab keeps {', '.join(LAB_OWNED_APPS)}; Infrahub owns the two above.")
+
+    print("\n - Cluster ready. Install the operator with `invoke vidra`.")
+
+
+@task(
+    help={
+        "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
+        "wait": "Block until both syncs report a terminal state.",
+    }
+)
+def vidra(ctx: Context, lab_dir: str = "", wait: bool = True) -> None:
+    """
+    Install the Vidra operator, so a merge in Infrahub becomes cluster state.
+
+    The operator polls each artifact's checksum on `main` and applies the
+    manifest when it moves. Because the syncs are pinned to `main`, the trigger
+    is a **merge**: work on a feature branch regenerates that branch's artifacts
+    and they go nowhere.
+
+    Run `invoke cluster` first -- the manifests Vidra delivers are Crossplane
+    claims, so the XRDs and compositions have to exist or they have no controller
+    and sit there unreconciled.
+    """
+    kubeconfig = _lab_kubeconfig(lab_dir)
+    env = {"KUBECONFIG": str(kubeconfig)}
+    ctx.run("scripts/install_vidra.sh", pty=True, env=env)
+
+    if wait:
+        print("\n - Waiting for both syncs to reach a terminal state")
+        _wait_for_syncs(ctx, kubeconfig)
+
+
+def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
+    """Report each sync's state, and what it actually delivered.
+
+    `syncState: Succeeded` is not evidence that anything arrived -- the sync
+    compares a checksum, and an `artefactName` that does not match
+    `.infrahub.yml` exactly returns an empty set, which succeeds. So the
+    VidraResource count is printed alongside it; that is the number that answers
+    "did it deliver?".
+    """
+    kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        result = ctx.run(
+            f"{kube} get infrahubsync -o jsonpath="
+            '\'{range .items[*]}{.metadata.name}{"\\t"}{.status.syncState}{"\\n"}{end}\'',
+            hide=True,
+            warn=True,
+        )
+        rows = [r for r in (result.stdout or "").strip().splitlines() if r.strip()]
+        if rows and all(r.split("\t")[-1] in {"Succeeded", "Failed"} for r in rows):
+            break
+        sleep(10)
+
+    ctx.run(
+        f"{kube} get infrahubsync -o custom-columns="
+        "NAME:.metadata.name,STATE:.status.syncState,LAST:.status.lastSyncTime,ERROR:.status.lastError",
+        pty=True,
+        warn=True,
+    )
+    print("\n - Delivered resources (this is the number that answers 'did it arrive?'):")
+    ctx.run(
+        f"{kube} get vidraresource -o custom-columns=NAME:.metadata.name,STATE:.status.DeployState",
+        pty=True,
+        warn=True,
+    )
+
+
 @task
 def stop(ctx: Context) -> None:
     """
