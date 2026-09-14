@@ -143,7 +143,7 @@ Per the plan's Structure Decision, which follows `avd_anta_catalog` and
 - [X] T039 Run the full gate: `uv run pytest tests/unit` and `uv run invoke lint`. Confirm ruff, yamllint, mypy and rumdl pass. `lint-prose` currently fails on 7 pre-existing errors in `docs/` unrelated to this feature — check the count is **unchanged** rather than assuming it is
 - [X] T040 [P] Document the transform in `docs/docs/developer-guide/transforms.md`: what it renders, that `ServiceFabricPeering` is the artifact target and why the cluster is not, and that selectors are stored as `key=value` lists because of the JSON dotted-key server bug. Use relative Markdown links only, per the docs-sync constraints in AGENTS.md
 - [X] T041 [P] Add the new prefix-role-style entries to `schemas/MARKETPLACE.md` only if this cycle changed anything there — it should not have. Instead confirm the JSON dotted-key finding recorded there is still accurate, since this transform is the first consumer of the `key=value` workaround
-- [ ] T042 Delete the throwaway branch: `uv run infrahubctl branch delete cx-peering`, keeping only what the pull request needs
+- [X] T042 `cx-peering` deleted, git branch and Infrahub mirror. Original: Delete the throwaway branch: `uv run infrahubctl branch delete cx-peering`, keeping only what the pull request needs
 - [ ] T043 Obtain maintainer sign-off on the Principle IV exception recorded in [plan.md](./plan.md) (Complexity Tracking) — either install `$infrahub-run-integration-tests` and run it, or accept the alternative evidence set (fixture unit tests, live render, Kubernetes dry-run, repository sync and artifact generation) in the pull request description. This is the same open decision as cycle 010's T070
 
 ---

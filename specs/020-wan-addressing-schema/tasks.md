@@ -152,7 +152,7 @@ interface is "the" loopback.
 - [X] T037 Run `uv run invoke test` and `uv run invoke lint` — ruff, mypy, yamllint, rumdl and Vale must all pass with zero unaddressed findings (Constitution IV)
 - [~] T038 Run `$infrahub-run-integration-tests` on branch `020-wan-addressing-schema`, recording branch and commit. If it cannot run in this environment, say so explicitly in the pull request as the constitution's documented exception — do not omit it silently (see plan.md, "Integration testing")
 - [X] T039 Walk [quickstart.md](./quickstart.md) §7 and confirm SC-006: every remaining row in the six rendered configs is blocked on object data, with no row left whose obstacle is schema. This is the criterion that says the next cycle can start
-- [ ] T040 Merge to `main`, then delete the Infrahub branch `wan-addr` — **held for the user.** The work is complete and verified, but the integration gate is an unmet documented exception (T038), and merging to `main` is the maintainer's call, not the implementer's
+- [X] T040 Merged to `main` (commit `8f74424`) and the `wan-addr` branch deleted in the cycle-026 cleanup — git branch first, because the Infrahub branch is a mirror that repository sync recreates. Original: Merge to `main`, then delete the Infrahub branch `wan-addr` — **held for the user.** The work is complete and verified, but the integration gate is an unmet documented exception (T038), and merging to `main` is the maintainer's call, not the implementer's
 
 ---
 

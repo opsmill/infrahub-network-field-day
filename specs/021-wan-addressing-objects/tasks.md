@@ -163,8 +163,8 @@ sessions, with acme/dr returning zero and one static route.
 - [X] T044 Run `uv run invoke test` and `uv run invoke lint` — ruff, mypy, yamllint, rumdl and Vale must all pass
 - [~] T045 Run `$infrahub-run-integration-tests` on this branch. If it is not installed, say so explicitly in the pull request as the constitution's documented exception, and point at the non-live alternative in Phases 6 — do not omit it silently
 - [X] T046 Walk [quickstart.md](./quickstart.md) §8 and answer SC-009: every line of the six rendered FRR configs has its data in the graph. This is the criterion that says the transform cycle can start
-- [ ] T047 Delete the polluted `wan-addr` Infrahub branch, or record explicitly why it is being kept. It must never be merged (research open risk 1) — **held for the user**, along with T048
-- [ ] T048 Merge to `main` and delete the `wan-obj` Infrahub branch — **held for the user.** The work is complete and verified, but the integration gate is an unmet documented exception (T045)
+- [X] T047 `wan-addr` deleted — git branch and Infrahub mirror both. It was never merged into the graph, so the probe data it held went with it. Original: Delete the polluted `wan-addr` Infrahub branch, or record explicitly why it is being kept. It must never be merged (research open risk 1) — **held for the user**, along with T048
+- [X] T048 Merged to `main` (commit `fb48a44`) and `wan-obj` deleted. Original: Merge to `main` and delete the `wan-obj` Infrahub branch — **held for the user.** The work is complete and verified, but the integration gate is an unmet documented exception (T045)
 
 ---
 

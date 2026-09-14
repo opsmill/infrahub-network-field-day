@@ -170,7 +170,7 @@ branch and confirm the six-line change SC-003 describes.
 - [X] T049 Run `uv run invoke test` and `uv run invoke lint` — ruff, mypy, yamllint, rumdl and Vale must all pass
 - [ ] T050 Run `$infrahub-run-integration-tests`. If it is not installed, say so explicitly in the pull request as the constitution's documented exception and point at the live verification in Phase 6 — do not omit it silently
 - [X] T051 Answer SC-009 per [quickstart.md](./quickstart.md) §7: what does `../lab/wan/tenants.yml` still hold that the graph does not? Expected answer — the host entries, the branch's bridged access ports, and `mtu`. Everything that drives a routing decision is in the graph
-- [ ] T052 Merge to `main` and delete the `wan-render` Infrahub branch — **held for the user.** The work is complete and verified, but the integration gate is an unmet documented exception (T050)
+- [X] T052 Merged to `main` (commit `acf5664`) and `wan-render` deleted. Original: Merge to `main` and delete the `wan-render` Infrahub branch — **held for the user.** The work is complete and verified, but the integration gate is an unmet documented exception (T050)
 
 ---
 

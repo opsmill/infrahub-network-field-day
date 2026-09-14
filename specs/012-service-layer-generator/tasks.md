@@ -145,7 +145,7 @@ Infrahub reference-design repository, per the plan's Structure Decision:
 - [X] T047 Run the full gate: `uv run pytest tests/unit` and `uv run invoke lint`. `lint-prose` fails on 7 pre-existing errors in `docs/`; confirm the count is unchanged
 - [X] T048 Write `specs/012-service-layer-generator/acceptance-evidence.md` recording SC-001 through SC-010 with the actual checksums, object counts and command output, following the format cycle 011 established
 - [X] T049 Record the Principle II exception evidence explicitly: the unit tests, the live double-run, and the artifact checksum comparison, stated as the documented alternative to `$infrahub-test-generator-idempotence`
-- [ ] T050 Delete the throwaway branch once the evidence is captured: `uv run infrahubctl branch delete svc-gen`
+- [X] T050 `svc-gen` deleted, git branch and Infrahub mirror. Original: Delete the throwaway branch once the evidence is captured: `uv run infrahubctl branch delete svc-gen`
 - [ ] T051 Obtain maintainer sign-off on the Principle II and Principle IV exceptions recorded in [plan.md](./plan.md) Complexity Tracking — the same open decision as cycles 010 and 011, now with a second principle attached
 
 ---
