@@ -55,7 +55,7 @@ def _data(*, anta_enabled: bool | None, target_found: bool = True, target_has_sc
         ]
     return {
         "target": {"edges": target_edges},
-        "DcimDevice": {"edges": [{"node": _device("leaf1", "dev-target", with_sc=target_has_sc)}]},
+        "DcimFabricSwitch": {"edges": [{"node": _device("leaf1", "dev-target", with_sc=target_has_sc)}]},
     }
 
 

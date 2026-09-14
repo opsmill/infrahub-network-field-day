@@ -124,9 +124,9 @@ class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodDev
 class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeDcimInterface(
     BaseModel
 ):
-    typename__: Literal["DcimInterface", "InterfaceLag", "InterfaceVirtual"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal[
+        "DcimInterface", "InterfaceLag", "InterfaceVirtual", "SecurityFirewallInterface"
+    ] = Field(alias="__typename")
     id: Optional[str]
 
 
@@ -193,7 +193,7 @@ class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRac
         Annotated[
             Union[
                 "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimPhysicalDevice",
-                "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDevice",
+                "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitch",
             ],
             Field(discriminator="typename__"),
         ]
@@ -203,83 +203,89 @@ class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRac
 class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimPhysicalDevice(
     BaseModel
 ):
-    typename__: Literal["DcimPhysicalDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimDevice", "DcimPhysicalDevice", "SecurityFirewall"] = Field(
+        alias="__typename"
+    )
     id: Optional[str]
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDevice(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitch(
     BaseModel
 ):
-    typename__: Literal["DcimDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimFabricSwitch"] = Field(alias="__typename")
     id: str
-    rack: "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceRack"
-    interfaces: "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfaces"
+    rack: "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchRack"
+    interfaces: "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfaces"
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceRack(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchRack(
     BaseModel
 ):
     node: Optional[
-        "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceRackNode"
+        "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchRackNode"
     ]
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceRackNode(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchRackNode(
     BaseModel
 ):
     id: str
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfaces(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfaces(
     BaseModel
 ):
     edges: Optional[
         list[
-            "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdges"
+            "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdges"
         ]
     ]
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdges(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimInterface",
-                "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimEndpoint",
+                "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimInterface",
+                "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimEndpoint",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimInterface(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimInterface(
     BaseModel
 ):
     typename__: Literal[
-        "DcimInterface", "InterfaceLag", "InterfacePhysical", "InterfaceVirtual"
+        "DcimInterface",
+        "InterfaceLag",
+        "InterfacePhysical",
+        "InterfaceVirtual",
+        "SecurityFirewallInterface",
     ] = Field(alias="__typename")
     id: Optional[str]
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimEndpoint(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimEndpoint(
     BaseModel
 ):
     typename__: Literal["DcimEndpoint"] = Field(alias="__typename")
     id: Optional[str]
-    connector: "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimEndpointConnector"
+    connector: "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimEndpointConnector"
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimEndpointConnector(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimEndpointConnector(
     BaseModel
 ):
     node: Optional[
-        "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimEndpointConnectorNode"
+        "FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimEndpointConnectorNode"
     ]
 
 
-class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimEndpointConnectorNode(
+class FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimEndpointConnectorNode(
     BaseModel
 ):
     typename__: Literal["DcimConnector", "NetworkLink"] = Field(alias="__typename")
@@ -306,9 +312,9 @@ FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdge
 FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNode.model_rebuild()
 FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevices.model_rebuild()
 FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdges.model_rebuild()
-FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDevice.model_rebuild()
-FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceRack.model_rebuild()
-FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfaces.model_rebuild()
-FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdges.model_rebuild()
-FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimEndpoint.model_rebuild()
-FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimDeviceInterfacesEdgesNodeDcimEndpointConnector.model_rebuild()
+FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitch.model_rebuild()
+FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchRack.model_rebuild()
+FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfaces.model_rebuild()
+FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdges.model_rebuild()
+FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimEndpoint.model_rebuild()
+FabricCablingPlanQueryNetworkFabricEdgesNodeChildrenEdgesNodeNetworkPodRacksEdgesNodeDevicesEdgesNodeDcimFabricSwitchInterfacesEdgesNodeDcimEndpointConnector.model_rebuild()

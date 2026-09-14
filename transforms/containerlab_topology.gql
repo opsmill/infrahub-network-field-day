@@ -14,7 +14,7 @@ query ContainerLabTopology($name: String!) {
                   edges {
                     node {
                       __typename
-                      ... on DcimDevice {
+                      ... on DcimFabricSwitch {
                         id
                         name {
                           value
@@ -94,7 +94,7 @@ query ContainerLabTopology($name: String!) {
                         edges {
                           node {
                             __typename
-                            ... on DcimDevice {
+                            ... on DcimFabricSwitch {
                               id
                               name {
                                 value

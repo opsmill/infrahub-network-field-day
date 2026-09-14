@@ -192,7 +192,7 @@ class ServiceAppAccess(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
 
 class AvdArtifact(CoreNode):
     name: String
-    device: RelationshipAttribute[DcimDevice]
+    device: RelationshipAttribute[DcimFabricSwitch]
     hostvar_file: RelationshipAttribute[AvdHostvarFile]
     structured_config_file: RelationshipAttribute[AvdStructuredConfigFile]
 
@@ -200,7 +200,7 @@ class AvdArtifact(CoreNode):
 class RoutingAsn(CoreNode):
     asn: Integer
     description: StringOptional
-    devices: RelationshipManager[DcimDevice]
+    devices: RelationshipManager[DcimGenericDevice]
     fabric: RelationshipAttribute[NetworkFabric]
     mlag_domains: RelationshipManager[MlagDomain]
 
@@ -286,7 +286,7 @@ class EvpnDomain(CoreNode):
 
 
 class MlagDomain(GenericMlagDomain):
-    peers: RelationshipManager[DcimDevice]
+    peers: RelationshipManager[DcimFabricSwitch]
 
 
 class AvdEvpn(CoreNode):
@@ -371,6 +371,10 @@ class ServiceFabricPeering(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     peerings: RelationshipManager[ClusterFabricPeering]
 
 
+class DcimFabricSwitch(CoreArtifactTarget, DcimGenericDevice, DcimPhysicalDevice):
+    status: Dropdown
+
+
 class SecurityFirewall(DcimGenericDevice, DcimPhysicalDevice, CoreArtifactTarget, SecurityPolicyAssignment):
     role: DropdownOptional
     policy: RelationshipAttribute[SecurityPolicy]
@@ -393,7 +397,7 @@ class EvpnGatewayGroup(CoreNode):
     name: String
     resiliency_model: Dropdown
     local_domain: RelationshipAttribute[EvpnDomain]
-    members: RelationshipManager[DcimDevice]
+    members: RelationshipManager[DcimFabricSwitch]
     pod: RelationshipAttribute[NetworkPod]
     remote_domain: RelationshipAttribute[EvpnDomain]
 
@@ -564,7 +568,7 @@ class NetworkPod(NetworkBuildingBlock, GeneratorTarget):
     leaf_interface_sorting_method: Dropdown
     role: Dropdown
     spine_interface_sorting_method: Dropdown
-    devices: RelationshipManager[DcimDevice]
+    devices: RelationshipManager[DcimFabricSwitch]
     evpn_domain: RelationshipAttribute[EvpnDomain]
     racks: RelationshipManager[LocationRack]
 
@@ -738,7 +742,7 @@ class EvpnSvi(CoreNode):
 
 class EvpnSviNode(CoreNode):
     ip_address: IPHost
-    device: RelationshipAttribute[DcimDevice]
+    device: RelationshipAttribute[DcimFabricSwitch]
     svi: RelationshipAttribute[EvpnSvi]
 
 
@@ -814,7 +818,7 @@ class RoutingVrfBgpPeer(CoreNode):
     route_map_in: StringOptional
     route_map_out: StringOptional
     send_community: StringOptional
-    devices: RelationshipManager[DcimDevice]
+    devices: RelationshipManager[DcimFabricSwitch]
     vrf: RelationshipAttribute[IpamVRF]
 
 
@@ -825,7 +829,7 @@ class RoutingVrfL3Interface(CoreNode):
     ip_address: IPHost
     ipv4_acl_in: StringOptional
     ipv4_acl_out: StringOptional
-    device: RelationshipAttribute[DcimDevice]
+    device: RelationshipAttribute[DcimFabricSwitch]
     vrf: RelationshipAttribute[IpamVRF]
 
 
@@ -833,7 +837,7 @@ class RoutingVrfStaticRoute(CoreNode):
     description: StringOptional
     next_hop: IPHost
     prefix: IPNetwork
-    devices: RelationshipManager[DcimDevice]
+    devices: RelationshipManager[DcimGenericDevice]
     vrf: RelationshipAttribute[IpamVRF]
 
 

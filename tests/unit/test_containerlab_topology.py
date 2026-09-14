@@ -65,7 +65,7 @@ def _device(
     link_role: str | None = None,
 ) -> dict[str, Any]:
     return {
-        "__typename": "DcimDevice",
+        "__typename": "DcimFabricSwitch",
         "id": name,
         "name": {"value": name},
         "role": {"value": role},

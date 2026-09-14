@@ -324,7 +324,7 @@ async def _device_names(client: InfrahubClient, branch: str) -> set[str]:
     pods = await client.filters(kind="NetworkPod", name__value=POD_NAME, branch=branch)
     if not pods:
         return set()
-    devices = await client.filters(kind="DcimDevice", pod__ids=[pods[0].id], branch=branch)
+    devices = await client.filters(kind="DcimFabricSwitch", pod__ids=[pods[0].id], branch=branch)
     return {device.name.value for device in devices}
 
 
@@ -333,7 +333,7 @@ async def _device_identity_report(client: InfrahubClient, branch: str) -> dict[s
     pods = await client.filters(kind="NetworkPod", name__value=POD_NAME, branch=branch)
     if not pods:
         return {}
-    devices = await client.filters(kind="DcimDevice", pod__ids=[pods[0].id], branch=branch, include=["asn"])
+    devices = await client.filters(kind="DcimFabricSwitch", pod__ids=[pods[0].id], branch=branch, include=["asn"])
 
     # `include` gives the relationship's peer id, not a hydrated node, so the
     # RoutingAsn is read on its own. Cached per id: the seven devices share four.

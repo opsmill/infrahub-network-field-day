@@ -64,7 +64,27 @@ def _choice_names(attribute: dict[str, Any]) -> set[str]:
 
 
 def _dcim_device_role_choice_names() -> set[str]:
-    """Role choice machine names on the DcimDevice extension."""
+    """Role choice machine names for the AVD-rendered fabric roles.
+
+    Every caller here asks about roles pyAVD renders, and cycle 027 moved those
+    onto DcimFabricSwitch's own dropdown; DcimDevice keeps only the non-EOS
+    router roles. So this reads the fabric kind rather than the union -- asking
+    the union would let a fabric role that had drifted onto the router kind
+    satisfy these clauses.
+    """
+    device = _extension_node(_DCIM_EXTENSIONS, "DcimFabricSwitch")
+    role = _attribute(device, "role")
+    assert role is not None, "DcimFabricSwitch.role attribute is missing"
+    return _choice_names(role)
+
+
+def _router_role_choice_names() -> set[str]:
+    """Role choice machine names on the DcimDevice (router) extension.
+
+    The counterpart to the helper above. Cycle 027 split one dropdown into two,
+    so "which roles exist" became two questions and each caller must say which
+    it is asking.
+    """
     device = _extension_node(_DCIM_EXTENSIONS, "DcimDevice")
     role = _attribute(device, "role")
     assert role is not None, "DcimDevice.role attribute is missing"
@@ -136,7 +156,12 @@ def test_provider_roles_present() -> None:
 
 
 def test_vtep_loopback_ip_relationship_present() -> None:
-    device = _extension_node(_DCIM_EXTENSIONS, "DcimDevice")
+    """A VXLAN tunnel endpoint is a fabric concept; cycle 027 moved it there.
+
+    It was the example the split was argued from -- an FRR provider edge had no
+    use for it and nothing stopped one being set.
+    """
+    device = _extension_node(_DCIM_EXTENSIONS, "DcimFabricSwitch")
     rel = _relationship(device, "vtep_loopback_ip")
     assert rel is not None
     assert rel["peer"] == "IpamIPAddress"

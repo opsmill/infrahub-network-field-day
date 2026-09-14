@@ -46,7 +46,14 @@ Key docs to read before larger changes:
 ## Architecture summary
 
 - Data model hierarchy: `NetworkFabric` -> `NetworkPod` -> `LocationRack` ->
-  `DcimDevice` -> `DcimInterface` / `NetworkLink` / `IpamIPAddress`.
+  `DcimFabricSwitch` -> `DcimInterface` / `NetworkLink` / `IpamIPAddress`.
+- **There are four device kinds, and they are siblings.** `DcimFabricSwitch` is
+  the fabric's EOS switches, `DcimDevice` the WAN's FRR routers,
+  `SecurityFirewall` the perimeter firewall, `ComputePhysicalServer` the hosts
+  and Kubernetes nodes. All four inherit `DcimGenericDevice`; none inherits
+  another, because Infrahub inheritance targets generics and these are nodes.
+  **A query naming `DcimDevice` does not see a fabric switch and reports
+  nothing** — peer or spread `DcimGenericDevice` to reach every kind.
 - The fabric generator chain is `generate-fabric` -> `generate-pod` ->
   `generate-rack` -> `generate-avd-device-hostvar` ->
   `generate-avd-device-structured-config`.
@@ -185,7 +192,9 @@ never moves.
 
 When adding an **AVD-rendered fabric** device role:
 
-1. Add the role value in `schemas/dcim_extensions.yml`.
+1. Add the role value to the **`DcimFabricSwitch`** dropdown in
+   `schemas/dcim_extensions.yml`. That list must stay equal to `ROLE_TO_AVD_TYPE`;
+   `tests/unit/test_dcim_schema_contract.py` asserts it.
 2. Load/check schema and regenerate generated files.
 3. Update `ROLE_TO_AVD_TYPE` in `src/solution_arista_avd/avd.py`.
 4. Update `generators/generate_avd_device_hostvar.py` for role-specific fields.
@@ -193,10 +202,13 @@ When adding an **AVD-rendered fabric** device role:
 6. Add tests, especially `tests/unit/test_avd.py` and hostvars tests when needed.
 7. Update `docs/docs/developer-guide/avd/role-mapping.md` and hostvars docs.
 
-When adding a **non-EOS** device role, steps 3 to 5 and 7 do not apply. The role values
-`firewall`, `isp_edge`, `isp_core`, `internet_edge`, `customer_edge`, `branch_router`
-and `k8s_node` describe equipment pyAVD never renders, and they are deliberately absent
-from `ROLE_TO_AVD_TYPE`:
+When adding a **non-EOS** device role, steps 3 to 5 and 7 do not apply, and the role
+goes on **`DcimDevice`'s** dropdown rather than `DcimFabricSwitch`'s — cycle 027 split
+the one dropdown into two, so "add the role value in `schemas/dcim_extensions.yml`"
+now requires choosing which kind. The role values `isp_edge`, `isp_core`,
+`internet_edge`, `customer_edge`, `branch_router` and `k8s_node` describe equipment
+pyAVD never renders, and they are deliberately absent from `ROLE_TO_AVD_TYPE` (there is
+no `firewall` value at all: a firewall is a `SecurityFirewall`):
 
 - `get_avd_type` raises `ValueError` for an unmapped role. That loud failure is the
   wanted behaviour here; mapping one would instead let a firewall or an FRR router be

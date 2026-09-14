@@ -69,18 +69,24 @@ class CablingPlan(InfrahubTransform):
                                             device {
                                                 node {
                                                     # `name` comes from the GENERIC, because the far
-                                                    # end of a fabric cable is not always a
-                                                    # DcimDevice. Every link in this lab is
+                                                    # end of a fabric cable is not always the same
+                                                    # kind. Every link in this lab is
                                                     # leaf <-> ComputePhysicalServer, and a query
-                                                    # spreading only `... on DcimDevice` resolved
-                                                    # the server end to an empty object -- so every
-                                                    # row was dropped and the artifact was a bare
-                                                    # CSV header. `rack` stays on the concrete kind
+                                                    # spreading only one concrete kind resolved the
+                                                    # server end to an empty object -- so every row
+                                                    # was dropped and the artifact was a bare CSV
+                                                    # header. `rack` stays on the concrete kind
                                                     # because a server has none.
+                                                    #
+                                                    # Cycle 027 made that fix load-bearing a second
+                                                    # time: the near end is now a DcimFabricSwitch,
+                                                    # not a DcimDevice. Because `name` already came
+                                                    # from the generic, the split cost this artifact
+                                                    # a blank rack column instead of every row.
                                                     ... on DcimGenericDevice {
                                                         name { value }
                                                     }
-                                                    ... on DcimDevice {
+                                                    ... on DcimFabricSwitch {
                                                         rack { node { name { value } } }
                                                     }
                                                 }
@@ -93,7 +99,7 @@ class CablingPlan(InfrahubTransform):
                                                     ... on DcimGenericDevice {
                                                         name { value }
                                                     }
-                                                    ... on DcimDevice {
+                                                    ... on DcimFabricSwitch {
                                                         rack { node { name { value } } }
                                                     }
                                                 }

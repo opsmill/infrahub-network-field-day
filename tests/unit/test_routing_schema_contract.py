@@ -179,8 +179,13 @@ def test_only_the_static_route_peers_the_device_generic() -> None:
     failures that were already expected.
 
     Widening a peer is not a neutral act -- it changes which kinds may be
-    referenced -- so each of these five is pinned to the concrete kind until
-    some cycle argues otherwise for that specific relationship.
+    referenced -- so each is pinned until some cycle argues otherwise for that
+    specific relationship.
+
+    Cycle 027 is such a cycle, for exactly one of them: ``RoutingAsn.devices``
+    widens to the generic because ``asn`` lives on both device kinds after the
+    fabric-switch split. The other four stay concrete, and this map is what
+    proves the thirteen peer edits that cycle made did not take them along.
     """
     schema = _load_yaml(ROUTING_SCHEMA)
 
@@ -194,7 +199,13 @@ def test_only_the_static_route_peers_the_device_generic() -> None:
     assert peers == {
         ("RoutingBGPPeerGroup", "device"): "DcimDevice",
         ("RoutingBGPNeighbor", "device"): "DcimDevice",
-        ("RoutingAsn", "devices"): "DcimDevice",
+        # Cycle 027 widened this one, and the reason is worth stating because
+        # it is not the firewall reason above. `asn` is carried by BOTH
+        # DcimDevice and DcimFabricSwitch -- the WAN's routers and the fabric's
+        # switches each have an ASN -- and a reverse side cannot name two
+        # concrete kinds. Measured before changing it: 9 RoutingAsn objects
+        # spanning 6 routers and 7 switches.
+        ("RoutingAsn", "devices"): "DcimGenericDevice",
         ("RoutingPrefixList", "device"): "DcimDevice",
         ("RoutingRouteMap", "device"): "DcimDevice",
         ("RoutingStaticRoute", "device"): "DcimGenericDevice",

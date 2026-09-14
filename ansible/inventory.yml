@@ -7,6 +7,17 @@ timeout: 30
 strict: false
 
 nodes:
+  # Both device kinds since cycle 027 split them. Listing only DcimDevice would
+  # silently drop every fabric switch from the inventory.
+  DcimFabricSwitch:
+    include:
+      - name
+      - location.name
+      - role
+      - device_type.name
+      # - device_type.platform.ansible_network_os
+      - primary_address.address
+      - status
   DcimDevice:
     include:
       - name

@@ -484,7 +484,7 @@ query FabricPoolCheckQuery($name: String!) {
                 device {
                   node {
                     id
-                    ... on DcimDevice {
+                    ... on DcimFabricSwitch {
                       pod {
                         node {
                           parent {

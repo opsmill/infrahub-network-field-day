@@ -113,7 +113,7 @@ def _cv_query(cloudvision_managed: bool | None = True) -> CVConfigCheckQuery:
     return CVConfigCheckQuery.model_validate(
         {
             "NetworkFabric": {"edges": [{"node": _fabric_node(cloudvision_managed)}]},
-            "DcimDevice": {
+            "DcimFabricSwitch": {
                 "edges": [
                     {
                         "node": _device_node(
@@ -159,7 +159,7 @@ def test_cv_devices_in_fabric_includes_devices_without_structured_configs() -> N
 
 def test_cv_query_parsing_tolerates_absent_optional_relationship_keys() -> None:
     data = _cv_query().model_dump(by_alias=True)
-    device_nodes = [edge["node"] for edge in data["DcimDevice"]["edges"]]
+    device_nodes = [edge["node"] for edge in data["DcimFabricSwitch"]["edges"]]
     device_nodes[0].pop("pod")
     device_nodes[1]["pod"]["node"].pop("parent")
     device_nodes[2].pop("avd_artifact")
@@ -180,7 +180,7 @@ async def test_unmanaged_validation_tolerates_absent_optional_relationship_keys(
 ) -> None:
     monkeypatch.delenv("CLOUDVISION_SERVERS", raising=False)
     data = _cv_query(cloudvision_managed=False).model_dump(by_alias=True)
-    device_nodes = [edge["node"] for edge in data["DcimDevice"]["edges"]]
+    device_nodes = [edge["node"] for edge in data["DcimFabricSwitch"]["edges"]]
     device_nodes[0].pop("pod")
     device_nodes[1]["pod"]["node"].pop("parent")
     device_nodes[2].pop("avd_artifact")
@@ -1027,7 +1027,7 @@ async def test_no_generated_configs_skips_after_inventory(monkeypatch: pytest.Mo
     monkeypatch.setenv("CLOUDVISION_TOKEN", "token")
     data = {
         "NetworkFabric": {"edges": [{"node": _fabric_node(True)}]},
-        "DcimDevice": {
+        "DcimFabricSwitch": {
             "edges": [
                 {"node": _device_node(obj_id="leaf-1", name="leaf-1", serial="SERIAL1")},
             ]
@@ -1051,7 +1051,7 @@ async def test_collect_eos_configs_fetches_structured_config_from_check_branch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     parsed = _cv_query()
-    device = parsed.dcim_device.edges[0].node
+    device = parsed.dcim_fabric_switch.edges[0].node
     assert device is not None
 
     class FakeStructuredConfigFile:
@@ -1085,7 +1085,7 @@ async def test_collect_eos_configs_fetches_structured_config_from_check_branch(
 @pytest.mark.asyncio
 async def test_collect_eos_configs_blocks_json_decode_failure(tmp_path: Path) -> None:
     parsed = _cv_query()
-    device = parsed.dcim_device.edges[0].node
+    device = parsed.dcim_fabric_switch.edges[0].node
     assert device is not None
 
     class FakeStructuredConfigFile:
@@ -1108,7 +1108,7 @@ async def test_collect_eos_configs_blocks_json_decode_failure(tmp_path: Path) ->
 @pytest.mark.asyncio
 async def test_collect_eos_configs_blocks_pyavd_render_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     parsed = _cv_query()
-    device = parsed.dcim_device.edges[0].node
+    device = parsed.dcim_fabric_switch.edges[0].node
     assert device is not None
 
     class FakeStructuredConfigFile:
@@ -1357,7 +1357,7 @@ def test_check_does_not_submit_or_register_lifecycle_hooks() -> None:
 def test_50_device_local_selection_path_completes_within_documented_threshold() -> None:
     data = {
         "NetworkFabric": {"edges": [{"node": _fabric_node(True)}]},
-        "DcimDevice": {
+        "DcimFabricSwitch": {
             "edges": [
                 {
                     "node": _device_node(

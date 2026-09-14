@@ -177,9 +177,12 @@ nodes:
         identifier: "evpn_gateway_group__remote_domain"
         description: "Remote EVPN domain used for inter-domain exchange"
         order_weight: 1200
+      # Reverse of DcimFabricSwitch.evpn_gateway_group. Zero objects exist on
+      # any device; the relationship is built but unpopulated. It moves anyway,
+      # because "border leaf" is a fabric role and a router can never be one.
       - name: members
         label: Border Leaf Members
-        peer: DcimDevice
+        peer: DcimFabricSwitch
         cardinality: many
         kind: Attribute
         optional: false
@@ -213,7 +216,12 @@ extensions:
           description: "EVPN Gateway groups that select this pod as context"
           order_weight: 1460
 
-    - kind: DcimDevice
+    # Valid on the `border_leaf` role alone, and until cycle 027 the only thing
+    # preventing misuse was a runtime raise in
+    # generators/generate_avd_device_hostvar.py -- the schema could not say it.
+    # Narrowing the kind is not the whole constraint, but it is the half the
+    # model can now express: a router cannot carry one at all.
+    - kind: DcimFabricSwitch
       relationships:
         - name: evpn_gateway_group
           label: EVPN Gateway Group

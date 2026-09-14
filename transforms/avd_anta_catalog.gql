@@ -1,5 +1,5 @@
 query AvdAntaCatalogQuery($name: String!) {
-  target: DcimDevice(name__value: $name) {
+  target: DcimFabricSwitch(name__value: $name) {
     edges {
       node {
         id
@@ -28,7 +28,7 @@ query AvdAntaCatalogQuery($name: String!) {
       }
     }
   }
-  DcimDevice {
+  DcimFabricSwitch {
     edges {
       node {
         id

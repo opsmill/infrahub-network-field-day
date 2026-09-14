@@ -114,8 +114,16 @@ def _choice_names(attribute: dict[str, Any]) -> set[str]:
 
 
 def _device_role_choices() -> set[str]:
-    device = _extension_node(_load_yaml("schemas/dcim_extensions.yml"), "DcimDevice")
-    return _choice_names(_attributes(device)["role"])
+    """The union of BOTH device dropdowns since cycle 027 split them.
+
+    This helper answers "does every legacy role still exist", which is a
+    question about the roles, not about which kind carries them.
+    tests/unit/test_dcim_schema_contract.py pins the split itself.
+    """
+    schema = _load_yaml("schemas/dcim_extensions.yml")
+    return _choice_names(_attributes(_extension_node(schema, "DcimDevice"))["role"]) | _choice_names(
+        _attributes(_extension_node(schema, "DcimFabricSwitch"))["role"]
+    )
 
 
 def _prefix_role_choices() -> set[str]:

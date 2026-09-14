@@ -58,11 +58,22 @@ spec:
       icon: "mdi:server"
       children:
         data:
+          # Two entries since cycle 027 split the kinds. "All Devices" now points
+          # at the GENERIC, so it still lists every device -- the fabric's
+          # switches, the WAN's routers, the firewall and the servers -- which is
+          # what the label promises. Pointing it at either concrete kind would
+          # silently show half the estate.
           - namespace: Dcim
             name: AllDevices
             label: All Devices
-            kind: DcimDevice
+            kind: DcimGenericDevice
             icon: "mdi:server"
+
+          - namespace: Dcim
+            name: FabricSwitches
+            label: Fabric Switches
+            kind: DcimFabricSwitch
+            icon: "clarity:network-switch-solid"
 
           - namespace: Interface
             name: InterfacesMenu

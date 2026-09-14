@@ -68,8 +68,8 @@ from solution_arista_avd.protocols import AvdArtifact, AvdHostvarFile, NetworkPo
 
 from .generate_avd_device_inputs_query import (  # noqa: E402
     GenerateAvdDeviceInputsQuery,
-    GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges,
-    GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical,
+    GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges,
+    GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical,
 )
 
 if TYPE_CHECKING:
@@ -200,7 +200,7 @@ async def check_fabric_hostvars_ready(client: InfrahubClient, fabric_id: str) ->
 
 
 def extract_uplinks_from_dict(
-    interfaces: list[GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges],
+    interfaces: list[GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges],
     uplink_role: str | None,
     device_id: str,  # noqa: ARG001 — part of the public signature; retained for callers/tests
 ) -> UplinkData:
@@ -228,7 +228,7 @@ def extract_uplinks_from_dict(
     for edge in interfaces:
         interface = edge.node
         if not isinstance(
-            interface, GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical
+            interface, GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical
         ):
             continue
         iface_role = interface.role
@@ -1317,7 +1317,7 @@ def _flush_switch_lag_groups(groups: dict[tuple[str, int], dict[str, Any]], *, m
 
 
 def extract_connected_endpoints(  # noqa: C901
-    interfaces: list[GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges],
+    interfaces: list[GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges],
     hostname: str,
     *,
     mlag_active: bool = False,
@@ -1345,7 +1345,7 @@ def extract_connected_endpoints(  # noqa: C901
     for edge in interfaces:
         interface = edge.node
         if not isinstance(
-            interface, GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical
+            interface, GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical
         ):
             continue
         iface_role = interface.role
@@ -1833,7 +1833,7 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         for peer_id in peer_ids:
             if peer_id not in cache:
                 try:
-                    cache[peer_id] = self._peer_name(await self.client.get(kind="DcimDevice", id=peer_id))
+                    cache[peer_id] = self._peer_name(await self.client.get(kind="DcimFabricSwitch", id=peer_id))
                 except (AttributeError, KeyError, ValueError):
                     cache[peer_id] = None
             if (name := cache[peer_id]) is not None:
@@ -1854,7 +1854,9 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             self._device_names_by_id = cache
         return cache
 
-    async def _single_peer_name(self, obj: object, relationship_name: str, *, kind: str = "DcimDevice") -> str | None:
+    async def _single_peer_name(
+        self, obj: object, relationship_name: str, *, kind: str = "DcimFabricSwitch"
+    ) -> str | None:
         """Resolve the name behind a cardinality-one relationship.
 
         Deliberately never reads ``RelatedNode.peer``: that property resolves
@@ -2744,7 +2746,7 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
     async def generate(self, data: dict) -> None:  # noqa: C901 — top-level generator orchestration
         raw_data = data
         data: GenerateAvdDeviceInputsQuery = GenerateAvdDeviceInputsQuery(**data)
-        device = data.dcim_device.edges[0].node
+        device = data.dcim_fabric_switch.edges[0].node
         pod = device.pod.node
         fabric = pod.parent.node
 
@@ -2783,7 +2785,7 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         uplinks = extract_uplinks_from_dict(iface_edges, uplink_role, device_id)
         raw_fabric = (
             (
-                ((raw_data.get("DcimDevice", {}).get("edges") or [{}])[0].get("node") or {})
+                ((raw_data.get("DcimFabricSwitch", {}).get("edges") or [{}])[0].get("node") or {})
                 .get("pod", {})
                 .get("node", {})
                 .get("parent", {})

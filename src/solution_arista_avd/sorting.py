@@ -6,20 +6,20 @@ from typing import TYPE_CHECKING, cast
 from netutils.interface import sort_interface_list
 
 if TYPE_CHECKING:
-    from .protocols import DcimDevice, DcimInterface
+    from .protocols import DcimFabricSwitch, DcimInterface
 
 
 def create_sorted_device_interface_map(
     interfaces: list[DcimInterface],
-) -> dict[DcimDevice, list[DcimInterface]]:
+) -> dict[DcimFabricSwitch, list[DcimInterface]]:
     """
     Creates a dictionary that maps a device hostname to a sorted list of interfaces from a list of interfaces
     """
 
-    device_interface_map: dict[DcimDevice, list[DcimInterface]] = defaultdict(list)
+    device_interface_map: dict[DcimFabricSwitch, list[DcimInterface]] = defaultdict(list)
 
     for interface in interfaces:
-        device_interface_map[cast("DcimDevice", interface.device.peer)].append(interface)
+        device_interface_map[cast("DcimFabricSwitch", interface.device.peer)].append(interface)
 
     for device, intfs in device_interface_map.items():
         interface_map = {interface.name.value: interface for interface in intfs}
@@ -31,11 +31,11 @@ def create_sorted_device_interface_map(
 
 def create_reverse_sorted_device_interface_map(
     interfaces: list[DcimInterface],
-) -> dict[DcimDevice, list[DcimInterface]]:
-    device_interface_map: dict[DcimDevice, list[DcimInterface]] = defaultdict(list)
+) -> dict[DcimFabricSwitch, list[DcimInterface]]:
+    device_interface_map: dict[DcimFabricSwitch, list[DcimInterface]] = defaultdict(list)
 
     for interface in interfaces:
-        device_interface_map[cast("DcimDevice", interface.device.peer)].append(interface)
+        device_interface_map[cast("DcimFabricSwitch", interface.device.peer)].append(interface)
 
     for device, intfs in device_interface_map.items():
         interface_map = {interface.name.value: interface for interface in intfs}

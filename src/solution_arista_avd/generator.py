@@ -16,7 +16,7 @@ from .pool_roles import (
     map_prefix_role,
     next_available_prefix,
 )
-from .protocols import DcimDevice, DcimInterface, InterfacePhysical, InterfaceVirtual, RoutingAsn
+from .protocols import DcimFabricSwitch, DcimInterface, InterfacePhysical, InterfaceVirtual, RoutingAsn
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
@@ -147,7 +147,7 @@ class GeneratorMixin:
 
     async def assign_mlag_peer_interfaces(
         self,
-        device: DcimDevice,
+        device: DcimFabricSwitch,
         count: int = 2,
         carvable_roles: frozenset[str] = frozenset({"server", "mlag_peer"}),
     ) -> None:
@@ -676,7 +676,7 @@ class GeneratorMixin:
         asn_pool: CoreNumberPool | None = None,
         node_id_pool: CoreNumberPool | None = None,
         mgmt_pool: CoreIPAddressPool | None = None,
-    ) -> DcimDevice:
+    ) -> DcimFabricSwitch:
         """Create an AVD-managed network device, allocating from the given pools.
 
         Centralises the device-creation pattern shared by the fabric, pod and
@@ -690,7 +690,7 @@ class GeneratorMixin:
 
         Returns the created device.
         """
-        existing_devices = await self.client.filters(DcimDevice, name__value=name)
+        existing_devices = await self.client.filters(DcimFabricSwitch, name__value=name)
         device_existed = bool(existing_devices)
         existing_device = await self._fetch_existing_avd_device(existing_devices[0].id) if device_existed else None
 
@@ -709,7 +709,7 @@ class GeneratorMixin:
         )
         self._log_device_field_decisions(name, decisions)
 
-        device = await self.client.create(DcimDevice, **device_kwargs)  # type: ignore[type-abstract]
+        device = await self.client.create(DcimFabricSwitch, **device_kwargs)  # type: ignore[type-abstract]
         await device.save(allow_upsert=True)
         await self._reconcile_physical_interfaces_from_template(device.id, object_template_id)
 
@@ -739,9 +739,9 @@ class GeneratorMixin:
 
         return device
 
-    async def _fetch_existing_avd_device(self, device_id: str) -> DcimDevice:
+    async def _fetch_existing_avd_device(self, device_id: str) -> DcimFabricSwitch:
         return await self.client.get(  # type: ignore[type-abstract]
-            DcimDevice,
+            DcimFabricSwitch,
             id=device_id,
             include=self._DEVICE_RECONCILE_INCLUDE,
         )
@@ -759,7 +759,7 @@ class GeneratorMixin:
         vtep_loopback_pool: CoreIPAddressPool | None,
         node_id_pool: CoreNumberPool | None,
         mgmt_pool: CoreIPAddressPool | None,
-        existing_device: DcimDevice | None,
+        existing_device: DcimFabricSwitch | None,
     ) -> tuple[dict[str, Any], dict[str, list[str]]]:
         decisions: dict[str, list[str]] = {"populated": [], "preserved": [], "skipped": []}
         payload: dict[str, Any] = {"name": name}
@@ -848,7 +848,7 @@ class GeneratorMixin:
         payload: dict[str, Any],
         decisions: dict[str, list[str]],
         *,
-        existing_device: DcimDevice | None,
+        existing_device: DcimFabricSwitch | None,
         field_name: str,
         value: object,
         include_preserved: bool = False,
@@ -870,7 +870,7 @@ class GeneratorMixin:
         payload: dict[str, Any],
         decisions: dict[str, list[str]],
         *,
-        existing_device: DcimDevice | None,
+        existing_device: DcimFabricSwitch | None,
         field_name: str,
         value: object,
     ) -> None:
@@ -887,7 +887,7 @@ class GeneratorMixin:
         self,
         payload: dict[str, Any],
         decisions: dict[str, list[str]],
-        existing_device: DcimDevice | None,
+        existing_device: DcimFabricSwitch | None,
     ) -> None:
         if existing_device is None:
             payload["member_of_groups"] = [AVD_DEVICES_GROUP]
@@ -1033,7 +1033,7 @@ class GeneratorMixin:
         attach it, and return it so callers can roll back later failures.
         """
         device = await self.client.get(  # type: ignore[type-abstract]
-            DcimDevice,
+            DcimFabricSwitch,
             id=device_id,
             include=["asn"],
             exclude=["rack", "pod", "role", "name", "object_template", "member_of_groups"],
@@ -1056,11 +1056,11 @@ class GeneratorMixin:
         return routing_asn
 
     async def _set_device_asn(self, device_id: str, routing_asn_id: str) -> None:
-        """Link DcimDevice.asn to a RoutingAsn without resaving the SDK object's relationships."""
+        """Link DcimFabricSwitch.asn to a RoutingAsn without resaving the SDK object's relationships."""
         await self.client.execute_graphql(
             query="""
             mutation SetDeviceAsn($id: String!, $asn_id: String!) {
-                DcimDeviceUpsert(data: { id: $id, asn: { id: $asn_id } }) {
+                DcimFabricSwitchUpsert(data: { id: $id, asn: { id: $asn_id } }) {
                     ok
                     object { id }
                 }
@@ -1072,7 +1072,7 @@ class GeneratorMixin:
     async def _device_vtep_loopback_ip_id(self, device_id: str) -> str | None:
         """Return the linked VTEP loopback IP node id for a device."""
         device = await self.client.get(
-            DcimDevice,  # type: ignore[type-abstract]
+            DcimFabricSwitch,  # type: ignore[type-abstract]
             id=device_id,
             include=["vtep_loopback_ip"],
             exclude=["rack", "pod", "role", "name", "object_template", "member_of_groups"],
@@ -1080,11 +1080,11 @@ class GeneratorMixin:
         return self._relationship_node_id(getattr(device, "vtep_loopback_ip", None))
 
     async def _set_device_vtep_loopback_ip(self, device_id: str, ip_address_id: str) -> None:
-        """Link DcimDevice.vtep_loopback_ip to an existing IpamIPAddress by id."""
+        """Link DcimFabricSwitch.vtep_loopback_ip to an existing IpamIPAddress by id."""
         await self.client.execute_graphql(
             query="""
             mutation SetDeviceVtepLoopbackIp($id: String!, $ip_address_id: String!) {
-                DcimDeviceUpsert(data: { id: $id, vtep_loopback_ip: { id: $ip_address_id } }) {
+                DcimFabricSwitchUpsert(data: { id: $id, vtep_loopback_ip: { id: $ip_address_id } }) {
                     ok
                     object { id }
                 }
@@ -1094,7 +1094,7 @@ class GeneratorMixin:
         )
 
     async def ensure_shared_device_asn(
-        self, devices: list[DcimDevice], asn_pool: CoreNumberPool, fabric_id: str
+        self, devices: list[DcimFabricSwitch], asn_pool: CoreNumberPool, fabric_id: str
     ) -> RoutingAsn | None:
         """Link all devices to one shared fabric-owned ``RoutingAsn``.
 
@@ -1110,7 +1110,7 @@ class GeneratorMixin:
         device_ids = [device.id for device in devices]
         fetched_devices = [
             await self.client.get(  # type: ignore[type-abstract]
-                DcimDevice,
+                DcimFabricSwitch,
                 id=device_id,
                 include=["asn"],
                 exclude=["rack", "pod", "role", "name", "object_template", "member_of_groups"],
@@ -1158,7 +1158,7 @@ class GeneratorMixin:
         Loopback0 and, for VTEP-capable roles, Loopback1.
         """
         device = await self.client.get(
-            DcimDevice,  # type: ignore[type-abstract]
+            DcimFabricSwitch,  # type: ignore[type-abstract]
             id=device_id,
             include=["loopback_ip", "vtep_loopback_ip"],
             exclude=["rack", "pod", "role", "name", "object_template", "member_of_groups"],

@@ -111,7 +111,7 @@ class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDevice(BaseMo
         Annotated[
             Union[
                 "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimGenericDevice",
-                "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDevice",
+                "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitch",
             ],
             Field(discriminator="typename__"),
         ]
@@ -122,57 +122,57 @@ class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDci
     BaseModel
 ):
     typename__: Literal[
-        "ComputePhysicalServer", "DcimGenericDevice", "SecurityFirewall"
+        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
     ] = Field(alias="__typename")
     id: Optional[str]
     display_label: Optional[str]
 
 
-class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDevice(
+class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitch(
     BaseModel
 ):
-    typename__: Literal["DcimDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimFabricSwitch"] = Field(alias="__typename")
     id: str
     display_label: Optional[str]
     name: Optional[
-        "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceName"
+        "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchName"
     ]
     role: Optional[
-        "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceRole"
+        "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchRole"
     ]
-    asn: "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceAsn"
+    asn: "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchAsn"
 
 
-class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceName(
+class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceRole(
+class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceAsn(
+class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchAsn(
     BaseModel
 ):
     node: Optional[
-        "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceAsnNode"
+        "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchAsnNode"
     ]
 
 
-class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceAsnNode(
+class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchAsnNode(
     BaseModel
 ):
     id: str
     asn: Optional[
-        "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceAsnNodeAsn"
+        "PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchAsnNodeAsn"
     ]
 
 
-class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceAsnNodeAsn(
+class PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchAsnNodeAsn(
     BaseModel
 ):
     value: Optional[Any]
@@ -236,7 +236,11 @@ class PeeringConsistencyCheckQueryInterfaceVirtualEdgesNodeDevice(BaseModel):
 
 class PeeringConsistencyCheckQueryInterfaceVirtualEdgesNodeDeviceNode(BaseModel):
     typename__: Literal[
-        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
+        "ComputePhysicalServer",
+        "DcimDevice",
+        "DcimFabricSwitch",
+        "DcimGenericDevice",
+        "SecurityFirewall",
     ] = Field(alias="__typename")
     id: Optional[str]
     display_label: Optional[str]
@@ -483,7 +487,11 @@ class PeeringConsistencyCheckQueryClusterKubernetesEdgesNodeNodesEdgesNodeComput
     BaseModel
 ):
     typename__: Literal[
-        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
+        "ComputePhysicalServer",
+        "DcimDevice",
+        "DcimFabricSwitch",
+        "DcimGenericDevice",
+        "SecurityFirewall",
     ] = Field(alias="__typename")
     id: Optional[str]
 
@@ -500,9 +508,9 @@ PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNode.model_rebuild()
 PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodeCluster.model_rebuild()
 PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodeClusterNode.model_rebuild()
 PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDevice.model_rebuild()
-PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDevice.model_rebuild()
-PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceAsn.model_rebuild()
-PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimDeviceAsnNode.model_rebuild()
+PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitch.model_rebuild()
+PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchAsn.model_rebuild()
+PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerDeviceNodeDcimFabricSwitchAsnNode.model_rebuild()
 PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerAddress.model_rebuild()
 PeeringConsistencyCheckQueryClusterFabricPeeringEdgesNodePeerAddressNode.model_rebuild()
 PeeringConsistencyCheckQueryInterfaceVirtual.model_rebuild()

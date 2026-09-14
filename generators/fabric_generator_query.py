@@ -83,7 +83,9 @@ class FabricGeneratorQueryNetworkFabricEdgesNodeDeviceDesignsEdgesNodeDeviceTemp
     BaseModel
 ):
     typename__: Literal[
-        "CoreObjectTemplate", "TemplateComputePhysicalServer", "TemplateDcimDevice"
+        "CoreObjectTemplate",
+        "TemplateComputePhysicalServer",
+        "TemplateDcimFabricSwitch",
     ] = Field(alias="__typename")
     id: Optional[str]
 
@@ -188,9 +190,19 @@ class FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPAddr
     BaseModel
 ):
     typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
     role: Optional[
         "FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
     ]
+
+
+class FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
@@ -243,9 +255,19 @@ class FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPPref
     BaseModel
 ):
     typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
     role: Optional[
         "FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
     ]
+
+
+class FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class FabricGeneratorQueryNetworkFabricEdgesNodeFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(

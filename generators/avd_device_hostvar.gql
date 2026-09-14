@@ -1,5 +1,5 @@
 query GenerateAvdDeviceInputsQuery($name: String!) {
-  DcimDevice(name__value: $name) {
+  DcimFabricSwitch(name__value: $name) {
     edges {
       node {
         __typename
@@ -316,7 +316,7 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                 node {
                   __typename
                   id
-                  ... on DcimDevice {
+                  ... on DcimFabricSwitch {
                     name {
                       value
                     }
@@ -431,7 +431,7 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                                 node {
                                   __typename
                                   id
-                                  ... on DcimDevice {
+                                  ... on DcimFabricSwitch {
                                     name {
                                       value
                                     }
@@ -776,7 +776,7 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                                 name {
                                   value
                                 }
-                                ... on DcimDevice {
+                                ... on DcimFabricSwitch {
                                   role {
                                     value
                                   }
@@ -934,7 +934,7 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                                                         name {
                                                           value
                                                         }
-                                                        ... on DcimDevice {
+                                                        ... on DcimFabricSwitch {
                                                           role {
                                                             value
                                                           }
@@ -1000,7 +1000,7 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                     name {
                       value
                     }
-                    ... on DcimDevice {
+                    ... on DcimFabricSwitch {
                       role {
                         value
                       }

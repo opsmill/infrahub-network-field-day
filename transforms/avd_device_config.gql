@@ -1,5 +1,5 @@
 query AvdDeviceConfigQuery($name: String!) {
-  DcimDevice(name__value: $name) {
+  DcimFabricSwitch(name__value: $name) {
     edges {
       node {
         id

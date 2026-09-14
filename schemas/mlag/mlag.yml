@@ -132,8 +132,9 @@ nodes:
     inherit_from:
       - GenericMlagDomain
     relationships:
+      # Reverse of DcimFabricSwitch.mlag_domain. 2 domains over 4 leaves.
       - name: peers
-        peer: DcimDevice
+        peer: DcimFabricSwitch
         optional: false
         cardinality: many
         kind: Generic
@@ -154,7 +155,9 @@ extensions:
           kind: Attribute
           description: "MLAG Domain this LAG is used as peer link"
           order_weight: 1800
-    - kind: DcimDevice
+    # MLAG pairs two fabric leaves. Cycle 027 moved this to DcimFabricSwitch
+    # with the other eleven fabric-only fields; an FRR router has no MLAG.
+    - kind: DcimFabricSwitch
       relationships:
         - name: mlag_domain
           label: "MLAG Domain"

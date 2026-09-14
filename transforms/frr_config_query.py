@@ -566,7 +566,11 @@ class FrrConfigQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNo
     BaseModel
 ):
     typename__: Literal[
-        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
+        "ComputePhysicalServer",
+        "DcimDevice",
+        "DcimFabricSwitch",
+        "DcimGenericDevice",
+        "SecurityFirewall",
     ] = Field(alias="__typename")
     name: Optional[
         "FrrConfigQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNodeName"
@@ -610,7 +614,11 @@ class FrrConfigQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNod
     BaseModel
 ):
     typename__: Literal[
-        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
+        "ComputePhysicalServer",
+        "DcimDevice",
+        "DcimFabricSwitch",
+        "DcimGenericDevice",
+        "SecurityFirewall",
     ] = Field(alias="__typename")
     name: Optional[
         "FrrConfigQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNodeName"

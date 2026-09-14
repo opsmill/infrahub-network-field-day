@@ -45,9 +45,14 @@ def test_the_device_name_is_read_from_the_generic() -> None:
 
 
 def test_the_rack_stays_on_the_concrete_kind() -> None:
-    """`rack` is a DcimDevice field. A server has none, and that is fine --
-    the transform emits an empty rack column rather than dropping the row."""
-    assert "... on DcimDevice {" in QUERY
+    """`rack` is a fabric-switch field. A server has none, and that is fine --
+    the transform emits an empty rack column rather than dropping the row.
+
+    Cycle 027 moved `rack` from DcimDevice to DcimFabricSwitch, which is why
+    this names the new kind. Because cycle 026 had already moved `name` to the
+    generic, the split cost this artifact a blank column rather than every row.
+    """
+    assert "... on DcimFabricSwitch {" in QUERY
     assert "rack { node { name { value } } }" in QUERY
 
 

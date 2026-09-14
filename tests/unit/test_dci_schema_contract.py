@@ -36,8 +36,13 @@ def _relationships(node: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def test_device_role_choices_keep_existing_values_and_add_border_leaf() -> None:
+    """Cycle 027 moved the fabric roles to DcimFabricSwitch's own dropdown.
+
+    DcimDevice keeps only the non-EOS router roles, so this clause follows the
+    roles rather than the kind.
+    """
     schema = _load_yaml("schemas/dcim_extensions.yml")
-    device = _extension_node(schema, "DcimDevice")
+    device = _extension_node(schema, "DcimFabricSwitch")
     role = _attrs(device)["role"]
 
     choices = {choice["name"]: choice.get("label") for choice in role["choices"]}

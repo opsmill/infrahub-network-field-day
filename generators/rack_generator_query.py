@@ -89,7 +89,9 @@ class RackGeneratorQueryLocationRackEdgesNodeDeviceDesignsEdgesNodeDeviceTemplat
     BaseModel
 ):
     typename__: Literal[
-        "CoreObjectTemplate", "TemplateComputePhysicalServer", "TemplateDcimDevice"
+        "CoreObjectTemplate",
+        "TemplateComputePhysicalServer",
+        "TemplateDcimFabricSwitch",
     ] = Field(alias="__typename")
     id: Optional[str]
 
@@ -99,9 +101,9 @@ class RackGeneratorQueryLocationRackEdgesNodeParent(BaseModel):
 
 
 class RackGeneratorQueryLocationRackEdgesNodeParentNode(BaseModel):
-    typename__: Literal["LocationGeneric", "LocationHall", "LocationRack"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal[
+        "LocationGeneric", "LocationHall", "LocationRack", "LocationSite"
+    ] = Field(alias="__typename")
     id: Optional[str]
     name: Optional["RackGeneratorQueryLocationRackEdgesNodeParentNodeName"]
 
@@ -125,6 +127,7 @@ class RackGeneratorQueryLocationRackEdgesNodePodNode(BaseModel):
     spine_interface_sorting_method: Optional[
         "RackGeneratorQueryLocationRackEdgesNodePodNodeSpineInterfaceSortingMethod"
     ]
+    pod_ip_pools: "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPools"
     parent: "RackGeneratorQueryLocationRackEdgesNodePodNodeParent"
 
 
@@ -180,7 +183,9 @@ class RackGeneratorQueryLocationRackEdgesNodePodNodeDeviceDesignsEdgesNodeDevice
     BaseModel
 ):
     typename__: Literal[
-        "CoreObjectTemplate", "TemplateComputePhysicalServer", "TemplateDcimDevice"
+        "CoreObjectTemplate",
+        "TemplateComputePhysicalServer",
+        "TemplateDcimFabricSwitch",
     ] = Field(alias="__typename")
     id: Optional[str]
 
@@ -192,6 +197,164 @@ class RackGeneratorQueryLocationRackEdgesNodePodNodeLeafInterfaceSortingMethod(
 
 
 class RackGeneratorQueryLocationRackEdgesNodePodNodeSpineInterfaceSortingMethod(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPools(BaseModel):
+    edges: Optional[
+        list["RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdges"]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdges(BaseModel):
+    node: Optional[
+        Annotated[
+            Union[
+                "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreResourcePool",
+                "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool",
+                "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreResourcePool(
+    BaseModel
+):
+    typename__: Literal["CoreNumberPool", "CoreResourcePool"] = Field(
+        alias="__typename"
+    )
+    id: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool(
+    BaseModel
+):
+    typename__: Literal["CoreIPAddressPool"] = Field(alias="__typename")
+    id: str
+    resources: "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources"
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges"
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix(
+    BaseModel
+):
+    typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
+        alias="__typename"
+    )
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix(
+    BaseModel
+):
+    typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
+    role: Optional[
+        "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool(
+    BaseModel
+):
+    typename__: Literal["CoreIPPrefixPool"] = Field(alias="__typename")
+    id: str
+    resources: "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources"
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
+    BaseModel
+):
+    typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
+        alias="__typename"
+    )
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
+    BaseModel
+):
+    typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
+    role: Optional[
+        "RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
     BaseModel
 ):
     value: Optional[str]
@@ -232,6 +395,7 @@ class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabric(Base
     mgmt_pool: (
         "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricMgmtPool"
     )
+    fabric_ip_pools: "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools"
     vtep_pool: (
         "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricVtepPool"
     )
@@ -290,6 +454,170 @@ class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricMgmtP
     BaseModel
 ):
     id: str
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges"
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool",
+                "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool",
+                "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool(
+    BaseModel
+):
+    typename__: Literal["CoreNumberPool", "CoreResourcePool"] = Field(
+        alias="__typename"
+    )
+    id: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool(
+    BaseModel
+):
+    typename__: Literal["CoreIPAddressPool"] = Field(alias="__typename")
+    id: str
+    resources: "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources"
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges"
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix(
+    BaseModel
+):
+    typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
+        alias="__typename"
+    )
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix(
+    BaseModel
+):
+    typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
+    role: Optional[
+        "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool(
+    BaseModel
+):
+    typename__: Literal["CoreIPPrefixPool"] = Field(alias="__typename")
+    id: str
+    resources: "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources"
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
+    BaseModel
+):
+    typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
+        alias="__typename"
+    )
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
+    BaseModel
+):
+    typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
+    role: Optional[
+        "RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
+    ]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricVtepPool(
@@ -392,11 +720,31 @@ RackGeneratorQueryLocationRackEdgesNodePodNodeDeviceDesigns.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeDeviceDesignsEdges.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeDeviceDesignsEdgesNode.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeDeviceDesignsEdgesNodeDeviceTemplate.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPools.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdges.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeParent.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabric.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricAsnPool.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricNodeIdPool.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricMgmtPool.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
+RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricVtepPool.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNode.model_rebuild()
 RackGeneratorQueryLocationRackEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeResources.model_rebuild()

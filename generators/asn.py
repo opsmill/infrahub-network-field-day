@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, cast
 
-from solution_arista_avd.protocols import DcimDevice, RoutingAsn
+from solution_arista_avd.protocols import DcimFabricSwitch, RoutingAsn
 
 if TYPE_CHECKING:
     from infrahub_sdk import InfrahubClient
@@ -14,11 +14,11 @@ class RoutingAsnAllocator(Protocol):
 
 
 async def set_device_asn(client: InfrahubClient, device_id: str, routing_asn_id: str) -> None:
-    """Link DcimDevice.asn to a RoutingAsn without resaving the SDK object's relationships."""
+    """Link DcimFabricSwitch.asn to a RoutingAsn without resaving the SDK object's relationships."""
     await client.execute_graphql(
         query="""
         mutation SetDeviceAsn($id: String!, $asn_id: String!) {
-            DcimDeviceUpsert(data: { id: $id, asn: { id: $asn_id } }) {
+            DcimFabricSwitchUpsert(data: { id: $id, asn: { id: $asn_id } }) {
                 ok
                 object { id }
             }
@@ -31,7 +31,7 @@ async def set_device_asn(client: InfrahubClient, device_id: str, routing_asn_id:
 async def ensure_shared_device_asn(
     *,
     client: InfrahubClient,
-    devices: list[DcimDevice],
+    devices: list[DcimFabricSwitch],
     asn_pool: CoreNumberPool,
     fabric_id: str,
     allocate_routing_asn: RoutingAsnAllocator,
@@ -43,7 +43,7 @@ async def ensure_shared_device_asn(
     device_ids = [device.id for device in devices]
     fetched_devices = [
         await client.get(  # type: ignore[type-abstract]
-            DcimDevice,
+            DcimFabricSwitch,
             id=device_id,
             include=["asn"],
             exclude=["rack", "pod", "role", "name", "object_template", "member_of_groups"],

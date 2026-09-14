@@ -24,6 +24,7 @@ class PodGeneratorQueryNetworkPodEdgesNode(BaseModel):
     index: Optional["PodGeneratorQueryNetworkPodEdgesNodeIndex"]
     role: Optional["PodGeneratorQueryNetworkPodEdgesNodeRole"]
     device_designs: "PodGeneratorQueryNetworkPodEdgesNodeDeviceDesigns"
+    pod_ip_pools: "PodGeneratorQueryNetworkPodEdgesNodePodIpPools"
     parent: "PodGeneratorQueryNetworkPodEdgesNodeParent"
 
 
@@ -83,9 +84,167 @@ class PodGeneratorQueryNetworkPodEdgesNodeDeviceDesignsEdgesNodeDeviceTemplateNo
     BaseModel
 ):
     typename__: Literal[
-        "CoreObjectTemplate", "TemplateComputePhysicalServer", "TemplateDcimDevice"
+        "CoreObjectTemplate",
+        "TemplateComputePhysicalServer",
+        "TemplateDcimFabricSwitch",
     ] = Field(alias="__typename")
     id: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPools(BaseModel):
+    edges: Optional[list["PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdges"]]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdges(BaseModel):
+    node: Optional[
+        Annotated[
+            Union[
+                "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreResourcePool",
+                "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPool",
+                "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPool",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreResourcePool(
+    BaseModel
+):
+    typename__: Literal["CoreNumberPool", "CoreResourcePool"] = Field(
+        alias="__typename"
+    )
+    id: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPool(
+    BaseModel
+):
+    typename__: Literal["CoreIPAddressPool"] = Field(alias="__typename")
+    id: str
+    resources: "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources"
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges"
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix(
+    BaseModel
+):
+    typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
+        alias="__typename"
+    )
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix(
+    BaseModel
+):
+    typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
+    role: Optional[
+        "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPool(
+    BaseModel
+):
+    typename__: Literal["CoreIPPrefixPool"] = Field(alias="__typename")
+    id: str
+    resources: "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources"
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
+    BaseModel
+):
+    typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
+        alias="__typename"
+    )
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
+    BaseModel
+):
+    typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
+    role: Optional[
+        "PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class PodGeneratorQueryNetworkPodEdgesNodeParent(BaseModel):
@@ -135,6 +294,9 @@ class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabric(BaseModel):
         "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricNodeIdPool"
     )
     mgmt_pool: "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricMgmtPool"
+    fabric_ip_pools: (
+        "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPools"
+    )
     vtep_pool: "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricVtepPool"
     loopback_pool: (
         "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricLoopbackPool"
@@ -215,7 +377,9 @@ class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricDeviceDesignsEd
     BaseModel
 ):
     typename__: Literal[
-        "CoreObjectTemplate", "TemplateComputePhysicalServer", "TemplateDcimDevice"
+        "CoreObjectTemplate",
+        "TemplateComputePhysicalServer",
+        "TemplateDcimFabricSwitch",
     ] = Field(alias="__typename")
     id: Optional[str]
 
@@ -252,6 +416,170 @@ class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricMgmtPoolNode(
     BaseModel
 ):
     id: str
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPools(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdges"
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool",
+                "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool",
+                "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool(
+    BaseModel
+):
+    typename__: Literal["CoreNumberPool", "CoreResourcePool"] = Field(
+        alias="__typename"
+    )
+    id: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool(
+    BaseModel
+):
+    typename__: Literal["CoreIPAddressPool"] = Field(alias="__typename")
+    id: str
+    resources: "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources"
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges"
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix(
+    BaseModel
+):
+    typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
+        alias="__typename"
+    )
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix(
+    BaseModel
+):
+    typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
+    role: Optional[
+        "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool(
+    BaseModel
+):
+    typename__: Literal["CoreIPPrefixPool"] = Field(alias="__typename")
+    id: str
+    resources: "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources"
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources(
+    BaseModel
+):
+    edges: Optional[
+        list[
+            "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
+    BaseModel
+):
+    node: Optional[
+        Annotated[
+            Union[
+                "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
+    BaseModel
+):
+    typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
+        alias="__typename"
+    )
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
+    BaseModel
+):
+    typename__: Literal["IpamPrefix"] = Field(alias="__typename")
+    id: str
+    prefix: Optional[
+        "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
+    ]
+    role: Optional[
+        "PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
+    ]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricVtepPool(BaseModel):
@@ -344,6 +672,16 @@ PodGeneratorQueryNetworkPodEdgesNodeDeviceDesigns.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeDeviceDesignsEdges.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeDeviceDesignsEdgesNode.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeDeviceDesignsEdgesNodeDeviceTemplate.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPools.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdges.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPool.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeParent.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkBuildingBlock.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabric.model_rebuild()
@@ -354,6 +692,16 @@ PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricDeviceDesignsEdgesNod
 PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricAsnPool.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricNodeIdPool.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricMgmtPool.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPools.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdges.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
+PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricVtepPool.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricVtepPoolNode.model_rebuild()
 PodGeneratorQueryNetworkPodEdgesNodeParentNodeNetworkFabricVtepPoolNodeResources.model_rebuild()

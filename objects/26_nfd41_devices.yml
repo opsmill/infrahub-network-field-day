@@ -113,7 +113,7 @@ spec:
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
-  kind: DcimDevice
+  kind: DcimFabricSwitch
   data:
     - name: "spine-nfd41-pod1-1"
       status: provisioning

@@ -199,7 +199,13 @@ def collect_devices(data: ContainerLabTopologyQuery) -> dict[str, DeviceInfo]:
     """Build a name -> DeviceInfo map for network devices (deduped)."""
     devices: dict[str, DeviceInfo] = {}
     for node in iter_device_nodes(data):
-        if node.typename != "DcimDevice" or node.name is None or not node.name.value:
+        # The kind is compared as a STRING, so this guard does not move when a
+        # query is retargeted and nothing warns when it goes stale. Cycle 027
+        # renamed the fabric's device kind to DcimFabricSwitch; leaving
+        # "DcimDevice" here would have skipped all seven switches and emitted a
+        # topology of seven servers -- valid YAML, no error, no artifact failure.
+        # The node/link counts in the tests are what actually catch that.
+        if node.typename != "DcimFabricSwitch" or node.name is None or not node.name.value:
             continue
         name = node.name.value
         role = node.role.value if node.role else None

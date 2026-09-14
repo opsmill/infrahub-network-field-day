@@ -16,23 +16,21 @@ from generators.generate_avd_device_hostvar import (
 )
 
 # Short aliases for deeply nested Pydantic model types
-IfaceEdge = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges
-IfaceNode = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical
-IfaceName = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalName
-IfaceRole = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole
-IfaceConnector = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector
-ConnectorNode = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode
-ConnectorEndpoints = (
-    q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints
-)
-EndpointEdge = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges
-_ep = "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNode"
+IfaceEdge = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges
+IfaceNode = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical
+IfaceName = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalName
+IfaceRole = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole
+IfaceConnector = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector
+ConnectorNode = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode
+ConnectorEndpoints = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints
+EndpointEdge = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges
+_ep = "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNode"
 EndpointIface = getattr(q, f"{_ep}DcimInterface")
 EndpointIfaceName = getattr(q, f"{_ep}DcimInterfaceName")
 EndpointDevice = getattr(q, f"{_ep}DcimInterfaceDevice")
-EndpointNetworkDevice = getattr(q, f"{_ep}DcimInterfaceDeviceNodeDcimDevice")
-EndpointNetworkDeviceName = getattr(q, f"{_ep}DcimInterfaceDeviceNodeDcimDeviceName")
-EndpointNetworkDeviceRole = getattr(q, f"{_ep}DcimInterfaceDeviceNodeDcimDeviceRole")
+EndpointNetworkDevice = getattr(q, f"{_ep}DcimInterfaceDeviceNodeDcimFabricSwitch")
+EndpointNetworkDeviceName = getattr(q, f"{_ep}DcimInterfaceDeviceNodeDcimFabricSwitchName")
+EndpointNetworkDeviceRole = getattr(q, f"{_ep}DcimInterfaceDeviceNodeDcimFabricSwitchRole")
 EndpointGenericDevice = getattr(q, f"{_ep}DcimInterfaceDeviceNodeDcimGenericDevice")
 EndpointGenericDeviceName = getattr(q, f"{_ep}DcimInterfaceDeviceNodeDcimGenericDeviceName")
 EndpointPhysical = getattr(q, f"{_ep}InterfacePhysical")
@@ -45,13 +43,21 @@ EndpointPhysicalLagNode = getattr(q, f"{_ep}InterfacePhysicalLagNode")
 EndpointPhysicalLagNodeName = getattr(q, f"{_ep}InterfacePhysicalLagNodeName")
 EndpointPhysicalLagNodeLacpMode = getattr(q, f"{_ep}InterfacePhysicalLagNodeLacpMode")
 EndpointPhysicalLagNodeEvpnEthernetSegment = getattr(q, f"{_ep}InterfacePhysicalLagNodeEvpnEthernetSegment")
-TaggedVlan = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlan
-UntaggedVlan = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlan
-UntaggedVlanNode = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode
+TaggedVlan = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlan
+UntaggedVlan = q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlan
+UntaggedVlanNode = (
+    q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode
+)
 # The query always selects `spanning_tree_portfast`; a port with no intent carries None.
-Portfast = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreePortfast
-BpduGuard = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreeBpduguard
-IfaceDescription = q.GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalDescription
+Portfast = (
+    q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreePortfast
+)
+BpduGuard = (
+    q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreeBpduguard
+)
+IfaceDescription = (
+    q.GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalDescription
+)
 
 
 def _attr(value: object) -> SimpleNamespace:
@@ -68,7 +74,7 @@ def _dci_endpoint(
         "role": {"value": "peering"},
         "device": {
             "node": {
-                "__typename": "DcimDevice",
+                "__typename": "DcimFabricSwitch",
                 "id": device_id,
                 "name": {"value": device_name},
                 "role": {"value": "border_leaf"},
@@ -157,7 +163,7 @@ def _make_uplink_edge(
                                     name=EndpointIfaceName(value=remote_iface_name),
                                     device=EndpointDevice(
                                         node=EndpointNetworkDevice(
-                                            __typename="DcimDevice",
+                                            __typename="DcimFabricSwitch",
                                             id=remote_device_id,
                                             name=EndpointNetworkDeviceName(value=remote_hostname),
                                             role=EndpointNetworkDeviceRole(value="spine"),
@@ -311,7 +317,7 @@ def _make_lagged_server_edge() -> IfaceEdge:
                                                 "name": {"value": "Ethernet1/1/17"},
                                                 "device": {
                                                     "node": {
-                                                        "__typename": "DcimDevice",
+                                                        "__typename": "DcimFabricSwitch",
                                                         "id": "leaf1",
                                                         "name": {"value": "leaf-pod-b2-1-1"},
                                                         "role": {"value": "leaf"},
@@ -344,7 +350,7 @@ def _make_lagged_server_edge() -> IfaceEdge:
                                                 "name": {"value": "Ethernet1/1/17"},
                                                 "device": {
                                                     "node": {
-                                                        "__typename": "DcimDevice",
+                                                        "__typename": "DcimFabricSwitch",
                                                         "id": "leaf2",
                                                         "name": {"value": "leaf-pod-b2-1-2"},
                                                         "role": {"value": "leaf"},

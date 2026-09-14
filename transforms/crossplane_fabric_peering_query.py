@@ -22,7 +22,9 @@ class CrossplaneFabricPeeringQueryTargetEdgesNode(BaseModel):
     name: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeName"]
     status: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeStatus"]
     communities: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeCommunities"]
-    advertisement_selector: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeAdvertisementSelector"]
+    advertisement_selector: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodeAdvertisementSelector"
+    ]
     cluster: "CrossplaneFabricPeeringQueryTargetEdgesNodeCluster"
     peerings: "CrossplaneFabricPeeringQueryTargetEdgesNodePeerings"
 
@@ -50,12 +52,24 @@ class CrossplaneFabricPeeringQueryTargetEdgesNodeCluster(BaseModel):
 class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNode(BaseModel):
     id: str
     name: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeName"]
-    local_asn: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeLocalAsn"]
-    bgp_auth_secret_name: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeBgpAuthSecretName"]
-    bgp_timers: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeBgpTimers"]
-    pod_cidr_communities: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodePodCidrCommunities"]
-    node_selector: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeNodeSelector"]
-    advertisement_selector: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeAdvertisementSelector"]
+    local_asn: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeLocalAsn"
+    ]
+    bgp_auth_secret_name: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeBgpAuthSecretName"
+    ]
+    bgp_timers: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeBgpTimers"
+    ]
+    pod_cidr_communities: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodePodCidrCommunities"
+    ]
+    node_selector: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeNodeSelector"
+    ]
+    advertisement_selector: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeAdvertisementSelector"
+    ]
 
 
 class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeName(BaseModel):
@@ -66,7 +80,9 @@ class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeLocalAsn(BaseModel):
     value: Optional[Any]
 
 
-class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeBgpAuthSecretName(BaseModel):
+class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeBgpAuthSecretName(
+    BaseModel
+):
     value: Optional[str]
 
 
@@ -74,7 +90,9 @@ class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeBgpTimers(BaseModel)
     value: Optional[Any]
 
 
-class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodePodCidrCommunities(BaseModel):
+class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodePodCidrCommunities(
+    BaseModel
+):
     value: Optional[Any]
 
 
@@ -82,7 +100,9 @@ class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeNodeSelector(BaseMod
     value: Optional[Any]
 
 
-class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeAdvertisementSelector(BaseModel):
+class CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNodeAdvertisementSelector(
+    BaseModel
+):
     value: Optional[Any]
 
 
@@ -97,9 +117,15 @@ class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdges(BaseModel):
 class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNode(BaseModel):
     id: str
     name: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodeName"]
-    peer_asn: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAsn"]
-    enabled: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodeEnabled"]
-    peer_address: "CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddress"
+    peer_asn: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAsn"
+    ]
+    enabled: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodeEnabled"
+    ]
+    peer_address: (
+        "CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddress"
+    )
 
 
 class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodeName(BaseModel):
@@ -114,15 +140,25 @@ class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodeEnabled(BaseMo
     value: Optional[bool]
 
 
-class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddress(BaseModel):
-    node: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddressNode"]
+class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddress(
+    BaseModel
+):
+    node: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddressNode"
+    ]
 
 
-class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddressNode(BaseModel):
-    address: Optional["CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddressNodeAddress"]
+class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddressNode(
+    BaseModel
+):
+    address: Optional[
+        "CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddressNodeAddress"
+    ]
 
 
-class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddressNodeAddress(BaseModel):
+class CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNodePeerAddressNodeAddress(
+    BaseModel
+):
     value: Optional[str]
 
 

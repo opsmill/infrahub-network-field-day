@@ -228,12 +228,40 @@ A cabled connection between interfaces. Inherits `Dcim.Connector`, so it has `na
 
 ## Devices and interfaces
 
+### There are four device kinds, not one
+
+Since cycle 027 the equipment in this lab is modelled as four sibling node kinds, all inheriting `DcimGenericDevice`:
+
+| Kind | Holds | Rendered by |
+| --- | --- | --- |
+| `DcimFabricSwitch` | the fabric's spines, leaves and border leaves | pyAVD → EOS config |
+| `DcimDevice` | the WAN's FRR routers | `frr_config` |
+| `SecurityFirewall` | the perimeter firewall | `junos_config` |
+| `ComputePhysicalServer` | Kubernetes nodes, hosts, cloud instances | — |
+
+They are **siblings, not subtypes**. Infrahub inheritance targets generics, and `DcimDevice` is a node, so `DcimFabricSwitch` could not inherit it. The consequence is the thing to remember before writing a query:
+
+> **A query that names `DcimDevice` does not see a fabric switch, and says nothing about it.** It returns no error and no rows. Peer or spread `DcimGenericDevice` to reach every device kind at once.
+
+`schemas/dcim_extensions.yml` recorded this decision first for the firewall — *"a firewall is its own device kind rather than a `DcimDevice` with a role"* — and cycle 027 applied it a second time.
+
+### `DcimFabricSwitch` — `Dcim.FabricSwitch`
+
+An Arista EOS switch in the datacenter fabric. Inherits `Dcim.GenericDevice`, `Dcim.PhysicalDevice`, and `CoreArtifactTarget` — the same three as `DcimDevice`.
+
+- **Attributes**: `name` (unique), `description`, `os_version`, `status`. Fabric extensions (via `dcim_extensions.yml`): `role` (the ten fabric roles below), `index`, `node_id`, `avd_custom_hostvars`.
+- **Relationships**: `interfaces` → `DcimInterface`, `device_type` → `DcimDeviceType`, `platform` → `DcimPlatform`, `loopback_ip` / `mgmt_ip` / `vtep_loopback_ip` → `IpamIPAddress`, `pod` → `NetworkPod`, `rack` → `LocationRack`, `asn` → `RoutingAsn`, `avd_artifact` → `AvdArtifact`, `mlag_domain` → `MlagDomain`, `evpn_gateway_group` → `EvpnGatewayGroup`, `object_template` → `TemplateDcimFabricSwitch`, plus `static_routes` inherited from the generic.
+
 ### `DcimDevice` — `Dcim.Device`
 
-The concrete network device (switch). Inherits `Dcim.GenericDevice`, `Dcim.PhysicalDevice`, and `CoreArtifactTarget`.
+The WAN's FRR routers. Inherits `Dcim.GenericDevice`, `Dcim.PhysicalDevice`, and `CoreArtifactTarget`.
 
-- **Attributes**: `name` (unique), `description`, `os_version`, `status` (`active`, `provisioning`, `maintenance`, `drained`). Fabric extensions (via `dcim_extensions.yml`): `role` (`super_spine`, `spine`, `leaf`, `border_leaf`, `l2leaf`), `index`, `node_id`.
-- **Relationships**: `interfaces` → `DcimInterface`, `device_type` → `DcimDeviceType`, `platform` → `DcimPlatform`, `primary_address` / `loopback_ip` / `mgmt_ip` / `router_id` → `IpamIPAddress` (`router_id` is explicit rather than derived, because a customer edge's router ID is its LAN address and not a loopback), `pod` → `NetworkPod`, `rack` → `LocationRack`, `asn` → `RoutingAsn` (device BGP ASN), `avd_artifact` → `AvdArtifact`, `mlag_domain` → `MlagDomain`, plus routing relations (`bgp_peer_groups`, `bgp_neighbors`, `prefix_lists`, `route_maps`, `static_routes`).
+- **Attributes**: `name` (unique), `description`, `os_version`, `status`. Extensions: `role` (the six non-EOS roles below).
+- **Relationships**: `interfaces` → `DcimInterface`, `device_type` → `DcimDeviceType`, `platform` → `DcimPlatform`, `router_id` → `IpamIPAddress` (explicit rather than derived, because a customer edge's router ID is its LAN address and not a loopback), `asn` → `RoutingAsn`, plus routing relations (`bgp_peer_groups`, `bgp_neighbors`, `prefix_lists`, `route_maps`, `static_routes`).
+
+It does **not** carry `vtep_loopback_ip`, `mlag_domain`, `evpn_gateway_group`, `pod`, `rack`, `node_id`, `index`, `loopback_ip`, `mgmt_ip`, `avd_artifact`, `object_template` or `avd_custom_hostvars`. Those are fabric concepts and live on `DcimFabricSwitch`; an ISP provider edge exposed every one of them before the split.
+
+`location` is on the shared `Dcim.PhysicalDevice` generic and is therefore available to all four kinds.
 
 ### Interface kinds
 
@@ -443,7 +471,12 @@ Mixed into kinds that can be generator targets (`NetworkPod`, `LocationRack`, `C
 
 ## Dropdown reference
 
-**Device role** (`DcimDevice.role`): `super_spine`, `spine`, `leaf`, `border_leaf`, `l2leaf`, `l2spine`, `l3spine`, `p`, `pe`, `rr`.
+**Device role** — two disjoint dropdowns since cycle 027, one per device kind:
+
+- **`DcimFabricSwitch.role`**: `super_spine`, `spine`, `leaf`, `border_leaf`, `l2leaf`, `l2spine`, `l3spine`, `p`, `pe`, `rr`. This list must equal the keys of `ROLE_TO_AVD_TYPE` in `src/solution_arista_avd/avd.py`; `get_avd_type` raises `ValueError` on anything else, so the schema and the code state the same boundary from two directions and a test asserts the equality.
+- **`DcimDevice.role`**: `isp_edge`, `isp_core`, `internet_edge`, `customer_edge`, `branch_router`, `k8s_node`. These describe equipment pyAVD never renders and are deliberately absent from `ROLE_TO_AVD_TYPE`.
+
+There is no `firewall` value in either: a firewall is `SecurityFirewall`, its own kind.
 
 **Interface role** (`DcimInterface.role`): `uplink`, `access`, `spine`, `super_spine`, `leaf`, `loopback`, `vtep_loopback`, `server`, `peering`, `storage`, `mlag_peer`.
 

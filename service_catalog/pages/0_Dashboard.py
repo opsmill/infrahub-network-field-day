@@ -181,14 +181,14 @@ def main() -> None:
         with st.spinner("Loading device summary..."):
             query = """
             query {
-                DcimDevice(role__values: ["super_spine", "spine", "leaf", "l2leaf"]) {
+                DcimFabricSwitch(role__values: ["super_spine", "spine", "leaf", "l2leaf"]) {
                     count
                     edges { node { role { value } } }
                 }
             }
             """
             result = client.execute_graphql(query, branch=branch)
-            devices = result.get("DcimDevice", {})
+            devices = result.get("DcimFabricSwitch", {})
             total = devices.get("count", 0)
 
             if total > 0:

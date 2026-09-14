@@ -29,7 +29,11 @@ class ComputedInterfaceDescriptionQueryDcimInterfaceEdges(BaseModel):
 
 class ComputedInterfaceDescriptionQueryDcimInterfaceEdgesNodeDcimInterface(BaseModel):
     typename__: Literal[
-        "DcimInterface", "InterfaceLag", "InterfacePhysical", "InterfaceVirtual"
+        "DcimInterface",
+        "InterfaceLag",
+        "InterfacePhysical",
+        "InterfaceVirtual",
+        "SecurityFirewallInterface",
     ] = Field(alias="__typename")
     id: Optional[str]
 
@@ -85,7 +89,12 @@ class ComputedInterfaceDescriptionQueryDcimInterfaceEdgesNodeDcimEndpointConnect
 class ComputedInterfaceDescriptionQueryDcimInterfaceEdgesNodeDcimEndpointConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint(
     BaseModel
 ):
-    typename__: Literal["DcimEndpoint", "InterfacePhysical"] = Field(alias="__typename")
+    typename__: Literal[
+        "DcimCircuitEndpoint",
+        "DcimEndpoint",
+        "InterfacePhysical",
+        "SecurityFirewallInterface",
+    ] = Field(alias="__typename")
     id: Optional[str]
 
 
@@ -117,9 +126,13 @@ class ComputedInterfaceDescriptionQueryDcimInterfaceEdgesNodeDcimEndpointConnect
 class ComputedInterfaceDescriptionQueryDcimInterfaceEdgesNodeDcimEndpointConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNode(
     BaseModel
 ):
-    typename__: Literal["ComputePhysicalServer", "DcimDevice", "DcimGenericDevice"] = (
-        Field(alias="__typename")
-    )
+    typename__: Literal[
+        "ComputePhysicalServer",
+        "DcimDevice",
+        "DcimFabricSwitch",
+        "DcimGenericDevice",
+        "SecurityFirewall",
+    ] = Field(alias="__typename")
     name: Optional[
         "ComputedInterfaceDescriptionQueryDcimInterfaceEdgesNodeDcimEndpointConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeName"
     ]

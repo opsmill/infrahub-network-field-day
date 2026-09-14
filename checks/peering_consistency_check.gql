@@ -46,7 +46,7 @@ query PeeringConsistencyCheckQuery {
             __typename
             id
             display_label
-            ... on DcimDevice {
+            ... on DcimFabricSwitch {
               name {
                 value
               }

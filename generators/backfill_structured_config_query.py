@@ -78,7 +78,11 @@ class BackfillStructuredConfigQueryAvdArtifactEdgesNodeDeviceNodeInterfacesEdges
     BaseModel
 ):
     typename__: Literal[
-        "DcimInterface", "InterfaceLag", "InterfacePhysical", "InterfaceVirtual"
+        "DcimInterface",
+        "InterfaceLag",
+        "InterfacePhysical",
+        "InterfaceVirtual",
+        "SecurityFirewallInterface",
     ] = Field(alias="__typename")
     id: Optional[str]
     name: Optional[

@@ -117,7 +117,9 @@ def test_gateway_contract_and_all_active_only_choice() -> None:
     assert rels["pod"]["identifier"] == "pod__evpn_gateway_groups"
     assert rels["remote_domain"]["peer"] == "EvpnDomain"
     assert rels["remote_domain"]["identifier"] == "evpn_gateway_group__remote_domain"
-    assert rels["members"]["peer"] == "DcimDevice"
+    # Cycle 027: a gateway group's members are border leaves, which are
+    # DcimFabricSwitch. A router can no longer be added to one at all.
+    assert rels["members"]["peer"] == "DcimFabricSwitch"
     assert rels["members"]["identifier"] == "evpn_gateway_group__members"
     assert rels["members"]["optional"] is False
     assert gateway["uniqueness_constraints"] == [["local_domain", "pod", "name__value"]]
@@ -128,7 +130,7 @@ def test_inverse_relationship_extensions_are_additive() -> None:
     schema = _schema()
     fabric_rels = _by_name(_extension(schema, "NetworkFabric")["relationships"])
     pod_rels = _by_name(_extension(schema, "NetworkPod")["relationships"])
-    device_rels = _by_name(_extension(schema, "DcimDevice")["relationships"])
+    device_rels = _by_name(_extension(schema, "DcimFabricSwitch")["relationships"])
     logical_schema = yaml.safe_load(LOGICAL_DESIGN_PATH.read_text(encoding="utf-8"))
     pod_base_rels = _by_name(_node_kind(logical_schema, "Network", "Pod")["relationships"])
 
@@ -228,7 +230,9 @@ def test_schema_does_not_add_display_only_local_domain_helpers() -> None:
 
 def test_border_leaf_dependency_is_present_in_device_role_choices() -> None:
     schema = yaml.safe_load(DCIM_EXTENSIONS_PATH.read_text(encoding="utf-8"))
-    dcim_device = next(node for node in schema["extensions"]["nodes"] if node["kind"] == "DcimDevice")
+    # `border_leaf` is a fabric role, so it lives on the fabric kind's dropdown
+    # since cycle 027 split the two.
+    dcim_device = next(node for node in schema["extensions"]["nodes"] if node["kind"] == "DcimFabricSwitch")
     role_attr = next(attr for attr in dcim_device["attributes"] if attr["name"] == "role")
 
     choices = {choice["name"]: choice.get("label") for choice in role_attr["choices"]}
