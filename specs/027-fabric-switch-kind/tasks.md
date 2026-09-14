@@ -111,54 +111,54 @@ C6e (T006) after each task below.
 
 ### The six query roots
 
-- [ ] T030 [P] [US2] `generators/avd_device_hostvar.gql:2` — `DcimDevice(name__value: $name)` → `DcimFabricSwitch(...)`
-- [ ] T031 [P] [US2] `transforms/avd_device_config.gql:2` — same
-- [ ] T032 [P] [US2] `transforms/avd_anta_catalog.gql` — **two** roots, `:2` (`target:`) and `:31`. The second is the one a single-site fix misses
-- [ ] T033 [P] [US2] `transforms/avd_fabric_devices.gql:12` — root `DcimDevice {` → `DcimFabricSwitch {`
-- [ ] T034 [P] [US2] `checks/cv_config_check.gql:15` — root `DcimDevice {` → `DcimFabricSwitch {`
-- [ ] T035 [US2] Confirm `transforms/frr_config.gql:6` and `:30` are **unchanged** — `git diff transforms/frr_config.gql` must be empty (C10). This is the file that "change every `DcimDevice`" would break
+- [X] T030 [P] [US2] `generators/avd_device_hostvar.gql:2` — `DcimDevice(name__value: $name)` → `DcimFabricSwitch(...)`
+- [X] T031 [P] [US2] `transforms/avd_device_config.gql:2` — same
+- [X] T032 [P] [US2] `transforms/avd_anta_catalog.gql` — **two** roots, `:2` (`target:`) and `:31`. The second is the one a single-site fix misses
+- [X] T033 [P] [US2] `transforms/avd_fabric_devices.gql:12` — root `DcimDevice {` → `DcimFabricSwitch {`
+- [X] T034 [P] [US2] `checks/cv_config_check.gql:15` — root `DcimDevice {` → `DcimFabricSwitch {`
+- [X] T035 [US2] Confirm `transforms/frr_config.gql:6` and `:30` are **unchanged** — `git diff transforms/frr_config.gql` must be empty (C10). This is the file that "change every `DcimDevice`" would break
 
 ### The twenty fragment sites
 
-- [ ] T036 [US2] `generators/avd_device_hostvar.gql` — five fragments at `:319`, `:434`, `:779`, `:937`, `:1003`. `:319` and `:434` read `name` and `role`; `:779`, `:937`, `:1003` read `role` (and `asn` at `:1003`) with `name` already outside the fragment. `name` moves to `... on DcimGenericDevice`; `role` needs **both** concrete fragments, because C5 makes the two dropdowns different enumerations
-- [ ] T037 [P] [US2] `generators/generate_avd.gql:25`, `generators/backfill_structured_config.gql:15`, `generators/generate_fabric_peering.gql:89` — one fragment each, all reading `name`/`role` off a device reached through a link or pod
-- [ ] T038 [P] [US2] `checks/fabric_pool_check.gql:487` (reads `pod`, which **moved** — needs `... on DcimFabricSwitch`) and `checks/peering_consistency_check.gql:49` (reads `name`/`role`)
-- [ ] T039 [P] [US2] `transforms/containerlab_topology.gql:17` and `:97` — both read `name`; move to `... on DcimGenericDevice`, which fixes every device kind at once
-- [ ] T040 [P] [US2] `transforms/cabling_plan.gql:52` and `transforms/cabling_plan.py:83`, `:96` — all read `rack`, which is genuinely concrete; add a `... on DcimFabricSwitch { rack { … } }` sibling. Cycle 026 already moved `name` to the generic here, so these **degrade to a blank column** rather than dropping rows
-- [ ] T041 [P] [US2] `service_catalog/pages/4_Fabric_View.py` — five sites: `:281` and `:287` read `interfaces` (→ generic), `:92`, `:341`, `:349` read `name` (→ generic) and `role` (→ both fragments)
+- [X] T036 [US2] `generators/avd_device_hostvar.gql` — five fragments at `:319`, `:434`, `:779`, `:937`, `:1003`. `:319` and `:434` read `name` and `role`; `:779`, `:937`, `:1003` read `role` (and `asn` at `:1003`) with `name` already outside the fragment. `name` moves to `... on DcimGenericDevice`; `role` needs **both** concrete fragments, because C5 makes the two dropdowns different enumerations
+- [X] T037 [P] [US2] `generators/generate_avd.gql:25`, `generators/backfill_structured_config.gql:15`, `generators/generate_fabric_peering.gql:89` — one fragment each, all reading `name`/`role` off a device reached through a link or pod
+- [X] T038 [P] [US2] `checks/fabric_pool_check.gql:487` (reads `pod`, which **moved** — needs `... on DcimFabricSwitch`) and `checks/peering_consistency_check.gql:49` (reads `name`/`role`)
+- [X] T039 [P] [US2] `transforms/containerlab_topology.gql:17` and `:97` — both read `name`; move to `... on DcimGenericDevice`, which fixes every device kind at once
+- [X] T040 [P] [US2] `transforms/cabling_plan.gql:52` and `transforms/cabling_plan.py:83`, `:96` — all read `rack`, which is genuinely concrete; add a `... on DcimFabricSwitch { rack { … } }` sibling. Cycle 026 already moved `name` to the generic here, so these **degrade to a blank column** rather than dropping rows
+- [X] T041 [P] [US2] `service_catalog/pages/4_Fabric_View.py` — five sites: `:281` and `:287` read `interfaces` (→ generic), `:92`, `:341`, `:349` read `name` (→ generic) and `role` (→ both fragments)
 
 ### The seven kind-name strings — the silent ones
 
-- [ ] T042 [US2] **`transforms/containerlab_topology.py:202`** — `if node.typename != "DcimDevice"` must accept **both** kinds. Missing this drops all seven switches and emits valid YAML with no error. Verify against T004's counts, not by eye
-- [ ] T043 [US2] `generators/generate_avd_device_hostvar.py:2786` — `raw_data.get("DcimDevice", {})`; the response key moves with the root retargeted in T030. **Silent** if missed
-- [ ] T044 [US2] `checks/cv_config_check.py:57` — `normalized.get("DcimDevice", {})`; the response key moves with T034. **Silent** if missed
-- [ ] T045 [P] [US2] `generators/generate_avd_device_hostvar.py:1836` (`client.get(kind="DcimDevice", …)`) and `:1857` (the `kind: str = "DcimDevice"` default parameter) — these fail loudly, but fix them with the rest
-- [ ] T046 [P] [US2] `src/solution_arista_avd/sorting.py:22` and `:38` — `cast("DcimDevice", …)`; type-only, but mypy will care once `protocols.py` is regenerated
+- [X] T042 [US2] **`transforms/containerlab_topology.py:202`** — `if node.typename != "DcimDevice"` must accept **both** kinds. Missing this drops all seven switches and emits valid YAML with no error. Verify against T004's counts, not by eye
+- [X] T043 [US2] `generators/generate_avd_device_hostvar.py:2786` — `raw_data.get("DcimDevice", {})`; the response key moves with the root retargeted in T030. **Silent** if missed
+- [X] T044 [US2] `checks/cv_config_check.py:57` — `normalized.get("DcimDevice", {})`; the response key moves with T034. **Silent** if missed
+- [X] T045 [P] [US2] `generators/generate_avd_device_hostvar.py:1836` (`client.get(kind="DcimDevice", …)`) and `:1857` (the `kind: str = "DcimDevice"` default parameter) — these fail loudly, but fix them with the rest
+- [X] T046 [P] [US2] `src/solution_arista_avd/sorting.py:22` and `:38` — `cast("DcimDevice", …)`; type-only, but mypy will care once `protocols.py` is regenerated
 
 ### The three raw mutation strings
 
-- [ ] T047 [P] [US2] `generators/asn.py:21` — `DcimDeviceUpsert(...)` → `DcimFabricSwitchUpsert(...)`
-- [ ] T048 [US2] `src/solution_arista_avd/generator.py:1063` (`asn`) and `:1087` (`vtep_loopback_ip`) — same. The `vtep_loopback_ip` one fails loudly once the field moves; the `asn` one is the quiet kind
+- [X] T047 [P] [US2] `generators/asn.py:21` — `DcimDeviceUpsert(...)` → `DcimFabricSwitchUpsert(...)`
+- [X] T048 [US2] `src/solution_arista_avd/generator.py:1063` (`asn`) and `:1087` (`vtep_loopback_ip`) — same. The `vtep_loopback_ip` one fails loudly once the field moves; the `asn` one is the quiet kind
 
 ### The twelve typed call sites
 
-- [ ] T049 [P] [US2] `generators/generate_pod.py:244` (`role="super_spine"`), `generators/generate_rack.py:179` (spine), `generators/generate_server_cabling.py:56` (leaf/l2leaf), `generators/asn.py:46` — `kind=DcimDevice` → `DcimFabricSwitch`, and update the `protocols` imports and `list[DcimDevice]` annotations in each file
-- [ ] T050 [US2] `src/solution_arista_avd/generator.py` — seven sites: `:693` (`filters`), `:712` (`create`, the single device-creation path), `:744`, `:1036`, `:1075`, `:1113`, `:1161` (`get`). Also the `list[DcimDevice]` annotations at `:150`, `:679`, `:762`, `:851`, `:873`, `:890`, `:1097`
-- [ ] T051 [P] [US2] `generators/generate_fabric.py:72`, `src/solution_arista_avd/cabling.py` (6 annotations), `generators/generate_rack.py:92`/`:94`/`:137`/`:361`/`:429`, `generators/generate_pod.py:72`/`:73`/`:237` — type annotations only, but mypy must pass
+- [X] T049 [P] [US2] `generators/generate_pod.py:244` (`role="super_spine"`), `generators/generate_rack.py:179` (spine), `generators/generate_server_cabling.py:56` (leaf/l2leaf), `generators/asn.py:46` — `kind=DcimDevice` → `DcimFabricSwitch`, and update the `protocols` imports and `list[DcimDevice]` annotations in each file
+- [X] T050 [US2] `src/solution_arista_avd/generator.py` — seven sites: `:693` (`filters`), `:712` (`create`, the single device-creation path), `:744`, `:1036`, `:1075`, `:1113`, `:1161` (`get`). Also the `list[DcimDevice]` annotations at `:150`, `:679`, `:762`, `:851`, `:873`, `:890`, `:1097`
+- [X] T051 [P] [US2] `generators/generate_fabric.py:72`, `src/solution_arista_avd/cabling.py` (6 annotations), `generators/generate_rack.py:92`/`:94`/`:137`/`:361`/`:429`, `generators/generate_pod.py:72`/`:73`/`:237` — type annotations only, but mypy must pass
 
 ### Regenerate, seed, and prove
 
-- [ ] T052 [US2] Regenerate every `*_query.py` beside a changed `.gql`, via `uv run infrahubctl graphql generate-return-types <file>.gql`. **Do not hand-edit** (Constitution III)
-- [ ] T053 [US2] `objects/26_nfd41_devices.yml` — `spec.kind: DcimDevice` → `DcimFabricSwitch` (C12). Confirm `objects/31_nfd41_offfabric_devices.yml` and `31a_nfd41_wan_addressing.yml` still say `DcimDevice`
-- [ ] T054 [US2] `uv run pytest tests/unit -q` — green at or above **1043** (T002) **before** touching the environment. Fix `tests/unit/test_avd.py` (C5: `NON_AVD_DEVICE_ROLES` now does less work, because the kinds separate what that list separated by hand) and `tests/unit/test_device_type_and_platform.py` (C13: across all four kinds)
-- [ ] T055 [US2] `uv run mypy --show-error-codes src/solution_arista_avd` — clean
-- [ ] T056 [US2] Rebuild: `uv run invoke destroy && uv run invoke build && uv run invoke start && uv run invoke load`. Switches load as `DcimFabricSwitch`, routers as `DcimDevice`
-- [ ] T057 [US2] Regenerate `src/solution_arista_avd/protocols.py` with `uv run infrahubctl protocols --schemas schemas --out src/solution_arista_avd/protocols.py` and confirm it contains a `DcimFabricSwitch` protocol with an unmodified header (C14)
-- [ ] T058 [US2] `uv run invoke avd --topology` — the topology generators run **once**, on a fresh instance only. Re-running them against cabled fabric takes spines from 9 interfaces to 4 and then `generate-rack` dies with `IndexError`
-- [ ] T059 [US2] Verify the kind counts against T005: `DcimFabricSwitch` **7**, `DcimDevice` **7**, `DcimGenericDevice` **22** — unchanged, which is what proves the polymorphic paths survived (L2)
-- [ ] T060 [US2] Verify **33** artifacts across the same 10 definitions with the same per-definition counts as T003. A missing definition means a target group lost its members — most likely `avd_devices`, set in one place in `src/solution_arista_avd/generator.py`
-- [ ] T061 [US2] Diff the seven EOS configs against `/tmp/027-baseline/` **and** against `lab/avd/intended/configs/*.cfg` with device names normalised. **Zero lines differ in both.** This is SC-003 and the cycle's headline claim
-- [ ] T062 [US2] Verify the ContainerLab topology still has **14 nodes and 17 links** and the cabling plan still has **17 rows**, against T004. This is the check that actually catches T042
+- [X] T052 [US2] Regenerate every `*_query.py` beside a changed `.gql`, via `uv run infrahubctl graphql generate-return-types <file>.gql`. **Do not hand-edit** (Constitution III)
+- [X] T053 [US2] `objects/26_nfd41_devices.yml` — `spec.kind: DcimDevice` → `DcimFabricSwitch` (C12). Confirm `objects/31_nfd41_offfabric_devices.yml` and `31a_nfd41_wan_addressing.yml` still say `DcimDevice`
+- [X] T054 [US2] `uv run pytest tests/unit -q` — green at or above **1043** (T002) **before** touching the environment. Fix `tests/unit/test_avd.py` (C5: `NON_AVD_DEVICE_ROLES` now does less work, because the kinds separate what that list separated by hand) and `tests/unit/test_device_type_and_platform.py` (C13: across all four kinds)
+- [X] T055 [US2] `uv run mypy --show-error-codes src/solution_arista_avd` — clean
+- [X] T056 [US2] Rebuild: `uv run invoke destroy && uv run invoke build && uv run invoke start && uv run invoke load`. Switches load as `DcimFabricSwitch`, routers as `DcimDevice`
+- [X] T057 [US2] Regenerate `src/solution_arista_avd/protocols.py` with `uv run infrahubctl protocols --schemas schemas --out src/solution_arista_avd/protocols.py` and confirm it contains a `DcimFabricSwitch` protocol with an unmodified header (C14)
+- [X] T058 [US2] `uv run invoke avd --topology` — the topology generators run **once**, on a fresh instance only. Re-running them against cabled fabric takes spines from 9 interfaces to 4 and then `generate-rack` dies with `IndexError`
+- [X] T059 [US2] Verify the kind counts against T005: `DcimFabricSwitch` **7**, `DcimDevice` **7**, `DcimGenericDevice` **22** — unchanged, which is what proves the polymorphic paths survived (L2)
+- [X] T060 [US2] Verify **33** artifacts across the same 10 definitions with the same per-definition counts as T003. A missing definition means a target group lost its members — most likely `avd_devices`, set in one place in `src/solution_arista_avd/generator.py`
+- [X] T061 [US2] Diff the seven EOS configs against `/tmp/027-baseline/` **and** against `lab/avd/intended/configs/*.cfg` with device names normalised. **Zero lines differ in both.** This is SC-003 and the cycle's headline claim
+- [X] T062 [US2] Verify the ContainerLab topology still has **14 nodes and 17 links** and the cabling plan still has **17 rows**, against T004. This is the check that actually catches T042
 
 **Checkpoint US2**: the fabric renders exactly as before, through a new kind.
 
@@ -171,10 +171,10 @@ C6e (T006) after each task below.
 **Independent test**: T063 is fully independent and runs offline at any point. T064–T065 need the
 rebuild from T056, so they are **not** independent of US2 — stated rather than pretended.
 
-- [ ] T063 [P] [US3] Offline and independent: `git diff transforms/frr_config.gql transforms/junos_config.gql` is **empty**, and neither file's `*_query.py` regenerated to anything different (C10)
-- [ ] T064 [US3] Diff the six FRR configs against `/tmp/027-baseline/` — **byte-identical** (SC-004)
-- [ ] T065 [US3] Diff the Junos config against `/tmp/027-baseline/` — **byte-identical**, still 592 rendered lines plus its provenance line
-- [ ] T066 [US3] Verify the two widened relationships still resolve **both** kinds: `RoutingAsn.devices` returns 6 routers and 7 switches; a tenant `RoutingVrfStaticRoute` returns `isp-pe1` **and** `leaf-nfd41-pod1-3-1`. If either returns one kind, T024 or T025 narrowed instead of widening
+- [X] T063 [P] [US3] Offline and independent: `git diff transforms/frr_config.gql transforms/junos_config.gql` is **empty**, and neither file's `*_query.py` regenerated to anything different (C10)
+- [X] T064 [US3] Diff the six FRR configs against `/tmp/027-baseline/` — **byte-identical** (SC-004)
+- [X] T065 [US3] Diff the Junos config against `/tmp/027-baseline/` — **byte-identical**, still 592 rendered lines plus its provenance line
+- [X] T066 [US3] Verify the two widened relationships still resolve **both** kinds: `RoutingAsn.devices` returns 6 routers and 7 switches; a tenant `RoutingVrfStaticRoute` returns `isp-pe1` **and** `leaf-nfd41-pod1-3-1`. If either returns one kind, T024 or T025 narrowed instead of widening
 
 **Checkpoint US3**: nothing outside the fabric moved.
 
@@ -182,13 +182,13 @@ rebuild from T056, so they are **not** independent of US2 — stated rather than
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T067 [P] Update `docs/docs/developer-guide/schemas.md` — four device kinds, and the two role dropdowns with their distinct choice lists
-- [ ] T068 [P] Update `AGENTS.md`: the architecture line still reads `LocationRack -> DcimDevice -> DcimInterface`, and the non-EOS-role checklist now describes a kind boundary rather than a dropdown exclusion
-- [ ] T069 [P] Add a note to `schemas/dcim_extensions.yml` beside the split dropdowns recording that `SecurityFirewall` was the precedent and `DcimFabricSwitch` is the second application — the file already carries that reasoning for the firewall
-- [ ] T070 `uv run invoke test` — green at or above 1043
-- [ ] T071 `uv run invoke lint` — ruff, ruff-format, yamllint, mypy, rumdl clean
-- [ ] T072 Write the PR body. It **must** state explicitly that `$infrahub-run-integration-tests` is not installed (as in cycles 020–026) and that quickstart steps 0–13 are the non-live alternative
-- [ ] T073 **Merge first, regenerate `schema.graphql` after.** `infrahubctl graphql export-schema` has no `--branch` flag and exports Infrahub `main`; loading this cycle's schema into `main` to regenerate is what made cycle 023's merge fail on a `SchemaAttribute` uniqueness violation. This cycle changes schema more than any since 023
+- [X] T067 [P] Update `docs/docs/developer-guide/schemas.md` — four device kinds, and the two role dropdowns with their distinct choice lists
+- [X] T068 [P] Update `AGENTS.md`: the architecture line still reads `LocationRack -> DcimDevice -> DcimInterface`, and the non-EOS-role checklist now describes a kind boundary rather than a dropdown exclusion
+- [X] T069 [P] Add a note to `schemas/dcim_extensions.yml` beside the split dropdowns recording that `SecurityFirewall` was the precedent and `DcimFabricSwitch` is the second application — the file already carries that reasoning for the firewall
+- [X] T070 `uv run invoke test` — green at or above 1043
+- [X] T071 `uv run invoke lint` — ruff, ruff-format, yamllint, mypy, rumdl clean
+- [X] T072 Write the PR body. It **must** state explicitly that `$infrahub-run-integration-tests` is not installed (as in cycles 020–026) and that quickstart steps 0–13 are the non-live alternative
+- [X] T073 **Merge first, regenerate `schema.graphql` after.** `infrahubctl graphql export-schema` has no `--branch` flag and exports Infrahub `main`; loading this cycle's schema into `main` to regenerate is what made cycle 023's merge fail on a `SchemaAttribute` uniqueness violation. This cycle changes schema more than any since 023
 
 ---
 
@@ -254,3 +254,76 @@ rather than by reading YAML.
 All 73 tasks carry a checkbox, a sequential ID, a `[P]` marker where parallelisable, a `[US1]`,
 `[US2]` or `[US3]` label in the three story phases and none in Setup, Foundational or Polish, and
 an exact file path. Task counts: Setup 5, Foundational 5, US1 19, US2 33, US3 4, Polish 7.
+
+
+---
+
+## Implementation notes — what actually happened
+
+Recorded because three of these change how the next cycle should work, not just
+what this one did.
+
+### The surface grew twice more, after R8 already corrected it
+
+R8 raised the count from "3 queries, 6 fragments, 5 Python places" to 6/20/12 by
+covering `checks/`, `src/` and Python string literals. Implementing it found
+**five more classes of site that enumeration still missed**:
+
+| Site | Why the grep missed it |
+| --- | --- |
+| `service_catalog/pages/0_Dashboard.py` | an inline query root, in a file the R8 grep did not read |
+| `service_catalog/utils/api.py` | a kind name inside a Python list literal |
+| `ansible/deploy_clab.yml`, `ansible/inventory.yml` | `ansible/` was in no search path |
+| `objects/21_nfd41_pools.yml` | a resource pool's `node:` field names the kind it allocates into |
+| `menus/menu.yml` | a menu item's `kind:` |
+
+And the generated layer moved with the queries in three ways nothing in the plan
+anticipated: generated **class names** carry the kind, the response **field**
+follows the root (`.dcim_device` → `.dcim_fabric_switch`), and `Literal[...]`
+unions pin `TemplateDcimDevice`.
+
+The honest lesson is not "grep wider next time". It is that **the count was
+treated as settled three times and was wrong three times**, and the thing that
+finally bounded it was a test that fails on any site left behind, not a search.
+
+### Two spec items were wrong and were corrected, not worked around
+
+- **FR-006 listed `location` as router-only.** It is on the `DcimPhysicalDevice`
+  generic, shared by all four device kinds. Making it router-only would change a
+  generic the firewall and the servers also inherit.
+- **FR-005 listed `object_template` among the twelve moved fields.** It is not a
+  declared field at all: Infrahub generates it from `generate_template: true`. It
+  moved by moving the flag, and the seeded templates became
+  `TemplateDcimFabricSwitch`.
+
+### T028's criterion was too strict
+
+It required the schema diff to name `DcimFabricSwitch` and `DcimDevice` and
+nothing else. Retargeting a reverse side necessarily changes its **owning**
+kind's entry, so the diff correctly names nine more. The failure signal is a
+tenth, not a third.
+
+### The rebuild needed the repository pointed at this branch
+
+Infrahub's `CoreRepository` tracks `main`, and the worker executes the code from
+the **synced git commit**, not the working tree. A rebuild on uncommitted work
+syncs `main`'s old queries against the new schema and fails at import. The work
+was committed and `repository.yml` given `default_branch: 027-fabric-switch-kind`
+for the duration; that line is reverted and **not committed**, so merging to
+`main` restores the normal arrangement.
+
+### Two things this cycle did not cause, found while verifying
+
+- `schemas/service/service.yml` declares `ServiceGenericDevice` and
+  `ServiceGenericInterface` and **nothing inherits either**, so both reverse
+  sides of `device_services` / `interface_services` are dead. Pre-existing,
+  out of scope, pinned by name in the contract test.
+- `scripts/seed_app_payloads.py` had not run, so the Crossplane FabricApp
+  artifact rendered a 404 body. A load-ordering casualty of an aborted earlier
+  run, not the split.
+
+### `invoke test` does not complete here
+
+It runs `pytest tests`, which includes `tests/integration` and needs the live
+lab. `uv run pytest tests/unit` is the gate that ran: **1055 passing**, up from
+the 1043 baseline.
