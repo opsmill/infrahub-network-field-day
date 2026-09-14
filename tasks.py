@@ -698,6 +698,20 @@ INFRAHUB_OWNED_RESOURCES = (
 # leaves a manifest it delivered itself.
 LAB_OWNED_APPS = ("nfd41-access", "nfd41-observability")
 
+# The namespace the demo application composes. Waiting on this, rather than on
+# composed-object names, is what makes the teardown check correct -- see
+# _wait_for_teardown.
+APP_NAMESPACE = "nfd41-demo"
+
+
+class _Missing:
+    """Stands in for a command that did not run, so `.ok` is always answerable."""
+
+    ok = False
+
+
+MISSING = _Missing()
+
 
 def _lab_kubeconfig(lab_dir: str = "") -> Path:
     return find_lab_directory(lab_dir) / "k8s/.kubeconfig/kubeconfig.yaml"
@@ -711,22 +725,41 @@ def _lab_kubeconfig(lab_dir: str = "") -> Path:
 )
 def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
     """
-    Bring up the Kubernetes half: Cilium, then Crossplane and the platform APIs.
+    Bring up the Kubernetes half: Cilium, then Vidra, then Crossplane.
 
-    Both installers belong to the lab repository and are run from here rather
-    than reimplemented -- the CNI and the Crossplane compositions are the lab's,
-    the same way the topology is.
+    The installers for the CNI and Crossplane belong to the lab repository and
+    are run from here rather than reimplemented -- they are the lab's, the same
+    way the topology is.
 
-    Cilium has to come first and cannot be managed by Crossplane: it *is* the pod
-    network, so a controller that needs a pod network to run cannot be the thing
-    that creates one. The k3s nodes sit NotReady until it lands, which is
-    expected rather than a fault.
+    Cilium is first and cannot be managed by Crossplane: it *is* the pod network,
+    so a controller that needs a pod network to run cannot be the thing that
+    creates one. The k3s nodes sit NotReady until it lands, which is expected
+    rather than a fault.
 
-    `--handover` (the default) then deletes the two claims the lab's bootstrap
-    applied which Infrahub models -- the demo application and the fabric peering.
-    They are recreated by `invoke vidra` from Infrahub's own artifacts, which is
-    the point of the exercise. Pass `--no-handover` to leave the lab in charge of
-    them and skip Vidra entirely.
+    **Vidra goes up second, before the platform it delivers into, and the order
+    is deliberate.** Its syncs fail while the XRDs are absent and retry every
+    `requeueSyncAfter`, so it costs nothing -- and it means the resources
+    Infrahub models are created by Vidra first-hand rather than adopted from
+    somebody else. That matters because the operator's recovery is weak in ways
+    that are easy to mistake for health:
+
+      - It refuses to adopt a resource it did not create, so whichever writer
+        gets there first keeps it.
+      - A resource deleted after a successful sync stays missing for up to
+        `requeueResourcesAfter` (ten minutes), with the sync reporting
+        `Succeeded` throughout, because an unchanged checksum skips the apply.
+      - Deleting its VidraResource does not cause redelivery at all; the sync
+        still considers itself current. Recovering needs the InfrahubSync
+        deleted and re-applied, which resets its checksum state.
+
+    All three were measured against this lab, which is why Vidra owning the
+    resource from the start is worth the ordering.
+
+    `--handover` (the default) deletes the two claims the lab's bootstrap applies
+    which Infrahub models -- the demo application and the fabric peering. Vidra
+    picks them up on its next sync, within `requeueSyncAfter`. The delete is
+    still needed because the lab's script has no flag to skip them; it is the one
+    seam between "the lab's cluster" and "Infrahub's resources".
     """
     lab_path = find_lab_directory(lab_dir)
     kubeconfig = _lab_kubeconfig(lab_dir)
@@ -735,11 +768,14 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
     print(" - Installing Cilium (the CNI; nodes stay NotReady until it is ready)")
     ctx.run(f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-cilium.sh'))}", pty=True)
 
+    print(" - Installing Vidra before the platform, so it owns what it delivers")
+    ctx.run("scripts/install_vidra.sh", pty=True, env={"KUBECONFIG": str(kubeconfig)})
+
     print(" - Installing Crossplane, the providers, the XRDs and the compositions")
     ctx.run(f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-crossplane.sh'))}", pty=True)
 
     if handover:
-        print("\n - Handing the Infrahub-modelled resources over to Vidra")
+        print("\n - Removing the lab's copies of the resources Infrahub models")
         for kind, name in INFRAHUB_OWNED_RESOURCES:
             ctx.run(
                 f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))} delete {kind} {name} --ignore-not-found",
@@ -747,8 +783,14 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
                 warn=True,
             )
         print(f"   The lab keeps {', '.join(LAB_OWNED_APPS)}; Infrahub owns the two above.")
+        _wait_for_teardown(ctx, kubeconfig)
+        _force_resync(ctx, kubeconfig)
+        print("\n - Waiting for Vidra to deliver them from Infrahub")
+        _wait_for_syncs(ctx, kubeconfig)
+    else:
+        print("\n - Handover skipped: the lab keeps all four resources and Vidra will not adopt them.")
 
-    print("\n - Cluster ready. Install the operator with `invoke vidra`.")
+    print("\n - Cluster ready.")
 
 
 @task(
@@ -779,26 +821,105 @@ def vidra(ctx: Context, lab_dir: str = "", wait: bool = True) -> None:
         _wait_for_syncs(ctx, kubeconfig)
 
 
-def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
-    """Report each sync's state, and what it actually delivered.
+def _wait_for_teardown(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
+    """Wait for a deleted claim's composed resources to finish disappearing.
 
-    `syncState: Succeeded` is not evidence that anything arrived -- the sync
-    compares a checksum, and an `artefactName` that does not match
-    `.infrahub.yml` exactly returns an empty set, which succeeds. So the
-    VidraResource count is printed alongside it; that is the number that answers
-    "did it deliver?".
+    Deleting a FabricApp only *starts* the teardown: Crossplane deletes each
+    composed Object, and the application's Namespace then sits in `Terminating`
+    while Kubernetes reaps what is inside it. Letting Vidra recreate the claim
+    during that window is what the handover used to do, and it produces a mess
+    that does not resolve on its own:
+
+        create failed: ... deployments.apps "frontend" is forbidden: unable to
+        create new content in namespace nfd41-demo because it is being terminated
+
+    The new composed Objects fail against the dying namespace, a second
+    composed Namespace Object appears alongside the first, and the FabricApp
+    stays `Ready=False` indefinitely -- measured at nine minutes before it was
+    cleaned up by hand.
+
+    So: wait for the composed Objects to go, and for the namespace with them,
+    before anything recreates the claim.
+    """
+    kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
+    print(" - Waiting for the composed resources to finish tearing down")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        # Wait on the application NAMESPACE, not on composed-object names.
+        # Matching objects by name prefix does not work here: composed objects are
+        # named `<claim>-<hash>`, and the peering claim is called `nfd41`, which is
+        # a prefix of `nfd41-access-...` and `nfd41-observability-...` too -- the
+        # lab's own applications, which are never torn down. That filter matched
+        # them forever and the wait always timed out.
+        #
+        # The namespace is the right thing to wait on regardless: it is what the
+        # new composed resources collide with while it is Terminating.
+        namespace = ctx.run(f"{kube} get ns {APP_NAMESPACE} --no-headers", hide=True, warn=True)
+        claims_gone = all(
+            not (ctx.run(f"{kube} get {kind} {name} --no-headers", hide=True, warn=True) or MISSING).ok
+            for kind, name in INFRAHUB_OWNED_RESOURCES
+        )
+        if claims_gone and not (namespace and namespace.ok):
+            print("   torn down")
+            return
+        sleep(10)
+
+    print(f"   still tearing down after {timeout}s; recreating anyway may leave a stuck namespace")
+
+
+def _force_resync(ctx: Context, kubeconfig: Path) -> None:
+    """Make Vidra re-deliver every artifact, whether or not its checksum moved.
+
+    Necessary after the handover, and the reason is the operator's weakest
+    behaviour. A sync compares the artifact's **checksum**; unchanged means it
+    skips the download and the apply entirely. So deleting a delivered resource
+    -- which is exactly what the handover does -- leaves the sync reporting
+    `Succeeded` over a cluster that no longer has the resource, and nothing
+    re-applies it until the VidraResource reconcile fires on
+    `requeueResourcesAfter`. That is ten minutes of a fabric peering that does
+    not exist.
+
+    Measured, not supposed: after the handover deleted `fabricapp/nfd41-demo`
+    and `fabricpeering/nfd41`, both syncs read `Succeeded` and both resources
+    stayed absent.
+
+    Deleting and re-applying the InfrahubSync resets its checksum state, and
+    delivery follows within seconds. Deleting the *VidraResource* instead does
+    not work -- the sync still considers itself current and never re-applies.
+    """
+    kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
+    syncs = MAIN_DIRECTORY_PATH / "vidra/infrahub-syncs.yaml"
+    print(" - Resetting the syncs so Vidra re-delivers (an unchanged checksum would skip the apply)")
+    ctx.run(f"{kube} delete -f {shlex.quote(str(syncs))} --ignore-not-found --timeout=120s", pty=True, warn=True)
+    ctx.run(f"{kube} apply -f {shlex.quote(str(syncs))}", pty=True, warn=True)
+
+
+def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
+    """Wait until the resources Infrahub owns actually exist in the cluster.
+
+    **This waits on the resources, not on `syncState`, deliberately.** A sync
+    compares the artifact's checksum, so an unchanged checksum skips the
+    download and the apply and still reports `Succeeded` -- over a cluster that
+    may have none of them. An `artefactName` that does not match
+    `.infrahub.yml` exactly fails the same way: an empty result set is a
+    success. Waiting on the sync state would therefore return happily from a
+    cluster where nothing was delivered, which is the failure that looks most
+    like health.
+
+    So the loop asks the API server whether `fabricapp/nfd41-demo` and
+    `fabricpeering/nfd41` are there, and the sync table is printed afterwards as
+    context rather than as the verdict.
     """
     kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
     deadline = time.time() + timeout
+    missing: list[str] = []
     while time.time() < deadline:
-        result = ctx.run(
-            f"{kube} get infrahubsync -o jsonpath="
-            '\'{range .items[*]}{.metadata.name}{"\\t"}{.status.syncState}{"\\n"}{end}\'',
-            hide=True,
-            warn=True,
-        )
-        rows = [r for r in (result.stdout or "").strip().splitlines() if r.strip()]
-        if rows and all(r.split("\t")[-1] in {"Succeeded", "Failed"} for r in rows):
+        missing = []
+        for kind, name in INFRAHUB_OWNED_RESOURCES:
+            found = ctx.run(f"{kube} get {kind} {name} --no-headers", hide=True, warn=True)
+            if not (found and found.ok):
+                missing.append(f"{kind}/{name}")
+        if not missing:
             break
         sleep(10)
 
@@ -808,12 +929,18 @@ def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
         pty=True,
         warn=True,
     )
-    print("\n - Delivered resources (this is the number that answers 'did it arrive?'):")
+    print("\n - Resources Infrahub owns (this is the verdict, not the sync state):")
     ctx.run(
-        f"{kube} get vidraresource -o custom-columns=NAME:.metadata.name,STATE:.status.DeployState",
+        f"{kube} get {','.join(k for k, _ in INFRAHUB_OWNED_RESOURCES)}",
         pty=True,
         warn=True,
     )
+    if missing:
+        print(
+            f"\n   WARNING: {', '.join(missing)} still absent after {timeout}s. "
+            "The sync may read Succeeded regardless -- an unchanged checksum skips the apply. "
+            "Re-run `invoke cluster` or delete and re-apply vidra/infrahub-syncs.yaml."
+        )
 
 
 @task

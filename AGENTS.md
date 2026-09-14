@@ -239,24 +239,57 @@ deletes it from the device. Three things are worth knowing before changing
 ## The Kubernetes half, and who owns which resource
 
 ```bash
-uv run invoke cluster      # Cilium, then Crossplane, then hand two resources over
-uv run invoke vidra        # the operator that turns a merge into cluster state
+uv run invoke cluster      # Cilium, then Vidra, then Crossplane, then the handover
+uv run invoke vidra        # the operator on its own, for a re-install
 ```
 
-`invoke cluster` runs the **lab repository's** two installers rather than
-reimplementing them — the CNI and the Crossplane compositions are the lab's, the
-same way the topology is. Cilium has to be first and cannot be managed by
-Crossplane: it *is* the pod network, so a controller needing a pod network cannot
-be what creates one. The k3s nodes sit `NotReady` until it lands; that is
-expected, not a fault.
+`invoke cluster` runs the **lab repository's** installers for the CNI and
+Crossplane rather than reimplementing them — those are the lab's, the same way
+the topology is. Cilium has to be first and cannot be managed by Crossplane: it
+*is* the pod network, so a controller needing a pod network cannot be what
+creates one. The k3s nodes sit `NotReady` until it lands; that is expected, not
+a fault.
 
-**The handover is the part that is easy to get wrong.** The lab's bootstrap
-applies `crossplane/platform/10-peering.yaml` and `crossplane/apps/10-demo.yaml`,
-which declare the same two resources Infrahub models and Vidra delivers. Vidra
-refuses to adopt a resource it did not create — `already exists but is not
-managed by this operator` — so whichever copy exists first wins and the other
-never arrives. `invoke cluster` therefore deletes those two after the lab script
-runs, and `invoke vidra` recreates them from Infrahub's artifacts:
+**Vidra goes up second, before the platform it delivers into.** Its syncs fail
+while the XRDs are absent and retry every `requeueSyncAfter`, so the ordering
+costs nothing — and it buys the thing that matters: the resources Infrahub
+models are created by Vidra first-hand rather than adopted from another writer.
+Three measured behaviours are why that is worth arranging:
+
+- **It refuses to adopt a resource it did not create** (`already exists but is
+  not managed by this operator`), so whichever writer gets there first keeps it.
+- **A resource deleted after a successful sync stays missing for up to
+  `requeueResourcesAfter` — ten minutes — while the sync reports `Succeeded`
+  throughout.** An unchanged checksum skips the download and the apply, so the
+  sync never notices the resource is gone. Verified by deleting a delivered
+  `FabricPeering` and its CRD: both the sync and the `VidraResource` read
+  `Succeeded` for two minutes with nothing in the cluster.
+- **Deleting the `VidraResource` does not cause redelivery at all.** The sync
+  still considers itself current, and there is no longer a resource to
+  reconcile, so it wedges silently. Recovery is to delete and re-apply the
+  `InfrahubSync`, which resets its checksum state — the peering came back
+  within 15 seconds of doing so.
+- **You cannot delete a resource Vidra owns; it puts it back.** That is drift
+  correction working as intended, but it means cleanup has to delete the
+  `InfrahubSync` first. Deleting the claim while the sync is live restores it
+  mid-teardown, and the new composed resources then collide with a namespace
+  still `Terminating` — which leaves two composed `Namespace` objects and a
+  `FabricApp` stuck `Ready=False`.
+
+**The handover is the remaining seam.** The lab's bootstrap applies
+`crossplane/platform/10-peering.yaml` and `crossplane/apps/10-demo.yaml`, which
+declare the same two resources Infrahub models, and its script has no flag to
+skip them. `invoke cluster` deletes those two afterwards — and then **deletes
+and re-applies `vidra/infrahub-syncs.yaml`**, which is not optional. Deleting a
+delivered resource does not move the artifact's checksum, so the next sync skips
+the apply, reports `Succeeded`, and leaves the cluster without it. Recreating the
+sync resets its checksum state and delivery follows in seconds. This was
+measured twice: first by deleting a resource by hand, then by `invoke cluster`
+itself walking into it before the reset was added.
+
+The wait afterwards checks **the resources**, not `syncState`, for the same
+reason — a wait on the sync state returns happily from a cluster where nothing
+was delivered:
 
 | Resource | Owner |
 | --- | --- |
@@ -267,9 +300,9 @@ runs, and `invoke vidra` recreates them from Infrahub's artifacts:
 
 The lab's two are safe because the operator only ever deletes a resource that
 leaves a manifest **it delivered**. Pass `--no-handover` to keep the lab in
-charge of all four and skip Vidra.
+charge of all four; Vidra will then never adopt them.
 
-`invoke vidra` runs `scripts/install_vidra.sh`, which follows the order the
+`scripts/install_vidra.sh` follows the order the
 operator requires: namespace, ConfigMap, Secret and the CRD shim **before** the
 chart, because `InitConfigWithClient` reads the configuration once at startup.
 Install the chart first and the operator keeps `queryName: ArtifactIDs`, which
@@ -384,9 +417,9 @@ uv run invoke lab --destroy             # tear it down
 uv run invoke provision                 # push every rendered artifact onto the running devices
 uv run invoke provision --dry-run       # ... showing what would be pushed, changing nothing
 uv run invoke provision --kind eos      # ... one family only: eos, frr, or junos
-uv run invoke cluster                   # Cilium + Crossplane, then hand two resources to Vidra
+uv run invoke cluster                   # Cilium, Vidra, Crossplane, then the handover
 uv run invoke cluster --no-handover     # ... leaving the lab in charge of all four
-uv run invoke vidra                     # install the operator that delivers on merge
+uv run invoke vidra                     # the operator on its own, for a re-install
 uv run invoke init-semaphore
 uv run invoke test
 uv run invoke lint
