@@ -22,7 +22,7 @@ class AvdEosConfigTransform(InfrahubTransform):
     async def transform(self, data: dict[str, Any]) -> str:
         """Transform structured config to EOS CLI configuration."""
         data: AvdDeviceConfigQuery = AvdDeviceConfigQuery(**data)
-        device_edges = data.dcim_device.edges
+        device_edges = data.dcim_fabric_switch.edges
 
         if not device_edges:
             return "! No device found"

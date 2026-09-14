@@ -2746,7 +2746,7 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
     async def generate(self, data: dict) -> None:  # noqa: C901 — top-level generator orchestration
         raw_data = data
         data: GenerateAvdDeviceInputsQuery = GenerateAvdDeviceInputsQuery(**data)
-        device = data.dcim_device.edges[0].node
+        device = data.dcim_fabric_switch.edges[0].node
         pod = device.pod.node
         fabric = pod.parent.node
 

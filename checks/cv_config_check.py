@@ -35,7 +35,7 @@ from pyavd._cv.workflows.verify_devices_on_cv import verify_devices_in_cloudvisi
 from solution_arista_avd.protocols import AvdStructuredConfigFile
 
 from .cv_config_check_query import CVConfigCheckQuery
-from .cv_config_check_query import CVConfigCheckQueryDcimFabricSwitchEdgesNode as CVConfigCheckDcimDeviceNode
+from .cv_config_check_query import CVConfigCheckQueryDcimFabricSwitchEdgesNode as CVConfigCheckDcimFabricSwitchNode
 from .cv_helpers import (
     DEFAULT_WORKSPACE_DESCRIPTION,
     get_cloudvision_config,
@@ -174,7 +174,7 @@ class CVConfigValidationCheck(InfrahubCheck):
                 inventory_devices=inventory_devices,
             )
 
-    def _devices_in_fabric(self, parsed: CVConfigCheckQuery, fabric_id: str) -> list[CVConfigCheckDcimDeviceNode]:
+    def _devices_in_fabric(self, parsed: CVConfigCheckQuery, fabric_id: str) -> list[CVConfigCheckDcimFabricSwitchNode]:
         """Filter devices confirmed to belong to the target fabric."""
         devices = []
         for edge in parsed.dcim_fabric_switch.edges:
@@ -193,22 +193,22 @@ class CVConfigValidationCheck(InfrahubCheck):
 
     def _filter_devices_by_fabric(
         self, parsed: CVConfigCheckQuery, fabric_id: str
-    ) -> list[CVConfigCheckDcimDeviceNode]:
+    ) -> list[CVConfigCheckDcimFabricSwitchNode]:
         """Filter target-fabric devices that have structured configs."""
         return [
             device for device in self._devices_in_fabric(parsed, fabric_id) if self._structured_config_file_id(device)
         ]
 
     @staticmethod
-    def _device_name(device: CVConfigCheckDcimDeviceNode) -> str:
+    def _device_name(device: CVConfigCheckDcimFabricSwitchNode) -> str:
         return device.name.value if device.name and device.name.value else "unknown"
 
     @staticmethod
-    def _device_serial(device: CVConfigCheckDcimDeviceNode) -> str | None:
+    def _device_serial(device: CVConfigCheckDcimFabricSwitchNode) -> str | None:
         return device.serial.value if device.serial and device.serial.value else None
 
     @staticmethod
-    def _structured_config_file_id(device: CVConfigCheckDcimDeviceNode) -> str | None:
+    def _structured_config_file_id(device: CVConfigCheckDcimFabricSwitchNode) -> str | None:
         avd_artifact = device.avd_artifact
         if (
             not avd_artifact
@@ -220,13 +220,15 @@ class CVConfigValidationCheck(InfrahubCheck):
         return avd_artifact.node.structured_config_file.node.id
 
     @classmethod
-    def _cv_device(cls, device: CVConfigCheckDcimDeviceNode) -> CVDevice:
+    def _cv_device(cls, device: CVConfigCheckDcimFabricSwitchNode) -> CVDevice:
         return CVDevice(
             avd_device=AvdDevice(hostname=cls._device_name(device)),
             serial_number=cls._device_serial(device),
         )
 
-    async def _verify_inventory(self, cv_config: Any, devices: list[CVConfigCheckDcimDeviceNode]) -> list[CVDevice]:
+    async def _verify_inventory(
+        self, cv_config: Any, devices: list[CVConfigCheckDcimFabricSwitchNode]
+    ) -> list[CVDevice]:
         """Verify every serial-numbered managed-fabric device exists in CloudVision inventory."""
         cv_devices = [self._cv_device(device) for device in devices]
         async with CVClient(
@@ -247,7 +249,9 @@ class CVConfigValidationCheck(InfrahubCheck):
                 cv_client=cv_client,
             )
 
-    async def _collect_eos_configs(self, devices: list[CVConfigCheckDcimDeviceNode], tmp_dir: str) -> list[CVEosConfig]:
+    async def _collect_eos_configs(
+        self, devices: list[CVConfigCheckDcimFabricSwitchNode], tmp_dir: str
+    ) -> list[CVEosConfig]:
         """Download structured configs and generate EOS CLI configs."""
         eos_configs: list[CVEosConfig] = []
         for device in devices:
