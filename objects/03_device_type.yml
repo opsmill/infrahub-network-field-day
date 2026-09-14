@@ -23,3 +23,29 @@ spec:
       description: Generic Linux host
       containerlab_os: linux
       containerlab_image: ghcr.io/srl-labs/network-multitool
+    # The WAN routers. `kind: linux` in the topology because FRR ships as an
+    # ordinary container rather than a ContainerLab-native node kind.
+    #
+    # The driver fields are filled in only where the answer is known. FRR has
+    # no NAPALM driver and is driven as a Linux host over SSH, so
+    # netmiko_device_type is `linux` and napalm_driver is deliberately unset --
+    # a plausible-looking value here would fail at connect time rather than at
+    # load time, which is the worse of the two.
+    - name: FRR
+      manufacturer: FRRouting
+      description: FRRouting, run as a Linux container
+      nornir_platform: linux
+      netmiko_device_type: linux
+      containerlab_os: linux
+      containerlab_image: quay.io/frrouting/frr:10.2.1
+    # The perimeter firewall. vrnetlab wraps the vSRX image, which is why the
+    # ContainerLab kind is juniper_vsrx rather than a plain container.
+    - name: JunOS
+      manufacturer: Juniper
+      description: Juniper JunOS (vSRX)
+      nornir_platform: junos
+      napalm_driver: junos
+      netmiko_device_type: juniper_junos
+      ansible_network_os: junipernetworks.junos.junos
+      containerlab_os: juniper_vsrx
+      containerlab_image: vrnetlab/juniper_vsrx:22.3R1.11

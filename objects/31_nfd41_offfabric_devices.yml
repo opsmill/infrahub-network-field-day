@@ -33,6 +33,8 @@ spec:
       description: "Perimeter vSRX; every tenant VRF's only route out points at one of its zones"
       role: edge_firewall
       rack_face: front
+      device_type: ["Juniper", "Juniper vSRX"]
+      platform: JunOS
       # 9192 (the vSRX interface maximum) - 14 Ethernet - 20 IP - 20 TCP.
       # The interfaces run 36 bytes short of the fabric's 9214, so two hosts
       # that both believe the path is 9214 would negotiate MSS 9174 and build a
@@ -54,6 +56,8 @@ spec:
       role: isp_edge
       status: active
       rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
       member_of_groups:
         - frr_routers
     - name: isp-pe2
@@ -61,6 +65,8 @@ spec:
       role: isp_core
       status: active
       rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
       member_of_groups:
         - frr_routers
     - name: internet-rtr
@@ -68,6 +74,8 @@ spec:
       role: internet_edge
       status: active
       rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
       location:
         kind: LocationSite
         data:
@@ -81,6 +89,8 @@ spec:
       role: customer_edge
       status: active
       rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
       location:
         kind: LocationSite
         data:
@@ -92,6 +102,8 @@ spec:
       role: customer_edge
       status: active
       rack_face: front
+      device_type: ["Generic", "Linux Container"]
+      platform: Linux
       location:
         kind: LocationSite
         data:
@@ -101,6 +113,8 @@ spec:
       role: customer_edge
       status: active
       rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
       location:
         kind: LocationSite
         data:
@@ -114,6 +128,8 @@ spec:
       role: branch_router
       status: active
       rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
       location:
         kind: LocationSite
         data:

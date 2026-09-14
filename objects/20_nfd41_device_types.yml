@@ -28,6 +28,38 @@ spec:
       part_number: cEOS-LAB
       height: 1
       full_depth: false
+    # Everything below exists so that every device in the graph says what it
+    # is. Before this, only the seven fabric switches had a device type: the
+    # seven WAN routers and the firewall had neither a type nor a platform, so
+    # the model held devices it could not describe.
+    #
+    # That is not only untidy. `transforms/containerlab_topology.py` reads a
+    # node's kind and image from the platform, so a device without one cannot
+    # render into a topology at all -- which is half the reason that artifact
+    # covers 14 of the lab's 30 nodes.
+    - name: "FRR Container Router"
+      manufacturer: FRRouting
+      platform: FRR
+      description: "FRRouting container; the WAN's PE, P, internet and CE routers"
+      height: 1
+      full_depth: false
+    - name: "Juniper vSRX"
+      manufacturer: Juniper
+      platform: JunOS
+      description: "Juniper vSRX, wrapped by vrnetlab for containerlab"
+      part_number: vSRX
+      height: 1
+      full_depth: false
+    # cust-acme-dr-ce is a customer edge that runs no routing protocol -- acme's
+    # DR site attaches statically -- so the lab gives it a plain multitool
+    # container rather than FRR. Typing it as an FRR router would be a tidier
+    # table and a false one.
+    - name: "Linux Container"
+      manufacturer: Generic
+      platform: Linux
+      description: "Plain Linux container with no network OS of its own"
+      height: 1
+      full_depth: false
 ---
 apiVersion: infrahub.app/v1
 kind: Object

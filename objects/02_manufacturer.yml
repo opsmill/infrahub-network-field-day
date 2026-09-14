@@ -5,3 +5,12 @@ spec:
   kind: OrganizationManufacturer
   data:
     - name: Arista
+    # A device type needs a manufacturer, and the lab's non-Arista nodes need
+    # device types like everything else. FRRouting is the project behind the
+    # container image the WAN routers run; Juniper is the vSRX vendor.
+    - name: FRRouting
+    - name: Juniper
+    # For nodes that are a plain Linux container with no network OS of their
+    # own -- cust-acme-dr-ce runs no routing daemon at all, which is the point
+    # of a statically attached DR site.
+    - name: Generic
