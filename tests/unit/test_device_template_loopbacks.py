@@ -29,7 +29,7 @@ def test_seeded_loopback0_templates_are_virtual_not_physical() -> None:
     # and a stale path list silently stops checking the templates it named.
     for path in sorted(_OBJECTS_DIR.glob("*.yml")):
         for doc in _documents(path):
-            if doc.get("spec", {}).get("kind") != "TemplateDcimDevice":
+            if doc.get("spec", {}).get("kind") != "TemplateDcimFabricSwitch":
                 continue
             for template in doc["spec"].get("data", []):
                 physical_loopbacks.extend(

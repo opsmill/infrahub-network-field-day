@@ -51,7 +51,7 @@ def _generator(devices: dict[str, str]) -> GenerateAVDDeviceHostvar:
     gen.client = AsyncMock()
 
     async def get(*, kind: str, id: str, **_: Any) -> SimpleNamespace:  # noqa: A002
-        assert kind == "DcimDevice"
+        assert kind == "DcimFabricSwitch"
         return SimpleNamespace(name=_attr(devices[id]))
 
     gen.client.get = AsyncMock(side_effect=get)

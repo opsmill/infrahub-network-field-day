@@ -33,10 +33,98 @@ nodes:
 extensions:
   nodes:
     - kind: DcimDevice
+      # The WAN's FRR routers, since cycle 027. The fabric's EOS switches are
+      # DcimFabricSwitch; anything that must see BOTH should peer the
+      # DcimGenericDevice generic, not either concrete kind.
+      attributes:
+        # Two dropdowns, one per device kind, since cycle 027 split DcimDevice.
+        #
+        # This one carries the roles pyAVD NEVER renders. They are deliberately
+        # ABSENT from ROLE_TO_AVD_TYPE in src/solution_arista_avd/avd.py:
+        # get_avd_type raises ValueError on an unmapped role, and that loud
+        # failure is the behaviour we want for an FRR router. Mapping one would
+        # let a non-EOS device be rendered as EOS, which is silently wrong.
+        #
+        # There is deliberately no `firewall` value: the marketplace security
+        # schema supplies SecurityFirewall, which inherits DcimGenericDevice and
+        # DcimPhysicalDevice, so a firewall is its own device kind rather than a
+        # DcimDevice with a role. DcimFabricSwitch is that same decision applied
+        # a second time -- which is why the fabric roles are no longer here.
+        - name: role
+          kind: Dropdown
+          optional: true
+          order_weight: 1400
+          choices:
+            - name: isp_edge
+              label: ISP Edge (PE)
+              description: "Customer-facing provider edge holding a VRF per tenant"
+              color: "#f4e9dd"
+            - name: isp_core
+              label: ISP Core
+              description: "Provider core; default VRF transit and the DC handoff"
+              color: "#f4e9dd"
+            - name: internet_edge
+              label: Internet Edge
+              description: "Border router of the internet autonomous system"
+              color: "#e3f0e8"
+            - name: customer_edge
+              label: Customer Edge (CE)
+              description: "Tenant-side router terminating an attachment circuit"
+              color: "#eef0f4"
+            - name: branch_router
+              label: Branch Router
+              description: "Branch office router with an integrated switched LAN"
+              color: "#eef0f4"
+            - name: k8s_node
+              label: Kubernetes Node
+              description: "Cluster member; may also be a ComputePhysicalServer"
+              color: "#dde1e7"
+      relationships:
+        # Explicit, not derived, and deliberately NOT folded into loopback_ip.
+        # Of the six routers the WAN renders, three take their router ID from a
+        # loopback (isp-pe1, isp-pe2, branch-rtr) and three do not: the customer
+        # edges use their LAN-side address and internet-rtr uses its peering
+        # address. Recording either of those in `loopback_ip` would be false,
+        # and inferring the router ID from an interface role would be wrong for
+        # half the fleet — silently, because a BGP router-id that is merely
+        # different still forms a session.
+        - name: router_id
+          label: Router ID
+          peer: IpamIPAddress
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: "The address used as this device's BGP router ID"
+          identifier: "device__router_id"
+          order_weight: 1660
+        - name: asn
+          label: BGP ASN
+          peer: RoutingAsn
+          kind: Attribute
+          cardinality: one
+          optional: true
+          identifier: "device__asn"
+          order_weight: 1650
+
+    - kind: DcimFabricSwitch
+      # The twelve fabric-only fields, moved here from DcimDevice by cycle 027.
+      # Measured across the 7 switches and 7 routers before the move: every one
+      # of these is populated on switches and on no router. `asn` is the
+      # exception that stays on both, which is why RoutingAsn.devices had to
+      # widen to the device generic rather than follow the others here.
       attributes:
         - name: index
           kind: Number
           optional: true
+        # The ten roles pyAVD renders, and this list must EQUAL the keys of
+        # ROLE_TO_AVD_TYPE in src/solution_arista_avd/avd.py. The schema and the
+        # code then state the same boundary from two directions;
+        # tests/unit/test_dcim_schema_contract.py asserts the equality rather
+        # than trusting it.
+        #
+        # `p`, `pe` and `rr` are mapped but have no instances -- they are marked
+        # excluded from the generated topology in supported-capabilities.md.
+        # They belong to this kind regardless.
         - name: role
           kind: Dropdown
           optional: true
@@ -69,43 +157,6 @@ extensions:
             - name: rr
               label: Route Reflector (RR)
               description: "MPLS/WAN route reflector"
-            # Non-EOS lab roles. There is deliberately no `firewall` value:
-            # the marketplace security schema supplies SecurityFirewall, which
-            # inherits DcimGenericDevice and DcimPhysicalDevice, so a firewall
-            # is its own device kind rather than a DcimDevice with a role.
-            #
-            # These are deliberately ABSENT from
-            # ROLE_TO_AVD_TYPE in src/solution_arista_avd/avd.py: get_avd_type
-            # raises ValueError on an unmapped role, and that loud failure is
-            # the behaviour we want for a firewall or an FRR router. Mapping
-            # one would instead let a non-EOS device be rendered as EOS, which
-            # is silently wrong. Devices with these roles must also stay out of
-            # the avd_devices group, which is the only path into the AVD
-            # hostvar generator.
-            - name: isp_edge
-              label: ISP Edge (PE)
-              description: "Customer-facing provider edge holding a VRF per tenant"
-              color: "#f4e9dd"
-            - name: isp_core
-              label: ISP Core
-              description: "Provider core; default VRF transit and the DC handoff"
-              color: "#f4e9dd"
-            - name: internet_edge
-              label: Internet Edge
-              description: "Border router of the internet autonomous system"
-              color: "#e3f0e8"
-            - name: customer_edge
-              label: Customer Edge (CE)
-              description: "Tenant-side router terminating an attachment circuit"
-              color: "#eef0f4"
-            - name: branch_router
-              label: Branch Router
-              description: "Branch office router with an integrated switched LAN"
-              color: "#eef0f4"
-            - name: k8s_node
-              label: Kubernetes Node
-              description: "Cluster member; may also be a ComputePhysicalServer"
-              color: "#dde1e7"
         - name: node_id
           label: Node ID
           kind: Number
@@ -136,23 +187,6 @@ extensions:
           cardinality: one
           optional: true
           identifier: "device__mgmt_ip"
-        # Explicit, not derived, and deliberately NOT folded into loopback_ip.
-        # Of the six routers the WAN renders, three take their router ID from a
-        # loopback (isp-pe1, isp-pe2, branch-rtr) and three do not: the customer
-        # edges use their LAN-side address and internet-rtr uses its peering
-        # address. Recording either of those in `loopback_ip` would be false,
-        # and inferring the router ID from an interface role would be wrong for
-        # half the fleet — silently, because a BGP router-id that is merely
-        # different still forms a session.
-        - name: router_id
-          label: Router ID
-          peer: IpamIPAddress
-          kind: Attribute
-          cardinality: one
-          optional: true
-          description: "The address used as this device's BGP router ID"
-          identifier: "device__router_id"
-          order_weight: 1660
         - name: rack
           peer: LocationRack
           kind: Attribute

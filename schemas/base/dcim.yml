@@ -473,7 +473,6 @@ nodes:
     description: A configurable network device for managing and directing data traffic, including routers, switches...
     icon: clarity:network-switch-solid
     include_in_menu: false
-    generate_template: true
     namespace: Dcim
     inherit_from:
       - CoreArtifactTarget
@@ -502,8 +501,68 @@ nodes:
             description: Temporarily taken out of service.
             color: "#bfbfbf"
       # NOTE: the device `role` dropdown is defined in
-      # schemas/dcim_extensions.yml (super_spine/spine/leaf/l2leaf) so there is
-      # a single authoritative choice list for the fabric.
+      # schemas/dcim_extensions.yml, and since cycle 027 there are TWO of them:
+      # this kind carries the non-EOS router roles, DcimFabricSwitch carries the
+      # ten fabric roles that ROLE_TO_AVD_TYPE maps.
+
+  # ==========================================================================
+  # The fabric's EOS switches: spines, leaves and border leaves.
+  #
+  # A sibling of DcimDevice rather than a subtype, because Infrahub inheritance
+  # targets GENERICS and DcimDevice is a node. SecurityFirewall is the same
+  # shape and the precedent -- see the comment beside the role dropdown in
+  # schemas/dcim_extensions.yml, which already records the decision for the
+  # firewall: "a firewall is its own device kind rather than a DcimDevice with
+  # a role".
+  #
+  # The consequence to know before writing a query: a query that names
+  # DcimDevice does NOT see these, silently. Peer DcimGenericDevice to see
+  # every device kind at once.
+  #
+  # `inherit_from` is copied verbatim from DcimDevice rather than redesigned.
+  # All three earn their place: CoreArtifactTarget because a switch carries EOS
+  # configs, device docs and an ANTA catalog; DcimGenericDevice so every
+  # polymorphic relationship keeps resolving; DcimPhysicalDevice because a
+  # switch is rack-mounted. human_friendly_id, display_label and order_by come
+  # from DcimGenericDevice, exactly as they do for DcimDevice.
+  #
+  # `generate_template: true` moved here FROM DcimDevice. It is what produces
+  # the object_template relationship and the TemplateDcimFabricSwitch kind that
+  # objects/20_nfd41_device_types.yml seeds; no router ever used one.
+  # ==========================================================================
+  - name: FabricSwitch
+    label: Fabric Switch
+    description: An Arista EOS switch in the datacenter fabric, rendered by pyAVD.
+    icon: clarity:network-switch-solid
+    include_in_menu: false
+    generate_template: true
+    namespace: Dcim
+    inherit_from:
+      - CoreArtifactTarget
+      - DcimGenericDevice
+      - DcimPhysicalDevice
+    attributes:
+      - name: status
+        kind: Dropdown
+        optional: false
+        order_weight: 1100
+        choices:
+          - name: active
+            label: Active
+            description: Fully operational and currently in service.
+            color: "#7fbf7f"
+          - name: provisioning
+            label: Provisioning
+            description: In the process of being set up and configured.
+            color: "#ffff7f"
+          - name: maintenance
+            label: Maintenance
+            description: Undergoing routine maintenance or repairs.
+            color: "#ffd27f"
+          - name: drained
+            label: Drained
+            description: Temporarily taken out of service.
+            color: "#bfbfbf"
 
   - name: Physical
     namespace: Interface

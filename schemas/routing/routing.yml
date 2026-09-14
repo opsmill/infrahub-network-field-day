@@ -186,8 +186,13 @@ nodes:
         on_delete: cascade
         identifier: fabric__asns
         order_weight: 900
+      # WIDENED to the generic by cycle 027. `asn` is one of the few fields
+      # carried by BOTH device kinds -- the WAN's routers and the fabric's
+      # switches each have an ASN -- and a reverse side cannot name two
+      # concrete kinds. Measured: 9 RoutingAsn objects across 6 routers and 7
+      # switches.
       - name: devices
-        peer: DcimDevice
+        peer: DcimGenericDevice
         kind: Generic
         cardinality: many
         optional: true

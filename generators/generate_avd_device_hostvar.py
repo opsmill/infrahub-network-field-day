@@ -1833,7 +1833,7 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         for peer_id in peer_ids:
             if peer_id not in cache:
                 try:
-                    cache[peer_id] = self._peer_name(await self.client.get(kind="DcimDevice", id=peer_id))
+                    cache[peer_id] = self._peer_name(await self.client.get(kind="DcimFabricSwitch", id=peer_id))
                 except (AttributeError, KeyError, ValueError):
                     cache[peer_id] = None
             if (name := cache[peer_id]) is not None:
@@ -1854,7 +1854,7 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             self._device_names_by_id = cache
         return cache
 
-    async def _single_peer_name(self, obj: object, relationship_name: str, *, kind: str = "DcimDevice") -> str | None:
+    async def _single_peer_name(self, obj: object, relationship_name: str, *, kind: str = "DcimFabricSwitch") -> str | None:
         """Resolve the name behind a cardinality-one relationship.
 
         Deliberately never reads ``RelatedNode.peer``: that property resolves
@@ -2783,7 +2783,7 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         uplinks = extract_uplinks_from_dict(iface_edges, uplink_role, device_id)
         raw_fabric = (
             (
-                ((raw_data.get("DcimDevice", {}).get("edges") or [{}])[0].get("node") or {})
+                ((raw_data.get("DcimFabricSwitch", {}).get("edges") or [{}])[0].get("node") or {})
                 .get("pod", {})
                 .get("node", {})
                 .get("parent", {})

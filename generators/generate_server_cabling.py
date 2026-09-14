@@ -12,7 +12,7 @@ from netutils.interface import sort_interface_list
 from solution_arista_avd.cabling import build_server_cabling_plan, connect_interface_maps
 from solution_arista_avd.generator import set_fabric_avd_hostvars_ready, trigger_hostvar_generation
 from solution_arista_avd.protocols import (
-    DcimDevice,
+    DcimFabricSwitch,
     DcimInterface,
     InterfaceLag,
     InterfacePhysical,
@@ -53,7 +53,7 @@ class ServerCablingGenerator(InfrahubGenerator):
         server_already_cabled = await self._is_server_cabled(server_interfaces)
 
         # Find leaf switches in the same rack
-        leaf_switches = await self.client.filters(kind=DcimDevice, rack__ids=[rack_id], role__values=["leaf", "l2leaf"])
+        leaf_switches = await self.client.filters(kind=DcimFabricSwitch, rack__ids=[rack_id], role__values=["leaf", "l2leaf"])
         if not leaf_switches:
             self.logger.warning("No leaf switches found in rack %s for server %s", rack_name, server_hostname)
             return
@@ -62,7 +62,7 @@ class ServerCablingGenerator(InfrahubGenerator):
         server_iface_objects = await self.client.filters(kind=InterfacePhysical, device__name__value=server_hostname)
 
         # Populate the SDK store with the server device using its actual typename
-        # (e.g. ComputePhysicalServer, not DcimDevice) so interface.device.peer resolves
+        # (e.g. ComputePhysicalServer, not DcimFabricSwitch) so interface.device.peer resolves
         if server_iface_objects:
             device_rel = server_iface_objects[0].device
             await self.client.get(kind=device_rel.typename, id=device_rel.id)
@@ -352,7 +352,7 @@ class ServerCablingGenerator(InfrahubGenerator):
 
     @staticmethod
     def _find_next_available_index(
-        leaf_interface_map: dict[DcimDevice, list[DcimInterface]],
+        leaf_interface_map: dict[DcimFabricSwitch, list[DcimInterface]],
     ) -> int:
         """Find the first index where all leaves have an uncabled interface."""
         max_len = max(len(ifaces) for ifaces in leaf_interface_map.values())

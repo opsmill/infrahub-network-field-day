@@ -227,7 +227,7 @@ class InfrahubClient:
 
     def _resolve_target_id(self, name: str, branch: str = "main") -> str | None:
         """Resolve a node name to its ID by searching common types."""
-        for kind in ["NetworkFabric", "NetworkPod", "LocationRack", "DcimDevice"]:
+        for kind in ["NetworkFabric", "NetworkPod", "LocationRack", "DcimFabricSwitch", "DcimDevice"]:
             try:
                 query = f'{{ {kind}(name__value: "{name}") {{ edges {{ node {{ id }} }} }} }}'
                 result = self.execute_graphql(query, branch=branch)

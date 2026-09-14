@@ -9,7 +9,7 @@ query AvdFabricDevicesQuery($name: String!) {
       }
     }
   }
-  DcimDevice {
+  DcimFabricSwitch {
     edges {
       node {
         id

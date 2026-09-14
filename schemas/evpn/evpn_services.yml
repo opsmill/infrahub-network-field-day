@@ -191,9 +191,15 @@ nodes:
         optional: false
         identifier: "svi__nodes"
         order_weight: 900
+      # An SVI lives on a fabric leaf. 8 objects, all leaves.
+      #
+      # This relationship has NO forward side on the device kind -- the device
+      # end exists only here -- so it is invisible to anyone working from cycle
+      # 027's list of moved fields. Three of its neighbours in
+      # schemas/routing/vrf_services.yml are the same shape.
       - name: device
         label: Device
-        peer: DcimDevice
+        peer: DcimFabricSwitch
         cardinality: one
         kind: Attribute
         optional: false

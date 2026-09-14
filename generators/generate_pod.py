@@ -38,7 +38,7 @@ from solution_arista_avd.generator import (  # noqa: E402
     set_fabric_avd_hostvars_ready,
     trigger_rack_generation,
 )
-from solution_arista_avd.protocols import DcimDevice, DcimInterface, LocationRack, NetworkPod  # noqa: E402
+from solution_arista_avd.protocols import DcimFabricSwitch, DcimInterface, LocationRack, NetworkPod  # noqa: E402
 
 from .asn import ensure_shared_device_asn  # noqa: E402
 from .pod_generator_query import PodGeneratorQuery  # noqa: E402
@@ -69,8 +69,8 @@ class PodGenerator(InfrahubGenerator, GeneratorMixin):
 
     loopback_pool: CoreIPAddressPool | None
 
-    spine_switches: list[DcimDevice]
-    super_spine_switches: list[DcimDevice]
+    spine_switches: list[DcimFabricSwitch]
+    super_spine_switches: list[DcimFabricSwitch]
 
     asn_pool: CoreNumberPool | None
     node_id_pool: CoreNumberPool | None
@@ -234,14 +234,14 @@ class PodGenerator(InfrahubGenerator, GeneratorMixin):
                 spine_b.name.value,
             )
 
-    async def get_super_spine_switches_for_fabric(self) -> tuple[NetworkPod | None, list[DcimDevice]]:
+    async def get_super_spine_switches_for_fabric(self) -> tuple[NetworkPod | None, list[DcimFabricSwitch]]:
         if self.fabric_amount_of_super_spines == 0:
             self.super_spine_switches = []
             return None, self.super_spine_switches
 
         self.fabric_pod = await self.client.get(kind=NetworkPod, parent__ids=[self.fabric_id], role__value="fabric")
         self.super_spine_switches = await self.client.filters(
-            kind=DcimDevice, pod__ids=[self.fabric_pod.id], role__value="super_spine"
+            kind=DcimFabricSwitch, pod__ids=[self.fabric_pod.id], role__value="super_spine"
         )
         return self.fabric_pod, self.super_spine_switches
 

@@ -12,7 +12,7 @@ query BackfillStructuredConfigQuery($name: String!) {
           node {
             __typename
             id
-            ... on DcimDevice {
+            ... on DcimFabricSwitch {
               name {
                 value
               }

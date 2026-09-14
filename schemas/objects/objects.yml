@@ -17,8 +17,12 @@ nodes:
         unique: true
         order_weight: 100
     relationships:
+      # An AvdArtifact belongs to a switch pyAVD renders. 7 objects, all
+      # switches. Note this relationship declares no identifier, so the
+      # two-sided check in tests/unit/test_dcim_schema_contract.py cannot see
+      # it -- it is pinned by the fragment/peer clauses instead.
       - name: device
-        peer: DcimDevice
+        peer: DcimFabricSwitch
         kind: Attribute
         cardinality: one
         optional: false

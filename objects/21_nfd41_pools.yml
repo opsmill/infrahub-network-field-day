@@ -104,7 +104,9 @@ spec:
       start_range: 65104
       end_range: 65109
     - name: NFD41-NodeID-Pool
-      node: DcimDevice
+      # `node_id` moved to DcimFabricSwitch with the other fabric-only fields in
+      # cycle 027, and a number pool names the kind it allocates into.
+      node: DcimFabricSwitch
       node_attribute: node_id
       start_range: 1
       end_range: 100

@@ -89,7 +89,7 @@ def _fetch_fabric_topology(client: InfrahubClient, fabric_name: str, branch: str
                     }
                     devices {
                       edges { node {
-                        ... on DcimDevice {
+                        ... on DcimFabricSwitch {
                           name { value }
                           role { value }
                         }
@@ -278,13 +278,13 @@ def _fetch_cabling_data(_client: InfrahubClient, fabric_name: str, branch: str) 
           ... on NetworkPod {
             devices { edges { node {
               __typename
-              ... on DcimDevice { interfaces { edges { node {
+              ... on DcimGenericDevice { interfaces { edges { node {
                 ... on InterfacePhysical { connector { node { id } } }
               } } } }
             } } }
             racks { edges { node { devices { edges { node {
               __typename
-              ... on DcimDevice { interfaces { edges { node {
+              ... on DcimGenericDevice { interfaces { edges { node {
                 ... on InterfacePhysical { connector { node { id } } }
               } } } }
             } } } } } }
@@ -339,6 +339,7 @@ def _fetch_cabling_data(_client: InfrahubClient, fabric_name: str, branch: str) 
             device { node {
               __typename
               ... on DcimDevice { name { value } role { value } }
+              ... on DcimFabricSwitch { name { value } role { value } }
               ... on ComputePhysicalServer { name { value } role { value } }
             } }
           }
@@ -347,6 +348,7 @@ def _fetch_cabling_data(_client: InfrahubClient, fabric_name: str, branch: str) 
             device { node {
               __typename
               ... on DcimDevice { name { value } role { value } }
+              ... on DcimFabricSwitch { name { value } role { value } }
               ... on ComputePhysicalServer { name { value } role { value } }
             } }
           }

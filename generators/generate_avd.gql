@@ -22,7 +22,7 @@ query GenerateAvdInputsQuery($name: String!) {
                           node {
                             __typename
                             id
-                            ... on DcimDevice {
+                            ... on DcimFabricSwitch {
                               name {
                                 value
                               }

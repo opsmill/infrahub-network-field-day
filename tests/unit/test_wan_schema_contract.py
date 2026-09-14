@@ -286,15 +286,20 @@ def test_a_device_can_name_its_router_id() -> None:
     Kept distinct from `loopback_ip`, which would record a falsehood for the
     three that are not loopbacks.
     """
-    device = _extension_node(_load_yaml(DCIM_EXTENSIONS), "DcimDevice")
-    relationships = _relationships(device)
-    router_id = relationships["router_id"]
+    schema = _load_yaml(DCIM_EXTENSIONS)
+    router_id = _relationships(_extension_node(schema, "DcimDevice"))["router_id"]
 
     assert router_id["peer"] == "IpamIPAddress"
     assert router_id["cardinality"] == "one"
     assert router_id["optional"] is True
     assert router_id["identifier"] == "device__router_id"
-    assert router_id["identifier"] != relationships["loopback_ip"]["identifier"]
+
+    # Since cycle 027 the two live on different kinds -- `loopback_ip` is
+    # fabric-only -- which makes the point more strongly than the original
+    # inequality did: a router cannot even reach the loopback relationship.
+    fabric = _relationships(_extension_node(schema, "DcimFabricSwitch"))
+    assert router_id["identifier"] != fabric["loopback_ip"]["identifier"]
+    assert "loopback_ip" not in _relationships(_extension_node(schema, "DcimDevice"))
 
 
 def test_the_loopback_interface_role_was_already_modelled() -> None:

@@ -34,7 +34,7 @@ from solution_arista_avd.generator import (  # noqa: E402
     set_fabric_avd_hostvars_ready,
     trigger_pod_generation,
 )
-from solution_arista_avd.protocols import DcimDevice, NetworkPod  # noqa: E402
+from solution_arista_avd.protocols import DcimFabricSwitch, NetworkPod  # noqa: E402
 
 from .asn import ensure_shared_device_asn  # noqa: E402
 from .fabric_generator_query import FabricGeneratorQuery  # noqa: E402
@@ -69,7 +69,7 @@ class FabricGenerator(InfrahubGenerator, GeneratorMixin):
             fabric_node.device_designs, "super_spine"
         )
         await set_fabric_avd_hostvars_ready(self.client, self.fabric_id, False)
-        self.super_spine_devices: list[DcimDevice] = []
+        self.super_spine_devices: list[DcimFabricSwitch] = []
 
         # Get AVD-related pool references
         (

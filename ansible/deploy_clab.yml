@@ -130,8 +130,8 @@
           query($name: String!) {
             NetworkFabric(name__value: $name) { edges { node {
               children { edges { node { ... on NetworkPod {
-                devices { edges { node { ... on DcimDevice { id name { value } } } } }
-                racks { edges { node { devices { edges { node { ... on DcimDevice { id name { value } } } } } } } }
+                devices { edges { node { ... on DcimFabricSwitch { id name { value } } } } }
+                racks { edges { node { devices { edges { node { ... on DcimFabricSwitch { id name { value } } } } } } } }
               } } } }
             } } }
           }

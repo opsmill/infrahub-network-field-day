@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .protocols import DcimDevice, DcimInterface, InterfacePhysical
+from .protocols import DcimFabricSwitch, DcimInterface, InterfacePhysical
 
 if TYPE_CHECKING:
     import logging
@@ -12,8 +12,8 @@ if TYPE_CHECKING:
 
 def build_pod_cabling_plan(
     pod_index: int,
-    src_interface_map: dict[DcimDevice, list[DcimInterface]],
-    dst_interface_map: dict[DcimDevice, list[DcimInterface]],
+    src_interface_map: dict[DcimFabricSwitch, list[DcimInterface]],
+    dst_interface_map: dict[DcimFabricSwitch, list[DcimInterface]],
 ) -> list[tuple[DcimInterface, DcimInterface]]:
     """Builds a cabling plan between source and destination interfaces based on Indexes.
 
@@ -42,8 +42,8 @@ def build_pod_cabling_plan(
 
 def build_rack_cabling_plan(
     rack_index: int,
-    src_interface_map: dict[DcimDevice, list[DcimInterface]],
-    dst_interface_map: dict[DcimDevice, list[DcimInterface]],
+    src_interface_map: dict[DcimFabricSwitch, list[DcimInterface]],
+    dst_interface_map: dict[DcimFabricSwitch, list[DcimInterface]],
 ) -> list[tuple[DcimInterface, DcimInterface]]:
     cabling_plan: list[tuple[DcimInterface, DcimInterface]] = []
     dst_devices = list(dst_interface_map.keys())
@@ -61,7 +61,7 @@ def build_rack_cabling_plan(
     return cabling_plan
 
 
-def _rack_source_device_index(device: DcimDevice, *, fallback: int) -> int:
+def _rack_source_device_index(device: DcimFabricSwitch, *, fallback: int) -> int:
     value = getattr(getattr(device, "index", None), "value", None)
     if isinstance(value, int) and value > 0:
         return value
@@ -81,8 +81,8 @@ def _rack_source_device_index(device: DcimDevice, *, fallback: int) -> int:
 
 def build_server_cabling_plan(
     server_index: int,
-    src_interface_map: dict[DcimDevice, list[DcimInterface]],
-    dst_interface_map: dict[DcimDevice, list[DcimInterface]],
+    src_interface_map: dict[DcimFabricSwitch, list[DcimInterface]],
+    dst_interface_map: dict[DcimFabricSwitch, list[DcimInterface]],
 ) -> list[tuple[DcimInterface, DcimInterface]]:
     """Builds a cabling plan connecting server interfaces to leaf switch interfaces.
 

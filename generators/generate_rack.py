@@ -44,7 +44,7 @@ from solution_arista_avd.generator import (  # noqa: E402
 )
 from solution_arista_avd.protocols import (  # noqa: E402
     AvdArtifact,
-    DcimDevice,
+    DcimFabricSwitch,
     DcimInterface,
     LocationRack,
     NetworkPod,
@@ -89,9 +89,9 @@ class RackGenerator(InfrahubGenerator, GeneratorMixin):
     pod_index: int
     pod_name: str
 
-    spine_switches: list[DcimDevice]
+    spine_switches: list[DcimFabricSwitch]
 
-    leaf_switches: list[DcimDevice]
+    leaf_switches: list[DcimFabricSwitch]
 
     # Device roles for this fabric. Defaults are the L3LS roles; generate()
     # switches them to l2spine/l2leaf for standalone L2LS fabrics (underlay "none").
@@ -134,7 +134,7 @@ class RackGenerator(InfrahubGenerator, GeneratorMixin):
         self.rack_mlag_enabled: bool = self.rack_mlag and self.rack_amount_of_leafs >= 2
         self.logger.info(f"Rack {self.rack_name}: mlag_enabled={self.rack_mlag}")
         self.leaf_switches = []
-        self.l2leaf_switches: list[DcimDevice] = []
+        self.l2leaf_switches: list[DcimFabricSwitch] = []
 
         # L2-leaf count + template come from the rack's device_designs (role
         # "l2leaf"); an absent design means no L2 leaves.
@@ -176,7 +176,7 @@ class RackGenerator(InfrahubGenerator, GeneratorMixin):
         self.spine_role = SPINE_ROLE_BY_UNDERLAY.get(underlay, "spine")
 
         self.spine_switches = await self.client.filters(
-            kind=DcimDevice, pod__ids=[self.pod_id], role__value=self.spine_role
+            kind=DcimFabricSwitch, pod__ids=[self.pod_id], role__value=self.spine_role
         )
 
         if self.pod_amount_of_spines != len(self.spine_switches):
@@ -358,7 +358,7 @@ class RackGenerator(InfrahubGenerator, GeneratorMixin):
             if share_mlag_vtep_loopback and index % 2 == 0:
                 await self._share_mlag_vtep_loopback_ip(self.leaf_switches[-2], leaf_switch)
 
-    async def _share_mlag_vtep_loopback_ip(self, primary_leaf: DcimDevice, secondary_leaf: DcimDevice) -> None:
+    async def _share_mlag_vtep_loopback_ip(self, primary_leaf: DcimFabricSwitch, secondary_leaf: DcimFabricSwitch) -> None:
         """Point both leaves in an MLAG pair at the primary leaf's VTEP loopback IP."""
         vtep_loopback_ip_id = await self._device_vtep_loopback_ip_id(primary_leaf.id)
         if vtep_loopback_ip_id is None:
@@ -426,7 +426,7 @@ class RackGenerator(InfrahubGenerator, GeneratorMixin):
 
             self.logger.info(f"MLAG domain {domain_id} created successfully with shared ASN node {routing_asn_id}")
 
-    async def _assign_l2leaf_mlag_peer_interfaces(self, leaf: DcimDevice) -> None:
+    async def _assign_l2leaf_mlag_peer_interfaces(self, leaf: DcimFabricSwitch) -> None:
         """Carve the MLAG peer-link on an l2leaf main-tier switch.
 
         Thin wrapper over the shared ``GeneratorMixin.assign_mlag_peer_interfaces``

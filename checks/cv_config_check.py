@@ -54,7 +54,7 @@ LOGGER = logging.getLogger(__name__)
 def _normalize_optional_relationships(data: dict[str, Any]) -> dict[str, Any]:
     """Fill omitted nullable relationship selections before generated model validation."""
     normalized = deepcopy(data)
-    device_edges = normalized.get("DcimDevice", {}).get("edges", [])
+    device_edges = normalized.get("DcimFabricSwitch", {}).get("edges", [])
     if not isinstance(device_edges, list):
         return normalized
 

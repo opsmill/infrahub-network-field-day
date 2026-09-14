@@ -165,8 +165,10 @@ nodes:
         cardinality: many
         kind: Generic
         identifier: "rack__pod"
+      # Reverse of DcimFabricSwitch.pod. Only fabric switches sit in a pod --
+      # measured before the change: 7 devices, all switches.
       - name: devices
-        peer: DcimDevice
+        peer: DcimFabricSwitch
         branch: aware
         kind: Generic
         cardinality: many

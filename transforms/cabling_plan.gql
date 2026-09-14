@@ -49,7 +49,7 @@ query FabricCablingPlanQuery($name: String!) {
                           node {
                             __typename
                             id
-                            ... on DcimDevice {
+                            ... on DcimFabricSwitch {
                               rack {
                                 node {
                                   __typename

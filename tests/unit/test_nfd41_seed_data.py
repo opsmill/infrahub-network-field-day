@@ -102,7 +102,11 @@ def test_seeded_switch_names_match_what_the_generators_produce() -> None:
             LEAF_NAME.format(pod=pod, rack_index=rack["index"], index=index) for index in range(1, quantity + 1)
         }
 
-    seeded = {entry["name"] for path, entry in _load_objects("DcimDevice") if path.name.startswith("26_nfd41")}
+    seeded = {
+        entry["name"]
+        for path, entry in _load_objects("DcimFabricSwitch")
+        if path.name.startswith("26_nfd41")
+    }
     assert seeded == expected
 
 

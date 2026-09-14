@@ -12,6 +12,7 @@ from solution_arista_avd.avd import (
 )
 from tests.unit.test_avd_example_fabrics_schema_contract import (
     _dcim_device_role_choice_names,
+    _router_role_choice_names,
 )
 
 # DcimDevice.role choices for devices pyAVD never renders. Kept out of
@@ -105,10 +106,13 @@ class TestRoleMapping:
     def test_non_avd_roles_are_declared_in_the_schema(self) -> None:
         """The exclusion set must track the schema, not drift from it.
 
-        If a role is removed from the dropdown, this fails rather than letting
-        a stale exclusion silently widen the gap in the test above.
+        Cycle 027 gave these roles their own kind. They are now exactly the
+        DcimDevice dropdown -- the router kind -- rather than a hand-maintained
+        subset of one shared dropdown, so this asserts equality instead of
+        containment. That is a stronger statement than the original, and it is
+        available only because the split made the two sets the same thing.
         """
-        assert _dcim_device_role_choice_names() >= NON_AVD_DEVICE_ROLES
+        assert _router_role_choice_names() == NON_AVD_DEVICE_ROLES
 
 
 class TestUnderlayRoleMapping:
