@@ -92,7 +92,9 @@ def test_provenance_names_infrahub_not_the_device() -> None:
     """The lab's file claims no renderer; ours must not claim to be the device."""
     first = _rendered()[0]
 
-    assert first == "! Rendered by Infrahub for fw1 -- do not edit."
+    # `#`, not `!`: Junos's comment character. `!` is EOS/FRR syntax and makes
+    # the artifact fail to load at line 1, taking part of the file with it.
+    assert first == "# Rendered by Infrahub for fw1 -- do not edit."
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +264,7 @@ def test_the_policies_stanza_opens_with_the_devices_own_commentary() -> None:
 # C1 says WHETHER, they say WHERE.
 # ---------------------------------------------------------------------------
 
-PROVENANCE_PREFIX = "! Rendered by Infrahub"
+PROVENANCE_PREFIX = "# Rendered by Infrahub"
 
 
 def _top_level_stanza_of(lines: list[str]) -> list[str | None]:

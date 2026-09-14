@@ -1,4 +1,10 @@
-! Rendered by Infrahub for {{ node }} -- do not edit.
+{# `#`, not `!`. Junos's line comment is `#`; `!` is EOS and FRR syntax and is a
+   syntax error here. It is not cosmetic: `load` fails at line 1, then error
+   recovery skips ahead to the next token it can resynchronise on, so the
+   configuration loads PARTIALLY and reports "load complete (2 errors)" rather
+   than refusing. Measured against the lab's vSRX. The sibling frr/*.j2
+   templates keep `!` because it is correct there. #}
+# Rendered by Infrahub for {{ node }} -- do not edit.
 {% include "interfaces.j2" %}
 {% include "routing-options.j2" %}
 security {

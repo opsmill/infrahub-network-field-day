@@ -30,6 +30,15 @@ SEMAPHORE_PLAYBOOK_PATH = "/opt/semaphore/playbooks"
 # staging directory, so files deploy_clab.yml pulls are reachable from the host.
 CLAB_STAGING_DIR = "lab/clab-staging"
 
+# The committed ContainerLab topology this project provisions, in the sibling
+# NFD41 lab repository. That repository owns the topology -- which nodes exist
+# and how they are wired -- and this one owns their configuration.
+LAB_TOPOLOGY = "nfd41.clab.yml"
+
+# Image variables the topology interpolates. ContainerLab runs under sudo, which
+# scrubs the environment, so they have to be named to survive.
+CLAB_ENV_PASSTHROUGH = "NFD41_CEOS_IMAGE,NFD41_CEOS_MEMORY,NFD41_VSRX_IMAGE,NFD41_FRR_IMAGE,NFD41_GUACAMOLE_IMAGE"
+
 # Markdown authored by this project. Vendored agent content (.agents, .claude,
 # .specify), spec-kit process artifacts (specs/), and PyAVD-rendered output
 # (lab/avd) are excluded in [tool.rumdl]; these paths are what remains.
@@ -505,6 +514,171 @@ def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool 
 
     if branch:
         print(f"\n - Done on '{branch}'. Review the diff, then merge with `infrahubctl branch merge {branch}`.")
+
+
+def find_lab_directory(explicit: str = "") -> Path:
+    """Locate the sibling NFD41 lab repository.
+
+    `../lab` is right from a normal checkout and wrong from a git worktree, where
+    the repository root sits several levels deeper under `.emdash/worktrees/`.
+    Rather than hard-code either, walk up from this file looking for a directory
+    holding the topology. Set NFD41_LAB_DIR to override.
+    """
+    if explicit:
+        candidate = Path(explicit).expanduser().resolve()
+        if not (candidate / LAB_TOPOLOGY).is_file():
+            raise SystemExit(f"No {LAB_TOPOLOGY} in {candidate}")
+        return candidate
+
+    if env_dir := os.getenv("NFD41_LAB_DIR"):
+        return find_lab_directory(env_dir)
+
+    for parent in [MAIN_DIRECTORY_PATH.resolve(), *MAIN_DIRECTORY_PATH.resolve().parents]:
+        candidate = parent.parent / "lab"
+        if (candidate / LAB_TOPOLOGY).is_file():
+            return candidate.resolve()
+
+    raise SystemExit(
+        f"Could not find the lab repository. Looked for a directory containing {LAB_TOPOLOGY} "
+        "beside this checkout and each of its parents. Set NFD41_LAB_DIR to point at it."
+    )
+
+
+def _wait_for_eapi(ctx: Context, timeout: int = 600) -> None:
+    """Block until every fabric switch answers eAPI, or the timeout expires.
+
+    cEOS takes minutes to boot, and provisioning a switch that is still coming up
+    fails in a way that looks like a configuration error rather than impatience.
+    """
+    addresses = sorted(_fabric_mgmt_addresses())
+    if not addresses:
+        print(" - No fabric switch management addresses in Infrahub; skipping the wait")
+        return
+
+    print(f" - Waiting for eAPI on {len(addresses)} switch(es), up to {timeout}s")
+    deadline = time.time() + timeout
+    pending = set(addresses)
+    while pending and time.time() < deadline:
+        for address in sorted(pending):
+            result = ctx.run(
+                f"curl -sk -o /dev/null -m 3 -w '%{{http_code}}' https://{address}/command-api",
+                hide=True,
+                warn=True,
+            )
+            # 401/405 both mean the listener is up; only a connection failure is 000.
+            if result and result.stdout.strip() not in {"000", ""}:
+                pending.discard(address)
+                print(f"   {address} up ({len(addresses) - len(pending)}/{len(addresses)})")
+        if pending:
+            sleep(10)
+
+    if pending:
+        print(f" - Still unreachable after {timeout}s: {', '.join(sorted(pending))}")
+
+
+def _fabric_mgmt_addresses() -> list[str]:
+    """Every fabric switch's management address, from Infrahub."""
+    query = "query{DcimFabricSwitch{edges{node{mgmt_ip{node{address{value}}}}}}}"
+    try:
+        response = httpx.post(
+            f"{INFRAHUB_ADDRESS}/graphql",
+            json={"query": query},
+            headers={"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")},
+            timeout=30,
+        )
+        response.raise_for_status()
+        edges = response.json()["data"]["DcimFabricSwitch"]["edges"]
+    except (httpx.HTTPError, KeyError, TypeError):
+        return []
+
+    addresses = []
+    for edge in edges:
+        node = (edge["node"].get("mgmt_ip") or {}).get("node") or {}
+        value = (node.get("address") or {}).get("value")
+        if value:
+            addresses.append(value.split("/", 1)[0])
+    return addresses
+
+
+@task(
+    help={
+        "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
+        "destroy": "Tear the lab down instead of deploying it.",
+        "wait": "Block until every fabric switch answers eAPI before returning.",
+    }
+)
+def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = True) -> None:
+    """
+    Bring up the ContainerLab topology with management connectivity.
+
+    Deploys the sibling lab repository's committed topology as-is. That
+    repository owns which nodes exist and how they are wired; this one owns their
+    configuration. Nothing here renders a topology.
+
+    The fabric comes up **unconfigured on purpose**. The cEOS nodes are given no
+    `startup-config` -- only `CLAB_MGMT_VRF` and a management address -- so they
+    boot reachable and empty, which is exactly the state `invoke provision` then
+    fills from Infrahub. The firewall and the FRR routers boot from the lab
+    repository's own files and are re-provisioned from Infrahub the same way.
+
+    Run `invoke provision` next.
+    """
+    lab_path = find_lab_directory(lab_dir)
+    topology = lab_path / LAB_TOPOLOGY
+    print(f" - Lab repository: {lab_path}")
+
+    # ContainerLab needs root for netns and bridge work; --preserve-env keeps the
+    # image variables the topology interpolates.
+    clab = f"sudo --preserve-env={CLAB_ENV_PASSTHROUGH} containerlab"
+
+    if destroy:
+        print(f" - Destroying lab from {topology.name}")
+        ctx.run(f"{clab} destroy -t {shlex.quote(str(topology))} --cleanup", pty=True)
+        return
+
+    print(f" - Deploying {topology.name} (cEOS takes a few minutes to boot)")
+    ctx.run(f"{clab} deploy -t {shlex.quote(str(topology))} --reconfigure", pty=True)
+
+    if wait:
+        _wait_for_eapi(ctx)
+
+    print("\n - Lab is up with management connectivity. Configure it with `invoke provision`.")
+
+
+@task(
+    help={
+        "branch": "Infrahub branch to read artifacts from. Omit to use main.",
+        "dry-run": "List what would be pushed without changing any device.",
+        "only": "Provision a single device by its Infrahub name.",
+        "kind": "Provision one family only: eos, frr, or junos.",
+    }
+)
+def provision(ctx: Context, branch: str = "", dry_run: bool = False, only: str = "", kind: str = "") -> None:
+    """
+    Push Infrahub's rendered configuration onto the running lab.
+
+    The second half of the bring-up: `invoke lab` gives every device management
+    connectivity, and this makes each one match the artifact Infrahub rendered
+    for it -- EOS switches over eAPI, the firewall and the FRR routers through
+    their containers.
+
+    Re-run it whenever the model changes. Each push is a replace, not a merge, so
+    removing something from the model removes it from the device.
+
+    Requires the artifacts to exist: run `invoke avd` first, or `invoke avd
+    --topology` on a freshly loaded instance.
+    """
+    flags = []
+    if branch:
+        flags.append(f"--branch {shlex.quote(branch)}")
+    if dry_run:
+        flags.append("--dry-run")
+    if only:
+        flags.append(f"--only {shlex.quote(only)}")
+    if kind:
+        flags.append(f"--kind {shlex.quote(kind)}")
+
+    ctx.run(f"python scripts/provision_lab.py {' '.join(flags)}".strip(), pty=True)
 
 
 @task

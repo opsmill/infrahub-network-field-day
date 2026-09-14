@@ -184,6 +184,58 @@ what changed first. Artifact regeneration passes the branch through to
 `infrahubctl transform --branch X` renders your change while the stored artifact
 never moves.
 
+## Bringing the lab up from Infrahub
+
+Two tasks, in order. The topology belongs to the sibling NFD41 lab repository;
+the configuration belongs here.
+
+```bash
+uv run invoke lab          # deploy ../lab/nfd41.clab.yml, wait for eAPI
+uv run invoke provision    # push every rendered artifact onto the devices
+```
+
+`invoke lab` deploys the lab repository's committed topology **as-is**. Nothing
+renders a topology from Infrahub. The fabric comes up unconfigured on purpose:
+the cEOS nodes are given no `startup-config`, only `CLAB_MGMT_VRF` and a
+management address, so they boot reachable and empty. `../lab` is resolved by
+walking up from this checkout, because a plain `../lab` is wrong from a git
+worktree; set `NFD41_LAB_DIR` to override.
+
+`invoke provision` then makes each device match its artifact. Three families,
+three routes in, because the lab gives them three different front doors:
+
+| Kind | Artifact | Route | Mechanism |
+| --- | --- | --- | --- |
+| `DcimFabricSwitch` | AVD EOS Configuration | `mgmt_ip`, eAPI | config session + `rollback clean-config` |
+| `DcimDevice` | FRR Configuration | container name | `frr-reload.py --reload` |
+| `SecurityFirewall` | Junos Configuration | container name | `load replace` + `commit confirmed` |
+
+**The switches are reached by address and the rest by name, deliberately.**
+Infrahub calls a switch `leaf-nfd41-pod1-1-1` and ContainerLab calls the same box
+`k8s-leaf1`; there is no renaming layer, so names cannot match them. Their
+`mgmt_ip` does equal the lab's management address, so eAPI needs no name. The FRR
+routers and the firewall have no address modelled at all, but their Infrahub
+names *are* their ContainerLab node names.
+
+Every push is a replace, not a merge, so deleting something from the model
+deletes it from the device. Three things are worth knowing before changing
+`scripts/provision_lab.py`:
+
+- **The EOS artifact ends with `end`.** Left in place it returns the CLI to
+  enable mode and the commit that follows is rejected as an invalid command, so
+  the session is abandoned and the switch silently keeps its old configuration.
+  `_eos_config_lines` strips it and appends its own.
+- **The firewall must use `load replace` with `replace:` tags.** `load override`
+  and `load update` were both measured against the running vSRX and both delete
+  the `system` stanza -- including `services { ssh; netconf; }`, the management
+  path this script arrives on. The artifact has no `system` stanza because those
+  are credential hashes that are never modelled. `_assert_junos_scope` fails
+  loudly if one ever appears, rather than letting the push start overwriting
+  credentials.
+- **Junos re-serialises `## SECRET-DATA` with a fresh salt on any load**, so a
+  diff showing the password hashes changing is Junos, not a credential rewrite.
+  Re-loading the device's own unmodified configuration produces the same diff.
+
 ## Naming conventions
 
 - Generators: `generate_<entity>.py`.
@@ -270,6 +322,11 @@ uv run invoke load-menu
 uv run invoke avd                       # regenerate AVD hostvars, structured configs and artifacts
 uv run invoke avd --branch my-change    # ... on a branch, so the result can be reviewed
 uv run invoke avd --topology            # BUILD-TIME ONLY: also build the fabric and its cabling
+uv run invoke lab                       # deploy ../lab's topology with management connectivity
+uv run invoke lab --destroy             # tear it down
+uv run invoke provision                 # push every rendered artifact onto the running devices
+uv run invoke provision --dry-run       # ... showing what would be pushed, changing nothing
+uv run invoke provision --kind eos      # ... one family only: eos, frr, or junos
 uv run invoke init-semaphore
 uv run invoke test
 uv run invoke lint
