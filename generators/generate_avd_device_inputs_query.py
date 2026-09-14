@@ -6,901 +6,937 @@ from pydantic import BaseModel, Field
 
 
 class GenerateAvdDeviceInputsQuery(BaseModel):
-    dcim_device: "GenerateAvdDeviceInputsQueryDcimDevice" = Field(alias="DcimDevice")
+    dcim_fabric_switch: "GenerateAvdDeviceInputsQueryDcimFabricSwitch" = Field(
+        alias="DcimFabricSwitch"
+    )
     network_link: "GenerateAvdDeviceInputsQueryNetworkLink" = Field(alias="NetworkLink")
 
 
-class GenerateAvdDeviceInputsQueryDcimDevice(BaseModel):
-    edges: list["GenerateAvdDeviceInputsQueryDcimDeviceEdges"]
+class GenerateAvdDeviceInputsQueryDcimFabricSwitch(BaseModel):
+    edges: list["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdges"]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdges(BaseModel):
-    node: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNode"]
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdges(BaseModel):
+    node: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNode"]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNode(BaseModel):
     id: str
-    name: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeName"]
-    role: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRole"]
+    name: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeName"]
+    role: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRole"]
     evpn_gateway_group: (
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroup"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroup"
     )
-    asn: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAsn"
-    node_id: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeNodeId"]
+    asn: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAsn"
+    node_id: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeNodeId"]
     avd_custom_hostvars: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAvdCustomHostvars"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAvdCustomHostvars"
     ]
-    loopback_ip: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIp"
-    vtep_loopback_ip: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIp"
-    mgmt_ip: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMgmtIp"
-    mlag_domain: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomain"
-    rack: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRack"
-    pod: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePod"
-    interfaces: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfaces"
+    loopback_ip: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIp"
+    vtep_loopback_ip: (
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIp"
+    )
+    mgmt_ip: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMgmtIp"
+    mlag_domain: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomain"
+    rack: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRack"
+    pod: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePod"
+    interfaces: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfaces"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeName(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeName(BaseModel):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRole(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRole(BaseModel):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroup(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroup(BaseModel):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNode(
+    BaseModel
+):
     id: str
     display_label: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeName"
     ]
     resiliency_model: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeResiliencyModel"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeResiliencyModel"
     ]
     evpn_l_2_enabled: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEvpnL2Enabled"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEvpnL2Enabled"
     ] = Field(alias="evpn_l2_enabled")
     evpn_l_3_enabled: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEvpnL3Enabled"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEvpnL3Enabled"
     ] = Field(alias="evpn_l3_enabled")
     evpn_l_3_inter_domain: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEvpnL3InterDomain"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEvpnL3InterDomain"
     ] = Field(alias="evpn_l3_inter_domain")
     d_path_enabled: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeDPathEnabled"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeDPathEnabled"
     ]
     all_active_multihoming_enabled: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeAllActiveMultihomingEnabled"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeAllActiveMultihomingEnabled"
     ]
     ethernet_segment_identifier: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEthernetSegmentIdentifier"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEthernetSegmentIdentifier"
     ]
     ethernet_segment_rt_import: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEthernetSegmentRtImport"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEthernetSegmentRtImport"
     ]
-    local_domain: (
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomain"
-    )
-    pod: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePod"
-    members: (
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembers"
-    )
-    remote_domain: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomain"
+    local_domain: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomain"
+    pod: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePod"
+    members: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembers"
+    remote_domain: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomain"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeResiliencyModel(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeResiliencyModel(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEvpnL2Enabled(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEvpnL2Enabled(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEvpnL3Enabled(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEvpnL3Enabled(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEvpnL3InterDomain(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEvpnL3InterDomain(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeDPathEnabled(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeDPathEnabled(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeAllActiveMultihomingEnabled(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeAllActiveMultihomingEnabled(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEthernetSegmentIdentifier(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEthernetSegmentIdentifier(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeEthernetSegmentRtImport(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeEthernetSegmentRtImport(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomain(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomain(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNode(
     BaseModel
 ):
     id: str
     display_label: Optional[str]
     domain_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeDomainId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeDomainId"
     ]
-    fabric: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabric"
+    fabric: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabric"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeDomainId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeDomainId(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabric(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabric(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePod(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePod(
+    BaseModel
+):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeName"
     ]
-    evpn_domain: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomain"
+    evpn_domain: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomain"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomain(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomain(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNode(
     BaseModel
 ):
     id: str
     display_label: Optional[str]
     domain_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeDomainId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeDomainId"
     ]
-    fabric: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabric"
+    fabric: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabric"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeDomainId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeDomainId(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabric(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabric(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembers(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembers(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodeName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodeRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodeRole"
     ]
-    pod: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePod"
+    pod: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePod"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodeRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodeRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePod(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePod(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomain(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomain(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNode(
     BaseModel
 ):
     id: str
     display_label: Optional[str]
     domain_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeDomainId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeDomainId"
     ]
-    fabric: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabric"
-    remote_gateway_groups: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroups"
+    fabric: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabric"
+    remote_gateway_groups: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroups"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeDomainId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeDomainId(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabric(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabric(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroups(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroups(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNode(
     BaseModel
 ):
     id: str
     display_label: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeName"
     ]
-    local_domain: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomain"
-    pod: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePod"
-    members: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembers"
+    local_domain: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomain"
+    pod: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePod"
+    members: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembers"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomain(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomain(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNode(
-    BaseModel
-):
-    id: str
-    display_label: Optional[str]
-    domain_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeDomainId"
-    ]
-    fabric: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabric"
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeDomainId(
-    BaseModel
-):
-    value: Optional[str]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabric(
-    BaseModel
-):
-    node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNode"
-    ]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNode(
-    BaseModel
-):
-    id: str
-    name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNodeName"
-    ]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNodeName(
-    BaseModel
-):
-    value: Optional[str]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePod(
-    BaseModel
-):
-    node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNode"
-    ]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNode(
-    BaseModel
-):
-    id: str
-    name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeName"
-    ]
-    evpn_domain: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomain"
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeName(
-    BaseModel
-):
-    value: Optional[str]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomain(
-    BaseModel
-):
-    node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNode"
-    ]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNode(
     BaseModel
 ):
     id: str
     display_label: Optional[str]
     domain_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeDomainId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeDomainId"
     ]
-    fabric: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabric"
+    fabric: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabric"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeDomainId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeDomainId(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabric(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabric(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembers(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePod(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNode"
+    ]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNode(
+    BaseModel
+):
+    id: str
+    name: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeName"
+    ]
+    evpn_domain: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomain"
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomain(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNode"
+    ]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNode(
+    BaseModel
+):
+    id: str
+    display_label: Optional[str]
+    domain_id: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeDomainId"
+    ]
+    fabric: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabric"
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeDomainId(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabric(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNode"
+    ]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNode(
+    BaseModel
+):
+    id: str
+    name: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNodeName"
+    ]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembers(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodeName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodeRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodeRole"
     ]
-    pod: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePod"
+    pod: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePod"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodeRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodeRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePod(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePod(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAsn(BaseModel):
-    node: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAsnNode"]
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAsn(BaseModel):
+    node: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAsnNode"]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAsnNode(BaseModel):
-    asn: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAsnNodeAsn"]
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAsnNode(BaseModel):
+    asn: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAsnNodeAsn"]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAsnNodeAsn(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAsnNodeAsn(BaseModel):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeNodeId(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeNodeId(BaseModel):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAvdCustomHostvars(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAvdCustomHostvars(BaseModel):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIp(BaseModel):
-    node: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNode"]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNode(BaseModel):
-    id: str
-    address: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeAddress"
-    ]
-    ip_prefix: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeIpPrefix"
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeAddress(BaseModel):
-    value: Optional[str]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeIpPrefix(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIp(BaseModel):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeIpPrefixNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeIpPrefixNode(
-    BaseModel
-):
-    typename__: Literal[
-        "BuiltinIPPrefix", "InternalIPPrefixAvailable", "IpamPrefix"
-    ] = Field(alias="__typename")
-    prefix: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeIpPrefixNodePrefix"
-    ]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeIpPrefixNodePrefix(
-    BaseModel
-):
-    value: Optional[str]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIp(BaseModel):
-    node: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNode"]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNode(BaseModel):
     id: str
     address: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeAddress"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeAddress"
     ]
     ip_prefix: (
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeIpPrefix"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeIpPrefix"
     )
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeAddress(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeAddress(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeIpPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeIpPrefix(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeIpPrefixNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeIpPrefixNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeIpPrefixNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeIpPrefixNode(
     BaseModel
 ):
     typename__: Literal[
         "BuiltinIPPrefix", "InternalIPPrefixAvailable", "IpamPrefix"
     ] = Field(alias="__typename")
     prefix: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeIpPrefixNodePrefix"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeIpPrefixNodePrefix"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeIpPrefixNodePrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeIpPrefixNodePrefix(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMgmtIp(BaseModel):
-    node: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMgmtIpNode"]
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIp(BaseModel):
+    node: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNode"
+    ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMgmtIpNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNode(
+    BaseModel
+):
     id: str
     address: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMgmtIpNodeAddress"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeAddress"
     ]
+    ip_prefix: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeIpPrefix"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMgmtIpNodeAddress(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeAddress(
+    BaseModel
+):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomain(BaseModel):
-    node: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNode"]
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeIpPrefix(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeIpPrefixNode"
+    ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeIpPrefixNode(
+    BaseModel
+):
+    typename__: Literal[
+        "BuiltinIPPrefix", "InternalIPPrefixAvailable", "IpamPrefix"
+    ] = Field(alias="__typename")
+    prefix: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeIpPrefixNodePrefix"
+    ]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeIpPrefixNodePrefix(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMgmtIp(BaseModel):
+    node: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMgmtIpNode"]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMgmtIpNode(BaseModel):
+    id: str
+    address: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMgmtIpNodeAddress"
+    ]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMgmtIpNodeAddress(BaseModel):
+    value: Optional[str]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomain(BaseModel):
+    node: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNode"
+    ]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNode(BaseModel):
     id: str
     domain_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeDomainId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeDomainId"
     ]
-    asn: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeAsn"
+    asn: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeAsn"
     virtual_router_mac: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeVirtualRouterMac"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeVirtualRouterMac"
     ]
-    peers: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeers"
+    peers: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeers"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeDomainId(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeDomainId(
+    BaseModel
+):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeAsn(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeAsn(BaseModel):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeAsnNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeAsnNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeAsnNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeAsnNode(
+    BaseModel
+):
     asn: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeAsnNodeAsn"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeAsnNodeAsn"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeAsnNodeAsn(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeAsnNodeAsn(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeVirtualRouterMac(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeVirtualRouterMac(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeers(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeers(
+    BaseModel
+):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeersEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeersEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeersEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeersEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeersEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeersEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeersEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeersEdgesNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeersEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeersEdgesNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeersEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeersEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRack(BaseModel):
-    node: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNode"]
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRack(BaseModel):
+    node: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNode"]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNode(BaseModel):
     id: str
-    name: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeName"]
-    mlag: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeMlag"]
-    devices: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevices"
+    name: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeName"]
+    mlag: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeMlag"]
+    devices: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevices"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeName(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeName(BaseModel):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeMlag(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeMlag(BaseModel):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevices(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevices(BaseModel):
     edges: Optional[
-        list["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdges"]
+        list[
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdges"
+        ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdges(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdges(
+    BaseModel
+):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimPhysicalDevice",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimDevice",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimPhysicalDevice",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimFabricSwitch",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimPhysicalDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimPhysicalDevice(
     BaseModel
 ):
-    typename__: Literal["DcimPhysicalDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimDevice", "DcimPhysicalDevice", "SecurityFirewall"] = Field(
+        alias="__typename"
+    )
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimFabricSwitch(
     BaseModel
 ):
-    typename__: Literal["DcimDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimFabricSwitch"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimDeviceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimFabricSwitchName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimDeviceRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimFabricSwitchRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimDeviceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimFabricSwitchName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimDeviceRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimFabricSwitchRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePod(BaseModel):
-    node: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNode"]
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePod(BaseModel):
+    node: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNode"]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNode(BaseModel):
     id: str
-    name: Optional["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeName"]
-    pod_ip_pools: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPools"
-    mlag_peer_pool: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagPeerPool"
-    mlag_l_3_pool: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagL3Pool" = Field(
+    name: Optional["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeName"]
+    pod_ip_pools: (
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPools"
+    )
+    mlag_peer_pool: (
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagPeerPool"
+    )
+    mlag_l_3_pool: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagL3Pool" = Field(
         alias="mlag_l3_pool"
     )
-    racks: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacks"
+    racks: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacks"
     avd_custom_hostvars: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeAvdCustomHostvars"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeAvdCustomHostvars"
     ]
-    parent: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParent"
+    parent: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParent"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeName(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeName(BaseModel):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPools(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPools(BaseModel):
     edges: Optional[
-        list["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdges"]
+        list[
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdges"
+        ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdges(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdges(
+    BaseModel
+):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreResourcePool",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreResourcePool",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreResourcePool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreResourcePool(
     BaseModel
 ):
     typename__: Literal["CoreNumberPool", "CoreResourcePool"] = Field(
@@ -909,48 +945,48 @@ class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeC
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool(
     BaseModel
 ):
     typename__: Literal["CoreIPAddressPool"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolName"
     ]
-    resources: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources"
+    resources: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix(
     BaseModel
 ):
     typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
@@ -958,72 +994,72 @@ class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeC
     )
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix(
     BaseModel
 ):
     typename__: Literal["IpamPrefix"] = Field(alias="__typename")
     prefix: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool(
     BaseModel
 ):
     typename__: Literal["CoreIPPrefixPool"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolName"
     ]
-    resources: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources"
+    resources: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
     BaseModel
 ):
     typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
@@ -1031,110 +1067,120 @@ class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeC
     )
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
     BaseModel
 ):
     typename__: Literal["IpamPrefix"] = Field(alias="__typename")
     prefix: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagPeerPool(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagPeerPool(
+    BaseModel
+):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagPeerPoolNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagPeerPoolNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagPeerPoolNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagPeerPoolNode(
+    BaseModel
+):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagPeerPoolNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagPeerPoolNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagPeerPoolNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagPeerPoolNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagL3Pool(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagL3Pool(BaseModel):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagL3PoolNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagL3PoolNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagL3PoolNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagL3PoolNode(
+    BaseModel
+):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagL3PoolNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagL3PoolNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagL3PoolNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagL3PoolNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacks(BaseModel):
-    edges: list["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacksEdges"]
-
-
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacksEdges(BaseModel):
-    node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacksEdgesNode"
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacks(BaseModel):
+    edges: list[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacksEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacksEdgesNode(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacksEdges(BaseModel):
+    node: Optional[
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacksEdgesNode"
+    ]
+
+
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacksEdgesNode(
+    BaseModel
+):
     id: str
     mlag: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacksEdgesNodeMlag"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacksEdgesNodeMlag"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacksEdgesNodeMlag(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacksEdgesNodeMlag(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeAvdCustomHostvars(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeAvdCustomHostvars(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParent(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParent(BaseModel):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkBuildingBlock",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabric",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkBuildingBlock",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabric",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkBuildingBlock(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkBuildingBlock(
     BaseModel
 ):
     typename__: Literal["NetworkBuildingBlock", "NetworkPod"] = Field(
@@ -1142,103 +1188,103 @@ class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkBui
     )
     id: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkBuildingBlockName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkBuildingBlockName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkBuildingBlockName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkBuildingBlockName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabric(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabric(
     BaseModel
 ):
     typename__: Literal["NetworkFabric"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricName"
     ]
-    children: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildren"
+    children: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildren"
     mgmt_gateway: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricMgmtGateway"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricMgmtGateway"
     ]
     mgmt_routes: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricMgmtRoutes"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricMgmtRoutes"
     ]
     virtual_router_mac: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVirtualRouterMac"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVirtualRouterMac"
     ]
     underlay_routing_protocol: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUnderlayRoutingProtocol"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUnderlayRoutingProtocol"
     ]
     overlay_routing_protocol: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricOverlayRoutingProtocol"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricOverlayRoutingProtocol"
     ]
     evpn_vlan_aware_bundles: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricEvpnVlanAwareBundles"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricEvpnVlanAwareBundles"
     ]
     p_2_p_uplinks_mtu: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricP2PUplinksMtu"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricP2PUplinksMtu"
     ] = Field(alias="p2p_uplinks_mtu")
-    uplink_pool: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPool"
-    fabric_ip_pools: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools"
-    vtep_pool: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPool"
-    loopback_pool: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPool"
+    uplink_pool: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPool"
+    fabric_ip_pools: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools"
+    vtep_pool: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPool"
+    loopback_pool: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPool"
     spanning_tree_mode: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreeMode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreeMode"
     ]
-    spanning_tree_priorities: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePriorities"
+    spanning_tree_priorities: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePriorities"
     bgp_evpn_overlay_password: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricBgpEvpnOverlayPassword"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricBgpEvpnOverlayPassword"
     ]
     bgp_underlay_password: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricBgpUnderlayPassword"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricBgpUnderlayPassword"
     ]
     bgp_mlag_password: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricBgpMlagPassword"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricBgpMlagPassword"
     ]
     avd_custom_hostvars: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdCustomHostvars"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdCustomHostvars"
     ]
-    dns_servers: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServers"
-    ntp_servers: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServers"
-    local_users: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsers"
-    avd_evpn: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpn"
+    dns_servers: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServers"
+    ntp_servers: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServers"
+    local_users: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsers"
+    avd_evpn: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpn"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildren(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildren(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkBuildingBlock",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPod",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkBuildingBlock",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPod",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkBuildingBlock(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkBuildingBlock(
     BaseModel
 ):
     typename__: Literal["NetworkBuildingBlock", "NetworkFabric"] = Field(
@@ -1247,313 +1293,322 @@ class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFab
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPod(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPod(
     BaseModel
 ):
     typename__: Literal["NetworkPod"] = Field(alias="__typename")
     id: str
-    devices: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevices"
+    devices: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevices"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevices(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevices(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeRole"
     ]
     node_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeNodeId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeNodeId"
     ]
-    interfaces: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfaces"
+    interfaces: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfaces"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeNodeId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeNodeId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfaces(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfaces(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeDcimInterface",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysical",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeDcimInterface",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysical",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeDcimInterface(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeDcimInterface(
     BaseModel
 ):
-    typename__: Literal["DcimInterface", "InterfaceLag", "InterfaceVirtual"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal[
+        "DcimInterface", "InterfaceLag", "InterfaceVirtual", "SecurityFirewallInterface"
+    ] = Field(alias="__typename")
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysical(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysical(
     BaseModel
 ):
     typename__: Literal["InterfacePhysical"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole"
     ]
-    connector: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector"
+    connector: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode(
     BaseModel
 ):
     typename__: Literal["DcimConnector", "NetworkLink"] = Field(alias="__typename")
     id: Optional[str]
-    connected_endpoints: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints"
+    connected_endpoints: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint(
     BaseModel
 ):
-    typename__: Literal["DcimEndpoint", "InterfacePhysical"] = Field(alias="__typename")
+    typename__: Literal[
+        "DcimCircuitEndpoint",
+        "DcimEndpoint",
+        "InterfacePhysical",
+        "SecurityFirewallInterface",
+    ] = Field(alias="__typename")
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface(
     BaseModel
 ):
     typename__: Literal["DcimInterface"] = Field(alias="__typename")
     id: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceName"
     ]
-    device: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice"
+    device: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNode(
     BaseModel
 ):
-    typename__: Literal["ComputePhysicalServer", "DcimDevice", "DcimGenericDevice"] = (
-        Field(alias="__typename")
-    )
+    typename__: Literal[
+        "ComputePhysicalServer",
+        "DcimDevice",
+        "DcimFabricSwitch",
+        "DcimGenericDevice",
+        "SecurityFirewall",
+    ] = Field(alias="__typename")
     id: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricMgmtGateway(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricMgmtGateway(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricMgmtRoutes(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricMgmtRoutes(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVirtualRouterMac(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVirtualRouterMac(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUnderlayRoutingProtocol(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUnderlayRoutingProtocol(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricOverlayRoutingProtocol(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricOverlayRoutingProtocol(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricEvpnVlanAwareBundles(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricEvpnVlanAwareBundles(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricP2PUplinksMtu(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricP2PUplinksMtu(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPool(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNodeName"
     ]
     default_prefix_length: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNodeDefaultPrefixLength"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNodeDefaultPrefixLength"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNodeDefaultPrefixLength(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNodeDefaultPrefixLength(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool(
     BaseModel
 ):
     typename__: Literal["CoreNumberPool", "CoreResourcePool"] = Field(
@@ -1562,48 +1617,48 @@ class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFab
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool(
     BaseModel
 ):
     typename__: Literal["CoreIPAddressPool"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolName"
     ]
-    resources: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources"
+    resources: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeBuiltinIPPrefix(
     BaseModel
 ):
     typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
@@ -1611,72 +1666,72 @@ class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFab
     )
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix(
     BaseModel
 ):
     typename__: Literal["IpamPrefix"] = Field(alias="__typename")
     prefix: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixPrefix(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefixRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool(
     BaseModel
 ):
     typename__: Literal["CoreIPPrefixPool"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolName"
     ]
-    resources: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources"
+    resources: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
     BaseModel
 ):
     typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
@@ -1684,1330 +1739,1334 @@ class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFab
     )
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
     BaseModel
 ):
     typename__: Literal["IpamPrefix"] = Field(alias="__typename")
     prefix: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPool(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeName"
     ]
     default_prefix_length: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeDefaultPrefixLength"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeDefaultPrefixLength"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeDefaultPrefixLength(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNodeDefaultPrefixLength(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPool(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPool(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNodeName"
     ]
     default_prefix_length: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNodeDefaultPrefixLength"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNodeDefaultPrefixLength"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNodeDefaultPrefixLength(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNodeDefaultPrefixLength(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreeMode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreeMode(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePriorities(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePriorities(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNode(
     BaseModel
 ):
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNodeRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNodeRole"
     ]
     priority: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNodePriority"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNodePriority"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNodeRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNodeRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNodePriority(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNodePriority(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricBgpEvpnOverlayPassword(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricBgpEvpnOverlayPassword(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricBgpUnderlayPassword(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricBgpUnderlayPassword(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricBgpMlagPassword(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricBgpMlagPassword(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdCustomHostvars(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdCustomHostvars(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServers(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServers(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNode(
     BaseModel
 ):
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeName"
     ]
     ip_address: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeIpAddress"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeIpAddress"
     ]
     vrf: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeVrf"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeVrf"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeIpAddress(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeIpAddress(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeVrf(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNodeVrf(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServers(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServers(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNode(
     BaseModel
 ):
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeName"
     ]
     server_vrf: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeServerVrf"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeServerVrf"
     ]
     iburst: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeIburst"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeIburst"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeServerVrf(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeServerVrf(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeIburst(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNodeIburst(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsers(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsers(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNode(
     BaseModel
 ):
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodeName"
     ]
     privilege: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePrivilege"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePrivilege"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodeRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodeRole"
     ]
     password_type: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePasswordType"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePasswordType"
     ]
     password: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePassword"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePassword"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePrivilege(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePrivilege(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodeRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodeRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePasswordType(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePasswordType(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePassword(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNodePassword(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpn(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpn(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNode(
     BaseModel
 ):
     ebgp_multihop: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNodeEbgpMultihop"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNodeEbgpMultihop"
     ]
     overlay_bgp_rtc: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNodeOverlayBgpRtc"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNodeOverlayBgpRtc"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNodeEbgpMultihop(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNodeEbgpMultihop(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNodeOverlayBgpRtc(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNodeOverlayBgpRtc(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfaces(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfaces(BaseModel):
     edges: Optional[
-        list["GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges"]
+        list["GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges"]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges(BaseModel):
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges(BaseModel):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeDcimInterface",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeDcimInterface",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeDcimInterface(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeDcimInterface(
     BaseModel
 ):
-    typename__: Literal["DcimInterface", "InterfaceLag", "InterfaceVirtual"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal[
+        "DcimInterface", "InterfaceLag", "InterfaceVirtual", "SecurityFirewallInterface"
+    ] = Field(alias="__typename")
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical(
     BaseModel
 ):
     typename__: Literal["InterfacePhysical"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole"
     ]
     spanning_tree_portfast: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreePortfast"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreePortfast"
     ]
     spanning_tree_bpduguard: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreeBpduguard"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreeBpduguard"
     ]
     description: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalDescription"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalDescription"
     ]
-    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlan"
-    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlan"
-    lag: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLag"
-    connector: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector"
+    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlan"
+    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlan"
+    lag: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLag"
+    connector: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreePortfast(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreePortfast(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreeBpduguard(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalSpanningTreeBpduguard(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalDescription(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalDescription(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlan(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlan(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLag(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLag(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeName"
     ]
     channel_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeChannelId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeChannelId"
     ]
     lacp_mode: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeLacpMode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeLacpMode"
     ]
     evpn_ethernet_segment: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment"
     ]
-    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlan"
-    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlan"
+    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlan"
+    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlan"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeChannelId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeChannelId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeLacpMode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeLacpMode(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlan(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlan(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode(
     BaseModel
 ):
     typename__: Literal["DcimConnector", "NetworkLink"] = Field(alias="__typename")
     id: Optional[str]
-    connected_endpoints: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints"
+    connected_endpoints: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint(
     BaseModel
 ):
-    typename__: Literal["DcimEndpoint"] = Field(alias="__typename")
+    typename__: Literal[
+        "DcimCircuitEndpoint", "DcimEndpoint", "SecurityFirewallInterface"
+    ] = Field(alias="__typename")
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface(
     BaseModel
 ):
     typename__: Literal["DcimInterface"] = Field(alias="__typename")
     id: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceName"
     ]
-    device: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice"
+    device: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDevice",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimDevice",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDevice",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimFabricSwitch",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDevice(
     BaseModel
 ):
-    typename__: Literal["ComputePhysicalServer", "DcimGenericDevice"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal[
+        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
+    ] = Field(alias="__typename")
     id: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDeviceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDeviceName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDeviceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDeviceName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimFabricSwitch(
     BaseModel
 ):
-    typename__: Literal["DcimDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimFabricSwitch"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimDeviceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimFabricSwitchName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimDeviceRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimFabricSwitchRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimDeviceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimFabricSwitchName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimDeviceRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimFabricSwitchRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical(
     BaseModel
 ):
     typename__: Literal["InterfacePhysical"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalName"
     ]
-    device: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice"
-    lag: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag"
+    device: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice"
+    lag: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice(
     BaseModel
 ):
-    typename__: Literal["ComputePhysicalServer", "DcimGenericDevice"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal[
+        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
+    ] = Field(alias="__typename")
     id: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch(
     BaseModel
 ):
-    typename__: Literal["DcimDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimFabricSwitch"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeName"
     ]
     channel_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeChannelId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeChannelId"
     ]
     lacp_mode: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLacpMode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLacpMode"
     ]
     evpn_ethernet_segment: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment"
     ]
-    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan"
-    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan"
-    lag_members: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembers"
+    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan"
+    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan"
+    lag_members: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembers"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeChannelId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeChannelId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLacpMode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLacpMode(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembers(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembers(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeName"
     ]
-    connector: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnector"
+    connector: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnector"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnector(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnector(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNode(
     BaseModel
 ):
     typename__: Literal["DcimConnector", "NetworkLink"] = Field(alias="__typename")
     id: Optional[str]
-    connected_endpoints: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpoints"
+    connected_endpoints: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpoints"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpoints(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpoints(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdges"
+            "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeDcimEndpoint(
     BaseModel
 ):
-    typename__: Literal["DcimEndpoint"] = Field(alias="__typename")
+    typename__: Literal[
+        "DcimCircuitEndpoint", "DcimEndpoint", "SecurityFirewallInterface"
+    ] = Field(alias="__typename")
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical(
     BaseModel
 ):
     typename__: Literal["InterfacePhysical"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalRole"
     ]
     spanning_tree_portfast: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalSpanningTreePortfast"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalSpanningTreePortfast"
     ]
     spanning_tree_bpduguard: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalSpanningTreeBpduguard"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalSpanningTreeBpduguard"
     ]
     description: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDescription"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDescription"
     ]
-    lag: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag"
-    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlan"
-    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlan"
-    device: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice"
+    lag: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag"
+    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlan"
+    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlan"
+    device: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalSpanningTreePortfast(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalSpanningTreePortfast(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalSpanningTreeBpduguard(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalSpanningTreeBpduguard(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDescription(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDescription(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeName"
     ]
     channel_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeChannelId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeChannelId"
     ]
     lacp_mode: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLacpMode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLacpMode"
     ]
     evpn_ethernet_segment: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment"
     ]
-    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan"
-    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan"
+    tagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan"
+    untagged_vlan: "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan"
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeChannelId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeChannelId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLacpMode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLacpMode(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeEvpnEthernetSegment(
     BaseModel
 ):
     value: Optional[bool]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlan(
     BaseModel
 ):
     edges: list[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdges"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdges"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdges(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdges(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlan(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlan(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNode"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNode(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNode(
     BaseModel
 ):
     vlan_id: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNodeVlanId"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNodeVlanId"
     ]
     status: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNodeStatus"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNodeStatus"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNodeVlanId(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNodeVlanId(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNodeStatus(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNodeStatus(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice",
-                "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice",
+                "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice(
     BaseModel
 ):
-    typename__: Literal["ComputePhysicalServer", "DcimGenericDevice"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal[
+        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
+    ] = Field(alias="__typename")
     id: Optional[str]
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch(
     BaseModel
 ):
-    typename__: Literal["DcimDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimFabricSwitch"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceName"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceRole"
+        "GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceName(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceRole(
+class GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchRole(
     BaseModel
 ):
     value: Optional[str]
@@ -3071,7 +3130,9 @@ class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdges(
 class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeDcimEndpoint(
     BaseModel
 ):
-    typename__: Literal["DcimEndpoint"] = Field(alias="__typename")
+    typename__: Literal[
+        "DcimCircuitEndpoint", "DcimEndpoint", "SecurityFirewallInterface"
+    ] = Field(alias="__typename")
     id: Optional[str]
 
 
@@ -3108,7 +3169,7 @@ class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNod
         Annotated[
             Union[
                 "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice",
-                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice",
+                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch",
             ],
             Field(discriminator="typename__"),
         ]
@@ -3118,9 +3179,9 @@ class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNod
 class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice(
     BaseModel
 ):
-    typename__: Literal["ComputePhysicalServer", "DcimGenericDevice"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal[
+        "ComputePhysicalServer", "DcimDevice", "DcimGenericDevice", "SecurityFirewall"
+    ] = Field(alias="__typename")
     id: Optional[str]
     name: Optional[
         "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDeviceName"
@@ -3133,84 +3194,84 @@ class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNod
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch(
     BaseModel
 ):
-    typename__: Literal["DcimDevice"] = Field(alias="__typename")
+    typename__: Literal["DcimFabricSwitch"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceName"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchName"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceRole"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchRole"
     ]
-    asn: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceAsn"
-    pod: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePod"
+    asn: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchAsn"
+    pod: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPod"
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceName(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceRole(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchRole(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceAsn(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchAsn(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceAsnNode"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchAsnNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceAsnNode(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchAsnNode(
     BaseModel
 ):
     asn: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceAsnNodeAsn"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchAsnNodeAsn"
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceAsnNodeAsn(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchAsnNodeAsn(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePod(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPod(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNode"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNode(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNode(
     BaseModel
 ):
-    parent: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParent"
+    parent: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParent"
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParent(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParent(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkBuildingBlock",
-                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabric",
+                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkBuildingBlock",
+                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabric",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkBuildingBlock(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkBuildingBlock(
     BaseModel
 ):
     typename__: Literal["NetworkBuildingBlock", "NetworkPod"] = Field(
@@ -3219,81 +3280,81 @@ class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNod
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabric(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabric(
     BaseModel
 ):
     typename__: Literal["NetworkFabric"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricName"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricName"
     ]
-    dci_pool: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPool"
-    fabric_ip_pools: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPools"
+    dci_pool: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPool"
+    fabric_ip_pools: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPools"
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricName(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPool(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPool(
     BaseModel
 ):
     node: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPoolNode"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPoolNode"
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPoolNode(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPoolNode(
     BaseModel
 ):
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPoolNodeName"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPoolNodeName"
     ]
     default_prefix_length: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPoolNodeDefaultPrefixLength"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPoolNodeDefaultPrefixLength"
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPoolNodeName(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPoolNodeName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPoolNodeDefaultPrefixLength(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPoolNodeDefaultPrefixLength(
     BaseModel
 ):
     value: Optional[Any]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPools(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPools(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdges"
+            "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdges(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool",
-                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool",
+                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool",
+                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreResourcePool(
     BaseModel
 ):
     typename__: Literal["CoreIPAddressPool", "CoreNumberPool", "CoreResourcePool"] = (
@@ -3302,48 +3363,48 @@ class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNod
     id: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool(
     BaseModel
 ):
     typename__: Literal["CoreIPPrefixPool"] = Field(alias="__typename")
     id: str
     name: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolName"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolName"
     ]
-    resources: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources"
+    resources: "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources"
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolName(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolName(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources(
     BaseModel
 ):
     edges: Optional[
         list[
-            "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
+            "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges"
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges(
     BaseModel
 ):
     node: Optional[
         Annotated[
             Union[
-                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
-                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
+                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix",
+                "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix",
             ],
             Field(discriminator="typename__"),
         ]
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeBuiltinIPPrefix(
     BaseModel
 ):
     typename__: Literal["BuiltinIPPrefix", "InternalIPPrefixAvailable"] = Field(
@@ -3351,222 +3412,222 @@ class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNod
     )
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix(
     BaseModel
 ):
     typename__: Literal["IpamPrefix"] = Field(alias="__typename")
     prefix: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix"
     ]
     role: Optional[
-        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
+        "GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole"
     ]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixPrefix(
     BaseModel
 ):
     value: Optional[str]
 
 
-class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
+class GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefixRole(
     BaseModel
 ):
     value: Optional[str]
 
 
 GenerateAvdDeviceInputsQuery.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroup.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomain.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabric.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePod.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomain.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabric.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembers.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePod.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomain.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabric.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroups.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomain.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabric.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePod.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomain.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabric.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembers.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePod.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAsn.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeAsnNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIp.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeIpPrefix.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeLoopbackIpNodeIpPrefixNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIp.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeIpPrefix.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeVtepLoopbackIpNodeIpPrefixNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMgmtIp.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMgmtIpNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomain.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeAsn.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodeAsnNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeers.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeersEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeMlagDomainNodePeersEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRack.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevices.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeRackNodeDevicesEdgesNodeDcimDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePod.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPools.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagPeerPool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagPeerPoolNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagL3Pool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeMlagL3PoolNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacks.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacksEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeRacksEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParent.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkBuildingBlock.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabric.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildren.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPod.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevices.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfaces.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysical.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPool.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePriorities.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServers.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServers.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsers.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpn.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfaces.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLag.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembers.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnector.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpoints.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlan.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNode.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitch.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroup.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomain.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabric.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeLocalDomainNodeFabricNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePod.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomain.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabric.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodePodNodeEvpnDomainNodeFabricNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembers.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePod.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeMembersEdgesNodePodNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomain.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabric.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeFabricNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroups.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomain.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabric.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeLocalDomainNodeFabricNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePod.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomain.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabric.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodePodNodeEvpnDomainNodeFabricNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembers.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePod.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeEvpnGatewayGroupNodeRemoteDomainNodeRemoteGatewayGroupsEdgesNodeMembersEdgesNodePodNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAsn.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeAsnNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIp.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeIpPrefix.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeLoopbackIpNodeIpPrefixNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIp.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeIpPrefix.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeVtepLoopbackIpNodeIpPrefixNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMgmtIp.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMgmtIpNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomain.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeAsn.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodeAsnNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeers.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeersEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeMlagDomainNodePeersEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRack.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevices.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeRackNodeDevicesEdgesNodeDcimFabricSwitch.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePod.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPools.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResources.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodePodIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagPeerPool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagPeerPoolNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagL3Pool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeMlagL3PoolNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacks.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacksEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeRacksEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParent.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkBuildingBlock.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabric.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildren.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPod.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevices.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfaces.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysical.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricChildrenEdgesNodeNetworkPodDevicesEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricUplinkPoolNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPools.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResources.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPAddressPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricVtepPoolNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPool.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLoopbackPoolNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePriorities.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricSpanningTreePrioritiesEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServers.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricDnsServersEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServers.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricNtpServersEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsers.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricLocalUsersEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpn.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodePodNodeParentNodeNetworkFabricAvdEvpnNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfaces.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalTaggedVlanEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalUntaggedVlanNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLag.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnector.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpoints.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterface.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDevice.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimGenericDevice.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeDcimFabricSwitch.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembers.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnector.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpoints.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysical.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLag.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeTaggedVlanEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeUntaggedVlanNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalTaggedVlanEdgesNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlan.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalUntaggedVlanNode.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice.model_rebuild()
+GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysicalConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalLagNodeLagMembersEdgesNodeConnectorNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch.model_rebuild()
 GenerateAvdDeviceInputsQueryNetworkLink.model_rebuild()
 GenerateAvdDeviceInputsQueryNetworkLinkEdges.model_rebuild()
 GenerateAvdDeviceInputsQueryNetworkLinkEdgesNode.model_rebuild()
@@ -3575,18 +3636,18 @@ GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdges.model_re
 GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysical.model_rebuild()
 GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDevice.model_rebuild()
 GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimGenericDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevice.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceAsn.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDeviceAsnNode.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePod.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNode.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParent.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabric.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPool.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricDciPoolNode.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPools.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
-GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimDevicePodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitch.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchAsn.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchAsnNode.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPod.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNode.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParent.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabric.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPool.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricDciPoolNode.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPools.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPool.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResources.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdges.model_rebuild()
+GenerateAvdDeviceInputsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeDcimFabricSwitchPodNodeParentNodeNetworkFabricFabricIpPoolsEdgesNodeCoreIPPrefixPoolResourcesEdgesNodeIpamPrefix.model_rebuild()

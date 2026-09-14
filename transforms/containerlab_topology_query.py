@@ -138,8 +138,9 @@ class Fabric(BaseModel):
 class ServerNode(BaseModel):
     """``ComputePhysicalServer`` — rendered as a Linux-kind ContainerLab node.
 
-    Servers have no ``mgmt_ip``: that relationship is a ``DcimDevice``-only
-    extension, so the inherited ``primary_address`` is used instead.
+    Servers have no ``mgmt_ip``: since cycle 027 that relationship is a
+    ``DcimFabricSwitch``-only extension, so the inherited ``primary_address`` is
+    used instead.
     """
 
     typename: str | None = Field(default=None, alias="__typename")

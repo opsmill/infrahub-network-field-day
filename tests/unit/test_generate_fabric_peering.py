@@ -62,14 +62,14 @@ def _device(
     svis: list[dict[str, Any]] | None = None,
     address: str | None = None,
 ) -> dict[str, Any]:
-    """A far-end DcimDevice.
+    """A far-end DcimFabricSwitch.
 
     Note the shape of an absent relationship throughout these fixtures: it is
     ``{"node": None}``, never a bare ``None``. That is what Infrahub's GraphQL
     returns, and the generated models enforce it.
 
     `__typename` is required: the generated model is a discriminated union, and
-    a non-DcimDevice far end (a ComputePhysicalServer, say) deserialises into a
+    a non-DcimFabricSwitch far end (a ComputePhysicalServer, say) deserialises into a
     variant carrying only `id` -- with no `role` or `asn` field at all. That is
     exactly why the derivation reads those attributes defensively.
     """
@@ -81,7 +81,7 @@ def _device(
             svis.append(_svi("peering", [resolved]))
     return {
         "node": {
-            "__typename": "DcimDevice",
+            "__typename": "DcimFabricSwitch",
             "id": f"dev-{name}",
             "name": {"value": name},
             "role": {"value": role},
@@ -154,7 +154,7 @@ def _session(name: str, device_name: str, address: str, *, enabled: bool = True)
             "peer_asn": {"value": PEER_ASN},
             "enabled": {"value": enabled},
             "peer_device": {
-                "node": {"__typename": "DcimDevice", "id": f"dev-{device_name}", "display_label": device_name}
+                "node": {"__typename": "DcimFabricSwitch", "id": f"dev-{device_name}", "display_label": device_name}
             },
             "peer_address": {"node": {"id": f"ip-{name}", "address": {"value": address}}},
         }

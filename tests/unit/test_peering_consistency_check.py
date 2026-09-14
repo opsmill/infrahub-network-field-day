@@ -44,7 +44,7 @@ def _svi(
             "name": {"value": name},
             "role": {"value": role},
             "dot1q_id": {"value": vlan},
-            "device": {"node": {"__typename": "DcimDevice", "id": f"dev-{device}", "display_label": device}},
+            "device": {"node": {"__typename": "DcimFabricSwitch", "id": f"dev-{device}", "display_label": device}},
             "ip_addresses": {
                 "edges": [{"node": {"id": f"ip-{a}", "address": {"value": a}}} for a in (addresses or [])]
             },
@@ -64,7 +64,7 @@ def _session(
             "cluster": {"node": {"id": f"cl-{cluster}", "name": {"value": cluster}}},
             "peer_device": {
                 "node": {
-                    "__typename": "DcimDevice",
+                    "__typename": "DcimFabricSwitch",
                     "id": f"dev-{device}",
                     "display_label": device,
                     "name": {"value": device},
@@ -96,7 +96,7 @@ def _evpn_node(device: str, address: str, *, vlan: int = PEERING_VLAN) -> dict[s
             "__typename": "EvpnSviNode",
             "id": f"evpn-{device}-{vlan}",
             "ip_address": {"value": address},
-            "device": {"node": {"__typename": "DcimDevice", "id": f"dev-{device}", "display_label": device}},
+            "device": {"node": {"__typename": "DcimFabricSwitch", "id": f"dev-{device}", "display_label": device}},
             "svi": {"node": {"id": f"evpnsvi-{vlan}", "svi_id": {"value": vlan}}},
         }
     }
@@ -143,7 +143,7 @@ def _cluster(*, cabled: list[str] | None = None, name: str = "nfd41") -> dict[st
                                                             "id": f"far-{idx}",
                                                             "device": {
                                                                 "node": {
-                                                                    "__typename": "DcimDevice",
+                                                                    "__typename": "DcimFabricSwitch",
                                                                     "id": f"dev-{device}",
                                                                 }
                                                             },

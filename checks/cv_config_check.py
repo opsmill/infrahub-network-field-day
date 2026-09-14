@@ -35,7 +35,7 @@ from pyavd._cv.workflows.verify_devices_on_cv import verify_devices_in_cloudvisi
 from solution_arista_avd.protocols import AvdStructuredConfigFile
 
 from .cv_config_check_query import CVConfigCheckQuery
-from .cv_config_check_query import CVConfigCheckQueryDcimDeviceEdgesNode as CVConfigCheckDcimDeviceNode
+from .cv_config_check_query import CVConfigCheckQueryDcimFabricSwitchEdgesNode as CVConfigCheckDcimDeviceNode
 from .cv_helpers import (
     DEFAULT_WORKSPACE_DESCRIPTION,
     get_cloudvision_config,
@@ -177,7 +177,7 @@ class CVConfigValidationCheck(InfrahubCheck):
     def _devices_in_fabric(self, parsed: CVConfigCheckQuery, fabric_id: str) -> list[CVConfigCheckDcimDeviceNode]:
         """Filter devices confirmed to belong to the target fabric."""
         devices = []
-        for edge in parsed.dcim_device.edges:
+        for edge in parsed.dcim_fabric_switch.edges:
             device = edge.node
             if not device:
                 continue

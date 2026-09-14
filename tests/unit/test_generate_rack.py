@@ -42,7 +42,7 @@ def _named_device(device_id: str, name: str) -> SimpleNamespace:
 
 def _design_edge(role: str, quantity: int, template_id: str | None) -> dict:
     """Build a single device_designs edge; sizing comes only from these."""
-    template_node = {"__typename": "TemplateDcimDevice", "id": template_id} if template_id else None
+    template_node = {"__typename": "TemplateDcimFabricSwitch", "id": template_id} if template_id else None
     return {
         "node": {
             "role": {"value": role},

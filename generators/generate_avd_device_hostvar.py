@@ -68,8 +68,8 @@ from solution_arista_avd.protocols import AvdArtifact, AvdHostvarFile, NetworkPo
 
 from .generate_avd_device_inputs_query import (  # noqa: E402
     GenerateAvdDeviceInputsQuery,
-    GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges,
-    GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical,
+    GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges,
+    GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical,
 )
 
 if TYPE_CHECKING:
@@ -200,7 +200,7 @@ async def check_fabric_hostvars_ready(client: InfrahubClient, fabric_id: str) ->
 
 
 def extract_uplinks_from_dict(
-    interfaces: list[GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges],
+    interfaces: list[GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges],
     uplink_role: str | None,
     device_id: str,  # noqa: ARG001 — part of the public signature; retained for callers/tests
 ) -> UplinkData:
@@ -228,7 +228,7 @@ def extract_uplinks_from_dict(
     for edge in interfaces:
         interface = edge.node
         if not isinstance(
-            interface, GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical
+            interface, GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical
         ):
             continue
         iface_role = interface.role
@@ -1317,7 +1317,7 @@ def _flush_switch_lag_groups(groups: dict[tuple[str, int], dict[str, Any]], *, m
 
 
 def extract_connected_endpoints(  # noqa: C901
-    interfaces: list[GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdges],
+    interfaces: list[GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges],
     hostname: str,
     *,
     mlag_active: bool = False,
@@ -1345,7 +1345,7 @@ def extract_connected_endpoints(  # noqa: C901
     for edge in interfaces:
         interface = edge.node
         if not isinstance(
-            interface, GenerateAvdDeviceInputsQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical
+            interface, GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdgesNodeInterfacePhysical
         ):
             continue
         iface_role = interface.role
@@ -1854,7 +1854,9 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             self._device_names_by_id = cache
         return cache
 
-    async def _single_peer_name(self, obj: object, relationship_name: str, *, kind: str = "DcimFabricSwitch") -> str | None:
+    async def _single_peer_name(
+        self, obj: object, relationship_name: str, *, kind: str = "DcimFabricSwitch"
+    ) -> str | None:
         """Resolve the name behind a cardinality-one relationship.
 
         Deliberately never reads ``RelatedNode.peer``: that property resolves

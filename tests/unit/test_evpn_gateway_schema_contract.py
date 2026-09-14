@@ -232,9 +232,7 @@ def test_border_leaf_dependency_is_present_in_device_role_choices() -> None:
     schema = yaml.safe_load(DCIM_EXTENSIONS_PATH.read_text(encoding="utf-8"))
     # `border_leaf` is a fabric role, so it lives on the fabric kind's dropdown
     # since cycle 027 split the two.
-    dcim_device = next(
-        node for node in schema["extensions"]["nodes"] if node["kind"] == "DcimFabricSwitch"
-    )
+    dcim_device = next(node for node in schema["extensions"]["nodes"] if node["kind"] == "DcimFabricSwitch")
     role_attr = next(attr for attr in dcim_device["attributes"] if attr["name"] == "role")
 
     choices = {choice["name"]: choice.get("label") for choice in role_attr["choices"]}

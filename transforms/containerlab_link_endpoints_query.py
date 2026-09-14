@@ -52,7 +52,9 @@ class ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdges(
 class ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeDcimEndpoint(
     BaseModel
 ):
-    typename__: Literal["DcimEndpoint"] = Field(alias="__typename")
+    typename__: Literal[
+        "DcimCircuitEndpoint", "DcimEndpoint", "SecurityFirewallInterface"
+    ] = Field(alias="__typename")
 
 
 class ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeDcimInterface(
@@ -82,9 +84,13 @@ class ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesN
 class ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNode(
     BaseModel
 ):
-    typename__: Literal["ComputePhysicalServer", "DcimDevice", "DcimGenericDevice"] = (
-        Field(alias="__typename")
-    )
+    typename__: Literal[
+        "ComputePhysicalServer",
+        "DcimDevice",
+        "DcimFabricSwitch",
+        "DcimGenericDevice",
+        "SecurityFirewall",
+    ] = Field(alias="__typename")
     name: Optional[
         "ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeDcimInterfaceDeviceNodeName"
     ]
@@ -127,9 +133,13 @@ class ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesN
 class ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNode(
     BaseModel
 ):
-    typename__: Literal["ComputePhysicalServer", "DcimDevice", "DcimGenericDevice"] = (
-        Field(alias="__typename")
-    )
+    typename__: Literal[
+        "ComputePhysicalServer",
+        "DcimDevice",
+        "DcimFabricSwitch",
+        "DcimGenericDevice",
+        "SecurityFirewall",
+    ] = Field(alias="__typename")
     name: Optional[
         "ContainerlabLinkEndpointsQueryNetworkLinkEdgesNodeConnectedEndpointsEdgesNodeInterfacePhysicalDeviceNodeName"
     ]

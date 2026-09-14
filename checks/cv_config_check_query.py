@@ -7,7 +7,9 @@ from pydantic import BaseModel, Field
 
 class CVConfigCheckQuery(BaseModel):
     network_fabric: "CVConfigCheckQueryNetworkFabric" = Field(alias="NetworkFabric")
-    dcim_device: "CVConfigCheckQueryDcimDevice" = Field(alias="DcimDevice")
+    dcim_fabric_switch: "CVConfigCheckQueryDcimFabricSwitch" = Field(
+        alias="DcimFabricSwitch"
+    )
 
 
 class CVConfigCheckQueryNetworkFabric(BaseModel):
@@ -34,70 +36,70 @@ class CVConfigCheckQueryNetworkFabricEdgesNodeCloudvisionManaged(BaseModel):
     value: Optional[bool]
 
 
-class CVConfigCheckQueryDcimDevice(BaseModel):
-    edges: list["CVConfigCheckQueryDcimDeviceEdges"]
+class CVConfigCheckQueryDcimFabricSwitch(BaseModel):
+    edges: list["CVConfigCheckQueryDcimFabricSwitchEdges"]
 
 
-class CVConfigCheckQueryDcimDeviceEdges(BaseModel):
-    node: Optional["CVConfigCheckQueryDcimDeviceEdgesNode"]
+class CVConfigCheckQueryDcimFabricSwitchEdges(BaseModel):
+    node: Optional["CVConfigCheckQueryDcimFabricSwitchEdgesNode"]
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNode(BaseModel):
+class CVConfigCheckQueryDcimFabricSwitchEdgesNode(BaseModel):
     id: str
-    name: Optional["CVConfigCheckQueryDcimDeviceEdgesNodeName"]
-    serial: Optional["CVConfigCheckQueryDcimDeviceEdgesNodeSerial"]
-    pod: "CVConfigCheckQueryDcimDeviceEdgesNodePod"
-    avd_artifact: "CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifact"
+    name: Optional["CVConfigCheckQueryDcimFabricSwitchEdgesNodeName"]
+    serial: Optional["CVConfigCheckQueryDcimFabricSwitchEdgesNodeSerial"]
+    pod: "CVConfigCheckQueryDcimFabricSwitchEdgesNodePod"
+    avd_artifact: "CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifact"
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodeName(BaseModel):
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodeName(BaseModel):
     value: Optional[str]
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodeSerial(BaseModel):
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodeSerial(BaseModel):
     value: Optional[str]
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodePod(BaseModel):
-    node: Optional["CVConfigCheckQueryDcimDeviceEdgesNodePodNode"]
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodePod(BaseModel):
+    node: Optional["CVConfigCheckQueryDcimFabricSwitchEdgesNodePodNode"]
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodePodNode(BaseModel):
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodePodNode(BaseModel):
     id: str
-    parent: "CVConfigCheckQueryDcimDeviceEdgesNodePodNodeParent"
+    parent: "CVConfigCheckQueryDcimFabricSwitchEdgesNodePodNodeParent"
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodePodNodeParent(BaseModel):
-    node: Optional["CVConfigCheckQueryDcimDeviceEdgesNodePodNodeParentNode"]
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodePodNodeParent(BaseModel):
+    node: Optional["CVConfigCheckQueryDcimFabricSwitchEdgesNodePodNodeParentNode"]
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodePodNodeParentNode(BaseModel):
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodePodNodeParentNode(BaseModel):
     typename__: Literal["NetworkBuildingBlock", "NetworkFabric", "NetworkPod"] = Field(
         alias="__typename"
     )
     id: Optional[str]
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifact(BaseModel):
-    node: Optional["CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifactNode"]
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifact(BaseModel):
+    node: Optional["CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifactNode"]
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifactNode(BaseModel):
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifactNode(BaseModel):
     id: str
     structured_config_file: (
-        "CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifactNodeStructuredConfigFile"
+        "CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifactNodeStructuredConfigFile"
     )
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifactNodeStructuredConfigFile(
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifactNodeStructuredConfigFile(
     BaseModel
 ):
     node: Optional[
-        "CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifactNodeStructuredConfigFileNode"
+        "CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifactNodeStructuredConfigFileNode"
     ]
 
 
-class CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifactNodeStructuredConfigFileNode(
+class CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifactNodeStructuredConfigFileNode(
     BaseModel
 ):
     id: str
@@ -107,12 +109,12 @@ CVConfigCheckQuery.model_rebuild()
 CVConfigCheckQueryNetworkFabric.model_rebuild()
 CVConfigCheckQueryNetworkFabricEdges.model_rebuild()
 CVConfigCheckQueryNetworkFabricEdgesNode.model_rebuild()
-CVConfigCheckQueryDcimDevice.model_rebuild()
-CVConfigCheckQueryDcimDeviceEdges.model_rebuild()
-CVConfigCheckQueryDcimDeviceEdgesNode.model_rebuild()
-CVConfigCheckQueryDcimDeviceEdgesNodePod.model_rebuild()
-CVConfigCheckQueryDcimDeviceEdgesNodePodNode.model_rebuild()
-CVConfigCheckQueryDcimDeviceEdgesNodePodNodeParent.model_rebuild()
-CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifact.model_rebuild()
-CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifactNode.model_rebuild()
-CVConfigCheckQueryDcimDeviceEdgesNodeAvdArtifactNodeStructuredConfigFile.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitch.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitchEdges.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitchEdgesNode.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitchEdgesNodePod.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitchEdgesNodePodNode.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitchEdgesNodePodNodeParent.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifact.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifactNode.model_rebuild()
+CVConfigCheckQueryDcimFabricSwitchEdgesNodeAvdArtifactNodeStructuredConfigFile.model_rebuild()

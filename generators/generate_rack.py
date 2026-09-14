@@ -358,7 +358,9 @@ class RackGenerator(InfrahubGenerator, GeneratorMixin):
             if share_mlag_vtep_loopback and index % 2 == 0:
                 await self._share_mlag_vtep_loopback_ip(self.leaf_switches[-2], leaf_switch)
 
-    async def _share_mlag_vtep_loopback_ip(self, primary_leaf: DcimFabricSwitch, secondary_leaf: DcimFabricSwitch) -> None:
+    async def _share_mlag_vtep_loopback_ip(
+        self, primary_leaf: DcimFabricSwitch, secondary_leaf: DcimFabricSwitch
+    ) -> None:
         """Point both leaves in an MLAG pair at the primary leaf's VTEP loopback IP."""
         vtep_loopback_ip_id = await self._device_vtep_loopback_ip_id(primary_leaf.id)
         if vtep_loopback_ip_id is None:

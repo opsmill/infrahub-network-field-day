@@ -20,14 +20,14 @@ from solution_arista_avd.protocols import AvdStructuredConfigFile
 
 from .avd_anta_catalog_query import (
     AvdAntaCatalogQuery,
-    AvdAntaCatalogQueryDcimDeviceEdgesNode,
+    AvdAntaCatalogQueryDcimFabricSwitchEdgesNode,
     AvdAntaCatalogQueryTargetEdgesNode,
     AvdAntaCatalogQueryTargetEdgesNodePodNodeParentNodeNetworkFabric,
 )
 
 # Readable aliases for the verbose generated query model classes.
 TargetNode = AvdAntaCatalogQueryTargetEdgesNode
-DeviceNode = AvdAntaCatalogQueryDcimDeviceEdgesNode
+DeviceNode = AvdAntaCatalogQueryDcimFabricSwitchEdgesNode
 FabricNode = AvdAntaCatalogQueryTargetEdgesNodePodNodeParentNodeNetworkFabric
 
 
@@ -85,7 +85,7 @@ class AvdAntaCatalogTransform(InfrahubTransform):
     ) -> dict[str, dict[str, Any]]:
         """Download validated structured config for every device in the fabric."""
         configs: dict[str, dict[str, Any]] = {}
-        for edge in parsed.dcim_device.edges:
+        for edge in parsed.dcim_fabric_switch.edges:
             device = edge.node
             if not device or not device.name or not device.name.value:
                 continue

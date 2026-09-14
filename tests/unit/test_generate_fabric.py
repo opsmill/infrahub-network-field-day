@@ -22,7 +22,7 @@ def _make_generator() -> FabricGenerator:
 
 def _design_edge(role: str, quantity: int, template_id: str | None) -> dict:
     """Build a single device_designs edge for a role."""
-    template_node = {"__typename": "TemplateDcimDevice", "id": template_id} if template_id else None
+    template_node = {"__typename": "TemplateDcimFabricSwitch", "id": template_id} if template_id else None
     return {
         "node": {
             "role": {"value": role},

@@ -34,7 +34,7 @@ class AvdFabricDocTransform(InfrahubTransform):
         fabric_id = fabric_node.id
 
         # Get all devices and filter by fabric
-        device_edges = data.dcim_device.edges
+        device_edges = data.dcim_fabric_switch.edges
         all_hostvars: dict[str, dict[str, Any]] = {}
         structured_configs: dict[str, dict[str, Any]] = {}
 
