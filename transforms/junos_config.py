@@ -52,6 +52,10 @@ from .junos_config_query import JunosConfigQuery
 KEYWORDS = frozenset({"any"})
 
 
+DEFAULT_MTU = 1514
+"""DcimInterface.mtu's schema default, and Junos's own."""
+
+
 class JunosConfigError(RuntimeError):
     """A required value was missing.
 
@@ -118,6 +122,13 @@ class JunosConfig(InfrahubTransform):
             # optional rather than asserted so that the management interface can
             # be modelled at all -- see objects/32_nfd41_security.yml for why it
             # has to be.
+            # 1514 is both the schema's default for DcimInterface.mtu and Junos's
+            # own default, which is why the device states an MTU on the data
+            # interfaces (9192) and none on fxp0. Rendering the default would
+            # add a line the device does not have -- and since every interface
+            # carries the attribute whether or not anyone set it, "unset" and
+            # "set to the default" are indistinguishable here.
+            mtu = node.mtu.value if node.mtu.value != DEFAULT_MTU else None
             zone = node.security_zone.node
             v4 = [a for a in addresses if ":" not in a]
             v6 = [a for a in addresses if ":" in a]
@@ -125,7 +136,7 @@ class JunosConfig(InfrahubTransform):
                 {
                     "name": node.name.value,
                     "description": node.description.value,
-                    "mtu": node.mtu.value,
+                    "mtu": mtu,
                     "address": v4[0] if v4 else None,
                     "address6": v6[0] if v6 else None,
                     "zone": zone.name.value if zone else None,

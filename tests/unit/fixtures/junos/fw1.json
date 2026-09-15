@@ -133,7 +133,7 @@
                     "value": null
                   },
                   "mtu": {
-                    "value": null
+                    "value": 1514
                   },
                   "security_zone": {
                     "node": null
