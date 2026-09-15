@@ -1,0 +1,3 @@
+--- system:/running-config
++++ session:/infrahub-capture-1789491123682-session-config
++ip host probe-marker 10.255.255.254

@@ -138,6 +138,81 @@ workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and
 `fabrics`; `peering-consistency` is **global** — it has no `targets`, because its rules are
 statements about the whole graph rather than about one fabric.
 
+## Deployment state, and the one rule about it
+
+`DeploymentState` and `DeploymentDiffFile` (`schemas/deployment.yml`) record whether each
+device matches the configuration Infrahub renders for it. **Nothing may generate from them:
+no generator input, no artifact target, no trigger source.** Writing state onto a device
+emits an event, `triggers.yml` turns node events into generator runs, a generator run
+regenerates artifacts, and a moved artifact is what the reconciler acts on — so a trigger on
+a deployment kind closes a loop that currently stays open only because nothing happens to
+watch these kinds. `tests/unit/test_deployment_schema_contract.py` fails, naming the rule,
+when someone adds one.
+
+Three properties of that file are deliberate and each looks like an oversight:
+
+- **No `on_delete`.** Its only value, `cascade`, deletes the *peer* when the node is deleted,
+  so on `DeploymentState.device` it would mean deleting a deployment record deletes the
+  switch. `infrahubctl schema check` accepts the line without complaint.
+- **`device` is optional, and identity lives on a copied `name` attribute instead.** An
+  `human_friendly_id` or uniqueness constraint over a relationship requires that relationship
+  to be mandatory, and a mandatory `device` makes any device that has ever held a record
+  permanently undeletable — Infrahub keeps refusing the delete *after* the record is gone,
+  naming a record that no longer exists. The reconciler owns `name`, refreshing it from the
+  device, and sweeps records whose device no longer resolves.
+- **Both kinds are `branch: agnostic`.** Deployment state is a fact about the physical world,
+  not about a branch: modelled branch-aware, a branch cut on Monday and merged on Friday
+  would carry Monday's deployment state into `main`, and every proposed change would display
+  deployment records as proposed intent.
+
+## The deployment reconciler
+
+`src/solution_arista_avd/deployment/` compares every device against its rendered artifact on a
+timer and pushes the ones that differ — the loop half of what `invoke provision` does by hand.
+It is behind a compose profile (`--profile reconcile`) so nothing starts it by accident, and
+`invoke provision` is unchanged: cycle 030 **lifted** the push path out of
+`scripts/provision_lab.py` into `deployment/devices.py` so both callers share one copy rather
+than two that drift.
+
+**Read `deployment/normalise.py` before changing anything in this package.** Two of the three
+device families report a difference against an artifact the device already matches:
+
+- **FRR** reports `neighbor <addr> activate`, `service integrated-vtysh-config` and `line vty`
+  every time — the artifact states them and `show running-config` never echoes them back.
+- **Junos** reports changed lines every time: zone-pair ordering and comment round-tripping.
+
+Read raw, that means "differs", and the reconciler would replace the configuration of every FRR
+router and the firewall on every cycle forever while logging success. So `differs` is computed
+from normalised output, never raw text, and the rules are an **allowlist** — anything
+unrecognised counts as a difference, so a gap causes an unnecessary push rather than a missed
+one. `tests/unit/test_deployment_normalise.py` holds real captured device output for both the
+in-sync and the changed case; an empty result is only evidence when a non-empty one is proven
+beside it.
+
+Three things worth knowing before debugging it:
+
+- **`interfaces` is replaced per interface, not wholesale, and that is a fix not a style
+  choice.** The model owns the data interfaces and not `fxp0`; the lab's own `junos.conf` says
+  `init.conf` owns "the admin user, fxp0, the mgmt_junos routing". Replacing the whole stanza
+  deleted the firewall's management interface on *every* push, and it survived only because
+  vrnetlab restored it as root before the `commit confirmed` had to be confirmed — visible as a
+  `root via other` commit wedged between the two `admin` commits. `_junos_replace_tagged` now
+  tags each modelled interface instead. The cost is that removing an entire interface from the
+  model no longer removes it from the device; changes within a modelled interface still
+  propagate. `_assert_junos_scope` refuses an artifact that renders `fxp0`, so moving that
+  boundary is a decision rather than a discovery.
+- **`frr-reload.py --test` returns `0` whether or not the configuration matches**, and its
+  output is `Lines To Add` / `Lines To Delete` sections rather than `+`/`-` prefixes. A parser
+  written against diff prefixes reports "no differences" for a device that has genuinely
+  changed.
+- **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load replace` does
+  nothing, and `show | compare` comes back empty — which reads exactly like "in sync".
+
+State goes to `DeploymentState` (cycle 029). `last_confirmed_at` moves only when the device
+reported no difference, never because a push was sent; `last_checked_at` moves every cycle so a
+stale confirmation is distinguishable from a dead loop. The service never writes `suspend` or
+`suspend_reason` — those are the operator's break-glass.
+
 ## Development workflow
 
 1. Prefer schema-first changes: add or update YAML under `schemas/` before code uses
@@ -192,8 +267,22 @@ uv run invoke bootstrap --fresh    # ... destroying the stack and the lab first
 ```
 
 That runs `start` → `load` → `avd` (on a branch, then merged) → `lab` →
-`provision` → `cluster`. Each step is still available on its own; `bootstrap`
-only removes the need to remember the order and the flags.
+`reconcile --converge` → `cluster`. Each step is still available on its own;
+`bootstrap` only removes the need to remember the order and the flags.
+
+**The device step is the reconciler, not `invoke provision`.** Cycle 030 swapped
+it so the bootstrap exercises the same code path that keeps the fabric correct
+afterwards, which also means `scripts/verify_bootstrap.sh` validates that path
+rather than a second one. `invoke provision` remains as the manual command and
+is unchanged.
+
+`--converge` rather than a single cycle, because of a semantic that matters: a
+cold device differs, so the first cycle **pushes** it — and `last_confirmed_at`
+deliberately does not move on a push. Confirmation needs a later comparison that
+finds no difference, so one cycle would leave a freshly built fabric correct but
+unconfirmed. Converge also compares the firewall on every cycle rather than one
+in four; the cadence is a steady-state economy and during a build nobody else is
+using the box.
 
 **The AVD chain runs on a branch and `--merge` merges it, rather than you
 running `infrahubctl branch merge` by hand.** That is not ceremony. The topology
@@ -230,6 +319,28 @@ every bug this found was quiet:
 
 Six runs of it found the tolerated-502, the topology double-run and the CoreDNS
 race, none of which failed in a way that pointed at its cause.
+
+**Two more races live in `invoke cluster`, and both are timing-dependent rather
+than deterministic.** Seen on a cycle-030 rebuild, one after the other:
+
+- **Vidra can beat the lab's installer to a resource.** Vidra goes up before
+  Crossplane, so once the XRDs land its next retry may create
+  `fabricpeering/nfd41` in the window between the lab installer's
+  `kubectl apply` reading the resource and creating it. Apply then fails
+  `AlreadyExists` — from `apply`, not `create` — and the script `die`s, leaving
+  the lab's two FabricApps unapplied and the handover unrun. Re-running
+  `invoke cluster` clears it, because by then `apply` finds the resource and
+  updates instead.
+- **The lab's Crossplane installer preflights in-cluster networking itself.**
+  `invoke cluster` already waits for the CoreDNS rollout, but
+  `install-crossplane.sh` separately runs a busybox pod checking API ClusterIP,
+  external DNS and egress. A Cilium that is up but still settling fails it. The
+  same preflight run by hand a few minutes later passes, so the failure says
+  "too early", not "broken".
+
+Neither is caused by the device step, whichever command runs it: both parties to
+each race are inside `invoke cluster`, which starts only after the devices are
+done.
 
 **Compose commands are pinned to the real project directory.** `docker compose`
 derives its project name from the working directory, so from a git worktree
@@ -478,6 +589,10 @@ uv run invoke lab --destroy             # tear it down
 uv run invoke provision                 # push every rendered artifact onto the running devices
 uv run invoke provision --dry-run       # ... showing what would be pushed, changing nothing
 uv run invoke provision --kind eos      # ... one family only: eos, frr, or junos
+uv run invoke reconcile --converge      # cycle until every device is confirmed (the bootstrap path)
+uv run invoke reconcile --once          # a single reconcile cycle
+uv run invoke reconcile --dry-run --branch X  # report differences, change nothing
+uv run invoke reconcile                 # the loop, 600s default, 60s floor
 uv run invoke cluster                   # Cilium, Vidra, Crossplane, then the handover
 uv run invoke cluster --no-handover     # ... leaving the lab in charge of all four
 uv run invoke vidra                     # the operator on its own, for a re-install

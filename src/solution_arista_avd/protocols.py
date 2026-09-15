@@ -269,6 +269,10 @@ class DcimDeviceType(CoreNode):
     tags: RelationshipManager[BuiltinTag]
 
 
+class DeploymentDiffFile(CoreFileObject):
+    state: RelationshipAttribute[DeploymentState]
+
+
 class NetworkDnsServer(CoreNode):
     ip_address: IPHost
     name: String
@@ -708,6 +712,20 @@ class NetworkSpanningTreePriority(CoreNode):
     priority: Integer
     role: Dropdown
     fabric: RelationshipAttribute[NetworkFabric]
+
+
+class DeploymentState(CoreNode):
+    last_artifact_checksum: StringOptional
+    last_attempt_at: DateTimeOptional
+    last_checked_at: DateTimeOptional
+    last_confirmed_at: DateTimeOptional
+    last_error: StringOptional
+    name: String
+    status: Dropdown
+    suspend: Boolean
+    suspend_reason: StringOptional
+    device: RelationshipAttribute[DcimGenericDevice]
+    last_diff: RelationshipAttribute[DeploymentDiffFile]
 
 
 class RoutingStaticRoute(CoreNode):

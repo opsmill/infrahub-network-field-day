@@ -34,6 +34,7 @@ const sidebars: SidebarsConfig = {
         'developer-guide/transforms',
         'developer-guide/checks',
         'developer-guide/vidra-delivery',
+        'developer-guide/deployment-reconciler',
         'developer-guide/concepts',
         {
           type: 'category',

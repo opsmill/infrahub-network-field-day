@@ -430,6 +430,26 @@ The workspace ID is derived deterministically from the proposed-change ID and th
 
 Fabrics opt in through `NetworkFabric.cloudvision_managed` (Boolean, default `false`) in `logical_design.yml`; the check skips everything else when it is false.
 
+## Deployment state
+
+### `DeploymentState` — `Deployment.State`
+
+One record per device, holding whether that device matches the configuration Infrahub renders for it. Defined in `deployment.yml`, shared by all four device families rather than only the AVD-rendered switches.
+
+- **Attributes**: `name` (unique — the device's name; the record's identity), `status` (`never_deployed`, `in_sync`, `pending`, `drifted`, `failed`), `last_confirmed_at` (the last time the device was *confirmed to match*, not merely pushed to), `last_checked_at`, `last_attempt_at`, `last_error`, `suspend` (per-device break-glass) and `suspend_reason`.
+- **Relationships**: `device` → `DcimGenericDevice` (cardinality one, optional, one-sided); `last_diff` → `DeploymentDiffFile` (Component).
+
+### `DeploymentDiffFile` — `Deployment.DiffFile`
+
+The device-computed difference between a device and its intent, from the most recent comparison that found one. Inherits `CoreFileObject`, so a first-configuration diff the size of a whole device configuration stores intact. Excluded from the UI menu; reached through its parent record.
+
+Four properties of these kinds are deliberate and each looks like an oversight:
+
+- **Nothing may generate from them** — no generator input, no artifact target, no trigger source. Writing state onto a device emits an event, `triggers.yml` turns node events into generator runs, a generator run regenerates artifacts, and a moved artifact is what a reconciler would act on. `tests/unit/test_deployment_schema_contract.py` fails, naming the rule, when someone adds one.
+- **No `on_delete`.** Its only value, `cascade`, deletes the *peer* when the node is deleted, so on `DeploymentState.device` it would mean deleting a deployment record deletes the switch — and schema validation accepts the line without complaint.
+- **`device` is optional, and identity lives on the copied `name` instead.** A relationship used in `human_friendly_id` or `uniqueness_constraints` must be mandatory, and a mandatory `device` makes any device that has ever held a record permanently undeletable. The consequence is that the graph enforces one record per *name*; keeping `name` equal to the device's name is the writer's job.
+- **Both kinds are `branch: agnostic`.** Deployment state is a fact about the physical world, not about a branch: modelled branch-aware, a branch cut on Monday and merged on Friday would carry Monday's state into `main`, and every proposed change would display deployment records as proposed intent.
+
 ## Application payload attachments
 
 ### `ServiceFabricAppValuesFile` · `ServiceFabricAppManifestsFile`
@@ -514,6 +534,7 @@ Pool purpose is resolved from the `IpamPrefix.role` values on each pool's resour
 - [`schemas/avd/avd.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/avd/avd.yml) — `Avd.Evpn`, `Avd.Tag`.
 - [`schemas/objects/objects.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/objects/objects.yml) — `Avd.Artifact`, `Avd.HostvarFile`, `Avd.StructuredConfigFile` (see [AvdArtifact & File Storage](./avd/artifacts.md) for the full reference).
 - [`schemas/cv/cv.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/cv/cv.yml) — `Cloudvision.Workspace`.
+- [`schemas/deployment.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/deployment.yml) — `Deployment.State`, `Deployment.DiffFile`.
 - [`schemas/device_design.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/device_design.yml) — `Network.DeviceDesign` and the per-container design nodes.
 - Generated protocols: [`src/solution_arista_avd/protocols.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/src/solution_arista_avd/protocols.py) — regenerate after any schema change with:
 

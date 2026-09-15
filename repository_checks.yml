@@ -133,11 +133,22 @@ kind: Object
 spec:
   kind: CoreCustomWebhook
   data:
+    # Two things were wrong with this and only one is fixed here.
+    #
+    # `branch_scope` was `other_branches`. Proposed changes are branch-agnostic
+    # objects, so their lifecycle events are emitted on the DEFAULT branch --
+    # scoping them to other branches means the webhook can never fire, whatever
+    # else is right about it. That is now `default_branch`.
+    #
+    # The URL is still a placeholder, so the webhook is `active: false` rather
+    # than `true`. An active webhook pointing at an unresolvable host is worse
+    # than an inactive one: it fires on every merge and fails on every merge.
+    # Set a real URL and flip `active` to true together.
     - name: cloudvision-workspace-submission
       event_type: infrahub.proposed_change.merged
-      active: true
-      branch_scope: other_branches
-      description: Placeholder CloudVision workspace submission handoff for cv-config-validation
+      active: false
+      branch_scope: default_branch
+      description: "CloudVision workspace submission handoff for cv-config-validation (inactive — no endpoint configured)"
       url: https://placeholder.invalid/cloudvision-workspace-submission
       validate_certificates: false
       transformation: cv-workspace-submission-webhook-payload

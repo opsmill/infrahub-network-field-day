@@ -80,6 +80,21 @@ spec:
             kind: DcimDevice
             icon: "mdi:router"
 
+          # Deployment state sits with the devices rather than in its own
+          # top-level group, because it is a per-device fact and this is where
+          # somebody asking "did my merge reach this switch?" looks first.
+          #
+          # It is the one entry here that is NOT per concrete kind: one record
+          # covers every device with a rendered configuration artifact, across
+          # all four device kinds. That is deliberate -- a device either matches
+          # its intent or it does not, and which kind it is does not change the
+          # question.
+          - namespace: Deployment
+            name: DeploymentState
+            label: Deployment State
+            kind: DeploymentState
+            icon: "mdi:cloud-check-outline"
+
           - namespace: Interface
             name: InterfacesMenu
             label: Interfaces

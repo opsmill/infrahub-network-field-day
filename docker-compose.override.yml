@@ -62,6 +62,52 @@ services:
       retries: 5
       start_period: 90s
 
+  # The deployment reconciler. Compares every device against its rendered
+  # artifact on a timer and pushes the ones that genuinely differ.
+  #
+  # **Behind a profile, so `docker compose up` does not start it.** This service
+  # replaces device configuration without being asked, including correcting
+  # drift someone introduced by hand. Starting it must be a decision:
+  #
+  #     docker compose --profile reconcile up -d deployment-reconciler
+  #
+  # Two things it needs that no other service here does, and both are worth
+  # understanding before enabling it:
+  #
+  #   * `network_mode: host` -- the fabric switches are reached over eAPI at
+  #     their ContainerLab management addresses (172.20.41.0/24), which are on
+  #     the host's docker network rather than the Infrahub compose network.
+  #   * the Docker socket -- the FRR routers and the firewall have no address
+  #     modelled at all and are reached through `docker exec` on their
+  #     containers, because Infrahub's names for them and ContainerLab's names
+  #     do not match. Mounting the socket is effectively root on the host. For a
+  #     lab that is the same trust level as running `invoke provision` from a
+  #     shell; anywhere else it is not, and the reconciler should be given a
+  #     narrower route to the devices instead.
+  deployment-reconciler:
+    <<: *infrahub_custom_build
+    profiles: ["reconcile"]
+    restart: unless-stopped
+    depends_on:
+      infrahub-server:
+        condition: service_healthy
+    network_mode: host
+    volumes:
+      - "./:/source"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    working_dir: /source
+    environment:
+      INFRAHUB_ADDRESS: ${INFRAHUB_ADDRESS:-http://localhost:8000}
+      INFRAHUB_API_TOKEN: ${INFRAHUB_INITIAL_ADMIN_TOKEN:-06438eb2-8019-4776-878c-0941b1f1d1ec}
+      # Device credentials come from the environment and nowhere else: never
+      # baked into the image, never committed, never written into Infrahub.
+      NFD41_EOS_USERNAME: ${NFD41_EOS_USERNAME:-admin}
+      NFD41_EOS_PASSWORD: ${NFD41_EOS_PASSWORD:-admin}
+      NFD41_VSRX_USERNAME: ${NFD41_VSRX_USERNAME:-admin}
+      NFD41_VSRX_PASSWORD: ${NFD41_VSRX_PASSWORD:-admin@123}
+      NFD41_RECONCILE_INTERVAL: ${NFD41_RECONCILE_INTERVAL:-600}
+    command: python scripts/reconcile.py
+
   semaphore:
     build:
       context: ./semaphore

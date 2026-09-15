@@ -1,0 +1,60 @@
+ 
+[edit security policies]
+!    from-zone acme-cloud to-zone wan { ... }
+[edit security policies]
+    from-zone app-prod to-zone k8s-prod { ... }
+!    from-zone branch to-zone k8s-prod { ... }
+!    from-zone branch to-zone wan { ... }
+!    from-zone globex-cloud to-zone wan { ... }
+[edit security policies]
+    from-zone k8s-prod to-zone app-prod { ... }
+!    from-zone wan to-zone acme-cloud { ... }
+!    from-zone wan to-zone app-prod { ... }
+!    from-zone wan to-zone branch { ... }
+!    from-zone wan to-zone globex-cloud { ... }
+[edit security policies]
+-    /*
+-     * The return direction, for sessions the cloud instance starts itself
+-     * -- a backup pushing to the tenant's site, say. Stateful return
+-     * traffic for sessions opened from the site needs no rule; this is
+-     * only for the cloud initiating.
+-     *
+-     * Deliberately NOT a permit to `any`: acme's cloud may reach acme's
+-     * sites and nothing else, so a compromised instance cannot use the
+-     * provider handoff to reach another tenant or the internet.
+-     */
++    /*
++     * Junos evaluates the policies of the matching from-zone/to-zone pair
++     * in order, then falls through to the default policy. Global policies
++     * are consulted AFTER zone-pair policies, not before -- so the
++     * anti-spoofing deny cannot be one global rule at the top. It is
++     * repeated as the first policy of each pair instead, which costs
++     * nothing because Junos does not cap policy count.
++     */
++    /*
++     * The return direction, for sessions the cloud instance starts itself
++     * -- a backup pushing to the tenant's site, say. Stateful return
++     * traffic for sessions opened from the site needs no rule; this is
++     * only for the cloud initiating.
++     *
++     * Deliberately NOT a permit to `any`: acme's cloud may reach acme's
++     * sites and nothing else, so a compromised instance cannot use the
++     * provider handoff to reach another tenant or the internet.
++     */
+     from-zone acme-cloud to-zone wan { ... }
+[edit security policies]
+-    /*
+-     * Junos evaluates the policies of the matching from-zone/to-zone pair
+-     * in order, then falls through to the default policy. Global policies
+-     * are consulted AFTER zone-pair policies, not before -- so the
+-     * anti-spoofing deny cannot be one global rule at the top. It is
+-     * repeated as the first policy of each pair instead, which costs
+-     * nothing because Junos does not cap policy count.
+-     */
+     from-zone app-prod to-zone k8s-prod { ... }
+[edit]
++  # Rendered by Infrahub for fw1 -- do not edit.
+   interfaces { ... }
+
+[edit]
+admin@fw1# 

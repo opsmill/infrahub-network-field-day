@@ -1,0 +1,12 @@
+
+Lines To Add
+============
+router bgp 65030
+ address-family ipv4 unicast
+  neighbor 10.250.70.1 activate
+ exit
+exit
+service integrated-vtysh-config
+line vty
+exit
+ip route 10.255.255.0/24 Null0

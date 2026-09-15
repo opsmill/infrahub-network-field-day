@@ -1,0 +1,236 @@
+---
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+version: "1.0"
+
+# Deployment state: the reconciler's record of whether a device matches the
+# configuration Infrahub renders for it.
+#
+# Two properties on these nodes are load-bearing and neither is obvious:
+#
+#   `branch: agnostic` -- deployment state is a fact about the physical world,
+#   not about a branch. Modelled branch-aware, a branch cut on Monday and merged
+#   on Friday would carry Monday's deployment state into `main`, and every
+#   proposed change would display deployment records as though someone were
+#   proposing them.
+#
+#   No `on_delete` anywhere. On `DeploymentState.device` the only available
+#   spelling is `cascade`, and `cascade` deletes the *peer* when this node is
+#   deleted -- so it would mean "deleting a deployment record deletes the
+#   switch". `infrahubctl schema check` accepts that line without complaint.
+#   Cleanup of records whose device is gone belongs to the reconciler.
+#
+# Nothing may generate from these kinds: no generator input, no artifact target,
+# no trigger rule. Writing state onto a device emits an event, `triggers.yml`
+# turns events into generator runs, a generator run regenerates artifacts, and a
+# moved artifact is what the reconciler acts on. The separate namespace is what
+# makes that rule checkable; tests/unit/test_deployment_schema_contract.py is
+# what checks it.
+
+nodes:
+  - name: State
+    namespace: Deployment
+    description: "Whether a device matches the configuration Infrahub renders for it"
+    label: Deployment State
+    icon: "mdi:cloud-check-outline"
+    branch: agnostic
+    generate_profile: false
+    # false because menus/menu.yml carries a curated entry for this kind under
+    # Devices. Its own header states the rule: a node that appears in that file
+    # must not also opt into the default menu, or it shows up twice. Cycle 029
+    # shipped this as `true` so the kind was reachable before the menu entry
+    # existed; cycle 030 closes the handoff.
+    include_in_menu: false
+    human_friendly_id:
+      - name__value
+    order_by:
+      - name__value
+    display_label: name__value
+    uniqueness_constraints:
+      - [name__value]
+    attributes:
+      # The device's name, copied. Identity cannot come from the `device`
+      # relationship, and the reason is measured rather than stylistic: an HFID
+      # or uniqueness constraint over a relationship requires that relationship
+      # to be mandatory ("cannot use device relationship, relationship must be
+      # mandatory"), and a mandatory `device` makes any device that has ever
+      # held a record permanently undeletable -- Infrahub keeps refusing the
+      # delete after the record is gone, naming a record that no longer exists.
+      # Since the reconciler attaches a record to every device, that would make
+      # the whole fabric undeletable.
+      #
+      # So the record carries the name and the relationship stays optional. The
+      # reconciler owns this field: it sets it from the device on create and
+      # refreshes it every cycle, because a device rename would otherwise leave
+      # it stale.
+      - name: name
+        kind: Text
+        unique: true
+        description: "The name of the device this record describes"
+        order_weight: 950
+      - name: status
+        kind: Dropdown
+        description: "The device's standing against its rendered intent"
+        default_value: never_deployed
+        order_weight: 1000
+        choices:
+          - name: never_deployed
+            label: Never deployed
+            description: "No confirmation has ever been recorded for this device"
+            color: "#9e9e9e"
+          - name: in_sync
+            label: In sync
+            description: "The device confirmed it matches its intent"
+            color: "#4caf50"
+          - name: pending
+            label: Pending
+            description: "Intent moved; not yet pushed or confirmed"
+            color: "#2196f3"
+          - name: drifted
+            label: Drifted
+            description: "Intent did not move; the device did"
+            color: "#ff9800"
+          - name: failed
+            label: Failed
+            description: "The last push or comparison failed"
+            color: "#f44336"
+
+      # The load-bearing field. It moves only when the device's own comparator
+      # reports no difference -- never when a push is merely sent. "Confirmed",
+      # not "sent": the record is a claim about the network, not about what the
+      # executor did.
+      - name: last_confirmed_at
+        kind: DateTime
+        label: Last confirmed at
+        description: "Last time the device was confirmed to match its intent"
+        optional: true
+        order_weight: 1100
+
+      # Moves on every comparison, including ones that find a difference and
+      # ones that fail. Without it, a stale `last_confirmed_at` is ambiguous
+      # between "this device is fine" and "the reconciler stopped running".
+      - name: last_checked_at
+        kind: DateTime
+        label: Last checked at
+        description: "Last time a comparison ran, whether or not it matched"
+        optional: true
+        order_weight: 1150
+
+      - name: last_attempt_at
+        kind: DateTime
+        label: Last attempt at
+        description: "Last time a push was attempted"
+        optional: true
+        order_weight: 1200
+
+      # TextArea, not Text: device and library errors are multi-line.
+      # The checksum of the artifact this device was last brought into line
+      # with. Its only job is to tell `pending` from `drifted`: a difference
+      # with a moved checksum means intent changed, a difference with the same
+      # checksum means the *device* changed. Those have different causes and
+      # only the second one can be fighting a person, so an operator reading the
+      # record needs to know which.
+      #
+      # Added in cycle 030. Cycle 030's spec said it added no schema; it was
+      # wrong, because FR-015 requires the distinction and there was nowhere to
+      # remember the previous artifact. It never decides *whether* to push --
+      # the device's own diff does that.
+      - name: last_artifact_checksum
+        kind: Text
+        label: Last artifact checksum
+        description: "Checksum of the artifact this device was last reconciled against"
+        optional: true
+        order_weight: 1250
+
+      - name: last_error
+        kind: TextArea
+        label: Last error
+        description: "Failure detail from the last unsuccessful cycle"
+        optional: true
+        order_weight: 1300
+
+      # Per-device break-glass. Drift is corrected automatically and without
+      # asking, so the only alternative to this flag is stopping the reconciler
+      # for the whole fabric -- which is the wrong trade at 3am on the firewall.
+      #
+      # Deliberately not a `status` choice: status is an observation about the
+      # device, suspension is an operator's instruction. Collapsing them loses
+      # what the device was doing when someone took it out of the loop.
+      - name: suspend
+        kind: Boolean
+        label: Suspend
+        description: "When set, the reconciler skips this device entirely"
+        default_value: false
+        order_weight: 1500
+
+      - name: suspend_reason
+        kind: Text
+        label: Suspend reason
+        description: "Why this device is suspended, and by whom"
+        optional: true
+        order_weight: 1550
+
+    relationships:
+      # The peer is the generic, not DcimDevice: the four device kinds are
+      # siblings, so a relationship naming DcimDevice is invisible to every
+      # fabric switch, and this feature deploys all four families.
+      #
+      # This relationship declares no identifier, and that is deliberate. No
+      # reverse side is added to DcimGenericDevice, so no deployment
+      # relationship lands on the device kinds themselves. The consequence is
+      # that the two-sided check in tests/unit/test_dcim_schema_contract.py
+      # cannot see it -- same arrangement, and same reason, as
+      # AvdArtifact.device in schemas/objects/objects.yml.
+      #
+      # `optional: true`, though a record about no device is meaningless. With
+      # `optional: false` Infrahub refuses to delete a device that is the
+      # mandatory peer of a DeploymentState -- and measurement showed it keeps
+      # refusing *after* the record has been deleted, naming a record that no
+      # longer exists. Since the reconciler attaches a record to every device,
+      # mandatory would make every device in the fabric permanently
+      # undeletable. A record whose device no longer resolves is swept by the
+      # reconciler instead.
+      - name: device
+        peer: DcimGenericDevice
+        kind: Attribute
+        cardinality: one
+        optional: true
+        order_weight: 900
+
+      - name: last_diff
+        peer: DeploymentDiffFile
+        kind: Component
+        cardinality: one
+        optional: true
+        identifier: "deploymentstate__last_diff"
+        order_weight: 950
+
+  # The evidence behind a `drifted` status: the diff the device computed itself.
+  # A CoreFileObject rather than a Text attribute because a device that has
+  # never been configured produces a diff the size of its whole configuration.
+  #
+  # Its human_friendly_id reaches the device name through its parent record --
+  # one hop to an attribute, which is the only shape an HFID path may take.
+  # `state__device__name__value` would be two hops and the server rejects it
+  # outright ("device is not a valid attribute of DeploymentState"), which is
+  # why the parent carries the name rather than only the relationship.
+  - name: DiffFile
+    namespace: Deployment
+    description: "The device-computed difference between a device and its intent"
+    label: Deployment Diff
+    icon: "mdi:file-compare"
+    branch: agnostic
+    generate_profile: false
+    include_in_menu: false
+    inherit_from:
+      - CoreFileObject
+    human_friendly_id:
+      - state__name__value
+    uniqueness_constraints:
+      - ["state"]
+    relationships:
+      - name: state
+        peer: DeploymentState
+        kind: Parent
+        cardinality: one
+        optional: false
+        identifier: "deploymentstate__last_diff"

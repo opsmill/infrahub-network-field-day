@@ -113,7 +113,10 @@ The schema still carries the roles and underlay choices the upstream examples us
 
 | Capability | Status | Notes |
 |------------|:------:|-------|
-| Deploy configurations to devices | ✅ | Through the bundled Ansible runner or CloudVision (CVP/CVaaS). |
+| Deploy configurations to devices | ✅ | `invoke provision` pushes each device's rendered artifact onto it — EOS over eAPI, FRR and the firewall through their containers. `invoke reconcile` does the same on a timer, comparing first and pushing only what differs. |
+| Reconcile devices against the model continuously | ✅ | A reference implementation for this lab, not a supported component. See [Deployment reconciler](./developer-guide/deployment-reconciler.md). |
+| Deploy through CloudVision (CVP/CVaaS) | ⬜ | `cv-config-validation` builds and validates a CloudVision workspace for a proposed change; it does not deploy. |
+| Deploy through the bundled Ansible runner | ⬜ | `ansible/deploy.yml` fetches the EOS artifact and writes it to `/tmp` on each host. It configures nothing and knows only one of the three device families. |
 
 ## Interfaces & change management
 

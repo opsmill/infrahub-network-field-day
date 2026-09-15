@@ -864,6 +864,54 @@ def provision(ctx: Context, branch: str = "", dry_run: bool = False, only: str =
     ctx.run(f"python scripts/provision_lab.py {' '.join(flags)}".strip(), pty=True)
 
 
+@task(
+    help={
+        "once": "Run a single cycle and stop, instead of looping.",
+        "converge": "Cycle until every device is confirmed, then stop. Used to bootstrap a cold fabric.",
+        "dry_run": "Report what each device would change, push nothing, write no state.",
+        "branch": "Compare against this branch (dry run only; deploys are main-only).",
+        "interval": "Seconds between cycles. Refused below 60.",
+    }
+)
+def reconcile(
+    ctx: Context,
+    once: bool = False,
+    converge: bool = False,
+    dry_run: bool = False,
+    branch: str = "",
+    interval: int = 0,
+) -> None:
+    """
+    Reconcile the running lab against Infrahub, continuously.
+
+    The difference from `invoke provision` is who decides when. `provision`
+    pushes because you asked; this compares every device against its rendered
+    artifact on a timer and pushes only the ones that actually differ -- so a
+    merge reaches the fabric without anyone typing anything, and a device
+    someone edited by hand is put back.
+
+    Each device computes its own diff, so drift is visible even when the
+    artifact has not changed. State goes to `DeploymentState` in Infrahub, which
+    is where an operator looks to see whether their merge arrived.
+
+    **It pushes without asking.** Set `suspend` on a device's `DeploymentState`
+    to take that one device out of the loop without stopping the service.
+    """
+    flags = []
+    if once:
+        flags.append("--once")
+    if converge:
+        flags.append("--converge")
+    if dry_run:
+        flags.append("--dry-run")
+    if branch:
+        flags.append(f"--branch {shlex.quote(branch)}")
+    if interval:
+        flags.append(f"--interval {interval}")
+
+    ctx.run(f"python scripts/reconcile.py {' '.join(flags)}".strip(), pty=True)
+
+
 # The two Crossplane resources Infrahub models and Vidra delivers. The lab
 # repository declares the same two in crossplane/platform/10-peering.yaml and
 # crossplane/apps/10-demo.yaml, and its bootstrap applies them -- which is right
@@ -1214,8 +1262,16 @@ def bootstrap(
     print("\n=== Deploying the lab ===")
     lab(ctx, lab_dir=lab_dir)
 
-    print("\n=== Provisioning every device from Infrahub ===")
-    provision(ctx)
+    print("\n=== Reconciling every device against Infrahub ===")
+    # The reconciler rather than `provision`, so the bootstrap exercises the same
+    # code path that keeps the fabric correct afterwards -- and so
+    # `scripts/verify_bootstrap.sh` validates that path rather than a second one.
+    #
+    # `--converge` rather than a single cycle: a cold device differs, so the
+    # first cycle pushes it, and `last_confirmed_at` deliberately does not move
+    # on a push. Confirmation needs a later comparison that finds no difference,
+    # so one cycle would leave the fabric correct but unconfirmed.
+    reconcile(ctx, converge=True)
 
     if cluster:
         print("\n=== Bringing up Kubernetes ===")

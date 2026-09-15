@@ -1,0 +1,21 @@
+
+Lines To Add
+============
+router bgp 65500
+ address-family ipv4 unicast
+  neighbor 10.50.255.2 activate
+ exit
+exit
+router bgp 65500 vrf CUST_ACME
+ address-family ipv4 unicast
+  neighbor 10.51.10.2 activate
+ exit
+exit
+router bgp 65500 vrf CUST_GLOBEX
+ address-family ipv4 unicast
+  neighbor 10.51.20.2 activate
+ exit
+exit
+service integrated-vtysh-config
+line vty
+exit

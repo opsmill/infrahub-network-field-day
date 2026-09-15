@@ -111,8 +111,24 @@ check "$empty" "0" "configuration artifacts with content"
 
 stage "lab and devices"
 check "$(docker ps -q --filter name=clab-nfd41 | wc -l)" "30" "lab nodes running"
-grep -q "All 14 device(s) now match Infrahub" "$LOG/bootstrap.log" \
-    && pass "all 14 devices provisioned" || fail "provision did not report 14/14"
+# Cycle 030 made the bootstrap's device step `invoke reconcile --converge`
+# rather than `invoke provision`, so the string this used to grep for is gone.
+grep -q "Every device is confirmed to match its rendered configuration" "$LOG/bootstrap.log" \
+    && pass "reconciler reported convergence" || fail "reconciler did not converge"
+# The outcome rather than the log line, and a stronger claim than the old one:
+# not "the command said it pushed 14" but "the graph says 14 devices were
+# CONFIRMED to match" -- which only a comparison finding no difference writes.
+confirmed=$(python3 - <<'PYSTATE'
+import httpx, os
+A=os.environ["INFRAHUB_ADDRESS"]; H={"X-INFRAHUB-KEY": os.environ["INFRAHUB_API_TOKEN"]}
+q='{DeploymentState{edges{node{status{value} last_confirmed_at{value}}}}}'
+r=httpx.post(f"{A}/graphql", json={"query": q}, headers=H, timeout=60).json()
+print(sum(1 for e in r["data"]["DeploymentState"]["edges"]
+          if e["node"]["status"]["value"] == "in_sync"
+          and e["node"]["last_confirmed_at"]["value"]))
+PYSTATE
+)
+check "$confirmed" "14" "devices confirmed in_sync in DeploymentState"
 # The outcome, not the artifact: a config can look complete and describe a fabric
 # that is not there.
 check "$(docker exec clab-nfd41-spine1 Cli -p 15 -c 'show ip bgp summary' 2>/dev/null | grep -c Estab)" \
