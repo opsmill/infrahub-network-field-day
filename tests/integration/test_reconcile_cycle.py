@@ -24,7 +24,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import pytest
 from infrahub_sdk.testing.docker import TestInfrahubDockerClient
 
 from solution_arista_avd.deployment.state import (
@@ -41,10 +40,6 @@ if TYPE_CHECKING:
 class TestReconcilerState(TestInfrahubDockerClient):
     async def _schema_loaded(self, client: InfrahubClient, default_branch: str, schemas: list[dict[str, Any]]) -> None:
         await client.schema.load(schemas=schemas, branch=default_branch, wait_until_converged=True)
-
-    @pytest.fixture(scope="class")
-    async def store(self, client: InfrahubClient) -> StateStore:
-        return StateStore(client)
 
     async def test_a_confirmed_match_records_confirmation(
         self, default_branch: str, client: InfrahubClient, schemas: list[dict[str, Any]]

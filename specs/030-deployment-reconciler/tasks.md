@@ -372,3 +372,49 @@ currently depends on vrnetlab racing the commit.
 
 Nornir (research R5). Scoped per-family credentials and a read-only compare pass (FR-071 —
 deferred, not rejected). Alerting. Sequencing against Vidra.
+
+---
+
+## Post-cycle work, done in the same session
+
+Everything the completion report listed as outstanding, implemented after the
+cycle closed:
+
+- **The bootstrap swap.** `tasks.py` now runs `reconcile --converge` in place of
+  `provision`. `compare_junos` gained the vSRX wait `push_junos` always had --
+  without it the reconciler fails on a cold `fw1` before the push that would
+  have waited. `verify_bootstrap.sh` was greping for a `provision`-only string
+  and would have failed on the new path; it now asserts 14 `DeploymentState`
+  records confirmed `in_sync`, which is a stronger claim than the log line it
+  replaced.
+- **The menu cycle** (queued by 029). `menus/menu.yml` carries a curated entry
+  under Devices; `include_in_menu` flipped to `false` on both kinds; a contract
+  test pins the pair, because reverting either half alone gives a duplicate
+  entry or a kind reachable only by UUID.
+- **The `fxp0` fragility, fixed rather than documented.** See the commit; the
+  `root via other` restore commit is gone from the device's log, and the
+  normaliser's suppression went with it.
+- **Two defects from the design review.** The CloudVision webhook's
+  `branch_scope` (`other_branches` on an event only emitted on the default
+  branch, so it could never fire) and `supported-capabilities.md`'s claim about
+  the Ansible runner.
+
+### Two races found in `invoke cluster`, documented not fixed
+
+Both hit during the rebuild, both timing-dependent, neither caused by the device
+step -- both parties to each race are inside `invoke cluster`, which starts only
+after the devices are done. Recorded in `AGENTS.md` beside the tolerated-502 and
+CoreDNS notes:
+
+1. Vidra can create `fabricpeering/nfd41` in the window between the lab
+   installer's `kubectl apply` reading the resource and creating it, so apply
+   fails `AlreadyExists` and the script dies.
+2. The lab's Crossplane installer preflights in-cluster networking itself, and a
+   Cilium that is up but still settling fails it.
+
+### Still deferred, by decision
+
+Nornir, scoped per-family credentials and a read-only compare pass, alerting,
+and sequencing against Vidra. Each needs a choice that is not the
+implementation's to make -- scoped credentials need accounts provisioned on the
+cEOS nodes, the FRR containers and the vSRX before anything can run.
