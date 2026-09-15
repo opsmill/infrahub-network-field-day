@@ -118,7 +118,7 @@ grep -q "Every device is confirmed to match its rendered configuration" "$LOG/bo
 # The outcome rather than the log line, and a stronger claim than the old one:
 # not "the command said it pushed 14" but "the graph says 14 devices were
 # CONFIRMED to match" -- which only a comparison finding no difference writes.
-confirmed=$(python3 - <<'PYSTATE'
+confirmed=$(uv run python - <<'PYSTATE'
 import httpx, os
 A=os.environ["INFRAHUB_ADDRESS"]; H={"X-INFRAHUB-KEY": os.environ["INFRAHUB_API_TOKEN"]}
 q='{DeploymentState{edges{node{status{value} last_confirmed_at{value}}}}}'
