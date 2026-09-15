@@ -622,9 +622,22 @@ nodes:
         optional: true
         cardinality: many
         kind: Component
+      # `optional: true` is a deliberate change to the upstream contract, which
+      # assumed every firewall interface is zoned. A management interface is
+      # not: the vSRX's `fxp0` lives in the mgmt_junos routing instance and in
+      # no security zone, and the device's own configuration has no zone for it.
+      #
+      # It had to be modelled -- `load replace` on the `interfaces` hierarchy
+      # deletes everything the artifact omits, so leaving fxp0 out meant every
+      # push deleted the firewall's management interface. An `extensions` block
+      # cannot relax an existing relationship's optionality, so this is the base
+      # definition rather than a local extension.
+      #
+      # The renderer skips a zone-less interface when building the `zones`
+      # stanza, so an unzoned interface changes no policy.
       - name: security_zone
         peer: SecurityZone
-        optional: false
+        optional: true
         cardinality: one
         kind: Attribute
 extensions:

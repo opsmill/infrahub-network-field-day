@@ -191,16 +191,21 @@ beside it.
 
 Three things worth knowing before debugging it:
 
-- **`interfaces` is replaced per interface, not wholesale, and that is a fix not a style
-  choice.** The model owns the data interfaces and not `fxp0`; the lab's own `junos.conf` says
-  `init.conf` owns "the admin user, fxp0, the mgmt_junos routing". Replacing the whole stanza
-  deleted the firewall's management interface on *every* push, and it survived only because
-  vrnetlab restored it as root before the `commit confirmed` had to be confirmed — visible as a
-  `root via other` commit wedged between the two `admin` commits. `_junos_replace_tagged` now
-  tags each modelled interface instead. The cost is that removing an entire interface from the
-  model no longer removes it from the device; changes within a modelled interface still
-  propagate. `_assert_junos_scope` refuses an artifact that renders `fxp0`, so moving that
-  boundary is a decision rather than a discovery.
+- **`fxp0` is modelled, and that is what makes `load replace` on `interfaces` safe.** The
+  hierarchy is replaced wholesale, so it deletes everything the artifact omits -- which is how
+  removing an interface from the model removes it from the device. While the model owned only
+  the data interfaces, that same behaviour deleted the firewall's management interface on
+  *every* push, and it survived only because vrnetlab restored it as root before the
+  `commit confirmed` had to be confirmed, visible as a `root via other` commit wedged between
+  the two `admin` commits.
+  **The consequence is that the model is now authoritative for the firewall's management
+  address**, and its values came from an `init.conf` vrnetlab generates inside the container
+  that no repository holds. If they drift from what vrnetlab assigns, a push sets the wrong
+  address and nothing restores it -- recovery is the container console.
+  `tests/unit/test_junos_config.py::FXP0_FROM_INIT_CONF` is the only thing asserting they still
+  agree, and it is hand-maintained. `SecurityZone` on a firewall interface became optional in
+  `schemas/security/security.yml` to allow this: a deliberate change to the upstream contract,
+  because a management interface is in no zone.
 - **`frr-reload.py --test` returns `0` whether or not the configuration matches**, and its
   output is `Lines To Add` / `Lines To Delete` sections rather than `+`/`-` prefixes. A parser
   written against diff prefixes reports "no differences" for a device that has genuinely

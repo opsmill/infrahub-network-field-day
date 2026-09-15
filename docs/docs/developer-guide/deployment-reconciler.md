@@ -114,10 +114,11 @@ instead of hiding it.
 
 :::note A suppression that turned out to be a bug
 
-This layer used to suppress the `fxp0` management interface. `load replace` on the whole
-`interfaces` hierarchy deleted it on every push, and vrnetlab — running as root inside the
-container — restored it seconds later, so an in-sync firewall reported `- fxp0 {...}` forever.
-The device's commit log showed the pair every time:
+This layer used to suppress the `fxp0` management interface. `load replace` on the
+`interfaces` hierarchy deletes everything the artifact omits, and the model owned only the data
+interfaces — so every push deleted the firewall's management interface, and vrnetlab, running
+as root inside the container, restored it seconds later. An in-sync firewall reported
+`- fxp0 {...}` forever. The device's commit log showed the pair every time:
 
 ```text
 16:49:01 admin via cli commit confirmed   ← the artifact loads, fxp0 goes
@@ -125,13 +126,14 @@ The device's commit log showed the pair every time:
 16:51:10 admin via cli                    ← the confirm
 ```
 
-The suppression was right about the diff and wrong about the cause: the push was the bug. The
-model owns the data interfaces and not `fxp0` — the lab's `junos.conf` says `init.conf` owns
-it — so each modelled interface is now tagged for replacement instead of the stanza. The diff
-went away and the suppression went with it.
+The suppression was right about the diff and wrong about the cause: the push was the bug.
+`fxp0` is now modelled, so the artifact carries it, the hierarchy can be replaced wholesale
+without deleting it, and the diff — along with the suppression — went away.
 
-The trade-off is stated rather than hidden: removing an entire interface from the model no
-longer removes it from the device. Changes within a modelled interface still propagate.
+The trade is stated rather than hidden: **the model is now authoritative for the firewall's
+management address.** Its values come from an `init.conf` that vrnetlab generates inside the
+container and that no repository holds, so if they ever drift, a push sets the wrong address
+and nothing restores it.
 
 Before adding a rule to the normaliser, ask whether the device is telling you something true.
 

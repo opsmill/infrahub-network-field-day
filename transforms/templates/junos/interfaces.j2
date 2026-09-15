@@ -21,12 +21,23 @@ interfaces {
      */
 {% for iface in interfaces %}
     {{ iface.name }} {
+{% if iface.description %}
         description "{{ iface.description }}";
+{% endif %}
+{% if iface.mtu %}
         mtu {{ iface.mtu }};
+{% endif %}
         unit 0 {
+{% if iface.address %}
             family inet {
                 address {{ iface.address }};
             }
+{% endif %}
+{% if iface.address6 %}
+            family inet6 {
+                address {{ iface.address6 }};
+            }
+{% endif %}
         }
     }
 {% endfor %}

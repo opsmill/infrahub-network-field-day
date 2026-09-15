@@ -114,28 +114,24 @@ class TestJunosScope:
 
 
 class TestJunosReplaceTagged:
-    def test_top_level_stanzas_other_than_interfaces_get_a_replace_tag(self) -> None:
-        out = _junos_replace_tagged("security {\n}\nrouting-options {\n}\n")
+    def test_every_top_level_stanza_gets_a_replace_tag(self) -> None:
+        out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\n")
         assert out.count("replace:") == 2
-        assert out.startswith("replace:\nsecurity {")
+        assert out.startswith("replace:\ninterfaces {")
 
-    def test_interfaces_is_tagged_per_interface_not_wholesale(self) -> None:
-        """The stanza itself must NOT be replaced.
+    def test_interfaces_is_replaced_wholesale_and_that_needs_fxp0_modelled(self) -> None:
+        """Replacing the hierarchy deletes everything the artifact omits.
 
-        The model owns the data interfaces and not `fxp0` -- the lab's own
-        junos.conf says init.conf owns it. Replacing the whole hierarchy deleted
-        the firewall's management interface on every push, and it survived only
-        because vrnetlab restored it as root seconds later.
+        That is the point -- it is what makes removing an interface from the
+        model remove it from the device. It is also why `fxp0` must be in the
+        artifact: while it was not, every push deleted the firewall's management
+        interface and vrnetlab restored it as root before the commit had to be
+        confirmed.
         """
-        out = _junos_replace_tagged("interfaces {\n    ge-0/0/0 {\n        mtu 9192;\n    }\n}\n")
-        assert "replace:\ninterfaces {" not in out, "the interfaces stanza must not be replaced wholesale"
-        assert "    replace:\n    ge-0/0/0 {" in out, "each modelled interface is replaced"
-
-    def test_an_unmodelled_interface_is_left_alone(self) -> None:
-        """Nothing tags a hierarchy the artifact does not mention, so fxp0
-        survives the load. That is the whole fix."""
-        out = _junos_replace_tagged("interfaces {\n    ge-0/0/0 {\n    }\n}\n")
-        assert "fxp0" not in out
+        out = _junos_replace_tagged("interfaces {\n    fxp0 {\n    }\n    ge-0/0/0 {\n    }\n}\n")
+        assert out.startswith("replace:\ninterfaces {")
+        assert "fxp0" in out, "the artifact must carry the management interface"
+        assert "    replace:" not in out, "interfaces are not tagged individually"
 
     def test_nested_stanzas_do_not_get_tagged(self) -> None:
         """A tag on a nested hierarchy would replace only part of a stanza, which

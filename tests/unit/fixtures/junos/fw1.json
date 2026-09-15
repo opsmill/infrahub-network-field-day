@@ -127,6 +127,41 @@
                 "node": {
                   "__typename": "SecurityFirewallInterface",
                   "name": {
+                    "value": "fxp0"
+                  },
+                  "description": {
+                    "value": null
+                  },
+                  "mtu": {
+                    "value": null
+                  },
+                  "security_zone": {
+                    "node": null
+                  },
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.0.0.15/24"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "address": {
+                            "value": "2001:db8::2/64"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "SecurityFirewallInterface",
+                  "name": {
                     "value": "ge-0/0/0"
                   },
                   "description": {

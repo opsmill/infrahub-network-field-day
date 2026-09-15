@@ -113,13 +113,22 @@ class JunosConfig(InfrahubTransform):
             addresses = [a.node.address.value for a in node.ip_addresses.edges]
             if not addresses:
                 raise JunosConfigError(f"{node.name.value}: no address, so no `family inet` to render")
+            # fxp0 carries no zone, description or MTU on the device, and it is
+            # the only interface here that does not. Everything below is
+            # optional rather than asserted so that the management interface can
+            # be modelled at all -- see objects/32_nfd41_security.yml for why it
+            # has to be.
+            zone = node.security_zone.node
+            v4 = [a for a in addresses if ":" not in a]
+            v6 = [a for a in addresses if ":" in a]
             entries.append(
                 {
                     "name": node.name.value,
                     "description": node.description.value,
                     "mtu": node.mtu.value,
-                    "address": addresses[0],
-                    "zone": node.security_zone.node.name.value,
+                    "address": v4[0] if v4 else None,
+                    "address6": v6[0] if v6 else None,
+                    "zone": zone.name.value if zone else None,
                 }
             )
         return sorted(entries, key=itemgetter("name"))
@@ -157,6 +166,11 @@ class JunosConfig(InfrahubTransform):
         """
         exits = {}
         for iface in self._interfaces(target):
+            # fxp0 has an address but lives in the mgmt_junos routing instance,
+            # which init.conf owns. It is never an exit for a route in the
+            # default instance, so it must not claim one here.
+            if iface["address"] is None or iface["zone"] is None:
+                continue
             exits[ip_interface(iface["address"]).network] = iface["name"]
 
         routes = []
@@ -306,6 +320,8 @@ class JunosConfig(InfrahubTransform):
         """
         by_zone: dict[str, list[str]] = {}
         for iface in self._interfaces(target):
+            if iface["zone"] is None:
+                continue
             by_zone.setdefault(iface["zone"], []).append(iface["name"])
 
         zones = []

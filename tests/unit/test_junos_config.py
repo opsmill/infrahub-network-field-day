@@ -65,7 +65,17 @@ def _stanza(lines: list[str], name: str, indent: str = "") -> list[str]:
 
 
 def test_interfaces_stanza_matches_the_device() -> None:
-    assert _stanza(_rendered(), "interfaces") == _stanza(_conf(), "interfaces")
+    """Against the device file plus fxp0, which that file does not carry.
+
+    This is the one place the artifact deliberately renders configuration
+    `junos.conf` does not contain. See FXP0_FROM_INIT_CONF for why, and for what
+    breaks if vrnetlab's addressing moves.
+    """
+    assert _stanza(_rendered(), "interfaces") == _with_fxp0(_stanza(_conf(), "interfaces"))
+    # and the block really is absent from the device file as CONFIGURATION, so
+    # this test asserts something rather than comparing a file with itself.
+    # `junos.conf` mentions fxp0 in four comments; none of them defines it.
+    assert not any(line.strip().startswith("fxp0 {") for line in _conf())
 
 
 def test_address_book_matches_the_device() -> None:
@@ -285,6 +295,45 @@ def _top_level_stanza_of(lines: list[str]) -> list[str | None]:
     return tags
 
 
+# The management interface, which `junos.conf` does not contain and never has.
+#
+# vrnetlab generates it into `init.conf` INSIDE the container; that file is not
+# version-controlled in either repository, so unlike every other line this suite
+# checks, these ten have no committed source. They are reproduced here by hand
+# from the running device.
+#
+# They are in scope because cycle 030 modelled fxp0 deliberately: `load replace`
+# on the `interfaces` hierarchy deletes everything the artifact does not name,
+# so leaving it out meant every push deleted the firewall's management
+# interface. The consequence is that the model is now authoritative for this
+# address, and this block is the only thing asserting it still matches the
+# device. If vrnetlab's addressing ever changes, this is what has to change with
+# it -- and the failure mode if it does not is an unreachable firewall.
+FXP0_FROM_INIT_CONF = [
+    "    fxp0 {",
+    "        unit 0 {",
+    "            family inet {",
+    "                address 10.0.0.15/24;",
+    "            }",
+    "            family inet6 {",
+    "                address 2001:db8::2/64;",
+    "            }",
+    "        }",
+    "    }",
+]
+
+
+def _with_fxp0(lines: list[str]) -> list[str]:
+    """`junos.conf` lines with the management interface spliced in.
+
+    Inserted immediately before the first data interface, which is where the
+    transform's name sort puts it: `fxp0` sorts before `ge-0/0/0`.
+    """
+    out = list(lines)
+    first_data_iface = next(i for i, line in enumerate(out) if line.startswith("    ge-0/0/0 {"))
+    return out[:first_data_iface] + FXP0_FROM_INIT_CONF + out[first_data_iface:]
+
+
 def _oracle_in_scope() -> list[str]:
     """The device file minus the two regions the artifact deliberately omits.
 
@@ -299,7 +348,11 @@ def _oracle_in_scope() -> list[str]:
     """
     lines = _conf()
     tags = _top_level_stanza_of(lines)
-    return [line for line, tag in zip(lines, tags, strict=True) if tag not in (None, "system")]
+    in_scope = [line for line, tag in zip(lines, tags, strict=True) if tag not in (None, "system")]
+    # ... plus fxp0, which the artifact renders and this file does not carry.
+    # Spliced here rather than in each caller so every test that compares the
+    # artifact against the device works from one definition of "in scope".
+    return _with_fxp0(in_scope)
 
 
 def _rendered_body() -> list[str]:
@@ -395,7 +448,13 @@ def test_the_exclusions_add_up() -> None:
     rendered = len(lines) - header - system
 
     assert header + system + rendered == len(lines)
-    assert rendered == len(_oracle_in_scope())
+
+    # Three categories now, not two. The artifact reproduces everything in scope
+    # AND renders the management interface, which this file does not carry --
+    # cycle 030 modelled fxp0 because `load replace` was otherwise deleting it
+    # on every push. Adding rather than hiding it keeps this an assertion about
+    # the total rather than a caveat beside one.
+    assert rendered + len(FXP0_FROM_INIT_CONF) == len(_oracle_in_scope())
 
     # Non-blank, because blank-line placement inside `policies` follows the
     # zone-pair sequence, which the model cannot reproduce -- see

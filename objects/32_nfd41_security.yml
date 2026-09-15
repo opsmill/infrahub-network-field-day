@@ -57,6 +57,29 @@ spec:
     # "Value 9228 is not within range (256..9192)". 9192 is the platform
     # maximum, an IP MTU of 9178, and `security flow tcp-mss` is what makes the
     # 36-byte shortfall safe rather than a stall with data stuck in Send-Q.
+    # The vSRX's management interface, and the one entry here whose values did
+    # not come from junos.conf -- that file does not contain fxp0 at all. They
+    # come from the init.conf vrnetlab generates INSIDE the container, which is
+    # not version-controlled anywhere.
+    #
+    # It is modelled deliberately: `load replace` on the `interfaces` hierarchy
+    # replaces everything the artifact names and deletes everything it does not,
+    # so leaving fxp0 out meant every push deleted the firewall's management
+    # interface and relied on vrnetlab restoring it as root before the
+    # `commit confirmed` had to be confirmed.
+    #
+    # The consequence of modelling it is that the model is now AUTHORITATIVE for
+    # that address. If these values ever drift from what vrnetlab assigns, a
+    # push sets the wrong management address and nothing restores it -- recovery
+    # is through the container console. No zone, no description and no MTU,
+    # because the device has none.
+    - name: fxp0
+      device: fw1
+      ip_addresses:
+        kind: IpamIPAddress
+        data:
+          - address: 10.0.0.15/24
+          - address: 2001:db8::2/64
     - name: ge-0/0/0
       description: "ZONE-K8S-PROD handoff - border-leaf1 Et10"
       mtu: 9192

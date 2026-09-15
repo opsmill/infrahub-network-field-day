@@ -555,29 +555,27 @@ def _junos_replace_tagged(config: str) -> str:
     confines the load to the modelled hierarchies and leaves `system` alone --
     see `push_junos` for why that matters.
 
-    **`interfaces` is the exception: its CHILDREN are tagged, not the stanza.**
-    The model owns the data interfaces and does not own `fxp0`, and the lab's
-    own `junos.conf` says so -- "everything in init.conf -- the admin user,
-    fxp0, the mgmt_junos routing". Replacing the whole `interfaces` hierarchy
-    therefore deleted the firewall's management interface on every single push.
-    It survived only because vrnetlab, running as root inside the container,
-    restored it seconds later; the device's commit log shows the pair every
-    time:
+    **`interfaces` is replaced wholesale, and the model carries `fxp0` so that is
+    safe.** It was not always: the model owned only the data interfaces, so
+    replacing the hierarchy deleted the firewall's management interface on every
+    push. It survived because vrnetlab, running as root inside the container,
+    restored it before the `commit confirmed` had to be confirmed -- the
+    device's commit log showed the pair every time:
 
         16:49:01 admin via cli commit confirmed   <- fxp0 deleted here
         16:51:03 root via other                   <- vrnetlab puts it back
         16:51:10 admin via cli                    <- the confirm
 
-    The confirm only reached the device because the restore won that race.
-    Tagging each modelled interface instead replaces exactly what the model
-    owns and leaves what it does not.
+    Modelling fxp0 closes that and keeps full deletion semantics: removing an
+    interface from the model removes it from the device.
 
-    **The cost, stated plainly**: removing an interface from the model no
-    longer removes it from the device, because nothing replaces a hierarchy the
-    artifact does not mention. Changes *within* a modelled interface still
-    propagate, including deletions. That is a narrower gap than breaking the
-    management path on every push, but it is a gap, and closing it properly
-    needs the lab to decide whether `init.conf` or the model owns `fxp0`.
+    **The cost, stated plainly.** The model is now AUTHORITATIVE for the
+    firewall's management address, and its values came from an `init.conf` that
+    vrnetlab generates inside the container and that no repository holds. If
+    they ever drift from what vrnetlab assigns, this push sets the wrong
+    management address and nothing restores it -- recovery is the container
+    console. `tests/unit/test_junos_config.py::FXP0_FROM_INIT_CONF` is the only
+    thing asserting they still agree.
 
     Lines beginning `!` are dropped as a **compatibility fallback, not the fix**.
     The renderer used to emit its provenance header as `! Rendered by
@@ -591,26 +589,15 @@ def _junos_replace_tagged(config: str) -> str:
     """
     lines = [line for line in config.splitlines() if not line.startswith("!")]
     out: list[str] = []
-    inside_interfaces = False
     for line in lines:
         if _TOP_LEVEL_STANZA.match(line):
-            inside_interfaces = line == "interfaces {"
-            if not inside_interfaces:
-                out.append("replace:")
-        elif inside_interfaces and _INTERFACE_STANZA.match(line):
-            out.append("    replace:")
-        elif line == "}":
-            inside_interfaces = False
+            out.append("replace:")
         out.append(line)
     return "\n".join(out) + "\n"
 
 
 # A top-level Junos stanza opener: unindented, lowercase, ending in ` {`.
 _TOP_LEVEL_STANZA = re.compile(r"^[a-z][a-z0-9-]* \{$")
-
-# One interface inside the `interfaces` stanza: indented four spaces, named like
-# `ge-0/0/0` or `fxp0`, ending in ` {`.
-_INTERFACE_STANZA = re.compile(r"^ {4}[a-z][a-z0-9/.-]* \{$")
 
 
 def _assert_junos_scope(target: Target, config: str) -> None:
@@ -627,17 +614,6 @@ def _assert_junos_scope(target: Target, config: str) -> None:
             f"{target.device}: the Junos artifact now contains a 'system' stanza. "
             "This push replaces every hierarchy the artifact names, so it would overwrite the "
             "device's credentials. Review the renderer before provisioning the firewall again."
-        )
-    # The management interface belongs to vrnetlab's init.conf, and the lab's own
-    # junos.conf says so. If the model ever starts rendering it, the per-interface
-    # replace tag would make this push own the firewall's management path -- which
-    # is a decision about where the boundary sits, not something to discover from
-    # a device that stopped answering.
-    if any(line.strip().startswith("fxp0 ") or line.strip() == "fxp0 {" for line in config.splitlines()):
-        raise ProvisionError(
-            f"{target.device}: the Junos artifact now renders 'fxp0', the management interface "
-            "that init.conf owns. Pushing it would put the firewall's management path under the "
-            "model. Decide where that boundary sits before provisioning the firewall again."
         )
 
 
