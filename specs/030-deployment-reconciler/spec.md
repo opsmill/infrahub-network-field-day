@@ -21,10 +21,17 @@ settled on: **a loop, Nornir, and Infrahub as the source of truth.** No webhook 
 approval gate, no separate state store — all three were removed under challenge, and the
 reasons are recorded there rather than re-litigated here.
 
-It is not an Infrahub artifact. It adds no schema, generator, transform, check, menu or
-object data. The `infrahub-speckit` router matched schema/transform/generator keywords in the
-description, but every one of them is *referential* — this feature reads artifacts that
-already exist and writes to kinds that already exist.
+It is not an Infrahub artifact. It adds no generator, transform or check. The
+`infrahub-speckit` router matched schema/transform/generator keywords in the description, but
+every one of them is *referential* — this feature reads artifacts that already exist and writes
+to kinds that already exist.
+
+> **This paragraph used to claim the cycle added no schema and no menu, and both turned out to
+> be wrong during implementation.** FR-015 requires `pending` to be distinguishable from
+> `drifted`, and there was nowhere to remember the previous artifact, so `DeploymentState`
+> gained `last_artifact_checksum`. Cycle 029's queued menu handoff was also closed here: a
+> curated `menus/menu.yml` entry, with `include_in_menu` flipped to `false`. Both are recorded
+> where they happened rather than left as a tidier claim in the introduction.
 
 ## User Scenarios & Testing *(mandatory)*
 
