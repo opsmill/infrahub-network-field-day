@@ -206,6 +206,31 @@ that exists, reports `Ready`, and is empty — and push nothing onto a switch.
 
 `invoke avd --branch X --merge` does the same thing outside a bootstrap.
 
+### Verifying a bootstrap
+
+```bash
+scripts/verify_bootstrap.sh          # ~20 minutes, destroys and rebuilds everything
+```
+
+Tears the environment down, rebuilds it with `invoke bootstrap --fresh`, and
+asserts sixteen things about the result. Use it after changing anything in the
+bootstrap path; "it worked" and "it is stable" are different claims, and only a
+full teardown distinguishes them.
+
+Several checks are deliberately about **state rather than exit status**, because
+every bug this found was quiet:
+
+- It counts **established BGP sessions**, not artifact size. An AVD artifact can
+  be 239 lines, contain `router bgp`, report `Ready`, and describe a fabric that
+  does not exist — which is exactly what a half-run topology chain produces.
+- It **downloads** every configuration artifact. Generation is asynchronous, and
+  an empty artifact still reports `Ready`.
+- It checks the **delivered resources**, not `syncState`. A sync over an empty
+  set is still `Succeeded`.
+
+Six runs of it found the tolerated-502, the topology double-run and the CoreDNS
+race, none of which failed in a way that pointed at its cause.
+
 **Compose commands are pinned to the real project directory.** `docker compose`
 derives its project name from the working directory, so from a git worktree
 `invoke destroy` used to address a project that does not exist and silently do
@@ -447,6 +472,7 @@ uv run invoke avd --topology            # BUILD-TIME ONLY: also build the fabric
 uv run invoke avd --branch b --merge    # ... on a branch, merged when it succeeds
 uv run invoke bootstrap                 # the whole environment, one command
 uv run invoke bootstrap --fresh         # ... destroying the stack and the lab first
+scripts/verify_bootstrap.sh             # rebuild from nothing and assert the result
 uv run invoke lab                       # deploy ../lab's topology with management connectivity
 uv run invoke lab --destroy             # tear it down
 uv run invoke provision                 # push every rendered artifact onto the running devices
