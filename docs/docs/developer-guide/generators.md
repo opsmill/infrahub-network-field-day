@@ -299,6 +299,74 @@ address change moves where BGP points, and that belongs in the run output.
 the tracking context. Sessions it never produced are outside that context and are never
 deletion candidates.
 
+### AppAccessGenerator
+
+**File**: `generators/generate_app_access.py`
+
+**Target**: `ServiceAppAccess` (group `service_app_accesses`)
+
+**Purpose**: Turn an approved access grant into the firewall objects that permit the session
+
+**Actions**:
+
+1. Check `approved`. An unapproved grant creates nothing and its status is left alone.
+2. Validate and derive everything before the first write — ports, the destination zone, the
+   policy, and the `tcp` protocol object.
+3. Upsert a `SecurityIPAMIPAddress` for the grant's destination VIP, or adopt an entry that
+   already wraps that address.
+4. Upsert a `SecurityService` per permitted port, or adopt the firewall's existing object for
+   that protocol and port.
+5. Upsert the `SecurityPolicyRule` joining them, with `managed_by_service: true`.
+6. Link the rule into the grant's `granted_rules` and set its status to `active`.
+
+**Query**: `generate_app_access.gql`
+
+Nothing downstream changes. `junos_config.gql` queries `SecurityGenericAddress` and
+`SecurityPolicy` unfiltered, so a generated object is rendered into the firewall's existing
+artifact the moment it exists, and the deployment reconciler pushes it.
+
+#### The approval gate
+
+`approved` is the gate, so an unapproved request is inert rather than merely hidden. The grant
+seeded in `objects/38_nfd41_access_grants.yml` is unapproved deliberately: it keeps the rendered
+artifact byte-identical to what the unit tests hold against the device's own configuration, while
+leaving the whole demo one field-flip away.
+
+The cost is that "ran successfully and created nothing" is the normal outcome, which is
+indistinguishable from a broken generator unless you check the flag first.
+
+#### The two allocation floors
+
+| Value | Floor | Hand-written range | Why |
+| --- | --- | --- | --- |
+| `SecurityPolicyRule.index` | 100 | 10, 20, 30 | Junos is first-match within a zone pair. The baseline puts an anti-spoofing `deny` at index 10, so a generated permit must sort **after** it — below it, every grant becomes a bypass for a spoofed infrastructure source. |
+| `SecurityIPAMIPAddress.book_index` | 1000 | 10–130 | The address book renders in `book_index` order and that order is pinned. An entry with **no** index is skipped entirely — referenced by a rule and never declared, so the configuration does not load. |
+
+Both are deterministic functions of the grant's name. A value that moves between runs would churn
+the tracking context even though nothing changed.
+
+#### Deriving the destination zone
+
+The grant names a source zone but not a destination one. It is derived through the VRF:
+
+```text
+ServiceAppAccess.application → ServiceFabricApp.vrf → IpamVRF ← SecurityZone.vrf
+```
+
+Deriving it instead from "the firewall interface whose subnet contains the VIP" cannot work: the
+handoff interfaces are `/30` point-to-points and contain no service VIP, so containment matches
+nothing and every grant raises.
+
+#### Adoption, and why revocation is safe
+
+Adoption fetches and modifies; it never upserts. An upsert validates every mandatory field, so a
+payload omitting fields in order to preserve them is rejected outright.
+
+An adopted object is never renamed, never re-indexed, and never marked `managed_by_service` —
+so the tracking context, which only removes what this generator created, leaves it alone. That is
+what keeps `junos-https` alive when a grant that used port 443 is revoked, while the rule the
+grant created disappears.
+
 ### BackfillStructuredConfigGenerator
 
 **File**: `generators/backfill_structured_config.py`

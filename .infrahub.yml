@@ -96,6 +96,10 @@ queries:
   - name: generate_fabric_peering
     file_path: "./generators/generate_fabric_peering.gql"
 
+  # Service-layer generator: turns an approved access grant into firewall rules
+  - name: generate_app_access
+    file_path: "./generators/generate_app_access.gql"
+
 
 generator_definitions:
   - name: generate-avd-device-hostvar
@@ -174,6 +178,24 @@ generator_definitions:
     parameters:
       name: name__value
     class_name: FabricPeeringGenerator
+    convert_query_response: false
+
+  # Sits underneath the service layer: turns an APPROVED ServiceAppAccess into
+  # the firewall objects that permit the session -- an address-book entry for
+  # the destination VIP, a service object per permitted port, and the rule
+  # joining them. Nothing downstream changes: junos_config queries
+  # SecurityGenericAddress and SecurityPolicy unfiltered, so the generated
+  # objects render into the existing artifact and the reconciler pushes it.
+  #
+  # An unapproved grant is a deliberate no-op, which reads exactly like a
+  # broken generator. Check `approved` before debugging anything else.
+  - name: generate-app-access
+    file_path: "./generators/generate_app_access.py"
+    query: generate_app_access
+    targets: service_app_accesses
+    parameters:
+      name: name__value
+    class_name: AppAccessGenerator
     convert_query_response: false
 
   - name: generate-server-cabling

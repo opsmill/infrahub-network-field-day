@@ -1,0 +1,226 @@
+query GenerateAppAccessQuery($name: String!) {
+  # The ordered intent. Aliased `target:` because the generator is
+  # parameterised on the service's name, the same way generate_fabric_peering
+  # is.
+  target: ServiceAppAccess(name__value: $name) {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        # The gate. Nothing below is materialized while this is false, so an
+        # unapproved request is inert rather than merely hidden.
+        approved {
+          value
+        }
+        requester {
+          value
+        }
+        justification {
+          value
+        }
+        # A list of TCP ports. An EMPTY list is rejected by the generator
+        # rather than read as "all ports" -- the lab's FirewallAccess CRD
+        # makes the same choice with minItems: 1.
+        ports {
+          value
+        }
+        # The application. Its VRF is how the destination zone is derived:
+        # ServiceFabricApp.vrf and SecurityZone.vrf both peer IpamVRF, so the
+        # zone is the one whose VRF matches. Deriving it from the firewall's
+        # interfaces instead cannot work -- the handoff interfaces are /30
+        # point-to-points and contain no service VIP.
+        application {
+          node {
+            id
+            name {
+              value
+            }
+            vrf {
+              node {
+                id
+                name {
+                  value
+                }
+              }
+            }
+          }
+        }
+        source_zone {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        # An existing address-book entry, never a synthesised CIDR, so a
+        # generated rule reads the same way as the hand-written ones beside it.
+        source_address {
+          node {
+            id
+            __typename
+            display_label
+          }
+        }
+        destination_vip {
+          node {
+            id
+            address {
+              value
+            }
+          }
+        }
+        # What a previous run already granted.
+        granted_rules {
+          edges {
+            node {
+              id
+              name {
+                value
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # ------------------------------------------------------------------------
+  # The firewall's own context, fetched unfiltered because the generator
+  # resolves against the whole set rather than by name.
+  # ------------------------------------------------------------------------
+
+  # SecurityPolicyRule.policy is mandatory and cardinality one, and the grant
+  # does not name a policy. Exactly one policy targets the firewall; anything
+  # else is an incomplete model and the generator raises.
+  SecurityPolicy {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        device_target {
+          node {
+            id
+            display_label
+          }
+        }
+      }
+    }
+  }
+
+  # The destination-zone lookup: match the application's VRF to a zone's.
+  SecurityZone {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        vrf {
+          node {
+            id
+          }
+        }
+      }
+    }
+  }
+
+  # Adoption by (protocol, port), NOT by name. The firewall already declares
+  # junos-http (80) and junos-https (443); a grant for 443 must reference the
+  # existing object rather than declare a second application for the same
+  # port, or the rendered configuration stops reading like the rules beside it.
+  SecurityService {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        port {
+          value
+        }
+        ip_protocol {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # `tcp` and `icmp`. Only tcp is ever used here -- `ports` is a list of TCP
+  # ports and ICMP is not requestable through a grant.
+  SecurityIPProtocol {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+      }
+    }
+  }
+
+  # The address book, for two things: adopting an entry that already wraps the
+  # grant's VIP, and knowing which book_index values are taken.
+  #
+  # The book is polymorphic and the value field differs per concrete kind, so a
+  # fragment per kind is mandatory. `... on SecurityGenericAddress` would be
+  # accepted by GraphQL and then yield None in the generated model, because it
+  # discriminates on __typename -- which is always the concrete kind.
+  SecurityGenericAddress {
+    edges {
+      node {
+        id
+        __typename
+        ... on SecurityIPAMIPAddress {
+          name {
+            value
+          }
+          book_index {
+            value
+          }
+          ip_address {
+            node {
+              id
+            }
+          }
+        }
+        ... on SecurityIPAMIPPrefix {
+          name {
+            value
+          }
+          book_index {
+            value
+          }
+        }
+        ... on SecurityPrefix {
+          name {
+            value
+          }
+          book_index {
+            value
+          }
+        }
+        ... on SecurityIPAddress {
+          name {
+            value
+          }
+          book_index {
+            value
+          }
+        }
+      }
+    }
+  }
+}

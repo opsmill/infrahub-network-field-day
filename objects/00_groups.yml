@@ -37,3 +37,14 @@ spec:
     # member, and a group rather than a direct target because an artifact
     # definition cannot point at an object.
     - name: junos_firewalls
+    # Generator target for application access grants. A group rather than a
+    # direct target because a generator definition cannot point at an object,
+    # and a group per service kind so a generator cannot run against a kind it
+    # cannot read.
+    #
+    # A CoreStandardGroup, like every other target here. The Infrahub docs
+    # describe generators as targeting a CoreGeneratorGroup; this repository
+    # does not, and generate-fabric-peering already targets a standard group
+    # successfully. Consistency with the eight generators already registered
+    # wins over the generic guidance.
+    - name: service_app_accesses

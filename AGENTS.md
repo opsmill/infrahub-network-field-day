@@ -76,7 +76,39 @@ Key docs to read before larger changes:
 Current generator definitions are registered in `.infrahub.yml`:
 `generate-fabric`, `generate-pod`, `generate-rack`, `generate-server-cabling`,
 `generate-avd-device-hostvar`, `generate-avd-device-structured-config`,
-`backfill-structured-config`, and `generate-fabric-peering`.
+`backfill-structured-config`, `generate-fabric-peering`, and `generate-app-access`.
+
+`generate-app-access` sits underneath `ServiceAppAccess` and turns an **approved** grant into
+the firewall objects permitting the session: an address-book entry for the destination VIP, a
+`SecurityService` per permitted port, and the `SecurityPolicyRule` joining them, linked back
+through `granted_rules`. Nothing downstream changed — `junos_config.gql` queries
+`SecurityGenericAddress` and `SecurityPolicy` unfiltered, so generated objects render into the
+existing artifact and the reconciler pushes it. Four things to know before changing it:
+
+- **An unapproved grant is a deliberate no-op, and that is the seeded state.** `approved` is
+  the gate, so `objects/38_nfd41_access_grants.yml` generates nothing and the rendered Junos
+  artifact stays byte-identical to what `tests/unit/test_junos_config.py` holds against
+  `junos.conf`. Approving it in the seed data would add a rule the device file has no
+  counterpart for, so there would be nothing true to update those assertions to —
+  `test_the_seeded_grant_is_unapproved` fails when someone tries. The cost is that "ran
+  successfully and created nothing" is the normal outcome, which reads exactly like a broken
+  generator. Check `approved` before debugging anything else.
+- **Two allocation floors, and both are load bearing.** Rule `index` starts at 100 because
+  Junos is first-match within a zone pair and the baseline puts `deny-spoofed-infra` at index
+  10 — a generated permit below it would turn every grant into a bypass for a spoofed
+  `fabric-infra` source. Address `book_index` starts at 1000 because hand-written entries
+  occupy 10–130 and their order is pinned; an entry with **no** `book_index` is skipped by
+  `junos_config.py::_addresses` entirely, so it would be referenced by a rule and never
+  declared, and the configuration would not load.
+- **The destination zone comes from the VRF, not from interface containment.**
+  `ServiceFabricApp.vrf` and `SecurityZone.vrf` both peer `IpamVRF`. Deriving it from "the
+  firewall interface whose subnet contains the VIP" cannot work — the handoff interfaces are
+  `/30` point-to-points and contain no service VIP, so containment matches nothing.
+- **Adoption fetches and modifies; it never upserts.** The firewall already declares
+  `junos-http` and `junos-https`, so a grant for 443 references the existing object rather than
+  declaring a second application for the same port. An adopted object is never marked
+  `managed_by_service` and so is never deleted by the tracking context when the grant is
+  revoked — which is what keeps `junos-https` alive for the baseline rules that share it.
 
 Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
