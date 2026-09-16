@@ -589,15 +589,37 @@ def _junos_replace_tagged(config: str) -> str:
     """
     lines = [line for line in config.splitlines() if not line.startswith("!")]
     out: list[str] = []
+    present: set[str] = set()
     for line in lines:
-        if _TOP_LEVEL_STANZA.match(line):
+        match = _TOP_LEVEL_STANZA.match(line)
+        if match:
+            present.add(match.group(1))
             out.append("replace:")
         out.append(line)
+
+    # A stanza the artifact OMITS is not replaced, because there is nothing to
+    # tag -- so the device keeps whatever it had. That is invisible until a
+    # stanza stops being rendered: revoking an access grant removed its policy
+    # and left its `applications` declaration behind, and the next grant added
+    # another. Emitting an empty replaced stanza deletes the hierarchy instead.
+    for stanza in sorted(_OPTIONAL_MODEL_OWNED_STANZAS - present):
+        out.extend(["replace:", f"{stanza} {{", "}"])
+
     return "\n".join(out) + "\n"
 
 
 # A top-level Junos stanza opener: unindented, lowercase, ending in ` {`.
-_TOP_LEVEL_STANZA = re.compile(r"^[a-z][a-z0-9-]* \{$")
+_TOP_LEVEL_STANZA = re.compile(r"^([a-z][a-z0-9-]*) \{$")
+
+# Stanzas the model owns but renders only when it has content. Each is emitted
+# empty-and-replaced when the artifact omits it, so removing the last object in
+# a hierarchy removes the hierarchy from the device.
+#
+# `routing-options` is deliberately NOT here. Its absence today means "this
+# firewall has no static routes in the model", and the device keeps the routes
+# it has; making the model authoritative for that is a defensible change and a
+# different one from this fix, which is about generated objects accumulating.
+_OPTIONAL_MODEL_OWNED_STANZAS = frozenset({"applications"})
 
 
 def _assert_junos_scope(target: Target, config: str) -> None:

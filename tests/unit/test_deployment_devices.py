@@ -115,8 +115,10 @@ class TestJunosScope:
 
 class TestJunosReplaceTagged:
     def test_every_top_level_stanza_gets_a_replace_tag(self) -> None:
+        """Two rendered stanzas, plus the empty `applications` appended so an
+        omitted model-owned hierarchy is deleted rather than left behind."""
         out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\n")
-        assert out.count("replace:") == 2
+        assert out.count("replace:") == 3
         assert out.startswith("replace:\ninterfaces {")
 
     def test_interfaces_is_replaced_wholesale_and_that_needs_fxp0_modelled(self) -> None:
@@ -137,7 +139,10 @@ class TestJunosReplaceTagged:
         """A tag on a nested hierarchy would replace only part of a stanza, which
         is not what `load replace` is being asked to do."""
         out = _junos_replace_tagged("security {\n    zones {\n    }\n}\n")
-        assert out.count("replace:") == 1
+        # One for `security`, one for the appended empty `applications`. The
+        # nested `zones` gets none, which is what this asserts.
+        assert out.count("replace:") == 2
+        assert "    replace:" not in out
 
     def test_bang_comment_lines_are_dropped(self) -> None:
         """A compatibility fallback, not the fix: a stored artifact predating the
@@ -150,3 +155,32 @@ class TestJunosReplaceTagged:
     def test_a_hash_comment_is_kept_because_junos_understands_it(self) -> None:
         out = _junos_replace_tagged("# Rendered by Infrahub\ninterfaces {\n}\n")
         assert "# Rendered by Infrahub" in out
+
+
+def test_an_omitted_applications_stanza_is_emitted_empty_and_replaced() -> None:
+    """Removing the last generated service must remove it from the device.
+
+    `load replace` acts only on hierarchies the payload tags, so a stanza the
+    artifact stops rendering is simply left alone. Measured: revoking an access
+    grant removed its policy and left `applications` behind, declaring a service
+    nothing referenced -- and the next grant would have added another.
+    """
+    out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\n")
+    assert "replace:\napplications {\n}" in out
+
+
+def test_a_rendered_applications_stanza_is_not_duplicated() -> None:
+    """When the artifact does render one, it is tagged like any other stanza and
+    no empty stanza is appended after it."""
+    out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\napplications {\n    application svc-x {\n    }\n}\n")
+    assert out.count("applications {") == 1
+    assert "    application svc-x {" in out
+
+
+def test_routing_options_is_not_force_deleted() -> None:
+    """Deliberately excluded. Its absence means "no static routes in the model",
+    and making the model authoritative for that is a separate decision from
+    stopping generated objects accumulating.
+    """
+    out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\n")
+    assert "routing-options {" not in out
