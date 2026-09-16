@@ -40,7 +40,7 @@ Pin a specific version with `--version`, for example
 
 | File | Extends | Adds | Why it is not upstream |
 |------|---------|------|------------------------|
-| `security_extensions.yml` | `SecurityZone`, `SecurityPolicyRule` | `trust_level`, `vrf`, `managed_by_service` | The VRF link is this fabric's handoff pairing; `managed_by_service` is the guard that lets a generator reconcile a firewall that also carries hand-written rules |
+| `security_extensions.yml` | `SecurityZone`, `SecurityPolicyRule`, `DcimFabricSwitch` | `trust_level`, `vrf`, `dc_advertised_prefix_list`, `advertising_device`, `advertised_zones`, `managed_by_service` | The VRF link is this fabric's handoff pairing; `managed_by_service` is the guard that lets a generator reconcile a firewall that also carries hand-written rules. The advertisement pair is the fabric side of a zone — a prefix-list **name** (there is no object to reference) plus the switch applying it; its inverse lives on `DcimFabricSwitch` in this file so both halves of one `identifier` stay together |
 | `cluster/kubernetes.yml` | `ClusterGeneric`, `ClusterGenericComputeUnitNodes` | `ClusterKubernetes`, `ClusterFabricPeering` | Nothing published covers a CNI, pod/service CIDRs, LoadBalancer VIP pools, or a cluster that speaks BGP with a fabric |
 | `tenancy_extensions.yml` | `OrganizationTenant`, `DcimCircuit` | `tenant_id`, `classification`, `sites`, `circuits` | A tenant crosses the provider edge, the fabric and the cluster at once, so these hang off the one adopted tenant rather than a per-domain copy of it |
 | `wan/wan.yml` | — | `WanSite`, `WanInternetPeering` | How a site attaches — its LAN, eBGP or static, its own ASN — and plain transit to one upstream AS have no published equivalent |

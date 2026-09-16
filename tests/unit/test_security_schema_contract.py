@@ -202,7 +202,7 @@ def test_policy_rule_gains_the_unmanaged_object_guard() -> None:
     assert managed["optional"] is False
 
 
-def test_extensions_touch_only_the_four_intended_kinds() -> None:
+def test_extensions_touch_only_the_five_intended_kinds() -> None:
     """Keeps local divergence from upstream small and reviewable.
 
     SecurityGenericAddress joined in cycle 023, for `book_index`: Junos writes
@@ -215,6 +215,19 @@ def test_extensions_touch_only_the_four_intended_kinds() -> None:
     deliberately each time a kind is added -- never loosened to "at least" --
     so that growing the local divergence is a visible decision rather than a
     test quietly accommodating it.
+
+    DcimFabricSwitch joined in cycle 032, and it is the first entry here that
+    is not a security kind at all. It carries `advertised_zones`, the inverse
+    of `SecurityZone.advertising_device`. Both halves of one relationship are
+    declared side by side deliberately: a bidirectional link is held together
+    by its `identifier`, and two identifiers that were meant to match and do
+    not produce two one-way relationships that each look correct and never
+    connect. Splitting the halves across files is how that drift starts.
+
+    The precedent is `schemas/service/service.yml`, whose extensions block
+    reaches into `DcimGenericDevice` and `DcimInterface` for the same reason --
+    the file that owns the concept declares both ends of the coupling it
+    introduces.
     """
     extended = {node["kind"] for node in _extension_nodes(_load_yaml(SECURITY_EXTENSIONS))}
 
@@ -223,6 +236,7 @@ def test_extensions_touch_only_the_four_intended_kinds() -> None:
         "SecurityPolicyRule",
         "SecurityGenericAddress",
         "SecurityFirewall",
+        "DcimFabricSwitch",
     }
 
 

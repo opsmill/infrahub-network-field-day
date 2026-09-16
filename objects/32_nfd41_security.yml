@@ -35,12 +35,26 @@ spec:
     - name: globex-cloud
       trust_level: 60
       vrf: TENANT_GLOBEX
+    # The only two zones the DC advertises toward, because these are the only
+    # two BGP neighbors carrying an outbound route-map -- both on border-leaf1:
+    #   VRF BRANCH:  neighbor 10.250.70.2 route-map RM-DC-TO-BRANCH out
+    #   VRF WAN:     neighbor 10.250.50.2 route-map RM-DC-TO-EXTERNAL out
+    # and each route-map matches exactly one prefix list.
+    #
+    # `leaf-nfd41-pod1-3-1` IS border-leaf1. Infrahub and ContainerLab name the
+    # same box differently and there is no renaming layer, so the two are
+    # matched by management address (172.20.41.25). NOT by role: no device in
+    # this fabric carries the `border_leaf` role -- all five leaves are `leaf`.
     - name: branch
       trust_level: 40
       vrf: BRANCH
+      dc_advertised_prefix_list: PL-DC-ADVERTISED-BRANCH
+      advertising_device: leaf-nfd41-pod1-3-1
     - name: wan
       trust_level: 20
       vrf: WAN
+      dc_advertised_prefix_list: PL-DC-ADVERTISED
+      advertising_device: leaf-nfd41-pod1-3-1
 
 ---
 # One physical interface per zone. A policy written against the wrong interface

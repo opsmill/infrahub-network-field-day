@@ -51,7 +51,7 @@ Regenerate the typed protocol classes after any schema change (see [the command 
 | `cluster/cluster.yml` | **Marketplace** (`infrahub/cluster`): `Cluster.Generic`, `Cluster.GenericComputeUnitNodes` |
 | `cluster/kubernetes.yml` | `Cluster.Kubernetes`, `Cluster.FabricPeering` — the CNI, pod/service/node ranges, VIP pools, and the fabric BGP contract |
 | `security/security.yml` | **Marketplace** (`infrahub/security`): 22 kinds — zones, the polymorphic address book, service objects, zone-pair policy rules, `Security.Firewall` as a device kind, `Security.FirewallInterface` |
-| `security_extensions.yml` | Adds `trust_level` and a fabric `vrf` link to `Security.Zone`, and `managed_by_service` to `Security.PolicyRule` |
+| `security_extensions.yml` | Adds `trust_level`, a fabric `vrf` link and the advertisement policy to `Security.Zone`, `managed_by_service` to `Security.PolicyRule`, and the inverse `advertised_zones` to `Dcim.FabricSwitch` |
 | `circuit/circuit.yml` | **Marketplace** (`infrahub/circuit`): `Dcim.Circuit`, `Dcim.CircuitEndpoint` |
 | `circuit_extensions.yml` | Adds `interface` to `Dcim.CircuitEndpoint`, so a circuit end resolves to the interface it terminates on and through it to real IP addresses |
 | `tenancy/tenancy.yml` | **Marketplace** (`infrahub/tenancy`): `Organization.Tenant`, plus tenant back-references on device, prefix, address, and location |
@@ -147,6 +147,37 @@ more than one object is one `Ipam.Prefix`, related to from each. This matters mo
 three enforcement points match on the same network: a fabric route policy, a firewall
 zone policy and a Kubernetes network policy can all name one prefix object, so agreement
 between them is a graph fact rather than three copies that might drift.
+
+### A zone's advertisement policy is a name, not a relationship
+
+`Security.Zone` carries two fields describing the fabric side of a zone:
+`dc_advertised_prefix_list`, the prefix list governing what the DC advertises **toward**
+that zone, and `advertising_device`, the fabric switch that applies it.
+
+The first is a `Text` attribute rather than a relationship, and that is forced rather
+than careless. No object exists to point at: every prefix list in this fabric lives
+inside `Network.Fabric.avd_custom_hostvars` as
+`custom_structured_configuration_prefix_lists`, which is AVD's channel for inputs this
+data model does not model. **Nothing enforces that the name resolves.** A zone can name a
+list no device defines, and the only symptom is a route that never appears.
+
+The `dc_` prefix carries the direction because both directions exist here as separate
+objects, and the shorter name reads as the wrong one:
+
+| Direction | List | Meaning |
+| --- | --- | --- |
+| DC → zone | `PL-DC-ADVERTISED-BRANCH` | advertised to the branch |
+| zone → DC | `PL-BRANCH-PERMITTED` | accepted from the branch |
+
+`advertising_device` peers `Dcim.FabricSwitch`, not `Dcim.Device` — see
+[the four device kinds](#there-are-four-device-kinds-not-one). It records
+the switch that **applies** the policy to a BGP neighbor, not the seven that merely
+render its definition: the prefix lists sit at fabric scope, so every switch renders them
+and one consults them.
+
+Both fields are optional and four of the six zones use neither. That is the steady state:
+the DC advertises nothing toward `k8s-prod` or `app-prod`, and the two tenant clouds are
+the *subject* of an advertisement toward `wan` rather than its destination.
 
 ### Non-EOS device roles
 

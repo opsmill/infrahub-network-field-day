@@ -43,6 +43,34 @@ extensions:
           parameters:
             min_value: 0
             max_value: 100
+        # The fabric side of a zone, half one. A ServiceAppAccess grant names
+        # all three domains of this lab -- the application (Kubernetes), the
+        # source zone (Junos) and the destination VIP (the fabric) -- and only
+        # the first two act. The grant cannot make its VIP routable because
+        # nothing connects a zone to the policy governing advertisement toward
+        # it.
+        #
+        # A NAME, NOT A RELATIONSHIP, and that is forced rather than lazy.
+        # There are zero RoutingPrefixList objects in this graph: every prefix
+        # list lives inside NetworkFabric.avd_custom_hostvars as
+        # `custom_structured_configuration_prefix_lists`, which is AVD's
+        # documented channel for inputs this model does not model. A
+        # relationship needs a peer to point at and there is none.
+        #
+        # The `dc_` prefix carries the direction, because both directions exist
+        # here as separate objects and the short name reads as the wrong one:
+        #   PL-DC-ADVERTISED-BRANCH   what we tell the branch     <- this
+        #   PL-BRANCH-PERMITTED       what we accept from it
+        - name: dc_advertised_prefix_list
+          kind: Text
+          label: DC Advertised Prefix List
+          optional: true
+          # Kept under 128 characters, which the schema enforces on any
+          # description; the reasoning above carries what will not fit.
+          description: >-
+            What the DC advertises TOWARD this zone. A soft reference into AVD
+            hostvars; nothing enforces that it resolves.
+          order_weight: 1300
       relationships:
         - name: vrf
           peer: IpamVRF
@@ -58,6 +86,40 @@ extensions:
           description: "The fabric VRF on the other side of this zone's handoff"
           identifier: security_zone__vrf
           order_weight: 930
+        # The fabric side of a zone, half two: which switch APPLIES the prefix
+        # list above to a BGP neighbor.
+        #
+        # "Applies", not "renders". custom_structured_configuration_prefix_lists
+        # sits at FABRIC scope, so all seven switches render
+        # PL-DC-ADVERTISED-BRANCH and exactly one references it on a neighbor.
+        # The seven-device answer is derivable and useless; the one-device
+        # answer is where a device-scope override actually takes effect.
+        #
+        # MODELLED RATHER THAN DERIVED, because both derivations fail here:
+        #   * by role -- no device in this fabric carries `border_leaf`; all
+        #     five leaves are plain `leaf`, and the lab's border-leaf1 is
+        #     identified only by its management address.
+        #   * through the zone's VRF -- IpamVRF relates to IpamPrefix and
+        #     IpamIPAddress and to nothing under Dcim.
+        #
+        # PEER IS DcimFabricSwitch AND THAT IS LOAD BEARING. `DcimDevice` is
+        # this repository's WAN FRR routers: it would validate, load, and
+        # resolve to nothing. `DcimGenericDevice` would resolve but admits the
+        # firewall and the compute nodes, neither of which carries
+        # avd_custom_hostvars.
+        #
+        # No on_delete. Its only value, `cascade`, deletes the PEER -- so on
+        # this relationship it would mean deleting a switch deletes a security
+        # zone. `infrahubctl schema check` accepts the line without complaint.
+        - name: advertising_device
+          peer: DcimFabricSwitch
+          label: Advertising Device
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: "The fabric switch that applies this zone's advertisement policy"
+          identifier: security_zone__advertising_device
+          order_weight: 940
 
     # The address book's ORDER, which Junos writes deliberately and Infrahub
     # does not otherwise store.
@@ -76,6 +138,30 @@ extensions:
     # policy order inside a zone pair is first-match and therefore semantic,
     # so the marketplace models it. This one is presentational, which is
     # probably why it does not.
+    # The other end of SecurityZone.advertising_device, declared so "what does
+    # this leaf advertise, and to whom" is answerable from the switch rather
+    # than only from the zone.
+    #
+    # The identifier MUST match the zone side exactly. Two different
+    # identifiers do not fail: they create two independent one-way
+    # relationships that each look correct in the UI and never connect.
+    #
+    # This is a Dcim kind being extended from the security file, which is the
+    # opposite direction from everything else here. It stays here rather than
+    # in dcim_extensions.yml so both halves of one relationship are declared
+    # side by side -- splitting them is how identifiers drift.
+    - kind: DcimFabricSwitch
+      relationships:
+        - name: advertised_zones
+          peer: SecurityZone
+          label: Advertised Zones
+          kind: Generic
+          cardinality: many
+          optional: true
+          description: "Zones whose advertisement policy this switch applies"
+          identifier: security_zone__advertising_device
+          order_weight: 3200
+
     - kind: SecurityGenericAddress
       attributes:
         - name: book_index
