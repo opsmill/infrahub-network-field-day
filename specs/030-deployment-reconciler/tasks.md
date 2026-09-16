@@ -324,10 +324,9 @@ is the assumption most likely to need revisiting).
 
 ## Implementation outcome
 
-**56 of 57 tasks complete.** T055's integration test is written but **not run**: it boots a
-fresh Infrahub through `infrahub-testcontainers`, which is a several-minute container spin-up
-and the constitution's `$infrahub-run-integration-tests` path owns that execution, not this
-command. The file is in place and ready for it.
+**All 57 tasks complete.** T055's integration test was written during the cycle and run
+afterwards: 5 passed in 4m24s against a real Infrahub booted through
+`infrahub-testcontainers`.
 
 ### The feature is validated against the real fabric, not just unit tests
 
