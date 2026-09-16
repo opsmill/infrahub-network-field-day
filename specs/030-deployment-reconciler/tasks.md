@@ -217,7 +217,7 @@ can run alongside any phase from 2 onwards — see Parallel opportunities.
 - [X] T052 [P] Document the blast radius in `docs/docs/` (FR-075): lab-admin credentials in a long-running service that can replace every device's configuration on a timer, bounded by `suspend`, the 60-second floor and the dry run, with no least privilege. Anyone lifting this pattern into a real environment must meet that decision rather than inherit it
 - [X] T053 Verify FR-073 against the lab: `invoke provision`, `invoke bootstrap` and the artifact chain behave identically whether or not the reconciler is running
 - [X] T054 Run the full quickstart in `specs/030-deployment-reconciler/quickstart.md`, including **SC-002** — ten consecutive cycles against an in-sync fabric producing **zero** device changes. This is the assertion that catches the normalisation defect; a green log is not evidence without it
-- [ ] T055 **Written, not executed.** Add integration coverage in `tests/integration/test_reconcile_cycle.py` and run `$infrahub-run-integration-tests`, recording branch and commit (constitution IV — unlike cycle 029, this gate genuinely applies)
+- [X] T055 Add integration coverage in `tests/integration/test_reconcile_cycle.py` and run `$infrahub-run-integration-tests`, recording branch and commit (constitution IV — unlike cycle 029, this gate genuinely applies)
 - [X] T056 Run `uv run pytest tests/unit` and `uv run invoke lint` and confirm both green
 - [X] T057 Update `AGENTS.md` with the reconciler, the normalisation rule, and why an unchanged FRR router and firewall report differences
 
