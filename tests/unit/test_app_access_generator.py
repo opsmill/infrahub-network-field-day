@@ -29,9 +29,13 @@ import yaml
 
 from generators.generate_app_access import (
     BOOK_INDEX_FLOOR,
+    PREFIX_LISTS_KEY,
     RULE_INDEX_FLOOR,
     AppAccessGenerator,
     GrantContext,
+    advertisement_entry,
+    advertisement_removed,
+    derive_advertisement,
     derive_destination_zone,
     derive_policy,
     derive_tcp_protocol,
@@ -51,6 +55,10 @@ from generators.generate_app_access_query import GenerateAppAccessQuery
 GRANT = "branch-to-nfd41-demo"
 APP = "nfd41-demo"
 VIP_ID = "ip-10.112.240.10"
+VIP_ADDRESS = "10.112.240.10/32"
+# The fabric side of the `branch` zone, from objects/32_nfd41_security.yml.
+ADVERTISED_LIST = "PL-DC-ADVERTISED-BRANCH"
+BORDER_LEAF = "leaf-nfd41-pod1-3-1"
 
 # Zone name -> the IpamVRF it hands off to. SecurityZone.vrf is how the
 # destination zone is derived; the firewall's /30 handoff interfaces contain no
@@ -95,6 +103,9 @@ def _grant(
     source_zone: str | None = "branch",
     vip_id: str | None = VIP_ID,
     granted_rule_ids: list[str] | None = None,
+    prefix_list: str | None = ADVERTISED_LIST,
+    advertising_device: str | None = BORDER_LEAF,
+    device_hostvars: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One ServiceAppAccess as GraphQL returns it.
 
@@ -120,7 +131,27 @@ def _grant(
                 }
             },
             "source_zone": (
-                {"node": {"id": f"zone-{source_zone}", "name": {"value": source_zone}}}
+                {
+                    "node": {
+                        "id": f"zone-{source_zone}",
+                        "name": {"value": source_zone},
+                        # The fabric side of the zone, from cycle 032. `branch`
+                        # and `wan` carry it in the lab; the other four carry
+                        # neither, because the DC advertises nothing toward them.
+                        "dc_advertised_prefix_list": {"value": prefix_list},
+                        "advertising_device": (
+                            {
+                                "node": {
+                                    "id": f"dev-{advertising_device}",
+                                    "name": {"value": advertising_device},
+                                    "avd_custom_hostvars": {"value": device_hostvars},
+                                }
+                            }
+                            if advertising_device
+                            else {"node": None}
+                        ),
+                    }
+                }
                 if source_zone
                 else {"node": None}
             ),
@@ -536,6 +567,9 @@ class _RecordingNode:
         self.saves: list[dict[str, Any]] = []
         self.status = _RecordingAttribute("provisioning")
         self.granted_rules = _RecordingRelationship()
+        # The advertising switch's shared JSON blob. Starts empty, as every
+        # fabric switch in the lab does.
+        self.avd_custom_hostvars = _RecordingAttribute({})
 
     async def save(self, **kwargs: Any) -> None:
         self.saves.append(kwargs)
@@ -565,6 +599,10 @@ class _RecordingClient:
 def _generator(client: _RecordingClient) -> AppAccessGenerator:
     generator = AppAccessGenerator.__new__(AppAccessGenerator)
     generator._client = client  # type: ignore[attr-defined]
+    # The non-tracking client, which the generator uses for objects it does not
+    # own -- the firewall and the advertising switch. One fake records both, so
+    # a test can still tell tracked writes from untracked ones by the kind.
+    generator._init_client = client  # type: ignore[attr-defined]
     import logging
 
     generator.logger = logging.getLogger("test")
@@ -1025,3 +1063,147 @@ def test_a_generated_rule_brings_its_application_declaration() -> None:
     joined = "\n".join(rendered)
     assert f"application svc-{GRANT}-tcp-8080 {{" in joined
     assert "        destination-port 8080;" in joined
+
+
+# ---------------------------------------------------------------------------
+# The fabric leg: making a permitted VIP actually routable
+# ---------------------------------------------------------------------------
+
+
+def test_the_advertisement_is_derived_from_the_source_zone() -> None:
+    parsed = _query()
+    advertisement = derive_advertisement(parsed.target.edges[0].node)
+    assert advertisement is not None
+    assert advertisement.prefix_list == ADVERTISED_LIST
+    assert advertisement.device_name == BORDER_LEAF
+
+
+def test_a_zone_the_dc_advertises_nothing_toward_yields_no_advertisement() -> None:
+    """Four of the six zones are in this state and it is not an error.
+
+    A grant from one of them gets its firewall rule and no advertisement, which
+    is the honest outcome: there is no route to add it to.
+    """
+    parsed = _query(prefix_list=None, advertising_device=None)
+    assert derive_advertisement(parsed.target.edges[0].node) is None
+
+
+def test_a_half_modelled_zone_raises_rather_than_guessing() -> None:
+    """The schema permits one half without the other; acting on it would either
+    write into an unnamed list or name a list on no device."""
+    for kwargs in ({"prefix_list": None}, {"advertising_device": None}):
+        parsed = _query(**kwargs)
+        with pytest.raises(ValueError, match="one half of its advertisement policy"):
+            derive_advertisement(parsed.target.edges[0].node)
+
+
+def test_the_sequence_sits_above_the_hand_written_entries() -> None:
+    """Hand-written sequences are 10 and 20 at fabric scope. A generated one is
+    far above them and at device scope, where _merge_lists composes the two."""
+    context = _context(_query())
+    assert context.prefix_sequence >= 1000
+    assert context.prefix_sequence == _context(_query()).prefix_sequence
+
+
+def test_adding_an_advertisement_preserves_everything_else() -> None:
+    """The attribute is a shared JSON blob, so the write is a merge.
+
+    Replacing it would discard whatever else a device carries -- and
+    `avd_custom_hostvars` is the documented channel for AVD inputs this model
+    does not model, so that could be anything.
+    """
+    existing = {
+        "custom_platform_settings": [{"platform": "cEOS"}],
+        PREFIX_LISTS_KEY: [{"name": "PL-OTHER", "sequence_numbers": [{"sequence": 10, "action": "permit 10.0.0.0/8"}]}],
+    }
+    merged = advertisement_entry(existing, ADVERTISED_LIST, 1234, "permit 10.112.240.10/32")
+
+    assert merged["custom_platform_settings"] == [{"platform": "cEOS"}]
+    names = {entry["name"] for entry in merged[PREFIX_LISTS_KEY]}
+    assert names == {"PL-OTHER", ADVERTISED_LIST}
+    assert existing[PREFIX_LISTS_KEY][0]["sequence_numbers"] == [{"sequence": 10, "action": "permit 10.0.0.0/8"}]
+
+
+def test_two_grants_share_one_prefix_list() -> None:
+    """A second grant adds a sequence rather than replacing the first."""
+    first = advertisement_entry({}, ADVERTISED_LIST, 1001, "permit 10.112.240.10/32")
+    both = advertisement_entry(first, ADVERTISED_LIST, 1002, "permit 10.112.240.11/32")
+
+    entry = next(e for e in both[PREFIX_LISTS_KEY] if e["name"] == ADVERTISED_LIST)
+    assert [s["sequence"] for s in entry["sequence_numbers"]] == [1001, 1002]
+
+
+def test_removing_one_advertisement_leaves_the_other() -> None:
+    both = advertisement_entry(
+        advertisement_entry({}, ADVERTISED_LIST, 1001, "permit 10.112.240.10/32"),
+        ADVERTISED_LIST,
+        1002,
+        "permit 10.112.240.11/32",
+    )
+    left = advertisement_removed(both, ADVERTISED_LIST, 1001)
+
+    entry = next(e for e in left[PREFIX_LISTS_KEY] if e["name"] == ADVERTISED_LIST)
+    assert [s["sequence"] for s in entry["sequence_numbers"]] == [1002]
+
+
+def test_removing_the_last_advertisement_prunes_the_husk() -> None:
+    """An emptied list and an emptied key both go.
+
+    Leaving `{"custom_structured_configuration_prefix_lists": [{"name": ...,
+    "sequence_numbers": []}]}` behind would render an empty prefix list onto the
+    switch, which is not what "no grants" means.
+    """
+    one = advertisement_entry({}, ADVERTISED_LIST, 1001, "permit 10.112.240.10/32")
+    assert advertisement_removed(one, ADVERTISED_LIST, 1001) == {}
+
+
+@pytest.mark.asyncio
+async def test_an_approved_grant_writes_the_advertisement_to_the_switch() -> None:
+    client = _RecordingClient()
+    await _generator(client).generate(_query(approved=True, ports=[8080]).model_dump(by_alias=True))
+
+    switch = client.nodes[f"dev-{BORDER_LEAF}"]
+    lists = switch.avd_custom_hostvars.value[PREFIX_LISTS_KEY]
+    entry = next(e for e in lists if e["name"] == ADVERTISED_LIST)
+    assert entry["sequence_numbers"][0]["action"] == f"permit {VIP_ADDRESS}"
+
+
+@pytest.mark.asyncio
+async def test_the_switch_never_joins_the_tracking_group() -> None:
+    """Otherwise it becomes a deletion candidate on any later run that did not
+    touch it, and this generator eventually deletes a leaf."""
+    client = _RecordingClient()
+    await _generator(client).generate(_query(approved=True, ports=[8080]).model_dump(by_alias=True))
+
+    switch = client.nodes[f"dev-{BORDER_LEAF}"]
+    assert switch.saves, "the switch should have been saved"
+    assert all(save.get("update_group_context") is False for save in switch.saves)
+
+
+@pytest.mark.asyncio
+async def test_revoking_a_grant_withdraws_its_advertisement() -> None:
+    client = _RecordingClient()
+    hostvars = advertisement_entry(
+        {},
+        ADVERTISED_LIST,
+        _context(_query()).prefix_sequence,
+        f"permit {VIP_ADDRESS}",
+    )
+    parsed = _query(approved=False, from_previous_run=True, device_hostvars=hostvars)
+    parsed.target.edges[0].node.granted_rules.edges.clear()
+
+    await _generator(client).generate(parsed.model_dump(by_alias=True))
+
+    switch = client.nodes[f"dev-{BORDER_LEAF}"]
+    assert switch.avd_custom_hostvars.value == {}, "the advertisement should be gone, husk and all"
+
+
+@pytest.mark.asyncio
+async def test_a_grant_from_a_silent_zone_still_gets_its_rule() -> None:
+    """No advertisement, and no failure. The firewall half is still correct."""
+    client = _RecordingClient()
+    parsed = _query(approved=True, ports=[8080], prefix_list=None, advertising_device=None)
+
+    await _generator(client).generate(parsed.model_dump(by_alias=True))
+
+    assert any(kind == "SecurityPolicyRule" for kind, _ in client.created)

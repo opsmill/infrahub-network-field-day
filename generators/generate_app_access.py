@@ -82,8 +82,10 @@ a referenced object like `junos-https` out of the deletion set.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import blake2b
+from operator import itemgetter
 from typing import Any
 
 from infrahub_sdk.generator import InfrahubGenerator
@@ -103,6 +105,11 @@ GrantNode = GenerateAppAccessQueryTargetEdgesNode
 # hand-written value, which is what keeps the pinned orderings intact.
 RULE_INDEX_FLOOR = 100
 BOOK_INDEX_FLOOR = 1000
+# Hand-written prefix-list sequences are 10 and 20, and they live at fabric
+# scope. A generated sequence sits far above them and at DEVICE scope, where
+# `_merge_lists` composes the two by `name` then by `sequence` rather than
+# replacing the baseline.
+PREFIX_SEQUENCE_FLOOR = 1000
 
 # Wide enough that two grants colliding is negligible at any realistic number
 # of them. A collision would not change what the firewall permits -- generated
@@ -119,6 +126,11 @@ TCP = "tcp"
 # The artifact_name from .infrahub.yml, which is what artifact_generate
 # looks the artifact up by. A mismatch here fails at run time, not load time.
 FIREWALL_ARTIFACT = "Junos Configuration"
+
+# The one key inside DcimFabricSwitch.avd_custom_hostvars this generator
+# writes. The attribute is a shared JSON blob, so every write is a
+# read-modify-write that preserves everything else in it.
+PREFIX_LISTS_KEY = "custom_structured_configuration_prefix_lists"
 
 MIN_PORT = 1
 MAX_PORT = 65535
@@ -150,6 +162,111 @@ def _stable_offset(seed: str, floor: int) -> int:
     """
     digest = blake2b(seed.encode("utf-8"), digest_size=8).digest()
     return floor + int.from_bytes(digest, "big") % ALLOCATION_SPAN
+
+
+@dataclass(frozen=True)
+class Advertisement:
+    """Where a grant's VIP must be advertised from, when anywhere.
+
+    The fabric leg of a grant. A `ServiceAppAccess` names all three domains of
+    this lab -- the application (Kubernetes), the source zone (Junos) and the
+    destination VIP (the fabric) -- and until cycle 032 the third had nowhere to
+    write, because nothing connected a zone to the policy governing
+    advertisement toward it.
+
+    `None` is a legitimate result: four of the six zones carry neither field
+    because the DC advertises nothing toward them, and a grant from one of those
+    gets its firewall rule and no advertisement.
+    """
+
+    device_id: str
+    device_name: str
+    prefix_list: str
+    hostvars: dict[str, Any]
+
+
+def derive_advertisement(grant: GrantNode) -> Advertisement | None:
+    """The fabric side of the grant's source zone, or None if it has none."""
+    zone = _node_of(grant.source_zone)
+    if zone is None:
+        return None
+
+    prefix_list_value = _value(getattr(zone, "dc_advertised_prefix_list", None))
+    device = _node_of(getattr(zone, "advertising_device", None))
+    name = _value(zone.name)
+
+    if prefix_list_value is None and device is None:
+        return None
+
+    # Half-modelled. The schema permits it and the lab has none; a zone with one
+    # half is a mistake rather than a state to act on, and acting on it would
+    # either write into an unnamed list or name a list on no device.
+    if prefix_list_value is None or device is None:
+        missing = "advertising_device" if device is None else "dc_advertised_prefix_list"
+        msg = (
+            f"zone {name!r} carries one half of its advertisement policy and not the other "
+            f"({missing} is unset); the fabric leg cannot be derived"
+        )
+        raise ValueError(msg)
+
+    raw = _value(getattr(device, "avd_custom_hostvars", None))
+    hostvars = deepcopy(raw) if isinstance(raw, dict) else {}
+
+    return Advertisement(
+        device_id=device.id,
+        device_name=_value(device.name),
+        prefix_list=prefix_list_value,
+        hostvars=hostvars,
+    )
+
+
+def advertisement_entry(hostvars: dict[str, Any], prefix_list: str, sequence: int, action: str) -> dict[str, Any]:
+    """``hostvars`` with one sequence added to one prefix list.
+
+    Merged rather than replaced, at every level. The attribute is shared, the
+    list may already carry another grant's sequence, and `_merge_lists` in
+    `generate_avd_device_hostvar.py` composes this device-scope entry with the
+    fabric-scope baseline by `name` and then by `sequence` -- so this adds to
+    `PL-DC-ADVERTISED-BRANCH` rather than replacing what the fabric declares.
+    """
+    merged = deepcopy(hostvars)
+    lists = merged.setdefault(PREFIX_LISTS_KEY, [])
+
+    entry = next((item for item in lists if item.get("name") == prefix_list), None)
+    if entry is None:
+        entry = {"name": prefix_list, "sequence_numbers": []}
+        lists.append(entry)
+
+    sequences = [item for item in entry.get("sequence_numbers", []) if item.get("sequence") != sequence]
+    sequences.append({"sequence": sequence, "action": action})
+    entry["sequence_numbers"] = sorted(sequences, key=itemgetter("sequence"))
+    return merged
+
+
+def advertisement_removed(hostvars: dict[str, Any], prefix_list: str, sequence: int) -> dict[str, Any]:
+    """``hostvars`` with one sequence removed, pruning what it empties.
+
+    An emptied list and an emptied key are both removed, so a device that has
+    never carried anything else comes back to `{}` rather than to a husk of
+    nested empties that renders an empty prefix list onto the switch.
+    """
+    merged = deepcopy(hostvars)
+    lists = merged.get(PREFIX_LISTS_KEY)
+    if not isinstance(lists, list):
+        return merged
+
+    for entry in list(lists):
+        if entry.get("name") != prefix_list:
+            continue
+        entry["sequence_numbers"] = [
+            item for item in entry.get("sequence_numbers", []) if item.get("sequence") != sequence
+        ]
+        if not entry["sequence_numbers"]:
+            lists.remove(entry)
+
+    if not lists:
+        merged.pop(PREFIX_LISTS_KEY, None)
+    return merged
 
 
 @dataclass(frozen=True)
@@ -191,6 +308,7 @@ class GrantContext:
     source_zone_id: str
     source_address_id: str
     vip_id: str
+    vip_address: str | None
     firewall_id: str | None
     tcp_protocol_id: str
     application_name: str | None
@@ -215,6 +333,11 @@ class GrantContext:
     @property
     def rule_index(self) -> int:
         return _stable_offset(self.grant_name, RULE_INDEX_FLOOR)
+
+    @property
+    def prefix_sequence(self) -> int:
+        """The sequence this grant occupies in the advertised prefix list."""
+        return _stable_offset(self.grant_name, PREFIX_SEQUENCE_FLOOR)
 
     @property
     def book_index(self) -> int:
@@ -463,6 +586,7 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
         source_zone_id=source_zone.id,
         source_address_id=source_address.id,
         vip_id=vip.id,
+        vip_address=_value(vip.address),
         firewall_id=derive_firewall(parsed),
         tcp_protocol_id=derive_tcp_protocol(parsed, name),
         application_name=_value(application.name) if application else None,
@@ -503,6 +627,7 @@ class AppAccessGenerator(InfrahubGenerator):
 
         await self._link_granted_rules(context, [rule_id])
         await self._set_status(grant.id, "active")
+        await self._advertise(context, derive_advertisement(grant))
         await self._rerender_firewall(context.firewall_id)
 
     async def _upsert_vip_entry(self, context: GrantContext) -> str:
@@ -677,9 +802,88 @@ class AppAccessGenerator(InfrahubGenerator):
             # Back to "ordered, not built". Leaving it `active` would claim a
             # rule that no longer exists.
             await self._set_status(grant.id, "provisioning")
+            await self._withdraw_advertisement(name, derive_advertisement(grant))
             await self._rerender_firewall(derive_firewall(parsed))
         else:
             self.logger.info("Grant %r is not approved; nothing to materialize", name)
+
+    async def _advertise(self, context: GrantContext, advertisement: Advertisement | None) -> None:
+        """Make the grant's VIP routable from its source zone.
+
+        The third leg. Without it the firewall permits a session to somewhere
+        the border leaf never re-advertises: permitted and unroutable, which
+        `schemas/service/access_services.yml` warns about on `destination_vip`.
+
+        **The write does not reach a switch on its own.** It lands in the
+        device's `avd_custom_hostvars`, which `generate-avd-device-hostvar`
+        reads -- and that generator is registered `execute_after_merge: false`
+        deliberately, because the AVD chain is expensive and is run explicitly.
+        So the model is correct immediately and the switch follows on the next
+        `invoke avd`, exactly as it does for any other fabric change.
+
+        DEVICE SCOPE, not fabric scope. `_merge_lists` composes the two by
+        `name` and then by `sequence`, so this adds a sequence to
+        `PL-DC-ADVERTISED-BRANCH` rather than replacing what the fabric
+        declares. Writing at fabric scope would put a per-grant value into the
+        attribute carrying the hand-authored baseline for every device.
+        """
+        if advertisement is None:
+            self.logger.info(
+                "Zone advertises nothing from the DC, so %r is permitted but not made routable",
+                context.grant_name,
+            )
+            return
+        if context.vip_address is None:
+            self.logger.warning("The destination VIP carries no address; nothing to advertise")
+            return
+
+        merged = advertisement_entry(
+            advertisement.hostvars,
+            advertisement.prefix_list,
+            context.prefix_sequence,
+            f"permit {context.vip_address}",
+        )
+        await self._write_hostvars(advertisement, merged)
+        self.logger.info(
+            "Advertised %s from %s via %s (seq %s); run `invoke avd` to reach the switch",
+            context.vip_address,
+            advertisement.device_name,
+            advertisement.prefix_list,
+            context.prefix_sequence,
+        )
+
+    async def _withdraw_advertisement(self, grant_name: str, advertisement: Advertisement | None) -> None:
+        """Stop advertising a revoked grant's VIP.
+
+        Keyed on this grant's own sequence, so another grant's entry in the same
+        prefix list survives -- the device-scope list is shared between grants
+        the way the address book is.
+        """
+        if advertisement is None:
+            return
+
+        sequence = _stable_offset(grant_name, PREFIX_SEQUENCE_FLOOR)
+        merged = advertisement_removed(advertisement.hostvars, advertisement.prefix_list, sequence)
+        if merged == advertisement.hostvars:
+            return
+
+        await self._write_hostvars(advertisement, merged)
+        self.logger.info(
+            "Withdrew the advertisement from %s; run `invoke avd` to reach the switch",
+            advertisement.device_name,
+        )
+
+    async def _write_hostvars(self, advertisement: Advertisement, hostvars: dict[str, Any]) -> None:
+        """Save the device's custom hostvars.
+
+        Through the NON-tracking client, and never with group context. The
+        switch is not this generator's to own: adding it to the tracking group
+        would make it a deletion candidate on any later run that did not touch
+        it, and this generator would eventually delete a leaf.
+        """
+        device = await self._init_client.get(kind="DcimFabricSwitch", id=advertisement.device_id)
+        device.avd_custom_hostvars.value = hostvars  # type: ignore[union-attr]
+        await device.save(update_group_context=False)
 
     async def _rerender_firewall(self, firewall_id: str | None) -> None:
         """Ask for the firewall's artifact to be re-rendered.

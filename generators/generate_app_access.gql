@@ -50,11 +50,35 @@ query GenerateAppAccessQuery($name: String!) {
             }
           }
         }
+        # The zone the request comes from, and -- since cycle 032 -- the fabric
+        # side of that zone: which prefix list governs what the DC advertises
+        # toward it, and which switch applies that list to a BGP neighbor.
+        #
+        # Both are optional in the schema and four of the six zones carry
+        # neither, because the DC advertises nothing toward them. A grant from
+        # such a zone gets its firewall rule and no advertisement, which is the
+        # honest outcome rather than an error.
         source_zone {
           node {
             id
             name {
               value
+            }
+            dc_advertised_prefix_list {
+              value
+            }
+            advertising_device {
+              node {
+                id
+                name {
+                  value
+                }
+                # Read to be merged into, never replaced: the attribute is a
+                # shared JSON blob and this generator owns one key inside it.
+                avd_custom_hostvars {
+                  value
+                }
+              }
             }
           }
         }

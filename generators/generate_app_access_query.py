@@ -103,10 +103,52 @@ class GenerateAppAccessQueryTargetEdgesNodeSourceZone(BaseModel):
 class GenerateAppAccessQueryTargetEdgesNodeSourceZoneNode(BaseModel):
     id: str
     name: Optional["GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeName"]
+    dc_advertised_prefix_list: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeDcAdvertisedPrefixList"
+    ]
+    advertising_device: (
+        "GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDevice"
+    )
 
 
 class GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeName(BaseModel):
     value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeDcAdvertisedPrefixList(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDevice(BaseModel):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNode(
+    BaseModel
+):
+    id: str
+    name: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNodeName"
+    ]
+    avd_custom_hostvars: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNodeAvdCustomHostvars"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNodeAvdCustomHostvars(
+    BaseModel
+):
+    value: Optional[Any]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeSourceAddress(BaseModel):
@@ -412,6 +454,8 @@ GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrfNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZone.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZoneNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDevice.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceAddress.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeDestinationVip.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeDestinationVipNode.model_rebuild()

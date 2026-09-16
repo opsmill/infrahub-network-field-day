@@ -2322,6 +2322,16 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         "ip_address",
         "prefix",
         "interface_name",
+        # A sequence number IS the identity of an entry in a prefix list, a
+        # route map or an ACL -- AVD writes them as `sequence_numbers` lists of
+        # `{sequence, action}`. Without it those lists have no identity key, so
+        # the whole list is REPLACED by the higher-precedence scope: a
+        # device-scope entry adding one permit to PL-DC-ADVERTISED-BRANCH
+        # silently deleted the two the fabric declares, and the branch stopped
+        # being told about the DC at all. Nothing failed; the leaf simply
+        # advertised less. Uniqueness within each list is checked before any key
+        # is used, so a list that reuses a sequence still falls back to replace.
+        "sequence",
     )
 
     # AVD node-type keys. A `nodes` or `node_groups` list under one of these is

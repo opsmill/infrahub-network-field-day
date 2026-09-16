@@ -1757,6 +1757,70 @@ def test_merge_custom_hostvars_replaces_a_list_with_no_identity_key() -> None:
     assert merged["servers"] == [{"name": "host-a", "adapters": [{"vlans": "20"}]}]
 
 
+def test_merge_custom_hostvars_composes_prefix_list_sequences() -> None:
+    """A device-scope permit is ADDED to the fabric's list, not substituted for it.
+
+    `sequence` had to join the identity keys for this. Without it a
+    `sequence_numbers` list has no key to match on, so the higher-precedence
+    scope replaces the whole list -- and a grant adding one permit to
+    PL-DC-ADVERTISED-BRANCH silently deleted the two the fabric declares. The
+    leaf then advertised strictly less than before and nothing failed.
+    """
+    merged = GenerateAVDDeviceHostvar._merge_custom_hostvars(
+        {
+            "custom_structured_configuration_prefix_lists": [
+                {
+                    "name": "PL-DC-ADVERTISED-BRANCH",
+                    "sequence_numbers": [
+                        {"sequence": 10, "action": "permit 10.112.240.0/24 le 32"},
+                        {"sequence": 20, "action": "permit 10.110.0.0/24"},
+                    ],
+                }
+            ]
+        },
+        {
+            "custom_structured_configuration_prefix_lists": [
+                {
+                    "name": "PL-DC-ADVERTISED-BRANCH",
+                    "sequence_numbers": [{"sequence": 843159, "action": "permit 10.112.240.10/32"}],
+                }
+            ]
+        },
+    )
+
+    entry = merged["custom_structured_configuration_prefix_lists"][0]
+    assert [item["sequence"] for item in entry["sequence_numbers"]] == [10, 20, 843159]
+
+
+def test_merge_custom_hostvars_lets_a_narrower_scope_edit_one_sequence() -> None:
+    """Precedence is unchanged: the same sequence in both scopes takes the
+    narrower scope's value, and its neighbours survive."""
+    merged = GenerateAVDDeviceHostvar._merge_custom_hostvars(
+        {
+            "custom_structured_configuration_prefix_lists": [
+                {
+                    "name": "PL-X",
+                    "sequence_numbers": [
+                        {"sequence": 10, "action": "permit 10.0.0.0/8"},
+                        {"sequence": 20, "action": "permit 10.1.0.0/16"},
+                    ],
+                }
+            ]
+        },
+        {
+            "custom_structured_configuration_prefix_lists": [
+                {"name": "PL-X", "sequence_numbers": [{"sequence": 10, "action": "deny 10.0.0.0/8"}]}
+            ]
+        },
+    )
+
+    entry = merged["custom_structured_configuration_prefix_lists"][0]
+    assert entry["sequence_numbers"] == [
+        {"sequence": 10, "action": "deny 10.0.0.0/8"},
+        {"sequence": 20, "action": "permit 10.1.0.0/16"},
+    ]
+
+
 def test_deep_merge_does_not_mutate_inputs() -> None:
     base = {"nested": {"keep": True, "replace": "base"}, "items": ["base"]}
     overlay = {"nested": {"replace": "overlay"}, "items": ["overlay"]}
