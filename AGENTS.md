@@ -271,6 +271,13 @@ stale confirmation is distinguishable from a dead loop. The service never writes
 2. Regenerate generated files rather than hand-editing them:
    - `src/solution_arista_avd/protocols.py` is generated.
    - `*_query.py` Pydantic models next to `.gql` files are generated.
+
+   **`infrahubctl protocols` does not apply the `extensions:` block.** It renders
+   `SecurityZone` with `name` and `interfaces` only — no `trust_level`, no `vrf`, none
+   of the advertisement fields — even though all of those are loaded and queryable.
+   So regenerating after an extension-only schema change produces an empty diff, and
+   **no extension-added field is reachable through the generated protocols**. Code that
+   needs one reads it through a generated `*_query.py` model instead.
 3. Implement generators, transforms, object data, menus, checks, or docs using the
    matching local Infrahub skills when a task touches those artifact types.
 4. Keep generators idempotent: use upserts/natural keys, deterministic ordering,
