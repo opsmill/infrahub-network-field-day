@@ -174,6 +174,20 @@ It is behind a compose profile (`--profile reconcile`) so nothing starts it by a
 `scripts/provision_lab.py` into `deployment/devices.py` so both callers share one copy rather
 than two that drift.
 
+The device layer is **Nornir** (`deployment/inventory.py`), with the inventory built from
+Infrahub by `nornir-infrahub`: hosts are `DcimGenericDevice` so all four device kinds appear,
+and groups come from each node's `member_of_groups`, which `objects/00_groups.yml` already
+seeds. **No `schema_mappings` is configured, deliberately** — `mgmt_ip` is a relationship on
+`DcimFabricSwitch` alone, so a mapping for it against the generic is rejected outright; the
+address each device is reached by comes from `Target` instead.
+
+**Where the thread boundary sits is the design.** Nornir runs hosts in a `ThreadPoolExecutor`
+while the SDK's client context is a contextvar bound to the async task, so a Nornir task does
+device I/O only and returns plain data; every Infrahub write happens afterwards in the caller's
+coroutine. `test_the_nornir_layer_never_touches_infrahub` asserts that by walking the module's
+imports rather than trusting the comment. The firewall is never parallelised — its comparison
+takes an exclusive lock, so it runs alone after the fabric.
+
 **Read `deployment/normalise.py` before changing anything in this package.** Two of the three
 device families report a difference against an artifact the device already matches:
 

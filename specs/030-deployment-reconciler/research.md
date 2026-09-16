@@ -172,8 +172,12 @@ match rather than leaving the implementer to discover R2 and R3 at 3am.
 
 ## R5. Is Nornir justified?
 
-**Decision**: **No, not in this cycle.** Reconcile sequentially, reusing the existing code
-path. Revisit if cycle wall-clock becomes a problem.
+> **OVERTURNED after the cycle, by the user.** Nornir is in. The measurements below stand and
+> the conclusion drawn from them did not: they weighed a dependency against wall-clock at 14
+> devices, which was the wrong axis. See R5a.
+
+**Decision at the time**: **No, not in this cycle.** Reconcile sequentially, reusing the
+existing code path. Revisit if cycle wall-clock becomes a problem.
 
 **Rationale**: Nornir buys concurrency and an inventory abstraction. Against that:
 
@@ -197,8 +201,41 @@ smaller step than a framework, and the firewall must stay serialised regardless 
 takes an exclusive lock.
 
 **Spec impact**: the spec's framing assumed Nornir (inherited from the review). It is not a
-requirement in the spec's FR list, so nothing there needs amending — but the assumption should
-be corrected so the next reader does not treat it as settled.
+requirement in the spec's FR list, so nothing there needs amending.
+
+---
+
+## R5a. Nornir, after the fact
+
+**Decision**: adopted. `nornir` 3.6.0 and `nornir-infrahub` 1.2.0 are direct dependencies, and
+`deployment/inventory.py` is the device layer.
+
+**What R5 got wrong.** It framed the question as "does wall-clock justify a dependency at 14
+devices" and answered no. The better question was what the layer is for at any scale: a full
+sweep is 14 sequential device comparisons, and measured per-device cost is 481 ms for EOS,
+209 ms for FRR, 915 ms for Junos. Sequentially that is ~10 s a cycle; through Nornir it is
+**3.3 s**, and the ceiling moves with `num_workers` rather than with the device count.
+
+**The contextvar hazard R5 cited is real and is designed around rather than avoided.** Nornir
+runs hosts in a `ThreadPoolExecutor` while the SDK's client context is a contextvar bound to
+the async task. The layer therefore does device I/O only — every `compare_*` and `push_*`
+function was already synchronous — and returns plain `DeviceOutcome` data. State writes happen
+in the caller's coroutine, sequentially, after the run.
+`test_the_nornir_layer_never_touches_infrahub` asserts that structurally by walking the
+module's imports, because the failure it prevents is silent rather than loud.
+
+**Two things measurement corrected in the review's own groundwork:**
+
+- It asserted both that the host kind is `DcimGenericDevice` and that `mgmt_ip.address` is a
+  legal single-hop schema mapping. Those cannot both be true, and the plugin says so:
+  `schema_mapping 'mgmt_ip.address' references 'mgmt_ip', which is not a relationship on
+  DcimGenericDevice`. `mgmt_ip` lives on `DcimFabricSwitch` alone — the same scar
+  `devices.discover()` already carries in its per-kind fragments. No mapping is configured; the
+  inventory supplies hosts and groups, and `Target` supplies the address per kind.
+- The mapping syntax is dotted (`primary_address.address`), not `__`-separated.
+
+**What did not change**: the firewall is still never parallelised — its comparison takes an
+exclusive lock, so it runs on its own after the fabric.
 
 ---
 
@@ -263,7 +300,8 @@ rather than by a lock, because a sequential loop cannot overlap itself. Two inst
 prevented operationally — the service runs as a single compose service with no replicas.
 
 **Rationale**: the review's own conclusion was "concurrency control is one loop with one lock",
-and with R5 removing Nornir there is no internal parallelism left to guard. This is worth
+and although R5a brought Nornir back, its parallelism is bounded inside one cycle of one
+loop rather than across cycles. This is worth
 stating rather than assuming, because the edge case in the spec — two reconcilers pushing
 replacements to the same device — is the worst failure mode available here, and "we only start
 one" is a weaker guarantee than it sounds. A cheap belt-and-braces option, deferred: take a
@@ -277,7 +315,7 @@ short-lived marker in Infrahub at cycle start so a second instance refuses to ru
 | --- | --- |
 | FR-010 device computes the diff | **True for all three, but insufficient.** R1 clean; R2 and R3 need normalisation |
 | FR-011 no difference ⇒ no push | **Needs FR-011a**: "no difference" must be defined after normalisation, fail-noisy |
-| Nornir device layer (assumption) | **Dropped for this cycle** (R5). No new dependency |
+| Nornir device layer (assumption) | Dropped in R5, **adopted afterwards** (R5a). Two direct dependencies |
 | FR-028 write cadence undecided | **Decided** (R8): `last_checked_at` every cycle, everything else on change |
 | FR-030 cleanup surfaces | **Confirmed and measured** (R6) |
 

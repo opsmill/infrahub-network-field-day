@@ -79,6 +79,20 @@ The firewall is compared on **one cycle in four, and last**, because its compari
 exclusive configuration lock — at the default interval a per-cycle check would take that lock
 144 times a day on the device you need during an incident.
 
+## The device layer
+
+Nornir, with the inventory built from Infrahub: hosts are `DcimGenericDevice` so all four
+device kinds appear, and groups come from each node's `member_of_groups`. A full sweep of the
+lab takes about 3.3 seconds against roughly 10 sequentially, and the ceiling moves with worker
+count rather than device count.
+
+**The firewall is never parallelised.** Its comparison takes an exclusive configuration lock,
+so it runs on its own after everything else.
+
+Nothing in a Nornir task touches Infrahub. Its hosts run in a thread pool while the SDK's
+client context is bound to the async task, so tasks do device I/O and return plain data, and
+state is written afterwards in the caller's coroutine.
+
 ## The normalisation layer, and why it exists
 
 **Two of the three families report a difference against an artifact the device already

@@ -391,15 +391,12 @@ Infrahub instance.
 
 ## Assumptions
 
-- **The device layer is the existing code, not Nornir.** The design review assumed Nornir, and
-  Phase 0 dropped it for this cycle (research R5): `provision_lab.discover()` already solves
-  the inventory in one query keyed on the artifact rather than the device kind, fifteen devices
-  at a 600-second interval have ample sequential headroom, and the review had itself recorded
-  that per-host work inside Nornir's thread pool "does not survive contact" with the
-  surrounding async context. Two new direct dependencies need a better justification than
-  "we might parallelise later". If wall-clock ever becomes the constraint, `concurrent.futures`
-  over the existing per-device functions is a smaller step than a framework — and the firewall
-  stays serialised regardless, because it takes an exclusive lock.
+- **The device layer is Nornir.** Phase 0 dropped it (research R5) and it was reinstated
+  afterwards (R5a): a full sweep goes from ~10 s to 3.3 s, and the ceiling moves with worker
+  count rather than device count. The contextvar hazard the review recorded is designed around
+  rather than avoided — Nornir tasks do device I/O only and return plain data, and every state
+  write happens in the caller's coroutine afterwards. The firewall is still never parallelised,
+  because its comparison takes an exclusive lock.
 - **The orchestrator is a plain loop, not Temporal.** The decision log's item 16 left this
   open, and answered it in the same breath: the webhook went at item 5 and the approval gate
   at item 15, so what remained for Temporal was scheduling, retry and history — and a

@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING
 
 from solution_arista_avd.deployment import compare as cmp
 from solution_arista_avd.deployment import devices as dv
+from solution_arista_avd.deployment import inventory as inv
 from solution_arista_avd.deployment.state import (
     STATUS_DRIFTED,
     STATUS_FAILED,
@@ -145,75 +146,72 @@ async def run_cycle(
     if not dry_run:
         report.swept = sweep(targets)
 
-    for target in targets:
-        if not all_due and not _due(target, cycle):
-            report.not_due.append(target.device)
-            continue
+    # Device work runs through Nornir: the fabric in parallel, the firewall on
+    # its own afterwards because comparing it takes an exclusive lock.
+    #
+    # NOTHING in a Nornir task touches Infrahub. Its hosts run in a
+    # ThreadPoolExecutor while the SDK's client context is a contextvar bound to
+    # the async task, so a write from inside one would need that context
+    # hand-propagated into worker threads -- which the design review measured
+    # and recorded as not surviving contact. The tasks return plain data and the
+    # state writes happen below, sequentially, in this coroutine.
+    by_name = {t.device: t for t in targets}
+    due = {name: t for name, t in by_name.items() if all_due or _due(t, cycle)}
+    report.not_due = sorted(set(by_name) - set(due))
 
-        # Read suspension before the device is reached, never after.
-        if not dry_run and await store.is_suspended(target.device):
-            report.suspended.append(target.device)
-            continue
+    suspended: set[str] = set()
+    if not dry_run:
+        for name in due:
+            if await store.is_suspended(name):
+                suspended.add(name)
+    report.suspended = sorted(suspended)
+    runnable = {name: t for name, t in due.items() if name not in suspended}
 
-        try:
-            config = cmp.read_intent(target, branch)
-            result = cmp.compare(target, config)
-        except Exception as error:
-            log.exception("compare failed for %s", target.device)
-            report.failed.append(target.device)
+    fabric, firewalls = inv.split_firewalls(inv.build_inventory(branch))
+    outcomes = inv.run_over(fabric, runnable, branch=branch, dry_run=dry_run)
+    outcomes += inv.run_over(firewalls, runnable, branch=branch, dry_run=dry_run)
+
+    for outcome in sorted(outcomes, key=lambda o: o.device):
+        if outcome.failed:
+            log.error("device %s failed: %s", outcome.device, outcome.error)
+            report.failed.append(outcome.device)
             if not dry_run:
-                await store.record(Outcome(device=target.device, status=STATUS_FAILED, error=str(error)))
+                await store.record(Outcome(device=outcome.device, status=STATUS_FAILED, error=outcome.error))
             continue
 
-        report.compared.append(target.device)
+        report.compared.append(outcome.device)
 
-        if not result.differs:
+        if not outcome.differs:
             if not dry_run:
                 await store.record(
                     Outcome(
-                        device=target.device,
+                        device=outcome.device,
                         status=STATUS_IN_SYNC,
                         confirmed=True,
-                        checksum=target.checksum,
+                        checksum=outcome.checksum,
                     )
                 )
             continue
 
-        report.differed.append(target.device)
+        report.differed.append(outcome.device)
         if dry_run:
             continue
 
         # `pending` vs `drifted` is the ONLY use of the artifact checksum in this
         # design. It does not decide whether to push -- the device's own diff did
-        # that -- it records which of two structurally different causes applies,
-        # which is what an operator reading the record needs to know.
-        previous = await store.last_checksum(target.device)
-        status = STATUS_PENDING if previous is not None and previous != target.checksum else STATUS_DRIFTED
+        # that -- it records which of two structurally different causes applies.
+        previous = await store.last_checksum(outcome.device)
+        status = STATUS_PENDING if previous is not None and previous != outcome.checksum else STATUS_DRIFTED
 
-        try:
-            dv.PUSHERS[target.artifact_name](target, config)
-        except Exception as error:
-            log.exception("push failed for %s", target.device)
-            report.failed.append(target.device)
-            await store.record(
-                Outcome(
-                    device=target.device,
-                    status=STATUS_FAILED,
-                    error=str(error),
-                    diff="\n".join(result.normalised),
-                    pushed=True,
-                )
-            )
-            continue
-
-        report.pushed.append(target.device)
+        if outcome.pushed:
+            report.pushed.append(outcome.device)
         await store.record(
             Outcome(
-                device=target.device,
+                device=outcome.device,
                 status=status,
-                diff="\n".join(result.normalised),
-                pushed=True,
-                checksum=target.checksum,
+                diff=outcome.diff,
+                pushed=outcome.pushed,
+                checksum=outcome.checksum,
             )
         )
 
