@@ -472,9 +472,48 @@ class JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityIPProtocolName(Base
 class JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityService(BaseModel):
     typename__: Literal["SecurityService"] = Field(alias="__typename")
     name: Optional["JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceName"]
+    description: Optional[
+        "JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceDescription"
+    ]
+    port: Optional["JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServicePort"]
+    ip_protocol: (
+        "JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceIpProtocol"
+    )
 
 
 class JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceName(BaseModel):
+    value: Optional[str]
+
+
+class JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceDescription(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServicePort(BaseModel):
+    value: Optional[Any]
+
+
+class JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceIpProtocol(
+    BaseModel
+):
+    node: Optional[
+        "JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceIpProtocolNode"
+    ]
+
+
+class JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceIpProtocolNode(
+    BaseModel
+):
+    name: Optional[
+        "JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceIpProtocolNodeName"
+    ]
+
+
+class JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceIpProtocolNodeName(
+    BaseModel
+):
     value: Optional[str]
 
 
@@ -843,6 +882,8 @@ JunosConfigQuerySecurityGenericService.model_rebuild()
 JunosConfigQuerySecurityGenericServiceEdges.model_rebuild()
 JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityIPProtocol.model_rebuild()
 JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityService.model_rebuild()
+JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceIpProtocol.model_rebuild()
+JunosConfigQuerySecurityGenericServiceEdgesNodeSecurityServiceIpProtocolNode.model_rebuild()
 JunosConfigQuerySecurityPolicy.model_rebuild()
 JunosConfigQuerySecurityPolicyEdges.model_rebuild()
 JunosConfigQuerySecurityPolicyEdgesNode.model_rebuild()

@@ -594,3 +594,81 @@ def test_the_three_recovered_comment_blocks_are_present() -> None:
     assert "Named objects rather than bare CIDRs" in rendered
     assert "NAT is absent from this file, and that absence is load-bearing" in rendered
     assert "`make verify`" in rendered
+
+
+# ---------------------------------------------------------------------------
+# Applications: declaring the services Junos does not predefine
+# ---------------------------------------------------------------------------
+
+
+def _rendered_with_custom_service() -> list[str]:
+    """The fixture plus one generated service, as generate-app-access creates it."""
+    data: dict[str, Any] = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    data["SecurityGenericService"]["edges"].append(
+        {
+            "node": {
+                "__typename": "SecurityService",
+                "name": {"value": "svc-branch-to-nfd41-demo-tcp-8080"},
+                "description": {"value": "tcp/8080, granted by branch-to-nfd41-demo"},
+                "port": {"value": 8080},
+                "ip_protocol": {"node": {"name": {"value": "tcp"}}},
+            }
+        }
+    )
+    transform = JunosConfig.__new__(JunosConfig)
+    transform.root_directory = str(REPO_ROOT)
+    return asyncio.run(transform.transform(data)).splitlines()
+
+
+def test_a_baseline_firewall_declares_no_applications_stanza() -> None:
+    """The device's own file has none, and rendering an empty one would differ.
+
+    Every service the hand-written rules reference is a Junos built-in, so the
+    correct output is no stanza at all rather than `applications { }`.
+    """
+    assert not any(line.startswith("applications") for line in _rendered())
+
+
+def test_a_generated_service_is_declared() -> None:
+    """The bug this stanza exists for.
+
+    Without it a policy referenced `svc-branch-to-nfd41-demo-tcp-8080`, nothing
+    declared it, and the device refused the entire commit with
+    `statements constraint check failed` -- naming no object and pointing at no
+    line. Every stanza test passed, because the rule itself was correct.
+    """
+    rendered = _rendered_with_custom_service()
+    stanza = _stanza(rendered, "applications")
+    assert "    application svc-branch-to-nfd41-demo-tcp-8080 {" in stanza
+    assert "        protocol tcp;" in stanza
+    assert "        destination-port 8080;" in stanza
+
+
+def test_built_in_applications_are_never_declared() -> None:
+    """Declaring a Junos built-in is rejected as a redefinition.
+
+    The `junos-` prefix is a fact about Junos -- Juniper namespaces every
+    predefined application that way -- not a convention of this repository.
+    """
+    stanza = "\n".join(_stanza(_rendered_with_custom_service(), "applications"))
+    for built_in in ("junos-http", "junos-https", "junos-ping"):
+        assert f"application {built_in} " not in stanza
+
+
+def test_the_any_keyword_is_never_declared() -> None:
+    """`any` is a keyword, exactly as it is in the address book: referenced by
+    rules, declared nowhere, and carrying no port to declare with."""
+    stanza = "\n".join(_stanza(_rendered_with_custom_service(), "applications"))
+    assert "application any {" not in stanza
+
+
+def test_the_applications_stanza_sits_outside_security() -> None:
+    """Applications are referenced BY security policies and are not part of that
+    hierarchy. Nesting them commits cleanly and leaves every reference
+    unresolved -- the same silent failure this stanza was added to fix.
+    """
+    rendered = _rendered_with_custom_service()
+    security_start = next(i for i, line in enumerate(rendered) if line == "security {")
+    security_end = security_start + len(_stanza(rendered, "security")) - 1
+    applications_start = next(i for i, line in enumerate(rendered) if line == "applications {")
+    assert applications_start > security_end

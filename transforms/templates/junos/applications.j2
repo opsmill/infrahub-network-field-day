@@ -1,0 +1,24 @@
+{# Declarations for services Junos does not predefine.
+
+   The whole stanza is conditional, and that is the point: the device's own
+   file declares no applications, because every service the hand-written rules
+   reference is a Junos built-in. Rendering an empty `applications { }` block
+   would be valid Junos and would still break the byte-for-byte comparison
+   against junos.conf for no gain, so an empty list renders nothing at all.
+
+   Top level, not inside `security`. Applications are referenced BY security
+   policies and are not part of that hierarchy; nesting them commits cleanly
+   and leaves every reference unresolved. #}
+{% if applications %}
+applications {
+{% for application in applications %}
+{% if application.description %}
+    /* {{ application.description }} */
+{% endif %}
+    application {{ application.name }} {
+        protocol {{ application.protocol }};
+        destination-port {{ application.port }};
+    }
+{% endfor %}
+}
+{% endif %}

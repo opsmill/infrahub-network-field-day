@@ -102,6 +102,7 @@ class JunosConfig(InfrahubTransform):
             "zones": self._zones(result, target),
             "zone_pairs": self._zone_pairs(result),
             "static_routes": self._static_routes(target),
+            "applications": self._applications(result),
             "tcp_mss": _value(target, "tcp_mss").value if _value(target, "tcp_mss") else None,
         }
         return env.get_template("junos.j2").render(**context)
@@ -234,6 +235,59 @@ class JunosConfig(InfrahubTransform):
                 raise JunosConfigError(f"{node.name.value}: address object carries no value")
             entries.append({"name": node.name.value, "value": value, "index": index.value})
         return sorted(entries, key=itemgetter("index"))
+
+    @staticmethod
+    def _applications(result: JunosConfigQuery) -> list[dict[str, Any]]:
+        """Services Junos does not predefine, so a policy may reference them.
+
+        The hand-written baseline needs none: `junos-http`, `junos-https` and
+        `junos-ping` are Junos built-ins and `any` is a keyword, so for three
+        cycles this renderer referenced applications and declared none. A
+        generator then created `svc-<grant>-tcp-8080`, the policy referenced it,
+        and the device refused the whole commit with
+
+            error: commit failed: (statements constraint check failed)
+
+        which names no object and points at no line. Only an end-to-end push
+        finds it: every stanza test passed, because the rule itself is correct.
+
+        BUILT-IN IS DECIDED BY THE `junos-` PREFIX, which is a fact about Junos
+        rather than a convention of this repository -- Juniper namespaces every
+        predefined application that way. Declaring one would be rejected as a
+        redefinition, so the prefix is a filter and not a preference.
+
+        Returns an EMPTY LIST when every service is predefined, and the template
+        then renders no stanza at all. That is what keeps the artifact
+        byte-for-byte identical to the device file, which declares none.
+        """
+        applications = []
+        for edge in result.security_generic_service.edges:
+            node = edge.node
+            name = _value(node, "name")
+            if name is None or name.value is None:
+                continue
+            if name.value.startswith("junos-"):
+                continue
+
+            port = _value(node, "port")
+            protocol = _value(node, "ip_protocol")
+            # `any` is a keyword, like it is in the address book: referenced by
+            # rules, declared nowhere, and carrying no port to declare with.
+            if port is None or port.value in (None, 0):
+                continue
+            if protocol is None or getattr(protocol, "node", None) is None:
+                raise JunosConfigError(f"{name.value}: service has a port and no protocol, so it cannot be declared")
+
+            description = _value(node, "description")
+            applications.append(
+                {
+                    "name": name.value,
+                    "protocol": protocol.node.name.value,
+                    "port": port.value,
+                    "description": description.value if description is not None else None,
+                }
+            )
+        return sorted(applications, key=itemgetter("name"))
 
     @staticmethod
     def _address_groups(result: JunosConfigQuery) -> list[dict[str, Any]]:

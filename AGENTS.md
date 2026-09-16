@@ -81,10 +81,23 @@ Current generator definitions are registered in `.infrahub.yml`:
 `generate-app-access` sits underneath `ServiceAppAccess` and turns an **approved** grant into
 the firewall objects permitting the session: an address-book entry for the destination VIP, a
 `SecurityService` per permitted port, and the `SecurityPolicyRule` joining them, linked back
-through `granted_rules`. Nothing downstream changed — `junos_config.gql` queries
-`SecurityGenericAddress` and `SecurityPolicy` unfiltered, so generated objects render into the
-existing artifact and the reconciler pushes it. Four things to know before changing it:
+through `granted_rules`. Generated objects render into the existing Junos artifact, because
+`junos_config.gql` queries `SecurityGenericAddress` and `SecurityPolicy` unfiltered. Six things
+to know before changing it:
 
+- **It asks for the firewall's artifact to be re-rendered, and must.** An artifact regenerates
+  when its *target* changes, and the target is `fw1` — a new `SecurityPolicyRule` is not a
+  change to the firewall. Without the explicit request the objects appear, the artifact keeps
+  its old checksum, and the reconciler compares the device against stale output and reports no
+  difference. Infrahub's trigger rules cannot close this: `CoreGeneratorAction` and
+  `CoreGroupAction` are the only actions and neither renders an artifact.
+- **A generated service object needs `junos_config` to declare it.** Every service in the
+  hand-written baseline is a Junos built-in (`junos-http`, `junos-https`, `junos-ping`), so for
+  three cycles the renderer referenced applications and declared none. A policy naming an
+  undeclared application is refused with `commit failed: (statements constraint check failed)`,
+  which names no object and points at no line. `_applications` now emits the stanza for any
+  service without the `junos-` prefix, and renders nothing when they are all built-ins — which
+  is what keeps the artifact byte-identical to the device file.
 - **An unapproved grant is a deliberate no-op, and that is the seeded state.** `approved` is
   the gate, so `objects/38_nfd41_access_grants.yml` generates nothing and the rendered Junos
   artifact stays byte-identical to what `tests/unit/test_junos_config.py` holds against
@@ -170,6 +183,33 @@ workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and
 `fabrics`; `peering-consistency` is **global** — it has no `targets`, because its rules are
 statements about the whole graph rather than about one fabric.
 
+## Repository sync, and the one thing that wedges it
+
+Infrahub clones the repository over git and imports what it finds: queries, generators,
+transforms, checks, artifact definitions, and menus. Two behaviours are worth knowing before
+debugging a change that never arrives.
+
+**A failed import is not retried until the commit changes.** Infrahub compares the commit it
+has against the repository's HEAD, and an unchanged hash means there is nothing to do — even
+when the last import failed halfway. The repository sits at `sync_status: error-import`
+indefinitely and polling does not help. Recovery is a new commit, not patience.
+
+**A partial import leaves the graph inconsistent and reports nothing.** One observed run
+registered the new `CoreGraphQLQuery` and not the `CoreGeneratorDefinition` beside it, because
+the import failed on an unrelated menu upsert after the queries and before the generators. That makes
+"the query is there, the generator is not" a symptom of a failed import rather than of a
+malformed definition. Check `sync_status` on the `CoreRepository` first:
+
+```bash
+# sync_status should be `in-sync`; `error-import` means the last import failed
+uv run infrahubctl repository list
+docker compose logs task-worker --since 10m | grep -i "Failed to synchronize"
+```
+
+The failure seen here was a race between the two `task-worker` replicas importing the same
+repository, surfacing as `Multiple CoreMenuItem nodes have the same hfid` on a menu item whose
+HFID is not in fact duplicated.
+
 ## Deployment state, and the one rule about it
 
 `DeploymentState` and `DeploymentDiffFile` (`schemas/deployment.yml`) record whether each
@@ -205,6 +245,13 @@ It is behind a compose profile (`--profile reconcile`) so nothing starts it by a
 `invoke provision` is unchanged: cycle 030 **lifted** the push path out of
 `scripts/provision_lab.py` into `deployment/devices.py` so both callers share one copy rather
 than two that drift.
+
+**Run `invoke build` before starting the profile if dependencies have moved.** The service runs
+`python scripts/reconcile.py` with the *image's* interpreter, so it needs the project's runtime
+dependencies baked in. An image built predating `nornir-infrahub` crash-loops on
+`ModuleNotFoundError: No module named 'infrahub_sdk'` — the SDK arrives transitively through
+`nornir-infrahub`, and the host virtualenv bind-mounted at `/source` cannot stand in for it:
+the image is Python 3.13 and that virtualenv is 3.12.
 
 The device layer is **Nornir** (`deployment/inventory.py`), with the inventory built from
 Infrahub by `nornir-infrahub`: hosts are `DcimGenericDevice` so all four device kinds appear,

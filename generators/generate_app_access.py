@@ -116,6 +116,10 @@ ALLOCATION_SPAN = 1_000_000
 # hand-written.
 TCP = "tcp"
 
+# The artifact_name from .infrahub.yml, which is what artifact_generate
+# looks the artifact up by. A mismatch here fails at run time, not load time.
+FIREWALL_ARTIFACT = "Junos Configuration"
+
 MIN_PORT = 1
 MAX_PORT = 65535
 
@@ -187,6 +191,7 @@ class GrantContext:
     source_zone_id: str
     source_address_id: str
     vip_id: str
+    firewall_id: str | None
     tcp_protocol_id: str
     application_name: str | None
     requester: str | None
@@ -260,6 +265,16 @@ def normalise_ports(grant: GrantNode) -> list[int]:
         ports.add(port)
 
     return sorted(ports)
+
+
+def derive_firewall(parsed: GenerateAppAccessQuery) -> str | None:
+    """The device the policy is applied to, so its artifact can be re-rendered."""
+    for edge in parsed.security_policy.edges:
+        node = edge.node
+        target = _node_of(node.device_target) if node is not None else None
+        if target is not None:
+            return target.id
+    return None
 
 
 def derive_policy(parsed: GenerateAppAccessQuery, grant_name: str) -> str:
@@ -448,6 +463,7 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
         source_zone_id=source_zone.id,
         source_address_id=source_address.id,
         vip_id=vip.id,
+        firewall_id=derive_firewall(parsed),
         tcp_protocol_id=derive_tcp_protocol(parsed, name),
         application_name=_value(application.name) if application else None,
         requester=_value(grant.requester),
@@ -487,6 +503,7 @@ class AppAccessGenerator(InfrahubGenerator):
 
         await self._link_granted_rules(context, [rule_id])
         await self._set_status(grant.id, "active")
+        await self._rerender_firewall(context.firewall_id)
 
     async def _upsert_vip_entry(self, context: GrantContext) -> str:
         """The address-book entry for the destination VIP.
@@ -660,8 +677,57 @@ class AppAccessGenerator(InfrahubGenerator):
             # Back to "ordered, not built". Leaving it `active` would claim a
             # rule that no longer exists.
             await self._set_status(grant.id, "provisioning")
+            await self._rerender_firewall(derive_firewall(parsed))
         else:
             self.logger.info("Grant %r is not approved; nothing to materialize", name)
+
+    async def _rerender_firewall(self, firewall_id: str | None) -> None:
+        """Ask for the firewall's artifact to be re-rendered.
+
+        WITHOUT THIS THE RULE NEVER REACHES THE DEVICE. An artifact is
+        regenerated when its *target* changes, and the target here is the
+        firewall -- a new `SecurityPolicyRule` is not a change to `fw1`. So the
+        objects appear, the rendered artifact keeps its old checksum, and the
+        reconciler compares the device against stale output and reports no
+        difference. Measured: the generator ran on merge, and three and a half
+        minutes later the artifact checksum had not moved.
+
+        Infrahub's trigger rules cannot close this -- `CoreGeneratorAction` and
+        `CoreGroupAction` are the only actions, and neither renders an artifact
+        -- so the generator that changed the configuration asks for the
+        re-render itself.
+
+        Best effort, and deliberately so. The objects are already written and
+        correct by this point; raising here would skip the tracking context's
+        `update_group`, leaving this run's objects outside the group they should
+        own. A failed request is recoverable by regenerating the artifact, so it
+        is logged loudly rather than thrown.
+
+        Uses the NON-tracking client: the firewall is not this generator's to
+        own, and fetching it through the tracking client risks making it a
+        deletion candidate.
+        """
+        if firewall_id is None:
+            self.logger.warning(
+                "No firewall resolved, so %r was not re-rendered; the rule will not reach a device "
+                "until the artifact is regenerated",
+                FIREWALL_ARTIFACT,
+            )
+            return
+
+        try:
+            firewall = await self._init_client.get(kind="SecurityFirewall", id=firewall_id)
+            await firewall.artifact_generate(FIREWALL_ARTIFACT)
+        except Exception as exc:  # noqa: BLE001 - see the docstring; never fatal here
+            self.logger.warning(
+                "Could not re-render %r (%s). The objects are correct; regenerate the artifact "
+                "or the reconciler will keep comparing against stale output",
+                FIREWALL_ARTIFACT,
+                exc,
+            )
+            return
+
+        self.logger.info("Requested a re-render of %r", FIREWALL_ARTIFACT)
 
     async def _set_status(self, grant_id: str, status: str) -> None:
         """Record the outcome on the grant.

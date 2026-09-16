@@ -106,11 +106,22 @@ query JunosConfigQuery($device: String!) {
     }
   }
 
+  # `port` and `ip_protocol` are fetched so a service that Junos does NOT
+  # predefine can be declared in an `applications` stanza. Every service in the
+  # hand-written baseline is a Junos built-in (junos-http, junos-https,
+  # junos-ping), which is why this renderer needed neither field until a
+  # generator started creating custom ones -- and why a policy referencing one
+  # was rejected with `statements constraint check failed`.
   SecurityGenericService {
     edges {
       node {
         __typename
-        ... on SecurityService { name { value } }
+        ... on SecurityService {
+          name { value }
+          description { value }
+          port { value }
+          ip_protocol { node { name { value } } }
+        }
         ... on SecurityIPProtocol { name { value } }
       }
     }

@@ -905,6 +905,19 @@
           "__typename": "SecurityService",
           "name": {
             "value": "junos-http"
+          },
+          "description": {
+            "value": "HTTP"
+          },
+          "port": {
+            "value": 80
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "tcp"
+              }
+            }
           }
         }
       },
@@ -913,6 +926,19 @@
           "__typename": "SecurityService",
           "name": {
             "value": "junos-https"
+          },
+          "description": {
+            "value": "HTTPS"
+          },
+          "port": {
+            "value": 443
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "tcp"
+              }
+            }
           }
         }
       },
@@ -921,6 +947,19 @@
           "__typename": "SecurityService",
           "name": {
             "value": "junos-ping"
+          },
+          "description": {
+            "value": "ICMP echo"
+          },
+          "port": {
+            "value": 0
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "icmp"
+              }
+            }
           }
         }
       },
@@ -929,6 +968,19 @@
           "__typename": "SecurityService",
           "name": {
             "value": "any"
+          },
+          "description": {
+            "value": "Any application"
+          },
+          "port": {
+            "value": 0
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "tcp"
+              }
+            }
           }
         }
       }

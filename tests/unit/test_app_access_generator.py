@@ -938,7 +938,15 @@ def _render_with_generated_objects() -> list[str]:
         }
     )
     data["SecurityGenericService"]["edges"].append(
-        {"node": {"__typename": "SecurityService", "name": {"value": f"svc-{GRANT}-tcp-8080"}}}
+        {
+            "node": {
+                "__typename": "SecurityService",
+                "name": {"value": f"svc-{GRANT}-tcp-8080"},
+                "description": {"value": f"tcp/8080, granted by {GRANT}"},
+                "port": {"value": 8080},
+                "ip_protocol": {"node": {"name": {"value": "tcp"}}},
+            }
+        }
     )
     # And what _upsert_rule writes, into the branch -> k8s-prod pair.
     data["SecurityPolicy"]["edges"][0]["node"]["rules"]["edges"].append(
@@ -1003,3 +1011,17 @@ def test_a_generated_address_entry_renders_after_every_hand_written_one() -> Non
     for name in ("k8s-nodes", "branch-users", "globex-cloud"):
         hand_written = next(i for i, line in enumerate(rendered) if f"address {name} " in line)
         assert hand_written < generated
+
+
+def test_a_generated_rule_brings_its_application_declaration() -> None:
+    """The defect an end-to-end push found, asserted from the render side.
+
+    A policy referencing an application nothing declares is rejected by the
+    device with `statements constraint check failed`, which names no object.
+    Every other test here passed while that was true, because the rule itself
+    was correct -- the missing piece was a stanza the renderer never emitted.
+    """
+    rendered = _render_with_generated_objects()
+    joined = "\n".join(rendered)
+    assert f"application svc-{GRANT}-tcp-8080 {{" in joined
+    assert "        destination-port 8080;" in joined
