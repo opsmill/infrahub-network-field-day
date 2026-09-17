@@ -150,18 +150,35 @@ take the next free resource from a pool. Two things to know before changing the 
   candidate. A hard-coded `NFD41-Segment-Subnet-Pool` would fail naming a string that appears in
   no schema.
 
-**`status` is honoured by one generator and inert everywhere else, and that is a gap rather
-than a design.** `ServiceGeneric.status` offers `decommissioning` and `decommissioned` on every
-service kind, but only `generate-network-segment` branches on them. Setting a
-`ServiceFabricPeering`, `ServiceFabricApp`, `ServiceL3vpn`, `ServiceTenantCloud` or
-`ServiceInternetAccess` to `decommissioned` changes nothing: the sessions stay, the Crossplane
-resource is still delivered, and the provider edge still imports the tenant's prefixes.
-`crossplane_fabric_peering.gql` even selects the field and its transform never reads it.
+**`status` withdraws, and `decommissioning` counts as gone rather than going.** Every service
+kind's `decommissioning`/`decommissioned` state now means the same thing everywhere: downstream
+treats the service as **absent**.
 
-Closing it means teaching each renderer to withdraw, and the WAN renderers are pinned
-byte-for-byte against `../lab/wan/rendered/*/frr.conf` — so it is a deliberate decision about
-what the service layer promises, not a tidy-up. Until it is made, treat `status` on those kinds
-as a label, and do not assume the segment generator's behaviour generalises.
+| Kind | What withdraws it |
+| --- | --- |
+| `ServiceNetworkSegment` | its generator deletes the subnet, VLAN and SVI, releasing both pools |
+| `ServiceTenantOnboarding` | its generator deletes the EVPN tenant, *refusing* while VRFs hang off it |
+| `ServiceServerPlacement` | its generator deletes the machine and its cabling |
+| `ServiceFabricApp` | its generator returns the VIP block, if it allocated it |
+| `ServiceFabricPeering` | its generator deletes the sessions **the service recorded** |
+| `ServiceL3vpn`, `ServiceTenantCloud`, `ServiceInternetAccess` | `frr_config` renders them as though absent |
+
+`decommissioning` withdraws rather than waiting, because the alternative is a window in which
+the intent is withdrawn and the router still carries the route — which is the window the state
+exists to close.
+
+**The WAN half was safe to change precisely because it is pinned.** `frr_config` is held
+byte-for-byte against `../lab/wan/rendered/*/frr.conf`, and filtering a status nothing currently
+carries is a no-op — so the existing assertions proved the change altered nothing, and a new test
+holds a decommissioned service's output against the *removal* of that service rather than merely
+asserting it changed.
+
+**What still does not withdraw is the Crossplane delivery path**, and that is deliberate.
+`crossplane_fabric_peering` and `crossplane_fabric_app` render one artifact per service; an
+artifact that rendered empty would be a manifest Vidra has to interpret, and
+[vidra-delivery.md](docs/docs/developer-guide/vidra-delivery.md) records that the operator only
+deletes a resource when the manifest it delivered goes away. Withdrawing a delivered resource is
+therefore done by deleting the service, not by labelling it.
 
 `generate-app-access` sits underneath `ServiceAppAccess` and turns an **approved** grant into
 the firewall objects permitting the session: an address-book entry for the destination VIP, a

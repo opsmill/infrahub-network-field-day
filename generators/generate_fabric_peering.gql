@@ -8,6 +8,12 @@ query GenerateFabricPeeringQuery($name: String!) {
         name {
           value
         }
+        # Drives withdrawal. Until cycle 037 this generator ignored status
+        # entirely, so a decommissioned peering service kept every BGP session
+        # it had derived -- the service said gone and the fabric said up.
+        status {
+          value
+        }
         cluster {
           node {
             id

@@ -312,12 +312,17 @@ class FrrConfigQueryServiceL3VpnEdges(BaseModel):
 
 class FrrConfigQueryServiceL3VpnEdgesNode(BaseModel):
     name: Optional["FrrConfigQueryServiceL3VpnEdgesNodeName"]
+    status: Optional["FrrConfigQueryServiceL3VpnEdgesNodeStatus"]
     tenant: "FrrConfigQueryServiceL3VpnEdgesNodeTenant"
     vrf: "FrrConfigQueryServiceL3VpnEdgesNodeVrf"
     dc_service_prefixes: "FrrConfigQueryServiceL3VpnEdgesNodeDcServicePrefixes"
 
 
 class FrrConfigQueryServiceL3VpnEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class FrrConfigQueryServiceL3VpnEdgesNodeStatus(BaseModel):
     value: Optional[str]
 
 
@@ -373,11 +378,16 @@ class FrrConfigQueryServiceTenantCloudEdges(BaseModel):
 
 class FrrConfigQueryServiceTenantCloudEdgesNode(BaseModel):
     name: Optional["FrrConfigQueryServiceTenantCloudEdgesNodeName"]
+    status: Optional["FrrConfigQueryServiceTenantCloudEdgesNodeStatus"]
     tenant: "FrrConfigQueryServiceTenantCloudEdgesNodeTenant"
     prefix: "FrrConfigQueryServiceTenantCloudEdgesNodePrefix"
 
 
 class FrrConfigQueryServiceTenantCloudEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class FrrConfigQueryServiceTenantCloudEdgesNodeStatus(BaseModel):
     value: Optional[str]
 
 
@@ -415,10 +425,15 @@ class FrrConfigQueryServiceInternetAccessEdges(BaseModel):
 
 class FrrConfigQueryServiceInternetAccessEdgesNode(BaseModel):
     name: Optional["FrrConfigQueryServiceInternetAccessEdgesNodeName"]
+    status: Optional["FrrConfigQueryServiceInternetAccessEdgesNodeStatus"]
     l_3_vpn: "FrrConfigQueryServiceInternetAccessEdgesNodeL3Vpn" = Field(alias="l3vpn")
 
 
 class FrrConfigQueryServiceInternetAccessEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class FrrConfigQueryServiceInternetAccessEdgesNodeStatus(BaseModel):
     value: Optional[str]
 
 

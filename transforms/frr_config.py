@@ -52,6 +52,13 @@ ROLE_TO_TEMPLATE = {
 TENANT_ORDER = ("acme", "globex")
 
 
+# A service in either state is rendered as though it did not exist. See
+# `FrrConfig._live`: `decommissioning` counts as gone rather than going, because
+# the alternative is a window where the intent is withdrawn and the router is
+# not.
+DECOMMISSIONED_STATUSES = frozenset({"decommissioning", "decommissioned"})
+
+
 class FrrConfigError(RuntimeError):
     """A required value was missing.
 
@@ -150,15 +157,34 @@ class FrrConfig(InfrahubTransform):
         return owners
 
     @staticmethod
-    def _services(result: FrrConfigQuery) -> dict[str, Any]:
-        l3vpn = {e.node.tenant.node.name.value: e.node for e in result.service_l_3_vpn.edges}
-        cloud = {e.node.tenant.node.name.value: e.node for e in result.service_tenant_cloud.edges}
+    def _live(node: Any) -> bool:
+        """Whether a service should be rendered at all.
+
+        A decommissioned service is treated as ABSENT, which is the only
+        interpretation that makes `status` mean anything here. Until this
+        existed, marking a tenant's L3VPN decommissioned left the provider edge
+        importing its prefixes exactly as before: the service said gone, the
+        router said up, and nothing reported the disagreement.
+
+        `decommissioning` counts as gone rather than going. The alternative is a
+        window in which the intent is withdrawn and the configuration is not,
+        and the whole point of the state is to close that window.
+        """
+        status = getattr(node, "status", None)
+        return status is None or status.value not in DECOMMISSIONED_STATUSES
+
+    @classmethod
+    def _services(cls, result: FrrConfigQuery) -> dict[str, Any]:
+        l3vpn = {e.node.tenant.node.name.value: e.node for e in result.service_l_3_vpn.edges if cls._live(e.node)}
+        cloud = {e.node.tenant.node.name.value: e.node for e in result.service_tenant_cloud.edges if cls._live(e.node)}
         # Presence is the datum. A tenant is in this set if it bought internet
-        # access, and that is the only place the fact lives.
+        # access, and that is the only place the fact lives -- so a
+        # decommissioned one has to be filtered out here rather than anywhere
+        # downstream, because downstream only ever sees the set.
         internet = {
             e.node.l_3_vpn.node.tenant.node.name.value
             for e in result.service_internet_access.edges
-            if e.node.l_3_vpn and e.node.l_3_vpn.node
+            if e.node.l_3_vpn and e.node.l_3_vpn.node and cls._live(e.node)
         }
         return {"l3vpn": l3vpn, "cloud": cloud, "internet": internet}
 

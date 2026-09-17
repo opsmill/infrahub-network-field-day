@@ -19,8 +19,10 @@ import pytest
 
 from generators.generate_fabric_peering import (
     FABRIC_ROLES,
+    FabricPeeringGenerator,
     build_session_payloads,
     derive_peers,
+    is_withdrawn,
     validate_model,
 )
 from generators.generate_fabric_peering_query import GenerateFabricPeeringQuery
@@ -168,6 +170,7 @@ def _data(
     local_asn: int | None = LOCAL_ASN,
     with_cluster: bool = True,
     with_target: bool = True,
+    status: str = "active",
 ) -> dict[str, Any]:
     """A query response shaped like GenerateFabricPeeringQuery.
 
@@ -210,6 +213,9 @@ def _data(
                     "node": {
                         "id": "svc-1",
                         "name": {"value": "nfd41-fabric-peering"},
+                        # `active` unless a test says otherwise: the query
+                        # selects status so a decommissioned service can withdraw.
+                        "status": {"value": status},
                         "cluster": cluster,
                     }
                 }
@@ -516,3 +522,104 @@ def test_svi_with_multiple_addresses_raises() -> None:
         validate_model(_parsed(nodes=[_node("k8s-node1", "if-1", device)]))
 
     assert LEAF1 in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# `status` means something here, which it did not until cycle 037
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("status", ["decommissioning", "decommissioned"])
+def test_the_two_statuses_that_withdraw(status: str) -> None:
+    """`decommissioning` counts as gone rather than going: the alternative is a
+    window where the intent is withdrawn and the BGP sessions are still up."""
+    parsed = GenerateFabricPeeringQuery(**_data(status=status))
+    assert is_withdrawn(parsed.target.edges[0].node)
+
+
+@pytest.mark.parametrize("status", ["provisioning", "active", "error"])
+def test_every_other_status_keeps_its_sessions(status: str) -> None:
+    """`error` included: a failed run that is corrected rebuilds rather than
+    needing its status reset by hand."""
+    parsed = GenerateFabricPeeringQuery(**_data(status=status))
+    assert not is_withdrawn(parsed.target.edges[0].node)
+
+
+class _RecordingRelationship:
+    def __init__(self) -> None:
+        self.peer_ids: list[str] = []
+
+    async def fetch(self) -> None:
+        return None
+
+    def add(self, peer_id: str) -> None:
+        self.peer_ids.append(peer_id)
+
+    def remove(self, peer_id: str) -> None:
+        self.peer_ids.remove(peer_id)
+
+
+class _RecordingNode:
+    def __init__(self, node_id: str) -> None:
+        self.id = node_id
+        self.peerings = _RecordingRelationship()
+        self.saves: list[dict[str, Any]] = []
+
+    async def save(self, **kwargs: Any) -> None:
+        self.saves.append(kwargs)
+
+
+class _RecordingClient:
+    def __init__(self) -> None:
+        self.deleted: list[tuple[str, str]] = []
+        self.created: list[str] = []
+        self.nodes: dict[str, _RecordingNode] = {}
+
+    async def create(self, kind: str, data: dict[str, Any]) -> Any:
+        self.created.append(kind)
+        return _RecordingNode(f"new-{kind}")
+
+    async def get(self, kind: str, id: str, **_kwargs: Any) -> Any:  # noqa: A002
+        return self.nodes.setdefault(id, _RecordingNode(id))
+
+    async def delete(self, kind: str, id: str) -> None:  # noqa: A002
+        self.deleted.append((kind, id))
+
+
+def _generator(client: _RecordingClient) -> FabricPeeringGenerator:
+    import logging
+
+    generator = FabricPeeringGenerator.__new__(FabricPeeringGenerator)
+    generator._client = client  # type: ignore[attr-defined]
+    generator._init_client = client  # type: ignore[attr-defined]
+    generator.logger = logging.getLogger("test")
+    return generator
+
+
+@pytest.mark.asyncio
+async def test_a_decommissioned_service_withdraws_the_sessions_it_recorded() -> None:
+    """THE GAP THIS CLOSES.
+
+    The tracking context cannot do it: `update_group` returns early on an empty
+    member set, so a run that writes nothing prunes nothing -- which is exactly
+    what a withdrawal is.
+    """
+    client = _RecordingClient()
+    # What the SERVICE records is what may be deleted, so that is what the fake
+    # returns -- not the cluster's sessions, which may include others' work.
+    service = _RecordingNode("svc-1")
+    service.peerings.peer_ids = ["sess-a", "sess-b"]
+    client.nodes["svc-1"] = service
+
+    await _generator(client).generate(_data(status="decommissioned"))
+
+    assert len(client.deleted) == 2
+    assert {kind for kind, _ in client.deleted} == {"ClusterFabricPeering"}
+    assert client.created == []
+
+
+@pytest.mark.asyncio
+async def test_a_decommissioned_service_with_no_sessions_deletes_nothing() -> None:
+    client = _RecordingClient()
+    await _generator(client).generate(_data(status="decommissioned"))
+    assert client.deleted == []

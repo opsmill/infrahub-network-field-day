@@ -70,10 +70,16 @@ query FrrConfigQuery($device: String!) {
   # The service layer. `dc_service_prefixes` is the shared DC range; the tenant
   # cloud subnet and the PE VRF come from their own kinds; and the PRESENCE of a
   # ServiceInternetAccess is what decides whether a tenant gets a default route.
+  #
+  # `status` is selected on all three so a decommissioned service can be
+  # treated as ABSENT. Without it, marking a tenant's L3VPN decommissioned left
+  # the provider edge still importing its prefixes -- the service said gone and
+  # the router said up, with nothing reporting the disagreement.
   ServiceL3vpn {
     edges {
       node {
         name { value }
+        status { value }
         tenant { node { name { value } } }
         vrf { node { name { value } } }
         dc_service_prefixes { edges { node { prefix { value } } } }
@@ -85,6 +91,7 @@ query FrrConfigQuery($device: String!) {
     edges {
       node {
         name { value }
+        status { value }
         tenant { node { name { value } } }
         prefix { node { prefix { value } } }
       }
@@ -95,6 +102,7 @@ query FrrConfigQuery($device: String!) {
     edges {
       node {
         name { value }
+        status { value }
         l3vpn { node { tenant { node { name { value } } } } }
       }
     }

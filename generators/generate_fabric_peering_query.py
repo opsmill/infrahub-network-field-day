@@ -20,10 +20,15 @@ class GenerateFabricPeeringQueryTargetEdges(BaseModel):
 class GenerateFabricPeeringQueryTargetEdgesNode(BaseModel):
     id: str
     name: Optional["GenerateFabricPeeringQueryTargetEdgesNodeName"]
+    status: Optional["GenerateFabricPeeringQueryTargetEdgesNodeStatus"]
     cluster: "GenerateFabricPeeringQueryTargetEdgesNodeCluster"
 
 
 class GenerateFabricPeeringQueryTargetEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class GenerateFabricPeeringQueryTargetEdgesNodeStatus(BaseModel):
     value: Optional[str]
 
 

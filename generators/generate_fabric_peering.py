@@ -195,6 +195,19 @@ def _existing_by_device(cluster: ClusterNode) -> dict[str, Any]:
     return index
 
 
+DECOMMISSIONED_STATUSES = frozenset({"decommissioning", "decommissioned"})
+
+
+def is_withdrawn(service: Any) -> bool:
+    """Whether this peering service should hold any sessions at all.
+
+    `decommissioning` counts as gone rather than going: the alternative is a
+    window in which the intent is withdrawn and the BGP sessions are still up.
+    """
+    status = getattr(service, "status", None)
+    return status is not None and status.value in DECOMMISSIONED_STATUSES
+
+
 def validate_model(parsed: GenerateFabricPeeringQuery) -> ClusterNode:
     """Check everything before a single object is written.
 
@@ -313,6 +326,15 @@ class FabricPeeringGenerator(InfrahubGenerator):
         """Upsert one ClusterFabricPeering per cabled fabric device."""
         parsed = GenerateFabricPeeringQuery(**data)
 
+        # Before anything else, as every other service generator here does.
+        # Until cycle 037 this one ignored `status` entirely, so a peering
+        # service marked decommissioned kept every session it had derived: the
+        # service said gone and the fabric said up, and nothing reported it.
+        service = parsed.target.edges[0].node if parsed.target.edges else None
+        if service is not None and is_withdrawn(service):
+            await self._withdraw(parsed, service)
+            return
+
         cluster = validate_model(parsed)
         peers = derive_peers(cluster)
         payloads = build_session_payloads(cluster, peers)
@@ -357,6 +379,45 @@ class FabricPeeringGenerator(InfrahubGenerator):
             )
 
         await self._link_to_service(parsed, session_ids)
+
+    async def _withdraw(self, parsed: GenerateFabricPeeringQuery, service: Any) -> None:
+        """Remove the sessions an earlier run derived for this service.
+
+        THE TRACKING CONTEXT DOES NOT COVER THIS. `update_group` opens with
+        ``if not members: return``, so a run that writes nothing prunes nothing
+        -- which is precisely a withdrawal. Tracking handles a *narrowing*, where
+        the run still writes some sessions and the dropped ones fall out of a
+        non-empty member set; it does not handle a service going away.
+
+        Only sessions the service RECORDS are deleted. A `ClusterFabricPeering`
+        that exists for some other reason is not this generator's to remove, and
+        the same rule is what keeps adoption safe on the building path.
+        """
+        name = _value(service.name)
+
+        # Read from the SERVICE, not from the parsed query. The query selects
+        # `cluster.fabric_peerings` -- every session on the cluster, whoever made
+        # it -- while `service.peerings` is what this service recorded, which is
+        # the only set this generator may delete. Fetched through the client for
+        # the same reason `_link_to_service` does: the relationship is not in
+        # the query at all.
+        live = await self.client.get(kind="ServiceFabricPeering", id=service.id)
+        peerings = live.peerings  # type: ignore[attr-defined]
+        await peerings.fetch()
+        session_ids = list(peerings.peer_ids)
+
+        if not session_ids:
+            self.logger.info("Peering service %r is decommissioned; nothing to withdraw", name)
+            return
+
+        # The link goes first. Deleting a session the service still points at
+        # leaves a dangling reference for as long as the second write takes, and
+        # a failure in between would leave one permanently.
+        await self._link_to_service(parsed, [])
+        for session_id in session_ids:
+            await self.client.delete(kind="ClusterFabricPeering", id=session_id)
+
+        self.logger.info("Peering service %r is decommissioned; withdrew %s session(s)", name, len(session_ids))
 
     async def _link_to_service(self, parsed: GenerateFabricPeeringQuery, session_ids: list[str]) -> None:
         """Point the ordering service at the sessions this run produced.

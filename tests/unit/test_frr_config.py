@@ -208,3 +208,63 @@ def test_the_statically_attached_ce_has_no_template_target() -> None:
     instead of deriving them from the role.
     """
     assert not (FIXTURES / "cust-acme-dr-ce.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# `status` means something here, which it did not until cycle 037
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("status", ["decommissioning", "decommissioned"])
+async def test_a_decommissioned_internet_service_renders_as_though_absent(status: str) -> None:
+    """The strongest form of the claim: decommissioned is byte-identical to gone.
+
+    Asserting "the output changed" would pass for a transform that broke the
+    configuration in some other way. Holding it against the *removal* case above
+    says exactly what the status is supposed to mean.
+
+    `decommissioning` is included because it counts as gone rather than going --
+    the alternative is a window in which the intent is withdrawn and the router
+    still carries the route, which is the window the state exists to close.
+    """
+    removed_fixture = _fixture("isp-pe1")
+    removed_fixture["ServiceInternetAccess"]["edges"] = []
+    removed = await _transform().transform(removed_fixture)
+
+    marked_fixture = _fixture("isp-pe1")
+    for edge in marked_fixture["ServiceInternetAccess"]["edges"]:
+        edge["node"]["status"] = {"value": status}
+    marked = await _transform().transform(marked_fixture)
+
+    assert marked == removed
+
+
+async def test_the_test_above_is_not_vacuous() -> None:
+    """An active service must render differently from an absent one, or the
+    equality asserted above would hold for a transform that ignored the field
+    entirely."""
+    active = await _render("isp-pe1")
+
+    removed_fixture = _fixture("isp-pe1")
+    removed_fixture["ServiceInternetAccess"]["edges"] = []
+    removed = await _transform().transform(removed_fixture)
+
+    assert active != removed
+
+
+async def test_a_decommissioned_l3vpn_drops_its_tenant_from_the_provider_edge() -> None:
+    """A tenant whose L3VPN is withdrawn stops being imported at all.
+
+    This is the case the gap documentation named: the service said gone and the
+    provider edge went on importing its prefixes, with nothing reporting the
+    disagreement.
+    """
+    fixture = _fixture("isp-pe1")
+    for edge in fixture["ServiceL3vpn"]["edges"]:
+        if edge["node"]["tenant"]["node"]["name"]["value"] == "acme":
+            edge["node"]["status"] = {"value": "decommissioned"}
+    rendered = await _transform().transform(fixture)
+
+    assert "RM-ACME-IMPORT" not in rendered
+    # globex is untouched, so this is a withdrawal rather than a wholesale break.
+    assert "RM-GLOBEX-IMPORT" in rendered
