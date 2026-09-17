@@ -1,12 +1,22 @@
-"""Infrahub Service Catalog - Add Server Page.
+"""Infrahub Service Catalog - Request a Server.
 
-Provides a form to create a new ComputePhysicalServer in a compute rack
-via a proposed change workflow.
+Creates ONE object: a `ServiceServerPlacement`. The machine, its interfaces and
+its cabling are built by `generate-server-placement` and `generate-server-cabling`
+when the branch merges.
+
+**This page used to create the `ComputePhysicalServer` itself.** Two of the
+fields below are mandatory for reasons that are invisible if you get them wrong:
+
+* The **rack** is what the machine gets cabled to — `generate-server-cabling`
+  finds the leaf switches in the server's own rack. A machine with no rack is
+  cabled to nothing and every step reports success.
+* The **object template** is what gives the machine its interfaces, and cabling
+  cables interfaces. Without one the cabling generator logs "has no interfaces"
+  and returns, which reads exactly like a broken generator.
 """
 
 import streamlit as st  # type: ignore[import-untyped]
 from utils import (
-    DEFAULT_BRANCH,
     INFRAHUB_ADDRESS,
     INFRAHUB_API_TOKEN,
     INFRAHUB_UI_URL,
@@ -16,131 +26,152 @@ from utils import (
 )
 from utils.api import InfrahubAPIError, InfrahubConnectionError, InfrahubGraphQLError
 
-# Read branch from query params, falling back to session state / default
-query_params = st.query_params
-if "branch" in query_params:
-    initial_branch = query_params["branch"]
-elif "selected_branch" in st.session_state:
-    initial_branch = st.session_state.selected_branch
-else:
-    initial_branch = DEFAULT_BRANCH
-
-st.session_state.selected_branch = initial_branch
-st.query_params["branch"] = st.session_state.selected_branch
-
 if "infrahub_url" not in st.session_state:
     st.session_state.infrahub_url = INFRAHUB_ADDRESS
 
+ROLES = {
+    "compute": "Compute — general workload host",
+    "storage": "Storage — storage node",
+    "k8s_node": "Kubernetes node — joins the cluster's BGP peering",
+}
+
+
+def _rack_label(rack: dict) -> str:
+    """A rack, and the switches a machine in it would be cabled to."""
+    devices = [d["node"]["name"]["value"] for d in rack.get("devices", {}).get("edges", []) if d.get("node")]
+    leaves = [d for d in devices if "leaf" in d or "spine" in d]
+    name = rack["name"]["value"]
+    return f"{name} — cabled to {', '.join(leaves)}" if leaves else f"{name} (no switches; nothing to cable to)"
+
 
 def main() -> None:
-    """Main function to render the add server page."""
-
+    """Render the Request Server page."""
     client = InfrahubClient(
         st.session_state.infrahub_url,
         api_token=INFRAHUB_API_TOKEN or None,
         ui_url=INFRAHUB_UI_URL,
     )
 
-    st.title("Add Server")
-    st.markdown("Add a new physical server to a compute rack in the fabric.")
+    st.title("Request a Server")
+    st.markdown(
+        "Ask for a machine in a rack. It is **created and cabled to that rack's leaves** for you; "
+        "a proposed change is opened for review."
+    )
 
-    branch = st.session_state.selected_branch
-
-    # Fetch compute racks and server templates
     try:
-        racks = _get_compute_racks(client, branch)
-        templates = _get_server_templates(client, branch)
-    except (InfrahubConnectionError, InfrahubGraphQLError) as e:
+        racks = client.get_racks()
+        templates = client.get_object_templates()
+        tenants = client.get_organization_tenants()
+        organizations = client.get_organizations()
+    except (InfrahubConnectionError, InfrahubGraphQLError, InfrahubAPIError) as e:
         display_error("Unable to fetch data from Infrahub", str(e))
         st.stop()
         return
 
-    if not racks:
-        st.warning("No compute racks found. Ensure racks with type 'compute' exist.")
+    missing = [
+        label
+        for label, values in (
+            ("racks", racks),
+            ("object templates", templates),
+            ("organizations", organizations),
+        )
+        if not values
+    ]
+    if missing:
+        st.warning(f"Cannot request a server yet — Infrahub has no {', '.join(missing)}.")
         st.stop()
         return
 
-    if not templates:
-        st.warning("No server templates found (TemplateComputePhysicalServer).")
-        st.stop()
-        return
-
-    # Build form
-    with st.form("add_server_form"):
-        st.subheader("Server Details")
+    with st.form("request_server_form"):
+        st.subheader("The machine")
 
         col1, col2 = st.columns(2)
-
         with col1:
-            server_name = st.text_input(
-                "Server Name",
-                placeholder="e.g. compute-pod-a2-3-1",
-                help="Hostname for the new server",
-            )
-
-            rack_options = {r["id"]: f"{r['name']} ({r['pod_name']})" for r in racks}
-            rack_id = st.selectbox(
-                "Rack",
-                options=list(rack_options.keys()),
-                format_func=lambda x: rack_options[x],
-                help="Only compute racks are shown",
-            )
+            hostname = st.text_input("Hostname", placeholder="e.g. host-c")
+            role = st.selectbox("Role", options=list(ROLES.keys()), format_func=lambda x: ROLES[x])
+            description = st.text_input("Description", placeholder="e.g. additional workload capacity")
 
         with col2:
-            template_options = {t["id"]: t["name"] for t in templates}
-            template_id = st.selectbox(
-                "Server Template",
-                options=list(template_options.keys()),
-                format_func=lambda x: template_options[x],
-                help="Determines interfaces and role",
+            tenant_options = {t["id"]: t["name"]["value"] for t in tenants}
+            tenant_id = (
+                st.selectbox(
+                    "Tenant (optional)",
+                    options=[None, *tenant_options.keys()],
+                    format_func=lambda x: "— shared infrastructure —" if x is None else tenant_options[x],
+                )
+                if tenants
+                else None
+            )
+            owner_options = {o["id"]: o["display_label"] for o in organizations}
+            owner_id = st.selectbox(
+                "Requested by", options=list(owner_options.keys()), format_func=lambda x: owner_options[x]
             )
 
-        submitted = st.form_submit_button("Add Server", type="primary")
+        st.subheader("Where it goes, and what it is")
+        st.caption(
+            "The rack decides what the machine is cabled to. The template decides what interfaces it "
+            "has — and cabling cables interfaces, so a machine without one is connected to nothing."
+        )
+        col3, col4 = st.columns(2)
+        with col3:
+            rack_options = {r["id"]: _rack_label(r) for r in racks}
+            rack_id = st.selectbox("Rack", options=list(rack_options.keys()), format_func=lambda x: rack_options[x])
+        with col4:
+            template_options = {t["id"]: t["template_name"]["value"] for t in templates}
+            template_id = st.selectbox(
+                "Object Template",
+                options=list(template_options.keys()),
+                format_func=lambda x: template_options[x],
+            )
+
+        submitted = st.form_submit_button("Request Server", type="primary")
 
     if submitted:
-        if not server_name:
-            st.error("Server Name is required.")
+        if not hostname:
+            st.error("Hostname is required — it is also the machine's ContainerLab node name.")
             return
 
+        branch_name = f"add-server-{hostname.lower().replace(' ', '-')}"
+        relationships: dict[str, str | list[str]] = {
+            "owner": owner_id,
+            "rack": rack_id,
+            "template": template_id,
+        }
+        if tenant_id:
+            relationships["tenant"] = tenant_id
+
         try:
-            # Create branch for the change
-            branch_name = f"add-server-{server_name.lower().replace(' ', '-')}"
             with st.spinner(f"Creating branch '{branch_name}'..."):
                 client.create_branch(branch_name)
+            st.info(f"Branch `{branch_name}` created")
 
-            # Create the server
-            with st.spinner(f"Creating server '{server_name}'..."):
-                server = _create_server(
-                    client,
+            with st.spinner("Requesting the machine..."):
+                client.create_service(
+                    kind="ServiceServerPlacement",
                     branch=branch_name,
-                    name=server_name,
-                    rack_id=rack_id,
-                    template_id=template_id,
+                    group="service_server_placements",
+                    fields={
+                        "name": f"place-{hostname}",
+                        "description": description or f"{hostname} in {rack_options[rack_id].split(' — ')[0]}",
+                        "hostname": hostname,
+                        "server_role": role,
+                    },
+                    relationships=relationships,
                 )
+            st.info("Machine requested")
 
-            # Wait for Infrahub to run generators (server cabling + AVD cascade)
-            import time
-
-            with st.spinner("Waiting for generators to complete (60s)..."):
-                time.sleep(60)
-
-            # Create proposed change
             with st.spinner("Creating proposed change..."):
                 pc = client.create_proposed_change(
                     branch=branch_name,
-                    name=f"Add server: {server_name}",
-                    description=f"Create server '{server_name}' in rack {rack_options[rack_id]} using template '{template_options[template_id]}'",
+                    name=f"Request server: {hostname}",
+                    description=(
+                        f"Place {hostname} ({role}) in {rack_options[rack_id].split(' — ')[0]} using template "
+                        f"{template_options[template_id]}. The machine and its cabling are built on merge."
+                    ),
                 )
 
-            pc_url = client.get_proposed_change_url(pc["id"])
-            server_url = f"{INFRAHUB_UI_URL}/objects/ComputePhysicalServer/{server['id']}?branch={branch_name}"
-
-            display_success(f"Server '{server_name}' created successfully!")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.link_button("View Server", server_url)
-            with col2:
-                st.link_button("View Proposed Change", pc_url)
+            display_success(f"Server '{hostname}' requested.")
+            st.link_button("View Proposed Change", client.get_proposed_change_url(pc["id"]))
 
         except InfrahubConnectionError as e:
             display_error("Connection error", str(e))
@@ -148,147 +179,6 @@ def main() -> None:
             display_error("GraphQL error", str(e))
         except InfrahubAPIError as e:
             display_error("API error", str(e))
-        except Exception as e:
-            display_error("Unexpected error", str(e))
-
-
-def _get_compute_racks(client: InfrahubClient, branch: str) -> list:
-    """Fetch only racks with rack_type 'compute'."""
-    query = """
-    query GetComputeRacks {
-        LocationRack(rack_type__value: "compute") {
-            edges {
-                node {
-                    id
-                    name { value }
-                    pod {
-                        node {
-                            name { value }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    """
-    result = client.execute_graphql(query, branch=branch)
-    racks = []
-    for edge in result.get("LocationRack", {}).get("edges", []):
-        node = edge["node"]
-        pod_node = node.get("pod", {}).get("node", {})
-        racks.append(
-            {
-                "id": node["id"],
-                "name": node.get("name", {}).get("value", "Unknown"),
-                "pod_name": pod_node.get("name", {}).get("value", "") if pod_node else "",
-            }
-        )
-    return racks
-
-
-def _get_server_templates(client: InfrahubClient, branch: str) -> list:
-    """Fetch available server templates."""
-    query = """
-    query GetServerTemplates {
-        TemplateComputePhysicalServer {
-            edges {
-                node {
-                    id
-                    template_name { value }
-                }
-            }
-        }
-    }
-    """
-    result = client.execute_graphql(query, branch=branch)
-    templates = []
-    for edge in result.get("TemplateComputePhysicalServer", {}).get("edges", []):
-        node = edge["node"]
-        templates.append(
-            {
-                "id": node["id"],
-                "name": node.get("template_name", {}).get("value", "Unknown"),
-            }
-        )
-    return templates
-
-
-def _create_server(
-    client: InfrahubClient,
-    branch: str,
-    name: str,
-    rack_id: str,
-    template_id: str,
-) -> dict:
-    """Create a ComputePhysicalServer as a member of the ``servers`` group.
-
-    Group membership is set atomically inside the upsert rather than as a
-    separate follow-up write. The ``servers`` group is the target of the
-    ``generate-server-cabling`` generator, so adding a member emits a
-    ``GroupMemberAdded`` event that triggers the generator for the new node.
-    Infrahub then re-queries the group's members on the branch and asserts the
-    node is present — a separate add-to-group write races that trigger and can
-    fail with ``Target ... is not part of the group ...`` because the membership
-    is not yet visible on the branch when the generator runs. Committing the
-    server and its membership in one transaction closes that race (this mirrors
-    how the device generators enroll devices in ``avd_devices`` at creation).
-    """
-    servers_group_id = _get_group_id(client, group_name="servers", branch=branch)
-
-    mutation = """
-    mutation CreateServer(
-        $name: String!,
-        $rack_id: String!,
-        $template_id: String!,
-        $servers_group_id: String!
-    ) {
-        ComputePhysicalServerUpsert(
-            data: {
-                name: { value: $name }
-                rack: { id: $rack_id }
-                object_template: { id: $template_id }
-                status: { value: "provisioning" }
-                member_of_groups: [{ id: $servers_group_id }]
-            }
-        ) {
-            ok
-            object {
-                id
-                name { value }
-            }
-        }
-    }
-    """
-
-    variables = {
-        "name": name,
-        "rack_id": rack_id,
-        "template_id": template_id,
-        "servers_group_id": servers_group_id,
-    }
-
-    result = client.execute_graphql(mutation, variables, branch)
-
-    if not result.get("ComputePhysicalServerUpsert", {}).get("ok"):
-        raise InfrahubAPIError(f"Failed to create server: {result}")
-
-    return result["ComputePhysicalServerUpsert"]["object"]
-
-
-def _get_group_id(client: InfrahubClient, group_name: str, branch: str) -> str:
-    """Resolve a CoreStandardGroup id by name on the given branch."""
-    query = """
-    query GetGroup($name: String!) {
-        CoreStandardGroup(name__value: $name) {
-            edges { node { id } }
-        }
-    }
-    """
-    result = client.execute_graphql(query, {"name": group_name}, branch)
-    edges = result.get("CoreStandardGroup", {}).get("edges", [])
-    if not edges:
-        raise InfrahubAPIError(f"Group '{group_name}' not found on branch '{branch}'")
-    return edges[0]["node"]["id"]
 
 
 main()

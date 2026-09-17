@@ -217,6 +217,85 @@ class InfrahubClient:
         result = self.execute_graphql(query, branch=branch)
         return [e["node"] for e in result.get("IpamVLAN", {}).get("edges", [])]
 
+    def get_racks(self, branch: str = "main") -> list[dict[str, Any]]:
+        """Fetch LocationRack objects, with the leaves in each.
+
+        The leaves matter to the form: `generate-server-cabling` cables a
+        machine to the switches in ITS rack, so choosing a rack is choosing what
+        the machine is wired to.
+        """
+        query = """
+        query { LocationRack { edges { node {
+            id display_label name { value }
+            devices { edges { node { id name { value } } } }
+        } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        return [e["node"] for e in result.get("LocationRack", {}).get("edges", [])]
+
+    def get_object_templates(self, branch: str = "main") -> list[dict[str, Any]]:
+        """Fetch CoreObjectTemplate objects.
+
+        A template is what gives a machine its interfaces, and cabling cables
+        interfaces -- so a placement without one produces a host connected to
+        nothing while every step reports success.
+        """
+        query = """
+        query { CoreObjectTemplate { edges { node {
+            id __typename template_name { value }
+        } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        return [e["node"] for e in result.get("CoreObjectTemplate", {}).get("edges", [])]
+
+    def create_service(
+        self,
+        *,
+        kind: str,
+        branch: str,
+        group: str,
+        fields: dict[str, Any],
+        relationships: dict[str, str | list[str]],
+    ) -> str:
+        """Create any service kind on a branch, in its generator's target group.
+
+        One helper rather than one per kind, because every service request has
+        the same shape: some attribute values, some relationships, a status of
+        `provisioning`, and membership of the group the generator targets.
+        Membership is the part that is easy to leave out and impossible to
+        notice -- a service outside its group is created and then silently never
+        built.
+        """
+        group_id = self._group_id(group, branch=branch)
+
+        declarations = ["$group: String!"]
+        assignments = ['status: { value: "provisioning" }', "member_of_groups: [{ id: $group }]"]
+        variables: dict[str, Any] = {"group": group_id}
+
+        for name, value in fields.items():
+            gql_type = "BigInt" if isinstance(value, int) and not isinstance(value, bool) else "String"
+            declarations.append(f"${name}: {gql_type}")
+            assignments.append(f"{name}: {{ value: ${name} }}")
+            variables[name] = value
+
+        for name, value in relationships.items():
+            if isinstance(value, list):
+                declarations.append(f"${name}: [RelatedNodeInput]")
+                assignments.append(f"{name}: ${name}")
+                variables[name] = [{"id": item} for item in value]
+            else:
+                declarations.append(f"${name}: String!")
+                assignments.append(f"{name}: {{ id: ${name} }}")
+                variables[name] = value
+
+        mutation = (
+            f"mutation({', '.join(declarations)}) {{\n"
+            f"  {kind}Create(data: {{ {' '.join(assignments)} }}) {{ ok object {{ id }} }}\n"
+            "}"
+        )
+        result = self.execute_graphql(mutation, variables, branch=branch)
+        return str(result[f"{kind}Create"]["object"]["id"])
+
     def get_organization_tenants(self, branch: str = "main") -> list[dict[str, Any]]:
         """Fetch OrganizationTenant objects.
 
