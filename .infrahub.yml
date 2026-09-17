@@ -73,6 +73,9 @@ queries:
   # Global peering-consistency check
   - name: peering_consistency_check
     file_path: "./checks/peering_consistency_check.gql"
+  # Global zone-advertisement check
+  - name: zone_advertisement_check
+    file_path: "./checks/zone_advertisement_check.gql"
   - name: cv_workspace_submission_webhook
     file_path: "./transforms/cv_workspace_submission_webhook.gql"
 
@@ -228,6 +231,14 @@ check_definitions:
   - name: peering-consistency
     file_path: "./checks/peering_consistency_check.py"
     class_name: PeeringConsistencyCheck
+  # Also global, and for the same reason: "some zone names a prefix list nobody
+  # declares" is a statement about the whole graph. It discharges the condition
+  # cycle 032 attached to modelling that prefix list as a NAME rather than a
+  # relationship -- there is no object to reference, so the reference is only
+  # defensible if the mismatch is detectable.
+  - name: zone-advertisement
+    file_path: "./checks/zone_advertisement_check.py"
+    class_name: ZoneAdvertisementCheck
 
 python_transforms:
   - name: computed_interface_description

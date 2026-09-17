@@ -1,0 +1,101 @@
+query ZoneAdvertisementCheckQuery {
+  # Every zone, whether or not it carries an advertisement policy. Four of the
+  # six carry none and that is correct -- the DC advertises nothing toward
+  # them -- so the check must distinguish "absent" from "broken".
+  SecurityZone {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        dc_advertised_prefix_list {
+          value
+        }
+        advertising_device {
+          node {
+            id
+            name {
+              value
+            }
+            # Device scope. A prefix list may be declared here rather than at
+            # fabric scope, so a name absent from the fabric is not yet proof
+            # of anything.
+            avd_custom_hostvars {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Fabric scope, where this lab's BGP policy actually lives. Prefix lists are
+  # not objects in this graph -- they are entries inside
+  # `custom_structured_configuration_prefix_lists` in these JSON blobs -- which
+  # is why a zone references one by NAME and why nothing but a check can tell
+  # whether that name resolves.
+  NetworkFabric {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        avd_custom_hostvars {
+          value
+        }
+      }
+    }
+  }
+
+  # Grants, for the two rules about reachability rather than about policy.
+  ServiceAppAccess {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        approved {
+          value
+        }
+        destination_vip {
+          node {
+            id
+            address {
+              value
+            }
+          }
+        }
+        application {
+          node {
+            id
+            name {
+              value
+            }
+            exposed {
+              value
+            }
+            vip_block {
+              node {
+                id
+                prefix {
+                  value
+                }
+              }
+            }
+          }
+        }
+        source_zone {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+}
