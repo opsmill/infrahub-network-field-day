@@ -408,6 +408,64 @@ so the tracking context, which only removes what this generator created, leaves 
 what keeps `junos-https` alive when a grant that used port 443 is revoked, while the rule the
 grant created disappears.
 
+### TenantOnboardingGenerator
+
+**File**: `generators/generate_tenant_onboarding.py`
+
+**Target**: `ServiceTenantOnboarding` (group `service_tenant_onboardings`)
+
+**Purpose**: Give an organization a presence on a fabric — its `EvpnTenant` and its VNI range
+
+**Query**: `generate_tenant_onboarding.gql`
+
+#### The VNI base is derived, not pooled
+
+This is the whole design decision, and pooling it would be wrong in a way nothing would report.
+Every tenant's L2VLAN VNIs are allocated **upward from its base**, so two tenants whose bases are
+close share VNIs. The lab spaces them a thousand apart:
+
+| Tenant | Base |
+| --- | --- |
+| `TENANT_K8S` | 11000 |
+| `TENANT_APP` | 12000 |
+| `TENANT_CLOUD` | 13000 |
+| `TENANT_EXTERNAL` | 15000 |
+
+A `CoreNumberPool` hands out **consecutive integers**, so pooling `mac_vrf_vni_base` would give
+two tenants 16000 and 16001 and overlap their entire VNI ranges — while every object looked
+correct and the fabric quietly bridged them together. The generator takes the lowest free
+multiple of `VNI_SPACING` instead, which also fills the gap at 14000 rather than drifting upward
+as tenants come and go.
+
+#### Withdrawal refuses rather than cascades
+
+An `EvpnTenant` carries VRFs and L2VLANs. Deleting one with a tenant's networks beneath it would
+take them too, so the generator reports and stops. What happens to those networks is the
+operator's decision.
+
+### ServerPlacementGenerator
+
+**File**: `generators/generate_server_placement.py`
+
+**Target**: `ServiceServerPlacement` (group `service_server_placements`)
+
+**Purpose**: Put a machine in a rack and let `generate-server-cabling` wire it to that rack's
+leaves
+
+**Query**: `generate_server_placement.gql`
+
+Three fields are mandatory, and each guards a failure that reports success:
+
+| Field | What happens without it |
+| --- | --- |
+| `rack` | `generate-server-cabling` finds leaves in the *server's rack*, so the machine is cabled to nothing |
+| `template` | The machine has no interfaces, so the cabling generator logs "has no interfaces" and returns |
+| `servers` group membership *(set by the generator)* | A generator targets a group; a machine outside it is never cabled |
+
+None of the three errors. The machine exists, sits in the right place, and is connected to
+nothing — which is why the schema makes the first two mandatory and the generator checks them
+again before its first write.
+
 ### FabricAppGenerator
 
 **File**: `generators/generate_fabric_app.py`

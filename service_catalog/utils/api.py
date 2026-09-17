@@ -224,10 +224,17 @@ class InfrahubClient:
         machine to the switches in ITS rack, so choosing a rack is choosing what
         the machine is wired to.
         """
+        # `devices` peers DcimPhysicalDevice, which is abstract: `name` is not
+        # selectable on it directly and __typename is what keys the union. The
+        # same rule tests/unit/test_graphql_query_contract.py enforces for the
+        # .gql files, which cannot see these inline strings.
         query = """
         query { LocationRack { edges { node {
             id display_label name { value }
-            devices { edges { node { id name { value } } } }
+            devices { edges { node {
+                __typename id
+                ... on DcimGenericDevice { name { value } }
+            } } }
         } } } }
         """
         result = self.execute_graphql(query, branch=branch)
