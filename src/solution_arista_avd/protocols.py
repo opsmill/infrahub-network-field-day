@@ -691,6 +691,15 @@ class IpamRouteTarget(CoreNode):
     vrf: RelationshipManager[IpamVRF]
 
 
+class ServiceServerPlacement(ServiceGeneric, GeneratorTarget):
+    hostname: String
+    server_role: Dropdown
+    rack: RelationshipAttribute[LocationRack]
+    server: RelationshipAttribute[ComputePhysicalServer]
+    template: RelationshipAttribute[CoreObjectTemplate]
+    tenant: RelationshipAttribute[OrganizationTenant]
+
+
 class SecurityService(SecurityGenericService):
     port: Integer
     ip_protocol: RelationshipAttribute[SecurityIPProtocol]
@@ -809,6 +818,13 @@ class ServiceTenantCloud(ServiceGeneric, GeneratorTarget):
     vlan: RelationshipAttribute[IpamVLAN]
     vrf: RelationshipAttribute[IpamVRF]
     zone: RelationshipAttribute[SecurityZone]
+
+
+class ServiceTenantOnboarding(ServiceGeneric, GeneratorTarget):
+    mac_vrf_vni_base: IntegerOptional
+    evpn_tenant: RelationshipAttribute[EvpnTenant]
+    fabric: RelationshipAttribute[NetworkFabric]
+    organization: RelationshipAttribute[OrganizationTenant]
 
 
 class IpamVLAN(CoreNode):

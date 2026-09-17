@@ -1,0 +1,68 @@
+query GenerateTenantOnboardingQuery($name: String!) {
+  target: ServiceTenantOnboarding(name__value: $name) {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        description {
+          value
+        }
+        status {
+          value
+        }
+        # Empty is the NORMAL case and means "derive one".
+        mac_vrf_vni_base {
+          value
+        }
+        organization {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        fabric {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        # What a previous run already built, so a re-run adopts its own output
+        # rather than creating a second EVPN tenant.
+        evpn_tenant {
+          node {
+            id
+            name {
+              value
+            }
+            mac_vrf_vni_base {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Every EVPN tenant, for two reasons: to derive the next free VNI base from
+  # the highest in use, and to refuse a name that already exists and this
+  # service does not own.
+  EvpnTenant {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        mac_vrf_vni_base {
+          value
+        }
+      }
+    }
+  }
+}

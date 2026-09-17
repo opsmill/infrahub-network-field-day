@@ -52,3 +52,8 @@ spec:
     # above: a group per service kind, so a generator cannot run against a kind
     # it cannot read.
     - name: service_network_segments
+    # Generator targets for the two onboarding kinds. Same shape as the rest:
+    # a group per service kind, so a generator cannot run against a kind it
+    # cannot read.
+    - name: service_tenant_onboardings
+    - name: service_server_placements

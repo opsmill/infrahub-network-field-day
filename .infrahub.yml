@@ -114,6 +114,13 @@ queries:
   - name: generate_fabric_app
     file_path: "./generators/generate_fabric_app.gql"
 
+  # Service-layer generators: onboarding a tenant, and placing a machine
+  - name: generate_tenant_onboarding
+    file_path: "./generators/generate_tenant_onboarding.gql"
+
+  - name: generate_server_placement
+    file_path: "./generators/generate_server_placement.gql"
+
 
 generator_definitions:
   - name: generate-avd-device-hostvar
@@ -245,6 +252,31 @@ generator_definitions:
     parameters:
       name: name__value
     class_name: FabricAppGenerator
+    convert_query_response: false
+
+  # Puts a tenant on a fabric. The VNI base is DERIVED rather than pooled: every
+  # tenant's L2VLAN VNIs are allocated upward from its base, and a CoreNumberPool
+  # hands out consecutive integers -- so pooling it would give two tenants
+  # overlapping VNI ranges while looking perfectly correct.
+  - name: generate-tenant-onboarding
+    file_path: "./generators/generate_tenant_onboarding.py"
+    query: generate_tenant_onboarding
+    targets: service_tenant_onboardings
+    parameters:
+      name: name__value
+    class_name: TenantOnboardingGenerator
+    convert_query_response: false
+
+  # Places a machine in a rack and joins it to `servers`, which is the group
+  # generate-server-cabling targets. Without that membership the machine is
+  # created and never cabled, and nothing reports it.
+  - name: generate-server-placement
+    file_path: "./generators/generate_server_placement.py"
+    query: generate_server_placement
+    targets: service_server_placements
+    parameters:
+      name: name__value
+    class_name: ServerPlacementGenerator
     convert_query_response: false
 
   - name: generate-server-cabling

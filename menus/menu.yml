@@ -398,6 +398,18 @@ spec:
             icon: "mdi:lan"
 
           - namespace: Service
+            name: TenantOnboardingServices
+            label: Tenant Onboarding
+            kind: ServiceTenantOnboarding
+            icon: "mdi:account-network"
+
+          - namespace: Service
+            name: ServerPlacementServices
+            label: Server Placements
+            kind: ServiceServerPlacement
+            icon: "mdi:server-plus"
+
+          - namespace: Service
             name: FabricAppServices
             label: Fabric Applications
             kind: ServiceFabricApp

@@ -42,6 +42,10 @@ SERVICE_KINDS = {
     "ServiceL3vpn",
     "ServiceInternetAccess",
     "ServiceTenantCloud",
+    # Onboarding, added when the portal's tenant and server forms were put
+    # behind the service layer.
+    "ServiceTenantOnboarding",
+    "ServiceServerPlacement",
 }
 
 

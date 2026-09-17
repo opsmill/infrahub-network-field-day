@@ -1,0 +1,70 @@
+query GenerateServerPlacementQuery($name: String!) {
+  target: ServiceServerPlacement(name__value: $name) {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        description {
+          value
+        }
+        status {
+          value
+        }
+        hostname {
+          value
+        }
+        server_role {
+          value
+        }
+        rack {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        template {
+          node {
+            id
+            template_name {
+              value
+            }
+          }
+        }
+        tenant {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        server {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Every machine, to refuse a hostname that already exists and this service
+  # does not own. A collision here would upsert onto a running host and then
+  # delete it on decommissioning.
+  ComputePhysicalServer {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+      }
+    }
+  }
+}

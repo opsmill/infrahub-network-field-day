@@ -1,0 +1,174 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# Onboarding: putting a tenant, or a machine, onto the fabric.
+#
+# These two kinds exist for the same reason ServiceNetworkSegment does. The
+# portal already had forms for both -- `3_Create_Tenant.py` wrote an
+# `EvpnTenant` straight into the graph and `2_Add_Server.py` wrote a
+# `ComputePhysicalServer` -- with no record of who asked, no status, and nothing
+# to withdraw. That is the inversion the service layer exists to fix; see the
+# header of service.yml.
+#
+# BOTH ALLOCATE RATHER THAN SELECT, which is what separates them from the WAN
+# kinds. A tenant request states who and which fabric, and the generator derives
+# the VNI base; a server request states a name and a rack, and the generator
+# creates the machine and lets `generate-server-cabling` cable it.
+#
+# SERVICE LAYER. No renderer reads this file. A generator sits underneath each
+# kind and upserts the technical objects, which is why both inherit
+# GeneratorTarget.
+# ============================================================================
+
+nodes:
+  - name: TenantOnboarding
+    namespace: Service
+    description: "A tenant's presence on a fabric: its EVPN tenant and VNI range"
+    label: Tenant Onboarding
+    icon: mdi:account-network
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+    attributes:
+      # Optional on purpose: empty means "derive one". A requester asking for a
+      # tenant has no opinion about VNI numbering, and picking a colliding base
+      # is the easiest mistake to make here.
+      #
+      # NOT ALLOCATED FROM A POOL, and that is deliberate. Every tenant's
+      # L2VLAN VNIs are derived by adding to this base, so the bases must be
+      # spaced -- the lab uses 11000, 12000, 13000, 15000. A CoreNumberPool
+      # hands out CONSECUTIVE integers, so pooling this would give two tenants
+      # overlapping VNI ranges while looking perfectly correct. The generator
+      # derives the next free multiple of the spacing instead.
+      - name: mac_vrf_vni_base
+        kind: Number
+        label: MAC-VRF VNI Base
+        optional: true
+        description: "Leave empty to derive the next free base; VNIs are allocated upward from it"
+        order_weight: 1300
+        parameters:
+          min_value: 1
+          max_value: 16000000
+    relationships:
+      - name: organization
+        peer: OrganizationTenant
+        label: Organization
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        description: "Who the tenant is; the EVPN tenant is the fabric's view of them"
+        identifier: service__onboarding_organization
+        order_weight: 910
+      - name: fabric
+        peer: NetworkFabric
+        label: Fabric
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        description: "The fabric the tenant is being onboarded onto"
+        identifier: service__onboarding_fabric
+        order_weight: 920
+      # What the generator built. `no-action` because deleting the request must
+      # not take an EVPN tenant that VRFs and VLANs already hang off.
+      - name: evpn_tenant
+        peer: EvpnTenant
+        label: EVPN Tenant
+        kind: Generic
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "The EVPN tenant the generator created"
+        identifier: service__onboarding_evpn_tenant
+        order_weight: 940
+
+  - name: ServerPlacement
+    namespace: Service
+    description: "A request for a machine in a rack, cabled to its leaves"
+    label: Server Placement
+    icon: mdi:server-plus
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+    attributes:
+      - name: hostname
+        kind: Text
+        label: Hostname
+        optional: false
+        description: "The machine's name, which is also its ContainerLab node name"
+        order_weight: 1300
+      - name: server_role
+        kind: Dropdown
+        label: Role
+        optional: false
+        default_value: compute
+        # Mirrors ComputePhysicalServer.role rather than reusing it: a service
+        # names what it wants, and the technical object carries what it is.
+        choices:
+          - name: compute
+            label: Compute
+            description: "General workload host"
+            color: "#c4bed7"
+          - name: storage
+            label: Storage
+            description: "Storage node"
+            color: "#9af1e1"
+          - name: k8s_node
+            label: Kubernetes Node
+            description: "Cluster member; joins the cluster's BGP peering"
+            color: "#a0b78d"
+        order_weight: 1310
+    relationships:
+      - name: rack
+        peer: LocationRack
+        label: Rack
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        # WHERE IT LANDS, and unlike a segment this one really is a rack.
+        # `generate-server-cabling` finds the leaf switches in the server's rack
+        # and cables to them, so a request naming no rack produces a machine
+        # that is never cabled to anything.
+        description: "The rack the machine goes in; its leaves are what it gets cabled to"
+        identifier: service__placement_rack
+        order_weight: 910
+      - name: template
+        peer: CoreObjectTemplate
+        label: Object Template
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        # The template is what gives the machine its interfaces. Without one the
+        # server is created with none, and generate-server-cabling then has
+        # nothing to cable -- it logs "has no interfaces" and returns, which
+        # reads exactly like a broken generator.
+        description: "Supplies the machine's interfaces; without one there is nothing to cable"
+        identifier: service__placement_template
+        order_weight: 920
+      - name: tenant
+        peer: OrganizationTenant
+        label: Tenant
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "Who the machine is for, when it is not shared infrastructure"
+        identifier: service__placement_tenant
+        order_weight: 930
+      - name: server
+        peer: ComputePhysicalServer
+        label: Server
+        kind: Generic
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "The machine the generator created"
+        identifier: service__placement_server
+        order_weight: 940
