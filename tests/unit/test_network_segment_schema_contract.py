@@ -159,6 +159,24 @@ def test_the_subnet_pool_has_a_declared_supernet() -> None:
     assert any(row.get("prefix") == SEGMENT_SUPERNET for row in _rows("IpamPrefix"))
 
 
+def test_the_subnet_pool_declares_what_it_allocates() -> None:
+    """`default_prefix_type` is what a pool creates when it allocates.
+
+    Omitting it costs nothing at load time and fails at allocation with
+    "A prefix_type or a default_value type must be provided" -- which names the
+    pool and not the file declaring it. Every other prefix pool here sets it.
+    """
+    pool = next(row for row in _rows("CoreIPPrefixPool") if row["name"] == SUBNET_POOL)
+    assert pool["default_prefix_type"] == "IpamPrefix"
+    assert pool["default_prefix_length"] == 24
+
+
+def test_every_prefix_pool_declares_what_it_allocates() -> None:
+    """The same trap for the fabric pools beside it, so a new one cannot omit it."""
+    for pool in _rows("CoreIPPrefixPool"):
+        assert pool.get("default_prefix_type"), f"{pool['name']} allocates an unnamed kind"
+
+
 def test_the_segment_pools_do_not_collide_with_the_lab() -> None:
     """The lab's own VLANs are 110, 210, 310 and 320, and its addressing runs
     10.41, 10.50-10.60, 10.70, 10.110-10.112, 10.210-10.220 and 10.250."""

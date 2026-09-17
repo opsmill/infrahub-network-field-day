@@ -85,6 +85,21 @@ next free one from `NFD41-Segment-VLAN-Pool` and `NFD41-Segment-Subnet-Pool`.
 existed, and writes `IpamVLAN` and `IpamVRF` straight into the graph — no requester, no status,
 nothing to withdraw. The kind exists to put that behind a service.
 
+**Resource pools are branch-agnostic and their resources are not**, which is worth knowing before
+testing one on a branch. `CoreIPPrefixPool` and `CoreNumberPool` carry `branch: agnostic`, so a pool
+created on a branch is live on `main` the moment it exists and deleting that branch does not remove
+it. The `IpamPrefix` it draws from is branch-aware and *does* go with the branch — leaving a pool
+that exists globally, has empty `resources`, and can never allocate. Two further traps sit behind it:
+
+- A pool needs `default_prefix_type: IpamPrefix`. Omitting it costs nothing at load time and fails at
+  allocation with `A prefix_type or a default_value type must be provided`, naming the pool but not
+  the file that declares it.
+- The caller passes the role: `allocate_next_ip_prefix(..., data={"role": "tenant_host"})`, because
+  `IpamPrefix.role` is mandatory here and depends on what the prefix is for rather than on the pool.
+
+What is **not** a trap, having been measured: an allocation made on a branch is branch-aware and
+invisible on `main`, so a proposed change that is opened and then rejected does not burn a subnet.
+
 Current generator definitions are registered in `.infrahub.yml`:
 `generate-fabric`, `generate-pod`, `generate-rack`, `generate-server-cabling`,
 `generate-avd-device-hostvar`, `generate-avd-device-structured-config`,
