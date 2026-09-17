@@ -50,3 +50,51 @@ The **service portal still authenticates as the admin token**, so a request it w
 attributed to that service account rather than to the person who asked. `final_url` does not
 carry the token: the UI keeps it and does a client-side redirect, so the portal cannot ride
 Infrahub's flow. See the portal notes in `service_catalog/` for where that stands.
+
+## Backstage
+
+The service portal is [Backstage](../backstage/), and it is a **separate relying party** from
+Infrahub rather than a client of it. Both trust this Dex, so one identity signs in to each, and
+each mints its own session.
+
+| | |
+| --- | --- |
+| Portal | `http://<host>:3001` |
+| Sign-in | the same `alice` / `bob` accounts |
+| Resolves to | a catalog `User` entity, via `emailLocalPartMatchingUserEntityName` |
+
+There is **no guest provider**. The upstream example this portal is based on ships one, and a
+guest cannot be recorded as having asked for anything — which is the point of putting requests
+behind a catalogue. `GET /api/catalog/entities` without credentials returns `401`.
+
+### Three things that failed first
+
+**`auth.session.secret` is required.** The openid-client passport strategy keeps its state and
+nonce in an express session, and the auth router only installs `express-session` when that key is
+set. Without it every sign-in fails with `Authentication failed, authentication requires session
+support` — a 500 from `/api/auth/oidc/start` naming neither the setting nor the provider.
+
+**`ApiBlueprint.make` needs the callback form.** `params: defineParams => defineParams(...)`
+rather than `params: <factory>`. The type error says so in full, which is the only reason it took
+one attempt rather than several.
+
+**There is no `oidcAuthApiRef` in Backstage.** `@backstage/core-plugin-api` ships refs for
+GitHub, Google, Okta and the rest; a *generic* OIDC provider has none, and you build it from
+`OAuth2.create()` against the provider id in `app-config.yaml`. See
+`backstage/packages/app/src/modules/auth/`.
+
+### A known Infrahub bug this runs into
+
+`GET /api/schema/json_schema/<kind>` returns **500 for any kind with a `List` attribute**:
+
+```text
+PydanticSchemaGenerationError: Unable to generate pydantic-core schema
+for <class 'infrahub.types.Any'>
+```
+
+Reproduced on Infrahub 1.10.6 against `ServiceFabricPeering`, whose only attribute kind is
+`List`. Kinds with no `List` attribute return 200.
+
+Backstage reads that endpoint to generate a request form, so `ServiceAppAccess`,
+`ServiceFabricApp` and `ServiceFabricPeering` appear in the catalogue with **no generated form**
+until it is fixed. The catalog provider warns and carries on rather than failing the poll.

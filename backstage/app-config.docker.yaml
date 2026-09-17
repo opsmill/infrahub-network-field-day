@@ -1,0 +1,54 @@
+---
+# Layered on top of app-config.yaml for the docker-compose service, which keeps
+# the Infrahub wiring, the extensions and the catalog rules.
+app:
+  # The container's 7007 is published on the host as 3001, and the backend serves
+  # the frontend bundle, so both URLs are the same origin.
+  #
+  # CONFIGURABLE, because this address is not just cosmetic: it is the origin
+  # the browser is on, and it must match a redirect URI registered on the
+  # `backstage` client in auth/dex-config.yaml. A lab reached over Tailscale and
+  # one reached on localhost are different origins, and OIDC notices.
+  baseUrl: ${BACKSTAGE_BASE_URL}
+
+backend:
+  baseUrl: ${BACKSTAGE_BASE_URL}
+  listen: ':7007'
+  cors:
+    origin: ${BACKSTAGE_BASE_URL}
+  # ponytail: in-memory, because everything worth keeping lives in Infrahub.
+  database:
+    client: better-sqlite3
+    connection: ':memory:'
+
+proxy:
+  endpoints:
+    # Lets the visual panels query Infrahub from the browser: the token stays in
+    # the backend, and the browser talks to same-origin Backstage.
+    '/infrahub':
+      target: ${INFRAHUB_ADDRESS}
+      allowedMethods: [POST]
+      headers:
+        X-INFRAHUB-KEY: ${INFRAHUB_API_TOKEN}
+
+infrahub:
+  instance: demo
+  # The backend talks to the compose service; browsers get the published port.
+  externalAddress: http://localhost:8000
+
+catalog:
+  # Replaces the dev locations: paths there are relative to packages/backend,
+  # the backend runs from /app here, and the scaffolded sample entities are
+  # noise next to the Infrahub data.
+  locations:
+    - type: file
+      target: ./examples/org.yaml
+      rules:
+        - allow: [User, Group]
+
+# The upstream example enables guest sign-in here with
+# `dangerouslyAllowOutsideDevelopment`, because the image runs NODE_ENV=production
+# and the guest provider refuses outside development. There is no guest provider
+# in this portal at all -- a guest cannot be recorded as having asked for
+# anything -- and the OIDC provider carries no such guard, so the block that
+# stood here is simply gone. The real configuration is in app-config.yaml.

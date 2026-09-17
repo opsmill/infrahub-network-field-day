@@ -76,6 +76,26 @@ staticClients:
       - http://agentic-agittings-agittings-dev-vm-02.tailc018d.ts.net:8000/auth/oidc/provider1/callback
       - http://100.98.193.51:8000/auth/oidc/provider1/callback
 
+  # The Backstage service portal.
+  #
+  # Backstage is a SEPARATE relying party from Infrahub, not a client of it.
+  # Both trust this Dex, so one person signs in to each with the same identity,
+  # but each mints its own session. Backstage still talks to Infrahub with a
+  # service token -- Infrahub's own flow ends in Infrahub's UI, which keeps the
+  # token, so there is no per-user Infrahub credential to forward. See
+  # auth/README.md.
+  #
+  # The callback path is Backstage's own: `/api/auth/oidc/handler/frame`.
+  - id: backstage
+    name: NFD41 Service Portal
+    secret: backstage-dex-secret
+    redirectURIs:
+      - http://localhost:3001/api/auth/oidc/handler/frame
+      - http://172.20.41.1:3001/api/auth/oidc/handler/frame
+      - http://agentic-agittings-agittings-dev-vm-02:3001/api/auth/oidc/handler/frame
+      - http://agentic-agittings-agittings-dev-vm-02.tailc018d.ts.net:3001/api/auth/oidc/handler/frame
+      - http://100.98.193.51:3001/api/auth/oidc/handler/frame
+
 enablePasswordDB: true
 
 staticPasswords:
