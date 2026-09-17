@@ -458,6 +458,17 @@ because generation is asynchronous: the REST endpoint returns 200 and the
 rendering happens afterwards. Without that wait `provision` can read an artifact
 that exists, reports `Ready`, and is empty — and push nothing onto a switch.
 
+**That wait requires the artifacts to be non-empty AND settled**, and the second half was
+added after the first half proved insufficient. An artifact still holding its *pre-merge*
+content is populated, so a merge that REMOVED something returned from the wait immediately; a
+reconcile cycle run straight afterwards compared every device against stale output, found
+nothing, and printed `compared=14 differed=0` — with the deleted interface still on the switch.
+Nothing errored, and the next cycle ten minutes later cleaned it up, so the only symptom was a
+deletion that appeared not to take. `_wait_for_artifacts` now also requires two consecutive
+checksum samples to agree. **Settling rather than "every checksum moved"**, because an artifact
+whose content genuinely did not change never moves and waiting for it would hang on every
+ordinary merge.
+
 `invoke avd --branch X --merge` does the same thing outside a bootstrap.
 
 ### Verifying a bootstrap

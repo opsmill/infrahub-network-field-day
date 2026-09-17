@@ -658,7 +658,7 @@ def _all_racks_done(branch: str) -> bool:
 
 
 def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG001
-    """Block until every configuration artifact on main has content.
+    """Block until every configuration artifact on main is populated AND settled.
 
     Artifact generation is **asynchronous**: the REST endpoint returns 200 and
     the rendering happens in a task afterwards, and a merge kicks off another
@@ -668,22 +668,41 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
     That matters because `invoke provision` reads these. Pushing an empty
     artifact would replace a switch's configuration with nothing, so the
     bootstrap waits here rather than racing.
+
+    **Non-empty was not enough, and the gap was measured.** An artifact still
+    holding its PRE-merge content is populated, so the original wait returned
+    immediately on a merge that removed something. A reconcile cycle run straight
+    afterwards then compared each device against stale output, found no
+    difference, and reported `compared=14 differed=0` — while the thing the merge
+    had deleted was still on the switch. Nothing errored, and the next cycle ten
+    minutes later cleaned it up, so the only symptom was a deletion that appeared
+    not to take.
+
+    So the wait also requires the checksums to **settle**: two consecutive
+    samples, ten seconds apart, that agree. Settling rather than "every checksum
+    moved", because an artifact whose content genuinely did not change never
+    moves, and waiting for it would hang on every ordinary merge. The cost is one
+    extra sampling interval on a path that already takes minutes.
     """
     names = ("AVD EOS Configuration", "FRR Configuration", "Junos Configuration")
     headers = {"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")}
-    query = "{CoreArtifact{edges{node{id name{value}}}}}"
+    query = "{CoreArtifact{edges{node{id name{value}checksum{value}}}}}"
     print(" - Waiting for the rendered artifacts to carry content")
     deadline = time.time() + timeout
     empty = -1
     wanted: list[str] = []
+    previous: dict[str, str] | None = None
     while time.time() < deadline:
+        current: dict[str, str] = {}
         try:
             response = httpx.post(
                 f"{INFRAHUB_ADDRESS}/graphql/main", json={"query": query}, headers=headers, timeout=60
             )
             response.raise_for_status()
             edges = response.json()["data"]["CoreArtifact"]["edges"]
-            wanted = [e["node"]["id"] for e in edges if e["node"]["name"]["value"] in names]
+            nodes = [e["node"] for e in edges if e["node"]["name"]["value"] in names]
+            wanted = [node["id"] for node in nodes]
+            current = {node["id"]: (node.get("checksum") or {}).get("value") or "" for node in nodes}
             empty = sum(
                 1
                 for aid in wanted
@@ -691,12 +710,17 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
             )
         except (httpx.HTTPError, KeyError, TypeError):
             empty = -1
-        if empty == 0 and wanted:
-            print(f"   all {len(wanted)} configuration artifacts populated")
+            current = {}
+        if empty == 0 and wanted and current == previous:
+            print(f"   all {len(wanted)} configuration artifacts populated and settled")
             return
+        previous = current
         sleep(10)
 
-    print(f"   WARNING: {empty} artifact(s) still empty after {timeout}s -- `invoke provision` would push nothing")
+    if empty == 0:
+        print(f"   WARNING: artifact checksums still moving after {timeout}s -- a push may use stale output")
+    else:
+        print(f"   WARNING: {empty} artifact(s) still empty after {timeout}s -- `invoke provision` would push nothing")
 
 
 def find_lab_directory(explicit: str = "") -> Path:
