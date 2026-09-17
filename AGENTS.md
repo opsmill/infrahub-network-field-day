@@ -316,6 +316,26 @@ has against the repository's HEAD, and an unchanged hash means there is nothing 
 when the last import failed halfway. The repository sits at `sync_status: error-import`
 indefinitely and polling does not help. Recovery is a new commit, not patience.
 
+**Never rewrite a commit Infrahub has already pulled.** `git commit --amend`, `git rebase` and
+`git reset` on an already-synced commit leave Infrahub's clone holding a commit that is no
+longer an ancestor of `main`, and every sync afterwards fails with
+`Unable to pull the branch main for repository test-repository, there are conflicts that must
+be resolved`. The message says "conflicts" and names no file, because there is no file conflict
+— the histories have diverged.
+
+The diagnosis is that `operational_status` reads `error` while `sync_status` still reads
+`in-sync`, so the one-line summary looks half-healthy; compare the repository's `commit` against
+`git log` and check whether it is still an ancestor:
+
+```bash
+git merge-base --is-ancestor <repository commit> HEAD && echo ok || echo diverged
+```
+
+Recovery is to make it an ancestor again rather than to force anything: `git merge -s ours
+<orphaned commit>` keeps the working tree exactly as it is and records the orphaned commit as a
+second parent, so the clone fast-forwards on its next poll. Re-cloning the repository object
+works too and throws away its artifact and check history.
+
 **A partial import leaves the graph inconsistent and reports nothing.** One observed run
 registered the new `CoreGraphQLQuery` and not the `CoreGeneratorDefinition` beside it, because
 the import failed on an unrelated menu upsert after the queries and before the generators. That makes
