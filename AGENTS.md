@@ -73,13 +73,13 @@ Key docs to read before larger changes:
 
 ## Generator and transform inventory
 
-The service layer offers seven kinds. Six are described where their generators or renderers are;
-`ServiceNetworkSegment` is the newest and has no generator yet — the schema and its pools landed
-first, per the schema-before-code rule. A segment is the three technical objects that always
-appear together and are always consistent: an `IpamPrefix`, an `IpamVLAN`, and an `EvpnSvi` giving
-it a gateway in a VRF. **It allocates rather than selects**, which is what separates it from the
-WAN kinds: leaving `vlan_id` or the subnet empty is the normal case, and the generator takes the
-next free one from `NFD41-Segment-VLAN-Pool` and `NFD41-Segment-Subnet-Pool`.
+The service layer offers seven kinds, each described where its generator or renderer is.
+`ServiceNetworkSegment` is the newest: a segment is the three technical objects that always
+appear together and are always consistent — an `IpamPrefix`, an `IpamVLAN`, and an `EvpnSvi`
+giving it a gateway in a VRF. **It allocates rather than selects**, which is what separates it
+from the WAN kinds: leaving `vlan_id` or the subnet empty is the normal case, and
+`generate-network-segment` takes the next free one from `NFD41-Segment-VLAN-Pool` and
+`NFD41-Segment-Subnet-Pool`.
 
 `service_catalog/pages/1_Create_Segment.py` has asked for this since before the service layer
 existed, and writes `IpamVLAN` and `IpamVRF` straight into the graph — no requester, no status,
