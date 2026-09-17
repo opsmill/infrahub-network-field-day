@@ -7,24 +7,32 @@ app:
   #
   # CONFIGURABLE, because this address is not just cosmetic: it is the origin
   # the browser is on, and it must match a redirect URI registered on the
-  # `backstage` client in auth/dex-config.yaml. A lab reached over Tailscale and
+  # `backstage` client in tooling/10-dex.yaml. A lab reached over Tailscale and
   # one reached on localhost are different origins, and OIDC notices.
   baseUrl: ${BACKSTAGE_BASE_URL}
 
 backend:
   baseUrl: ${BACKSTAGE_BASE_URL}
   listen: ':7007'
-  # Backstage's default CSP includes `upgrade-insecure-requests`, which tells
-  # the browser to rewrite every http:// request on the page to https://. This
-  # lab is served over plain HTTP, so the page itself loads and then every
-  # /static/*.js request is upgraded to a port nothing is listening on --
-  # presenting as "scripts failed to load from source" with the assets sitting
-  # right there and answering 200 over http.
+  # TLS, with a self-signed certificate supplied by scripts/deploy_tooling.sh.
   #
-  # `false` removes the directive. Put a TLS terminator in front of this before
-  # it is reachable by anyone who matters, and delete this block.
-  csp:
-    upgrade-insecure-requests: false
+  # IT IS HERE BECAUSE OF `crypto.randomUUID`, not because of eavesdroppers. The
+  # frontend calls it after sign-in, `globalThis.crypto` is only populated in a
+  # SECURE CONTEXT, and an origin served over plain HTTP at a bare IP is not one
+  # -- so sign-in completed and the app then died with
+  # `globalThis.crypto.randomUUID is not a function`, which reads like a missing
+  # polyfill rather than a transport problem. `localhost` is a secure context by
+  # exception, which is why this never appeared while testing from the host.
+  #
+  # `https: true` would have Backstage generate its own, and that was tried
+  # first. It writes the certificate inside the container, so a pod restart
+  # produces a NEW one -- and the branch user has to accept a fresh browser
+  # exception every time. The deploy script's certificate lives in a Secret and
+  # outlives the pod.
+  https:
+    certificate:
+      cert: ${BACKSTAGE_TLS_CERT}
+      key: ${BACKSTAGE_TLS_KEY}
   cors:
     origin: ${BACKSTAGE_BASE_URL}
   # ponytail: in-memory, because everything worth keeping lives in Infrahub.
@@ -44,8 +52,12 @@ proxy:
 
 infrahub:
   instance: demo
-  # The backend talks to the compose service; browsers get the published port.
-  externalAddress: http://localhost:8000
+  # Where the BROWSER is sent when the portal links out to Infrahub, which is a
+  # different address from the one the backend uses: the backend reaches it
+  # over the tooling bridge, and a branch user reaches it through the firewall.
+  # Both happen to be `10.90.0.1:8000`; `localhost` was right only while the
+  # portal ran on the same host as Infrahub.
+  externalAddress: ${INFRAHUB_EXTERNAL_ADDRESS}
 
 catalog:
   # Replaces the dev locations: paths there are relative to packages/backend,

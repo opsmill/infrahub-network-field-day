@@ -3,27 +3,30 @@
 Dex is the lab's identity provider and **Infrahub is the relying party**. Infrahub drives the
 whole flow itself and mints its own token; nothing downstream ever sees a Dex token.
 
-## There are TWO Dex instances, and that is not a mistake
+## One Dex, in the tooling cluster
 
-| Dex | Issuer | Serves | Reached by |
-| --- | --- | --- | --- |
-| host (`docker-compose`) | `…tailc018d.ts.net:5556/dex` | Infrahub | operators, over Tailscale |
-| tooling cluster (`tooling/10-dex.yaml`) | `10.90.0.11:32556/dex` | Backstage | branch users, through the firewall |
+`tooling/10-dex.yaml` is the whole identity provider. Its issuer is
+`http://10.90.0.11:32556/dex`, and everything that trusts it — Infrahub and Backstage — names
+that one URL.
 
-**An OIDC issuer is one URL, and there is no address both audiences can reach.** An operator's
-browser arrives over Tailscale and has no route into `10.90.0.0/24`; the branch desktop routes
-`10.0.0.0/8` through the firewall and has never heard of the Tailscale network. Neither is
-reachable from the other, so neither can be the issuer for both.
+**SSO is a branch-side flow.** `10.90.0.11` is reachable from the branch desktop through
+WAN → border-leaf1 → fw1 → zone `tooling`, and from the Infrahub container over the host's
+bridge. It is *not* reachable from an operator's own machine, which arrives over Tailscale and
+has no route into `10.90.0.0/24`.
 
-This was consolidated onto the cluster Dex once, on the strength of testing from the host, the
-Infrahub container and the branch desktop — every party except the one that matters most.
-Infrahub login broke for exactly the people who use Infrahub, and it broke at the IdP redirect
-rather than at Infrahub, so nothing in Infrahub's logs pointed at the cause. **Before changing
-which Dex anything points at, test from a browser on a different machine**, not from this host.
+That boundary is deliberate. The people who sign in with SSO are end users at the branch, asking
+for services as themselves; an operator signs in to Infrahub with the local `admin` account,
+which sits on the same login page beside the SSO button and needs no identity provider at all.
 
-What makes two tolerable is that `auth/dex-config.yaml` and `tooling/10-dex.yaml` carry the same
-users and the same bcrypt hashes. A person is defined once in the repository and deployed twice;
-they sign in to Infrahub and to the portal separately, with the same credentials.
+A second Dex on the host was built to serve operators over Tailscale and then removed. Two
+issuers is two identities for one person: the same `alice` would be a different Infrahub account
+depending on which network she came in on, and the accounts could not be merged afterwards.
+Having one directory is worth more than having SSO on every path into the lab.
+
+**Before changing which address Dex publishes, test from every browser that has to reach it.**
+An earlier consolidation was tested from the host, the Infrahub container and the branch desktop
+— every party except a remote operator — and broke Infrahub login at the IdP redirect rather
+than at Infrahub, so nothing in Infrahub's logs pointed at the cause.
 
 Infrahub has **no `depends_on`** for its Dex. Dex is needed only when someone signs in, and
 Infrahub was measured booting cleanly with its discovery URL unreachable: discovery is fetched on
@@ -80,12 +83,12 @@ Infrahub's flow. See the portal notes in `service_catalog/` for where that stand
 ## Backstage
 
 The service portal is [Backstage](../backstage/), and it is a **separate relying party** from
-Infrahub rather than a client of it. Both trust this Dex, so one identity signs in to each, and
-each mints its own session.
+Infrahub rather than a client of it. Both trust the same Dex, so one identity signs in to each,
+and each mints its own session.
 
 | | |
 | --- | --- |
-| Portal | `http://<host>:3001` |
+| Portal | `https://10.90.0.11:32001`, from the branch desktop |
 | Sign-in | the same `alice` / `bob` accounts |
 | Resolves to | a catalog `User` entity, via `emailLocalPartMatchingUserEntityName` |
 

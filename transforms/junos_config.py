@@ -12,7 +12,7 @@ firewall's configuration is worse than one that does not exist:
 * the 72-line file header -- lab documentation ABOUT the file, not device
   configuration. Reproducing it would put a false provenance claim in the
   artifact, so it is replaced by this renderer's own one-line header.
-592 of the file's 677 lines. The excluded 85 are the two items above, and they
+656 of the file's 741 lines. The excluded 85 are the two items above, and they
 are excluded for DIFFERENT reasons -- one is configuration this project will
 not model, the other is not configuration. ``test_the_exclusions_add_up``
 computes the totals from the device file rather than asserting literals.

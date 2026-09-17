@@ -1095,6 +1095,27 @@
             }
           }
         }
+      },
+      {
+        "node": {
+          "__typename": "SecurityService",
+          "name": {
+            "value": "infrahub-api"
+          },
+          "description": {
+            "value": null
+          },
+          "port": {
+            "value": 8000
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "tcp"
+              }
+            }
+          }
+        }
       }
     ]
   },
@@ -1797,6 +1818,12 @@
                         "node": {
                           "__typename": "SecurityService",
                           "display_label": "tooling-oidc"
+                        }
+                      },
+                      {
+                        "node": {
+                          "__typename": "SecurityService",
+                          "display_label": "infrahub-api"
                         }
                       }
                     ]

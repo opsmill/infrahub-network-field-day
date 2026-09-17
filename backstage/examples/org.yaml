@@ -4,7 +4,7 @@
 # a User's `metadata.name`, so `alice@nfd41.lab` resolves to `alice` here. A Dex
 # user with no entry still signs in -- the second resolver allows it -- but gets
 # an identity belonging to no group, so ownership and filtering do not work for
-# them. Adding a person is two places: here and auth/dex-config.yaml.
+# them. Adding a person is two places: here and tooling/10-dex.yaml.
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Group

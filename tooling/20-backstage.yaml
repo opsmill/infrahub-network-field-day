@@ -20,10 +20,22 @@ data:
   # Every URL the BROWSER will be sent to has to be one the branch desktop can
   # resolve and route to. That rules out localhost, the Tailscale name and the
   # management range, and leaves the tooling address.
-  BACKSTAGE_BASE_URL: "http://10.90.0.11:32001"
+  #
+  # HTTPS, with a certificate the backend generates for itself. Not for privacy:
+  # the frontend calls `crypto.randomUUID`, which exists only in a secure
+  # context, so a portal served over plain HTTP signs a user in and then throws
+  # `globalThis.crypto.randomUUID is not a function`. See app-config.docker.yaml.
+  BACKSTAGE_BASE_URL: "https://10.90.0.11:32001"
+  # Dex stays on HTTP. It is the IdP, not the origin the app runs on, and
+  # nothing on the page loads from it -- the browser only ever navigates there
+  # and back, which no mixed-content rule touches.
   BACKSTAGE_OIDC_METADATA_URL: "http://10.90.0.11:32556/dex/.well-known/openid-configuration"
   BACKSTAGE_OIDC_CLIENT_ID: "backstage"
+  # Two addresses for one Infrahub, and they are the same string by coincidence
+  # rather than by rule: the backend reaches it over the tooling bridge, the
+  # branch user's browser reaches it through the firewall.
   INFRAHUB_ADDRESS: "http://10.90.0.1:8000"
+  INFRAHUB_EXTERNAL_ADDRESS: "http://10.90.0.1:8000"
 ---
 apiVersion: v1
 kind: Secret
@@ -47,10 +59,10 @@ metadata:
 spec:
   replicas: 1
   selector:
-    matchLabels: { app: backstage }
+    matchLabels: {app: backstage}
   template:
     metadata:
-      labels: { app: backstage }
+      labels: {app: backstage}
     spec:
       containers:
         - name: backstage
@@ -68,17 +80,50 @@ spec:
             - "--config"
             - "app-config.docker.yaml"
           envFrom:
-            - configMapRef: { name: backstage-env }
-            - secretRef: { name: backstage-secrets }
+            - configMapRef: {name: backstage-env}
+            - secretRef: {name: backstage-secrets}
+          env:
+            # The certificate the backend serves, as configuration.
+            - name: BACKSTAGE_TLS_CERT
+              valueFrom:
+                secretKeyRef: {name: backstage-tls, key: tls.crt}
+            - name: BACKSTAGE_TLS_KEY
+              valueFrom:
+                secretKeyRef: {name: backstage-tls, key: tls.key}
+            # ... and the same certificate as a trust anchor, because Backstage
+            # calls ITSELF. The sign-in resolver looks the user up in the
+            # catalog through `https://localhost:7007`, and Node refuses a
+            # self-signed peer. The failure arrives inside the OIDC popup as
+            #
+            #   FetchError: request to https://localhost:7007/api/catalog/
+            #   entities/by-name/User/default/alice failed
+            #
+            # which names the catalog and never mentions TLS. Pointing Node at
+            # the certificate is the fix; `NODE_TLS_REJECT_UNAUTHORIZED=0` also
+            # works and turns off verification for every outbound call.
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/backstage-tls/tls.crt
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/backstage-tls
+              readOnly: true
           ports:
             - containerPort: 7007
           readinessProbe:
             httpGet:
+              # HTTPS, and the probe must say so -- the backend now terminates
+              # TLS itself. An `http` probe against it fails with an empty reply
+              # and the pod never goes Ready, which reads as a crashing app.
+              # kubelet does not verify the certificate, so self-signed is fine.
+              scheme: HTTPS
               path: /.backstage/health/v1/readiness
               port: 7007
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 30
+      volumes:
+        - name: tls
+          secret: {secretName: backstage-tls}
 ---
 apiVersion: v1
 kind: Service
@@ -87,9 +132,9 @@ metadata:
   namespace: nfd41-tooling
 spec:
   type: NodePort
-  selector: { app: backstage }
+  selector: {app: backstage}
   ports:
-    - name: http
+    - name: https
       port: 7007
       targetPort: 7007
       # Fixed, because it is named in three other places that must agree: the

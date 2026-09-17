@@ -11,7 +11,7 @@ from time import sleep
 from typing import Any
 
 import httpx
-from invoke import Context, task
+from invoke import Context, Exit, task
 
 # If no version is indicated, we will take the latest
 VERSION = os.getenv("INFRAHUB_IMAGE_VER", None)
@@ -1246,6 +1246,49 @@ def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
         )
 
 
+@task(
+    help={"no-cache": "Rebuild the image from scratch, ignoring the layer cache."},
+)
+def backstage_build(ctx: Context, no_cache: bool = False) -> None:
+    """
+    Build the service portal's image.
+
+    The compose service is `profiles: ["build-only"]` -- the portal RUNS in the
+    tooling cluster, not on the host -- so this builds the image and starts
+    nothing. `invoke tooling` is what carries it across to the node.
+
+    Use `--no-cache` when a config file changed and the build appears not to have
+    noticed. `app-config.docker.yaml` is COPYed in, so an edit should invalidate
+    the layer, and it has been seen not to; the way to be sure is to look inside
+    the image rather than at the build output.
+    """
+    flag = " --no-cache" if no_cache else ""
+    ctx.run(f"{compose_cmd()} --profile build-only build{flag} backstage", pty=True)
+
+
+@task
+def tooling(ctx: Context) -> None:
+    """
+    Deploy the tooling cluster's contents: Dex, and the Backstage portal.
+
+    **This is the one part of the lab Infrahub does not deliver, and cannot.**
+    Dex is the identity provider Infrahub authenticates users against and
+    Backstage is where people request services, so anything waiting on an
+    Infrahub merge to exist would have to exist before it could be merged. The
+    tooling network is L2-adjacent to the host for the same reason -- see
+    `lab/scripts/tooling-bridge.sh`.
+
+    Independent of `invoke cluster`, which brings up the WORKLOAD cluster behind
+    the fabric. These are two clusters with two purposes; neither waits on the
+    other.
+
+    Idempotent: re-run it to roll out a manifest edit or a rebuilt image.
+    """
+    if not Path("scripts/deploy_tooling.sh").is_file():
+        raise Exit("scripts/deploy_tooling.sh is missing")
+    ctx.run("scripts/deploy_tooling.sh", pty=True)
+
+
 # `bootstrap` takes a --cluster flag, which shadows the task of the same name
 # inside its body. Alias it here so the call site stays readable.
 _cluster_task = cluster
@@ -1273,6 +1316,7 @@ def bootstrap(
         avd        the generation chain ON A BRANCH, then merged to main
         lab        the ContainerLab topology, management connectivity only
         provision  every device configured from its rendered artifact
+        tooling    Dex and the Backstage portal, in the tooling cluster
         cluster    Cilium, Vidra, Crossplane, and the resource handover
 
     **The chain runs on a branch and is merged here rather than by hand.** That
@@ -1316,6 +1360,14 @@ def bootstrap(
     # on a push. Confirmation needs a later comparison that finds no difference,
     # so one cycle would leave the fabric correct but unconfirmed.
     reconcile(ctx, converge=True)
+
+    # The tooling cluster, before the workload one. It does not need the fabric
+    # -- that is the point of it -- but it does need the firewall configured, so
+    # that a branch user can reach the portal the moment the bootstrap ends.
+    print("\n=== Building the service portal ===")
+    backstage_build(ctx)
+    print("\n=== Deploying the tooling cluster ===")
+    tooling(ctx)
 
     if cluster:
         print("\n=== Bringing up Kubernetes ===")

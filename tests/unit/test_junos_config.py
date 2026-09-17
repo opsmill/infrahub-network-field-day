@@ -6,11 +6,12 @@ makes equality the right assertion: a substring check would pass on a policy
 stanza with a rule in the wrong position, and Junos evaluates first-match, so
 that is a different firewall which loads without complaint.
 
-The artifact covers 573 of the file's 677 lines. The excluded 104 are the
-`system` stanza (two credential hashes, permanently out), `routing-options`
-(eight routes with no device-level home in the schema) and the 7-line `flow`
-block (nothing models it). SC-010 makes that total an arithmetic criterion
-rather than a prose caveat, and `test_the_exclusions_add_up` checks it.
+The artifact covers 656 of the file's 741 lines. The excluded 85 are the
+`system` stanza (13 lines: two credential hashes, permanently out) and the
+file header (72 lines of lab documentation, which is not configuration).
+SC-010 makes that total an arithmetic criterion rather than a prose caveat,
+and `test_the_exclusions_add_up` derives all three figures from the file --
+so the numbers in this docstring are commentary and the test is the check.
 """
 
 from __future__ import annotations

@@ -102,11 +102,7 @@ def _abstract_offences(document: graphql.DocumentNode, schema: graphql.GraphQLSc
             parent = type_info.get_parent_type()
             if parent is None or not graphql.is_abstract_type(parent):
                 return
-            fields = {
-                selection.name.value
-                for selection in node.selections
-                if isinstance(selection, graphql.FieldNode)
-            }
+            fields = {selection.name.value for selection in node.selections if isinstance(selection, graphql.FieldNode)}
             if "__typename" not in fields:
                 offences.append(str(parent))
 

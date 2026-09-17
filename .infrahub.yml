@@ -432,7 +432,7 @@ artifact_definitions:
   # `frr_routers` names its six members explicitly rather than deriving them
   # from the device role, because cust-acme-dr-ce shares the `customer_edge`
   # role and the lab renders no FRR config for it.
-  # The perimeter firewall. 592 of junos.conf's 677 lines, complete as of cycle
+  # The perimeter firewall. 656 of junos.conf's 741 lines, complete as of cycle
   # 026. The 85 it omits are two different things: the `system` stanza (13
   # lines) is configuration deliberately never modelled -- two credential
   # hashes -- and the file header (72 lines) is lab documentation about the

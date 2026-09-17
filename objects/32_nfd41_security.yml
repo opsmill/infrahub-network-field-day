@@ -336,7 +336,7 @@ spec:
       description: "ICMP echo"
       port: 0
       ip_protocol: icmp
-    # The tooling cluster's two services. NOT `junos-` prefixed, because they are
+    # The tooling network's services. NOT `junos-` prefixed, because they are
     # not Junos built-ins -- which is precisely why the artifact renders an
     # `applications` stanza declaring them. A rule naming an undeclared
     # application makes the device refuse the entire commit.
@@ -347,6 +347,14 @@ spec:
     - name: tooling-oidc
       description: "Dex, the tooling cluster's identity provider"
       port: 32556
+      ip_protocol: tcp
+    # Infrahub itself, on the host's address on the tooling bridge. It is in
+    # this zone because 10.90.0.1 is on the tooling subnet, not because Infrahub
+    # runs in the cluster -- it does not. A branch user needs it to complete the
+    # SSO redirect, which ends on Infrahub's own UI.
+    - name: infrahub-api
+      description: "Infrahub, on the host's tooling-bridge address"
+      port: 8000
       ip_protocol: tcp
     # Junos' built-in wildcard. Fourteen rules match `application any`, and the
     # address book carries an `any` SecurityPrefix for the same reason: a rule's
@@ -617,14 +625,17 @@ spec:
           # and the policy was describing a service that does not exist there.
           #
           # Naming them explicitly is also the honest thing -- the branch may
-          # reach the portal and the IdP, and nothing else in the tooling
-          # network, which is what a NodePort range full of other services would
-          # otherwise expose.
+          # reach the portal, the IdP and Infrahub, and nothing else in the
+          # tooling network, which is what a NodePort range full of other
+          # services would otherwise expose.
           - name: tooling-portal
             port: 32001
             ip_protocol: tcp
           - name: tooling-oidc
             port: 32556
+            ip_protocol: tcp
+          - name: infrahub-api
+            port: 8000
             ip_protocol: tcp
     - name: branch-to-k8s-icmp
       index: 30

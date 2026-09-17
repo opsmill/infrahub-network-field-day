@@ -28,15 +28,12 @@ services:
     # SSO against the lab's Dex. No Infrahub code is involved: 1.10.6 ships
     # as an OIDC relying party, and this is the whole of the configuration.
     #
-    # The DISCOVERY URL is fetched by the SERVER, so it uses the address the
-    # server can reach. The URLs *inside* that document are followed by the
-    # BROWSER, so Dex must publish itself as 172.20.41.1 -- which is why its
-    # issuer is set that way rather than to `dex:5556`. Pointing this at
-    # `http://dex:5556` instead would fetch fine and then redirect the browser
-    # to a hostname it cannot resolve.
-    #
-    # `depends_on` is deliberate: Infrahub reads provider configuration at
-    # startup, and a server that starts first shows no SSO button at all.
+    # The DISCOVERY URL is fetched by the SERVER, so it must name an address
+    # this container can reach. The URLs *inside* that document are followed by
+    # the BROWSER, so the same address has to work there too -- which is why
+    # Dex's issuer is `10.90.0.11:32556` and not a cluster-internal name.
+    # Pointing this at a Service DNS name would fetch fine and then redirect the
+    # browser somewhere it cannot resolve.
     environment:
       # A JSON ARRAY, not a bare name. The setting is a list field, so
       # pydantic-settings parses it as JSON -- and `provider1` on its own makes
@@ -47,24 +44,21 @@ services:
       INFRAHUB_SECURITY_OIDC_PROVIDERS: ${INFRAHUB_SECURITY_OIDC_PROVIDERS:-["provider1"]}
       INFRAHUB_OIDC_PROVIDER1_CLIENT_ID: ${INFRAHUB_OIDC_PROVIDER1_CLIENT_ID:-infrahub}
       INFRAHUB_OIDC_PROVIDER1_CLIENT_SECRET: ${INFRAHUB_OIDC_PROVIDER1_CLIENT_SECRET:-infrahub-dex-secret}
-      # THE TOOLING CLUSTER'S DEX, which is the one address every party can
-      # reach: this container, the host, pods in that cluster, and the branch
-      # desktop through the firewall. That is the whole reason the tooling
-      # network exists -- before it there was no single issuer, and Infrahub and
-      # the portal had to trust two different ones.
-      # THE OPERATORS' DEX, on the host, at an address their browsers reach.
+      # THE TOOLING CLUSTER'S DEX, and the only one in the lab.
       #
-      # NOT the tooling cluster's. That one is reachable from the host, from
-      # this container and from the branch desktop -- but NOT from an operator's
-      # own machine, which arrives over Tailscale and has no route into
-      # 10.90.0.0/24. Consolidating onto it broke Infrahub login for exactly the
-      # people who use Infrahub, and the redirect failed on the IdP rather than
-      # on Infrahub, so nothing pointed at the cause.
+      # SSO IS A BRANCH-SIDE FLOW BY DESIGN. The people who sign in this way are
+      # end users at the branch desktop, and `10.90.0.11` is reachable from
+      # there through WAN -> border-leaf1 -> fw1 -> zone `tooling`, as well as
+      # from this container over the host's bridge.
       #
-      # See auth/README.md: two audiences on two networks with no address in
-      # common is why there are two of these.
+      # An operator arriving over Tailscale has no route into 10.90.0.0/24 and
+      # cannot complete this flow. That is the documented boundary, not a gap:
+      # operators sign in with the local `admin` account, which sits on the same
+      # login page beside the SSO button. A second Dex on the host to serve them
+      # was built and then removed -- two issuers is two identities for one
+      # person, and this lab has one directory.
       INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL: >-
-        ${INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL:-http://agentic-agittings-agittings-dev-vm-02.tailc018d.ts.net:5556/dex/.well-known/openid-configuration}
+        ${INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL:-http://10.90.0.11:32556/dex/.well-known/openid-configuration}
       INFRAHUB_OIDC_PROVIDER1_DISPLAY_LABEL: ${INFRAHUB_OIDC_PROVIDER1_DISPLAY_LABEL:-Sign in with Dex}
       INFRAHUB_OIDC_PROVIDER1_ICON: ${INFRAHUB_OIDC_PROVIDER1_ICON:-mdi:account-key}
       # Every SSO user lands here. Without a default group an SSO account is
@@ -92,35 +86,6 @@ services:
     volumes:
       - ./:/upstream
       - ./src:/opt/local/src
-
-  # ==========================================================================
-  # The lab's on-prem OpenID Connect provider.
-  #
-  # Infrahub is the relying party: it drives the flow and issues its own token,
-  # so nothing downstream ever sees a Dex token. See auth/dex-config.yaml for
-  # why the issuer is 172.20.41.1 rather than localhost -- it is the one address
-  # that resolves to the same Dex from the browser AND from inside the Infrahub
-  # container, and getting that wrong is how OIDC-in-Docker usually fails.
-  # ==========================================================================
-  dex:
-    image: ghcr.io/dexidp/dex:v2.44.0
-    restart: unless-stopped
-    command: dex serve /etc/dex/config.yaml
-    volumes:
-      - "./auth/dex-config.yaml:/etc/dex/config.yaml:ro"
-      - "dex_data:/var/dex"
-    ports:
-      - "${DEX_PORT:-5556}:5556"
-    healthcheck:
-      test:
-        - CMD
-        - wget
-        - -qO-
-        - http://localhost:5556/dex/.well-known/openid-configuration
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
 
   # ==========================================================================
   # The Backstage service portal.
@@ -159,12 +124,15 @@ services:
       INFRAHUB_ADDRESS: http://infrahub-server:8000
       INFRAHUB_API_TOKEN: ${INFRAHUB_INITIAL_ADMIN_TOKEN:-06438eb2-8019-4776-878c-0941b1f1d1ec}
       # The origin the BROWSER is on. It must match a redirect URI registered on
-      # the `backstage` client in auth/dex-config.yaml, or sign-in fails at Dex
+      # the `backstage` client in tooling/10-dex.yaml, or sign-in fails at Dex
       # with an error naming the exact string it expected.
+      #
+      # These defaults are the cluster's, because the cluster is where the
+      # portal runs -- this service builds the image and does not serve it.
       BACKSTAGE_BASE_URL: >-
-        ${BACKSTAGE_BASE_URL:-http://agentic-agittings-agittings-dev-vm-02:3001}
+        ${BACKSTAGE_BASE_URL:-https://10.90.0.11:32001}
       BACKSTAGE_OIDC_METADATA_URL: >-
-        ${BACKSTAGE_OIDC_METADATA_URL:-http://agentic-agittings-agittings-dev-vm-02.tailc018d.ts.net:5556/dex/.well-known/openid-configuration}
+        ${BACKSTAGE_OIDC_METADATA_URL:-http://10.90.0.11:32556/dex/.well-known/openid-configuration}
       BACKSTAGE_OIDC_CLIENT_ID: ${BACKSTAGE_OIDC_CLIENT_ID:-backstage}
       BACKSTAGE_OIDC_CLIENT_SECRET: ${BACKSTAGE_OIDC_CLIENT_SECRET:-backstage-dex-secret}
       # Signs the express session the OIDC strategy keeps its state and nonce
@@ -295,4 +263,3 @@ services:
 
 volumes:
   # Dex's sqlite store, so a restart does not invalidate every session.
-  dex_data:
