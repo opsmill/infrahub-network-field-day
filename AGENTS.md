@@ -106,10 +106,27 @@ Current generator definitions are registered in `.infrahub.yml`:
 `backfill-structured-config`, `generate-fabric-peering`, `generate-app-access`, and
 `generate-network-segment`.
 
-`generate-network-segment` is the only one that **allocates rather than selects**: every other
-generator here derives from objects that already exist, while a `ServiceNetworkSegment` states a
-size and a tenant and the generator takes the next free subnet and VLAN id. Two things to know
-before changing it:
+`generate-fabric-app` gives an exposed `ServiceFabricApp` a LoadBalancer VIP block from its
+cluster's pool. It closes a harder edge than the other allocating generator, because an exposed
+application with no block does not degrade — `crossplane_fabric_app.py` **raises**
+`is exposed but has no vip_block; the XRD requires expose.vipBlock`. Two things to know:
+
+- **`vip_block_managed` is what makes withdrawal safe.** `vip_block` holds either a block a
+  human declared in `objects/` — `10.112.240.0/28` for `nfd41-demo` — or one this generator took
+  from the pool, and only the second is ever safe to delete. The flag records which, is set only
+  on the allocating path, and is the only thing withdrawal consults; it plays exactly the role
+  `managed_by_service` plays on `SecurityPolicyRule`. It is written in the **same save** as the
+  block, because two saves leave a window in which the block exists and nothing records who owns
+  it. A block that already exists is kept whoever created it, which is how the seeded
+  application's manifest stays byte-identical.
+- **The pool is resolved through the CLUSTER**, not by name and not by role. A cluster's
+  `vip_pools` are the only supernets the leaves' inbound route policy permits
+  (`10.112.240.0/24 le 32`), so a block from anywhere else is advertised by the cluster and
+  refused by the fabric.
+
+`generate-network-segment` and `generate-fabric-app` are the two generators that **allocate
+rather than select**: every other one here derives from objects that already exist, while these
+take the next free resource from a pool. Two things to know before changing the segment one:
 
 - **`ServiceNetworkSegment.avd_tags` is what decides whether the segment renders at all.** AVD
   puts an SVI on a device only where `svis[].tags` intersects that device's node-group

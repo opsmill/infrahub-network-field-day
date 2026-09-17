@@ -408,6 +408,66 @@ so the tracking context, which only removes what this generator created, leaves 
 what keeps `junos-https` alive when a grant that used port 443 is revoked, while the rule the
 grant created disappears.
 
+### FabricAppGenerator
+
+**File**: `generators/generate_fabric_app.py`
+
+**Target**: `ServiceFabricApp` (group `service_fabric_apps`)
+
+**Purpose**: Give an exposed application a LoadBalancer VIP block from its cluster's pool, so
+stating a size is the request rather than choosing addresses by hand
+
+**Actions**:
+
+1. Check `exposed` and `status`. An unexposed or decommissioned application withdraws.
+2. Keep any block the application already holds, whoever created it.
+3. Otherwise resolve the pool through the cluster, allocate a block, and record it together
+   with `vip_block_managed: true`.
+4. Ask for the Crossplane manifest to be re-rendered.
+
+**Query**: `generate_fabric_app.gql`
+
+This is the second generator here that **allocates rather than selects**, after
+[NetworkSegmentGenerator](#networksegmentgenerator), and it closes a harder edge: an exposed
+application with no block does not degrade, it **fails**. `crossplane_fabric_app.py` raises
+`application {name} is exposed but has no vip_block; the XRD requires expose.vipBlock`, so
+before this generator every exposed application needed a block picked by hand out of
+`10.112.240.0/24` with nothing preventing two of them from picking the same one.
+
+#### `vip_block_managed`, and why withdrawal is safe
+
+`vip_block` is one field holding two very different things:
+
+| Origin | Example | May the generator delete it? |
+| --- | --- | --- |
+| Declared in `objects/` by a human | `10.112.240.0/28` for `nfd41-demo` | **No** |
+| Allocated from the pool by this generator | `10.112.240.16/28` onward | Yes |
+
+`vip_block_managed` records which, is set only on the allocating path, and is the only thing
+withdrawal consults. It plays exactly the role `managed_by_service` plays on
+`SecurityPolicyRule`: the guard that lets a generator work beside hand-maintained data. Deleting
+the seeded block would remove an object `objects/29_nfd41_offfabric_prefixes.yml` owns and break
+the next `invoke load`.
+
+It is written in the **same save** as the block. Two saves leave a window in which the block
+exists and nothing records who owns it, and a withdrawal landing in that window would decline to
+remove a block the generator had in fact allocated — leaking it.
+
+#### The pool comes from the cluster
+
+Not from a name, and not from a role scan. A cluster's `vip_pools` are the only supernets its
+LoadBalancer addresses may come from: the leaves' inbound route policy permits exactly
+`10.112.240.0/24 le 32`, so a block from anywhere else is advertised by the cluster and refused
+by the fabric — permitted and unroutable, the same failure
+`schemas/service/access_services.yml` warns about on `destination_vip`. Exactly one pool must
+draw from those supernets; two would allocate against each other.
+
+#### What it does not do
+
+Reallocate an existing block. That is what keeps `nfd41-demo` on `10.112.240.0/28`, which matters
+because the `zone-advertisement` check measures grant VIPs against it and the rendered manifest
+is already applied in the cluster.
+
 ### NetworkSegmentGenerator
 
 **File**: `generators/generate_network_segment.py`

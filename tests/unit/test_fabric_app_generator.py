@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from infrahub_sdk.exceptions import NodeNotFoundError
 
 from generators.generate_fabric_app import (
     FabricAppGenerator,
@@ -344,3 +345,32 @@ async def test_the_manifest_is_rerendered_after_an_allocation() -> None:
     await _generator(client).generate(_query(app=_app()).model_dump(by_alias=True))
 
     assert client.nodes["app-1"].artifacts == ["Crossplane FabricApp"]
+
+
+@pytest.mark.asyncio
+async def test_a_brand_new_application_with_no_artifact_yet_is_not_a_warning() -> None:
+    """The most common path of all, and it was reported as a failure.
+
+    A service created moments ago has no CoreArtifact -- the node appears when
+    the artifact definition first runs against it -- so asking to regenerate one
+    raises NodeNotFoundError. Measured on this generator's first live
+    allocation, where it printed a multi-line WARNING beside a perfectly correct
+    result.
+    """
+
+    class _NoArtifactNode(_RecordingNode):
+        async def artifact_generate(self, name: str) -> None:
+            raise NodeNotFoundError(node_type="CoreArtifact", identifier={"name__value": name})
+
+    class _NoArtifactClient(_RecordingClient):
+        async def get(self, kind: str, id: str) -> Any:  # noqa: A002
+            return self.nodes.setdefault(id, _NoArtifactNode(id))
+
+    client = _NoArtifactClient()
+    caplog_free = _generator(client)
+
+    # The allocation must still complete; the missing artifact is not a failure.
+    await caplog_free.generate(_query(app=_app()).model_dump(by_alias=True))
+
+    assert len(client.allocations) == 1
+    assert client.nodes["app-1"].saves[0]["managed"] is True

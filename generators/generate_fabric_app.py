@@ -45,6 +45,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from infrahub_sdk.exceptions import NodeNotFoundError
 from infrahub_sdk.generator import InfrahubGenerator
 
 from .generate_fabric_app_query import (
@@ -278,16 +279,31 @@ class FabricAppGenerator(InfrahubGenerator):
         Best effort, and deliberately so: the allocation is already written and
         correct by this point, and raising here would skip the tracking
         context's `update_group`. A failed request is recoverable by
-        regenerating the artifact, so it is logged loudly rather than thrown.
+        regenerating the artifact, so it is logged rather than thrown.
 
         Unlike `generate-app-access`, the changed object here IS the artifact's
         target, so Infrahub regenerates on its own. This is belt and braces
         against that assumption, which cost cycle 033 a day when it turned out
         not to hold for the firewall.
+
+        **A missing artifact is the NORMAL first run, not a failure.** A service
+        created moments ago has no `CoreArtifact` yet -- the node appears when
+        the artifact definition first runs against it -- so asking to regenerate
+        one raises `NodeNotFoundError`. Reported as a warning it reads as a
+        broken generator on the single most common path there is, which is how
+        people are taught to ignore warnings. Measured on the first live
+        allocation this generator ever made.
         """
         try:
             service = await self._init_client.get(kind="ServiceFabricApp", id=app_id)
             await service.artifact_generate(APP_ARTIFACT)
+        except NodeNotFoundError:
+            self.logger.info(
+                "No %r artifact exists for this application yet; it will be rendered when the "
+                "artifact definition first runs",
+                APP_ARTIFACT,
+            )
+            return
         except Exception as exc:  # noqa: BLE001 - see the docstring; never fatal here
             self.logger.warning(
                 "Could not re-render %r (%s); the allocation is correct, regenerate the artifact",
