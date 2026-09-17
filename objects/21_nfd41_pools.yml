@@ -74,26 +74,6 @@ spec:
       ip_namespace: default
       resources:
         - 10.230.0.0/16
-    # LoadBalancer VIP blocks, one per exposed application.
-    #
-    # The supernet is the cluster's own `vip_pools` entry, and the leaves'
-    # inbound route policy permits exactly `10.112.240.0/24 le 32` -- so a block
-    # allocated from anywhere else is advertised by the cluster and refused by
-    # the fabric, which is permitted-and-unroutable rather than an error.
-    #
-    # 10.112.240.0/28 is already carved out of it by
-    # objects/29_nfd41_offfabric_prefixes.yml for nfd41-demo. That is not a
-    # conflict: Infrahub allocates the next FREE subnet, so the pool hands out
-    # 10.112.240.16/28 first and the hand-written block keeps its address.
-    - name: NFD41-VIP-Pool
-      default_member_type: prefix
-      default_prefix_type: IpamPrefix
-      # /28 gives 16 blocks out of the /24, which is more applications than this
-      # lab will ever run and still leaves each one a usable set of VIPs.
-      default_prefix_length: 28
-      ip_namespace: default
-      resources:
-        - 10.112.240.0/24
     - name: NFD41-Loopback-Pool
       default_member_type: prefix
       default_prefix_type: IpamPrefix

@@ -152,3 +152,31 @@ spec:
       role: loopback
       status: active
       description: "Branch router loopback"
+---
+# ============================================================================
+# The pool that carves per-application VIP blocks out of 10.112.240.0/24.
+#
+# DECLARED HERE, NOT IN 21_nfd41_pools.yml WITH THE OTHERS, and the reason is
+# load order. `CoreIPPrefixPool.resources` must name prefixes that ALREADY
+# exist, and this supernet is declared above in this same file -- eight files
+# after 21. Putting the pool with the other pools failed a fresh `invoke load`
+# with "Unable to find the node 10.112.240.0/24 / BuiltinIPPrefix in the
+# database", which names the prefix and not the file that had to move.
+#
+# It was invisible on a running instance, because the supernet was already
+# there. Only a rebuild from nothing puts the files back in order.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: CoreIPPrefixPool
+  data:
+    - name: NFD41-VIP-Pool
+      default_member_type: prefix
+      default_prefix_type: IpamPrefix
+      # /28 gives 16 blocks out of the /24, which is more applications than this
+      # lab will ever run and still leaves each one a usable set of VIPs.
+      default_prefix_length: 28
+      ip_namespace: default
+      resources:
+        - 10.112.240.0/24
