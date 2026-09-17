@@ -1,0 +1,117 @@
+query WanServiceCheckQuery {
+  # The provider-edge half. A tenant's sites reach each other because their
+  # circuits are both in here, not because anything was leaked between them --
+  # so membership of this list IS the routing domain.
+  ServiceL3vpn {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        tenant {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        vrf {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        # `tenant` on a circuit resolves to the OrganizationTenant, which is what
+        # makes rule 1 possible. The same field on IpamVRF does NOT -- every
+        # tenant VRF in this lab points at the EvpnTenant `TENANT_CLOUD` -- so a
+        # VRF cannot be attributed to a tenant and the rules never try.
+        circuits {
+          edges {
+            node {
+              id
+              circuit_id {
+                value
+              }
+              tenant {
+                node {
+                  id
+                  name {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # The datacentre half. All of vrf, zone and prefix are mandatory because the
+  # isolation is structural: no VRF imports another's route targets anywhere, so
+  # there is no east-west path to filter. It takes all three to be so.
+  ServiceTenantCloud {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        tenant {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        vrf {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        zone {
+          node {
+            id
+            name {
+              value
+            }
+            # The join rule 3 checks. `generate-app-access` derives a grant's
+            # destination zone by matching exactly this against the
+            # application's VRF, so a mismatch here silently sends grants to
+            # the wrong zone.
+            vrf {
+              node {
+                id
+                name {
+                  value
+                }
+              }
+            }
+          }
+        }
+        prefix {
+          node {
+            id
+            prefix {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+}
