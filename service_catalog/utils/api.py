@@ -217,6 +217,143 @@ class InfrahubClient:
         result = self.execute_graphql(query, branch=branch)
         return [e["node"] for e in result.get("IpamVLAN", {}).get("edges", [])]
 
+    def get_organization_tenants(self, branch: str = "main") -> list[dict[str, Any]]:
+        """Fetch OrganizationTenant objects.
+
+        NOT the same thing as `get_tenants`, which returns `EvpnTenant`. The two
+        are different kinds serving different layers -- an EvpnTenant is a
+        fabric-level construct carrying VNI bases, while an OrganizationTenant is
+        who the service is for. `ServiceNetworkSegment.tenant` peers this one, so
+        passing an EvpnTenant id is rejected by the mutation.
+        """
+        query = """
+        query { OrganizationTenant { edges { node {
+            id display_label name { value }
+        } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        return [e["node"] for e in result.get("OrganizationTenant", {}).get("edges", [])]
+
+    def get_avd_tags(self, branch: str = "main") -> list[dict[str, Any]]:
+        """Fetch AvdTag objects, with the racks each one selects.
+
+        These decide where a segment lands. AVD renders an SVI onto a device only
+        where the SVI's tags intersect that device's node-group filter, and in
+        this fabric those filters are the racks' own AvdTags -- so a segment with
+        no tag renders on no switch at all, silently. The rack names come back
+        with them so the form can say which leaves a tag means.
+        """
+        query = """
+        query { AvdTag { edges { node {
+            id name { value } description { value }
+            racks { edges { node { id name { value } } } }
+        } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        return [e["node"] for e in result.get("AvdTag", {}).get("edges", [])]
+
+    def create_network_segment(
+        self,
+        *,
+        branch: str,
+        name: str,
+        description: str,
+        owner_id: str,
+        tenant_id: str,
+        vrf_id: str,
+        fabric_id: str,
+        avd_tag_ids: list[str],
+        prefix_length: int,
+        vlan_id: int | None = None,
+    ) -> str:
+        """Request a network segment, and nothing else.
+
+        ONE object. The subnet, the VLAN and the SVI are the generator's job --
+        `generate-network-segment` builds all three when the branch merges. The
+        portal used to create them itself, which meant a requester had to know
+        which VLAN ids were free and which subnet to use, and produced a segment
+        with no record of who asked for it and nothing to withdraw.
+
+        `vlan_id` is OMITTED rather than defaulted when the requester states
+        none. Empty means "allocate one"; sending a number would turn the
+        request back into the work order this replaces.
+
+        Membership of `service_network_segments` is what makes the generator run
+        at all -- a generator targets a group, so a segment outside it is created
+        and then silently never built.
+        """
+        group_id = self._group_id("service_network_segments", branch=branch)
+
+        fields = [
+            "name: { value: $name }",
+            "description: { value: $description }",
+            'status: { value: "provisioning" }',
+            "owner: { id: $owner }",
+            "tenant: { id: $tenant }",
+            "vrf: { id: $vrf }",
+            "fabric: { id: $fabric }",
+            "avd_tags: $avd_tags",
+            "prefix_length: { value: $prefix_length }",
+            "member_of_groups: [{ id: $group }]",
+        ]
+        declarations = [
+            "$name: String!",
+            "$description: String!",
+            "$owner: String!",
+            "$tenant: String!",
+            "$vrf: String!",
+            "$fabric: String!",
+            "$avd_tags: [RelatedNodeInput]",
+            "$prefix_length: BigInt!",
+            "$group: String!",
+        ]
+        variables: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "owner": owner_id,
+            "tenant": tenant_id,
+            "vrf": vrf_id,
+            "fabric": fabric_id,
+            "avd_tags": [{"id": tag_id} for tag_id in avd_tag_ids],
+            "prefix_length": prefix_length,
+            "group": group_id,
+        }
+        if vlan_id is not None:
+            declarations.append("$vlan_id: BigInt")
+            fields.append("vlan_id: { value: $vlan_id }")
+            variables["vlan_id"] = vlan_id
+
+        mutation = (
+            f"mutation({', '.join(declarations)}) {{\n"
+            f"  ServiceNetworkSegmentCreate(data: {{ {' '.join(fields)} }}) {{ ok object {{ id }} }}\n"
+            "}"
+        )
+        result = self.execute_graphql(mutation, variables, branch=branch)
+        return str(result["ServiceNetworkSegmentCreate"]["object"]["id"])
+
+    def _group_id(self, group_name: str, branch: str = "main") -> str:
+        """Resolve a CoreStandardGroup's id, refusing to guess.
+
+        Passing the name straight into `member_of_groups` happens to work in
+        some Infrahub versions through HFID resolution and not in others, and the
+        failure is a segment that exists, belongs to no group, and is therefore
+        never built by the generator -- with no error anywhere. Resolving it
+        explicitly turns that into a message naming the missing group.
+        """
+        query = """
+        query($name: String!) {
+            CoreStandardGroup(name__value: $name) { edges { node { id } } }
+        }
+        """
+        result = self.execute_graphql(query, {"name": group_name}, branch=branch)
+        edges = result.get("CoreStandardGroup", {}).get("edges", [])
+        if not edges:
+            raise InfrahubAPIError(
+                f"group {group_name!r} does not exist, so a segment created now would never be built "
+                "by generate-network-segment; load objects/00_groups.yml"
+            )
+        return str(edges[0]["node"]["id"])
+
     def get_l2domains(self, branch: str = "main") -> list[dict[str, Any]]:
         """Fetch IpamL2Domain objects."""
         query = """

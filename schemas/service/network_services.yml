@@ -13,11 +13,13 @@ version: "1.0"
 # TENANT_ACME -- and all three were written out by hand, three times, in three
 # different object files.
 #
-# THE PORTAL ALREADY ASKS FOR THIS. `service_catalog/pages/1_Create_Segment.py`
-# has the form, and it writes `IpamVLANCreate` and `IpamVRFCreate` straight into
-# the graph: no record of who asked, no status, no approval, and nothing to
-# withdraw. That is precisely the inversion the service layer exists to fix --
-# see the header of service.yml.
+# THE PORTAL REQUESTS ONE OF THESE. `service_catalog/pages/1_Create_Segment.py`
+# used to write `IpamVLANCreate`, `IpamVRFCreate` and `EvpnSviCreate` straight
+# into the graph -- no record of who asked, no status, no approval, nothing to
+# withdraw, and no `avd_tags`, so every SVI it created rendered on no switch at
+# all. It now creates a single ServiceNetworkSegment and lets the generator
+# build the three technical objects on merge. That inversion is what the service
+# layer exists to fix -- see the header of service.yml.
 #
 # THIS KIND ALLOCATES RATHER THAN SELECTS, and that is the whole point of
 # modelling it. `ServiceL3vpn` and its WAN siblings name technical objects that

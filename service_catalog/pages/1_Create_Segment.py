@@ -1,7 +1,23 @@
-"""Infrahub Service Catalog - Add Network Segment.
+"""Infrahub Service Catalog - Request a Network Segment.
 
-Creates a new EVPN network segment (VRF + VLAN + SVI) on a fabric via a proposed change.
-Workflow: create branch -> create objects -> wait for hostvars -> open proposed change.
+Creates ONE object: a `ServiceNetworkSegment`. The subnet, the VLAN and the SVI
+are built by `generate-network-segment` when the branch merges.
+
+**This page used to create those three itself**, and the schema header of
+`schemas/service/network_services.yml` names it as the inversion the service
+layer exists to fix. Three things were wrong with that, beyond the missing
+record of who asked:
+
+* It demanded a VLAN id, a gateway CIDR and a VRF VNI from the requester -- the
+  person least able to know which of those are free.
+* Leaving the VRF blank produced a VLAN and no SVI, warned "SVI will need a VRF
+  assigned manually", and reported success.
+* Nothing set `avd_tags`, so every SVI it did create matched no node-group
+  filter and rendered on **no switch at all**, silently.
+
+Workflow: create branch -> create the service -> open a proposed change. No AVD
+run here: the generator writes the technical objects on merge, and the fabric
+picks them up on the next `invoke avd`.
 """
 
 import streamlit as st  # type: ignore[import-untyped]
@@ -19,211 +35,172 @@ if "infrahub_url" not in st.session_state:
     st.session_state.infrahub_url = INFRAHUB_ADDRESS
 
 
+def _tag_label(tag: dict) -> str:
+    """A tag, and the leaves it actually selects.
+
+    The names alone (`k8s`, `app`, `border`) say nothing about where a segment
+    will land, and landing nowhere is this form's most likely mistake.
+    """
+    racks = [r["node"]["name"]["value"] for r in tag.get("racks", {}).get("edges", []) if r.get("node")]
+    name = tag["name"]["value"]
+    return f"{name} — {', '.join(racks)}" if racks else f"{name} (selects no racks)"
+
+
 def main() -> None:
-    """Render the Add Network Segment page."""
+    """Render the Request Network Segment page."""
     client = InfrahubClient(
         st.session_state.infrahub_url,
         api_token=INFRAHUB_API_TOKEN or None,
         ui_url=INFRAHUB_UI_URL,
     )
 
-    st.title("Add Network Segment")
+    st.title("Request a Network Segment")
     st.markdown(
-        "Create a new EVPN network segment (VRF, VLAN, SVI) on a fabric. "
-        "Changes are made in a branch, hostvars are regenerated, and a proposed change is opened for review."
+        "Ask for a tenant network. The subnet and VLAN id are **allocated for you**; "
+        "a proposed change is opened for review, and the segment is built when it merges."
     )
 
-    # Fetch data for dropdowns
     try:
-        tenants = client.get_tenants()
+        tenants = client.get_organization_tenants()
+        vrfs = client.get_vrfs()
         fabrics = client.get_fabrics()
-        l2domains = client.get_l2domains()
-    except (InfrahubConnectionError, InfrahubGraphQLError) as e:
+        avd_tags = client.get_avd_tags()
+        organizations = client.get_organizations()
+    except (InfrahubConnectionError, InfrahubGraphQLError, InfrahubAPIError) as e:
         display_error("Unable to fetch data from Infrahub", str(e))
         st.stop()
         return
 
-    if not tenants:
-        st.warning("No EVPN tenants found. Create a tenant first in Infrahub.")
+    missing = [
+        label
+        for label, values in (
+            ("tenants", tenants),
+            ("VRFs", vrfs),
+            ("fabrics", fabrics),
+            ("AVD tags", avd_tags),
+            ("organizations", organizations),
+        )
+        if not values
+    ]
+    if missing:
+        # Named rather than generic: "no data" sends the reader to the wrong file.
+        st.warning(f"Cannot request a segment yet — Infrahub has no {', '.join(missing)}.")
         st.stop()
         return
 
-    if not fabrics:
-        st.warning("No fabrics found.")
-        st.stop()
-        return
-
-    # Build form
-    with st.form("add_segment_form"):
-        st.subheader("Segment Details")
+    with st.form("request_segment_form"):
+        st.subheader("What the segment is for")
 
         col1, col2 = st.columns(2)
 
         with col1:
-            segment_name = st.text_input("Segment Name", placeholder="e.g. web-services")
+            segment_name = st.text_input("Segment Name", placeholder="e.g. PLATFORM_HOSTS")
+            description = st.text_input("Description", placeholder="e.g. platform team application hosts")
 
             tenant_options = {t["id"]: t["name"]["value"] for t in tenants}
             tenant_id = st.selectbox(
-                "Tenant",
-                options=list(tenant_options.keys()),
-                format_func=lambda x: tenant_options[x],
+                "Tenant", options=list(tenant_options.keys()), format_func=lambda x: tenant_options[x]
             )
 
-            vlan_id = st.number_input("VLAN ID", min_value=1, max_value=4094, value=100)
-
-            gateway_ip = st.text_input("Gateway IP (CIDR)", placeholder="e.g. 10.10.100.1/24")
+            owner_options = {o["id"]: o["display_label"] for o in organizations}
+            owner_id = st.selectbox(
+                "Requested by", options=list(owner_options.keys()), format_func=lambda x: owner_options[x]
+            )
 
         with col2:
-            vrf_name = st.text_input("VRF Name", placeholder="e.g. VRF-WEB (leave blank to use existing)")
-
-            vrf_vni = st.number_input("VRF VNI", min_value=1, max_value=16777215, value=100)
-
-            l2domain_options = {d["id"]: d["name"]["value"] for d in l2domains}
-            l2domain_id = (
-                st.selectbox(
-                    "L2 Domain",
-                    options=list(l2domain_options.keys()),
-                    format_func=lambda x: l2domain_options[x],
-                )
-                if l2domains
-                else None
+            # SELECTED, never created. A segment joins a routing domain that
+            # already exists and is shared; one VRF per segment would give every
+            # segment its own routing table, which is the opposite of what a
+            # tenant network is for.
+            vrf_options = {v["id"]: v["name"]["value"] for v in vrfs}
+            vrf_id = st.selectbox(
+                "VRF (must already exist)",
+                options=list(vrf_options.keys()),
+                format_func=lambda x: vrf_options[x],
             )
 
             fabric_options = {f["id"]: f["name"]["value"] for f in fabrics}
             fabric_id = st.selectbox(
-                "Target Fabric",
-                options=list(fabric_options.keys()),
-                format_func=lambda x: fabric_options[x],
+                "Fabric", options=list(fabric_options.keys()), format_func=lambda x: fabric_options[x]
             )
 
-        submitted = st.form_submit_button("Create Network Segment", type="primary")
+            prefix_length = st.number_input(
+                "Subnet size (prefix length)", min_value=16, max_value=30, value=24
+            )
+
+        st.subheader("Where it lands")
+        st.caption(
+            "AVD puts the gateway only on leaves whose node group matches one of these tags. "
+            "**A segment with no tag renders on no switch** — the configuration is produced, "
+            "reports Ready, and simply lacks the interface."
+        )
+        tag_options = {t["id"]: _tag_label(t) for t in avd_tags}
+        avd_tag_ids = st.multiselect(
+            "AVD Tags", options=list(tag_options.keys()), format_func=lambda x: tag_options[x]
+        )
+
+        with st.expander("Advanced — normally leave these alone"):
+            st.caption(
+                "Leaving the VLAN id empty is the normal case: the generator takes the next free "
+                "id from the segment pool. Name one only when adopting an id that is already in use."
+            )
+            name_vlan = st.checkbox("Name a specific VLAN ID")
+            vlan_id = st.number_input("VLAN ID", min_value=2, max_value=4093, value=500, disabled=not name_vlan)
+
+        submitted = st.form_submit_button("Request Segment", type="primary")
 
     if submitted:
         if not segment_name:
             st.error("Segment Name is required.")
             return
-        if not gateway_ip:
-            st.error("Gateway IP is required.")
+        if not avd_tag_ids:
+            # Refused rather than defaulted. There is no tag meaning "everywhere",
+            # so an empty list is a segment that renders nowhere.
+            st.error(
+                "At least one AVD tag is required — without one the segment would render on no switch."
+            )
             return
 
-        fabric_name = fabric_options[fabric_id]
-        tenant_name = tenant_options[tenant_id]
-        branch_name = f"add-segment-{segment_name.lower().replace(' ', '-')}"
+        branch_name = f"add-segment-{segment_name.lower().replace(' ', '-').replace('_', '-')}"
 
         try:
-            # Step 1: Create branch
             with st.spinner(f"Creating branch '{branch_name}'..."):
                 client.create_branch(branch_name)
             st.info(f"Branch `{branch_name}` created")
 
-            # Step 2: Create VLAN
-            with st.spinner(f"Creating VLAN {vlan_id}..."):
-                vlan_mutation = """
-                mutation($name: String!, $vlan_id: BigInt!, $l2domain: String!) {
-                    IpamVLANCreate(data: {
-                        name: { value: $name }
-                        vlan_id: { value: $vlan_id }
-                        status: { value: "active" }
-                        l2domain: { id: $l2domain }
-                    }) { ok object { id } }
-                }
-                """
-                vlan_result = client.execute_graphql(
-                    vlan_mutation,
-                    {
-                        "name": segment_name,
-                        "vlan_id": vlan_id,
-                        "l2domain": l2domain_id,
-                    },
+            with st.spinner("Requesting the segment..."):
+                client.create_network_segment(
                     branch=branch_name,
+                    name=segment_name,
+                    description=description or f"{segment_name} segment",
+                    owner_id=owner_id,
+                    tenant_id=tenant_id,
+                    vrf_id=vrf_id,
+                    fabric_id=fabric_id,
+                    avd_tag_ids=avd_tag_ids,
+                    prefix_length=int(prefix_length),
+                    vlan_id=int(vlan_id) if name_vlan else None,
                 )
-                vlan_obj_id = vlan_result["IpamVLANCreate"]["object"]["id"]
-            st.info(f"VLAN {vlan_id} ({segment_name}) created")
+            st.info("Segment requested")
 
-            # Step 3: Create VRF (if name provided)
-            vrf_id = None
-            if vrf_name:
-                with st.spinner(f"Creating VRF {vrf_name}..."):
-                    vrf_mutation = """
-                    mutation($name: String!, $vrf_vni: BigInt!, $tenant: String!) {
-                        IpamVRFCreate(data: {
-                            name: { value: $name }
-                            namespace: { id: "default" }
-                            vrf_vni: { value: $vrf_vni }
-                            tenant: { id: $tenant }
-                        }) { ok object { id } }
-                    }
-                    """
-                    vrf_result = client.execute_graphql(
-                        vrf_mutation,
-                        {
-                            "name": vrf_name,
-                            "vrf_vni": vrf_vni,
-                            "tenant": tenant_id,
-                        },
-                        branch=branch_name,
-                    )
-                    vrf_id = vrf_result["IpamVRFCreate"]["object"]["id"]
-                st.info(f"VRF {vrf_name} (VNI {vrf_vni}) created")
-            else:
-                # Use existing VRFs - let user pick
-                st.warning("No new VRF created. SVI will need a VRF assigned manually.")
-
-            # Step 4: Create SVI
-            if vrf_id:
-                with st.spinner(f"Creating SVI for VLAN {vlan_id}..."):
-                    svi_mutation = """
-                    mutation($name: String!, $svi_id: BigInt!, $ip: String!, $vrf: String!, $vlan: String!) {
-                        EvpnSviCreate(data: {
-                            name: { value: $name }
-                            svi_id: { value: $svi_id }
-                            ip_address_virtual: { value: $ip }
-                            enabled: { value: true }
-                            vrf: { id: $vrf }
-                            vlan: { id: $vlan }
-                        }) { ok object { id } }
-                    }
-                    """
-                    client.execute_graphql(
-                        svi_mutation,
-                        {
-                            "name": segment_name,
-                            "svi_id": vlan_id,
-                            "ip": gateway_ip,
-                            "vrf": vrf_id,
-                            "vlan": vlan_obj_id,
-                        },
-                        branch=branch_name,
-                    )
-                st.info(f"SVI {vlan_id} with gateway {gateway_ip} created in {vrf_name}")
-
-            # Step 5: Run AVD generators (hostvars + structured config)
-            with st.spinner("Running AVD generators — this may take a few minutes..."):
-                results = client.run_avd_pipeline(branch=branch_name)
-
-            if results["hostvars"]:
-                st.success("Hostvars generated")
-            else:
-                st.warning("Hostvar generation timed out")
-            if results["structured_config"]:
-                st.success("Structured configs generated")
-            else:
-                st.warning("Structured config generation timed out")
-
-            # Step 6: Create proposed change
             with st.spinner("Creating proposed change..."):
                 pc = client.create_proposed_change(
                     branch=branch_name,
-                    name=f"Add network segment: {segment_name}",
+                    name=f"Request network segment: {segment_name}",
                     description=(
-                        f"Add EVPN network segment '{segment_name}' "
-                        f"(VLAN {vlan_id}, VRF {vrf_name or 'existing'}, gateway {gateway_ip}) "
-                        f"to tenant {tenant_name} on fabric {fabric_name}"
+                        f"Request segment '{segment_name}' for tenant {tenant_options[tenant_id]} "
+                        f"in VRF {vrf_options[vrf_id]} on fabric {fabric_options[fabric_id]}, "
+                        f"/{int(prefix_length)}, tags {', '.join(tag_options[t].split(' — ')[0] for t in avd_tag_ids)}. "
+                        "The subnet, VLAN and SVI are built by generate-network-segment on merge."
                     ),
                 )
 
             pc_url = client.get_proposed_change_url(pc["id"])
-            display_success(f"Network segment '{segment_name}' created successfully!")
+            display_success(f"Segment '{segment_name}' requested.")
+            st.markdown(
+                "The subnet and VLAN id are allocated when this merges, and the gateway reaches "
+                "the switches on the next `invoke avd`."
+            )
             st.link_button("View Proposed Change", pc_url)
 
         except InfrahubConnectionError as e:

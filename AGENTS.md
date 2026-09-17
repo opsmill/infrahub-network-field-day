@@ -81,9 +81,12 @@ from the WAN kinds: leaving `vlan_id` or the subnet empty is the normal case, an
 `generate-network-segment` takes the next free one from `NFD41-Segment-VLAN-Pool` and
 `NFD41-Segment-Subnet-Pool`.
 
-`service_catalog/pages/1_Create_Segment.py` has asked for this since before the service layer
-existed, and writes `IpamVLAN` and `IpamVRF` straight into the graph — no requester, no status,
-nothing to withdraw. The kind exists to put that behind a service.
+`service_catalog/pages/1_Create_Segment.py` is the request path. It creates a single
+`ServiceNetworkSegment` on a branch and opens a proposed change; the generator builds the three
+technical objects on merge. It previously wrote `IpamVLAN`, `IpamVRF` and `EvpnSvi` itself — no
+requester, no status, nothing to withdraw, and **no `avd_tags`, so every SVI it created rendered
+on no switch**. The form now asks for a size and a set of tags, labelled with the racks each tag
+selects, and refuses an empty tag list rather than defaulting it.
 
 **Resource pools are branch-agnostic and their resources are not**, which is worth knowing before
 testing one on a branch. `CoreIPPrefixPool` and `CoreNumberPool` carry `branch: agnostic`, so a pool
