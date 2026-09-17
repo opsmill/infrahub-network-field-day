@@ -35,6 +35,18 @@ spec:
     - name: globex-cloud
       trust_level: 60
       vrf: TENANT_GLOBEX
+    # THE ONLY ZONE NOT FACING THE FABRIC. Every other handoff lands on
+    # border-leaf1; ge-0/0/6 lands on a Linux bridge the host is also on, which
+    # is what lets the tooling cluster come up before the fabric it configures.
+    #
+    # No `vrf`: there is no fabric VRF behind it. That is deliberate and it is
+    # why `wan-service-consistency` has nothing to say about this zone -- its
+    # rules are about tenant clouds, which this is not.
+    #
+    # trust_level 80: higher than a tenant cloud because it is infrastructure
+    # the operators own, lower than nothing because branch users reach it.
+    - name: tooling
+      trust_level: 80
     # The only two zones the DC advertises toward, because these are the only
     # two BGP neighbors carrying an outbound route-map -- both on border-leaf1:
     #   VRF BRANCH:  neighbor 10.250.70.2 route-map RM-DC-TO-BRANCH out
@@ -148,6 +160,17 @@ spec:
         kind: IpamIPAddress
         data:
           - address: 10.250.20.2/30
+    # The tooling handoff. A /24 rather than the /30s above, because this side
+    # is a real LAN with a cluster on it rather than a point-to-point to a leaf.
+    - name: ge-0/0/6
+      description: "ZONE-TOOLING handoff - the tooling cluster bridge"
+      mtu: 9192
+      device: fw1
+      security_zone: tooling
+      ip_addresses:
+        kind: IpamIPAddress
+        data:
+          - address: 10.90.0.254/24
 
 ---
 # The address book, IPAM-backed. Each entry references the same IpamPrefix the
@@ -256,6 +279,12 @@ kind: Object
 spec:
   kind: SecurityPrefix
   data:
+    # The tooling cluster's LAN. 140 continues the hand-written run (10..130);
+    # generated entries start at 1000 and never collide with it.
+    - name: tooling-services
+      book_index: 140
+      description: "The tooling cluster: the request portal and the identity provider"
+      prefix: 10.90.0.0/24
     - name: any
       description: "Matches everything; used where Junos says destination-address any"
       prefix: 0.0.0.0/0
@@ -519,6 +548,54 @@ spec:
         - branch-users
       destination_address:
         - access-portal
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: junos-http
+            port: 80
+            ip_protocol: tcp
+          - name: junos-https
+            port: 443
+            ip_protocol: tcp
+    # ---- branch -> tooling ---------------------------------------
+    # REACHING THE REQUEST PORTAL IS ITSELF A FIREWALL DECISION, which is the
+    # point of putting the portal behind ge-0/0/6 rather than beside Infrahub on
+    # the host. A branch user asks for application access through a portal they
+    # had to be permitted to reach.
+    #
+    # Deny first, at index 10, exactly as every other pair does: a source
+    # claiming to be fabric-infra is dropped before any permit is considered.
+    - name: deny-spoofed-infra
+      index: 10
+      action: deny
+      log: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: branch
+      destination_zone: tooling
+      source_address:
+        - fabric-infra
+      destination_address:
+        - any
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: any
+            port: 0
+            ip_protocol: tcp
+    - name: branch-to-tooling-portal
+      index: 20
+      action: permit
+      log: true
+      log_session_close: true
+      managed_by_service: false
+      policy: nfd41-perimeter
+      source_zone: branch
+      destination_zone: tooling
+      source_address:
+        - branch-users
+      destination_address:
+        - tooling-services
       destination_services:
         kind: SecurityService
         data:

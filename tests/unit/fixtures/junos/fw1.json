@@ -3,7 +3,7 @@
     "edges": [
       {
         "node": {
-          "id": "18d43558-5eb0-e3ce-3610-c51adfa9f572",
+          "id": "18d621b8-7aa3-5595-38a1-1187381ac231",
           "name": {
             "value": "fw1"
           },
@@ -349,6 +349,38 @@
                     ]
                   }
                 }
+              },
+              {
+                "node": {
+                  "__typename": "SecurityFirewallInterface",
+                  "name": {
+                    "value": "ge-0/0/6"
+                  },
+                  "description": {
+                    "value": "ZONE-TOOLING handoff - the tooling cluster bridge"
+                  },
+                  "mtu": {
+                    "value": 9192
+                  },
+                  "security_zone": {
+                    "node": {
+                      "name": {
+                        "value": "tooling"
+                      }
+                    }
+                  },
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.90.0.254/24"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
               }
             ]
           }
@@ -477,6 +509,27 @@
                 "node": {
                   "name": {
                     "value": "ge-0/0/2"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "name": {
+            "value": "tooling"
+          },
+          "trust_level": {
+            "value": 80
+          },
+          "interfaces": {
+            "edges": [
+              {
+                "node": {
+                  "name": {
+                    "value": "ge-0/0/6"
                   }
                 }
               }
@@ -775,6 +828,23 @@
           },
           "prefix": {
             "value": "0.0.0.0/0"
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "SecurityPrefix",
+          "name": {
+            "value": "tooling-services"
+          },
+          "description": {
+            "value": "The tooling cluster: the request portal and the identity provider"
+          },
+          "book_index": {
+            "value": 140
+          },
+          "prefix": {
+            "value": "10.90.0.0/24"
           }
         }
       }
@@ -1529,6 +1599,162 @@
                         "node": {
                           "__typename": "SecurityService",
                           "display_label": "junos-ping"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "node": {
+                  "name": {
+                    "value": "deny-spoofed-infra"
+                  },
+                  "index": {
+                    "value": 10
+                  },
+                  "action": {
+                    "value": "deny"
+                  },
+                  "log": {
+                    "value": true
+                  },
+                  "log_session_close": {
+                    "value": false
+                  },
+                  "source_zone": {
+                    "node": {
+                      "name": {
+                        "value": "branch"
+                      }
+                    }
+                  },
+                  "destination_zone": {
+                    "node": {
+                      "name": {
+                        "value": "tooling"
+                      }
+                    }
+                  },
+                  "source_address": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityIPAMIPPrefix",
+                          "display_label": "fabric-infra"
+                        }
+                      }
+                    ]
+                  },
+                  "destination_address": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityPrefix",
+                          "display_label": "any (0.0.0.0/0)",
+                          "name": {
+                            "value": "any"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "source_groups": {
+                    "edges": []
+                  },
+                  "destination_groups": {
+                    "edges": []
+                  },
+                  "source_services": {
+                    "edges": []
+                  },
+                  "destination_services": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityService",
+                          "display_label": "any"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "node": {
+                  "name": {
+                    "value": "branch-to-tooling-portal"
+                  },
+                  "index": {
+                    "value": 20
+                  },
+                  "action": {
+                    "value": "permit"
+                  },
+                  "log": {
+                    "value": true
+                  },
+                  "log_session_close": {
+                    "value": true
+                  },
+                  "source_zone": {
+                    "node": {
+                      "name": {
+                        "value": "branch"
+                      }
+                    }
+                  },
+                  "destination_zone": {
+                    "node": {
+                      "name": {
+                        "value": "tooling"
+                      }
+                    }
+                  },
+                  "source_address": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityIPAMIPPrefix",
+                          "display_label": "branch-users"
+                        }
+                      }
+                    ]
+                  },
+                  "destination_address": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityPrefix",
+                          "display_label": "tooling-services (10.90.0.0/24)",
+                          "name": {
+                            "value": "tooling-services"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "source_groups": {
+                    "edges": []
+                  },
+                  "destination_groups": {
+                    "edges": []
+                  },
+                  "source_services": {
+                    "edges": []
+                  },
+                  "destination_services": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityService",
+                          "display_label": "junos-http"
+                        }
+                      },
+                      {
+                        "node": {
+                          "__typename": "SecurityService",
+                          "display_label": "junos-https"
                         }
                       }
                     ]

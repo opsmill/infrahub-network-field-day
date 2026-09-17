@@ -224,10 +224,15 @@ def test_zone_pair_matches_the_device(pair: tuple[str, str]) -> None:
     assert _zone_pairs(_rendered())[pair] == _zone_pairs(_conf())[pair]
 
 
-def test_the_anti_spoofing_rule_renders_six_times_identically() -> None:
-    """Six objects, not one: `source_zone` and `destination_zone` are
-    cardinality-one on the adopted schema, so a rule belongs to exactly one
-    pair. The render must not let the six drift apart.
+def test_the_anti_spoofing_rule_renders_once_per_zone_pair_identically() -> None:
+    """One object per pair, not one shared object: `source_zone` and
+    `destination_zone` are cardinality-one on the adopted schema, so a rule
+    belongs to exactly one pair. The render must not let the copies drift apart.
+
+    The count moves when a zone pair is added -- it went from six to seven with
+    the `tooling` zone -- which is why it is derived from the zone pairs rather
+    than written down. A hard-coded six would have to be edited every time, and
+    the thing worth asserting was never the number.
     """
     rendered = _rendered()
     bodies = []
@@ -241,7 +246,11 @@ def test_the_anti_spoofing_rule_renders_six_times_identically() -> None:
                     break
             bodies.append("\n".join(rendered[i : end + 1]))
 
-    assert len(bodies) == 6
+    # Derived from the oracle, so adding a zone pair does not mean editing a
+    # number here. What matters is that every copy is identical, not how many.
+    expected = "\n".join(_conf()).count("policy deny-spoofed-infra {")
+    assert expected > 1, "the oracle should carry one anti-spoofing rule per pair"
+    assert len(bodies) == expected
     assert len(set(bodies)) == 1
 
 
@@ -416,7 +425,10 @@ def test_every_zone_pair_matches_byte_for_byte() -> None:
     rendered = _zone_pair_blocks(_split_at_policies(_rendered_body())[1])
 
     assert set(oracle) == set(rendered)
-    assert len(oracle) == 11
+    # Twelve since the `tooling` zone arrived: the six fabric-facing zones pair
+    # up as before, plus branch -> tooling. Asserted rather than derived because
+    # a pair silently disappearing is exactly what this test exists to catch.
+    assert len(oracle) == 12
 
     differing = {pair: (oracle[pair], rendered[pair]) for pair in oracle if oracle[pair] != rendered[pair]}
     assert not differing, f"zone pairs differing in content: {sorted(differing)}"
