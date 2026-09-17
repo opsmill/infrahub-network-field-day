@@ -48,6 +48,8 @@ Regenerate the typed protocol classes after any schema change (see [the command 
 | `service/kubernetes_services.yml` | `Service.FabricPeering`, `Service.FabricApp` |
 | `service/access_services.yml` | `Service.AppAccess` |
 | `service/wan_services.yml` | `Service.L3vpn`, `Service.InternetAccess`, `Service.TenantCloud` |
+| `service/network_services.yml` | `Service.NetworkSegment` — a subnet, a VLAN and a gateway, **allocated** rather than named |
+| `service/onboarding_services.yml` | `Service.TenantOnboarding`, `Service.ServerPlacement` — putting a tenant, or a machine, onto the fabric |
 | `cluster/cluster.yml` | **Marketplace** (`infrahub/cluster`): `Cluster.Generic`, `Cluster.GenericComputeUnitNodes` |
 | `cluster/kubernetes.yml` | `Cluster.Kubernetes`, `Cluster.FabricPeering` — the CNI, pod/service/node ranges, VIP pools, and the fabric BGP contract |
 | `security/security.yml` | **Marketplace** (`infrahub/security`): 22 kinds — zones, the polymorphic address book, service objects, zone-pair policy rules, `Security.Firewall` as a device kind, `Security.FirewallInterface` |
