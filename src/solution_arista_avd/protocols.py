@@ -540,11 +540,10 @@ class OrganizationManufacturer(OrganizationGeneric):
 
 
 class ServiceNetworkSegment(ServiceGeneric, GeneratorTarget):
-    mtu: IntegerOptional
     prefix_length: Integer
     vlan_id: IntegerOptional
+    avd_tags: RelationshipManager[AvdTag]
     fabric: RelationshipAttribute[NetworkFabric]
-    racks: RelationshipManager[LocationRack]
     subnet: RelationshipAttribute[IpamPrefix]
     subnet_pool: RelationshipAttribute[CoreIPPrefixPool]
     svi: RelationshipAttribute[EvpnSvi]

@@ -123,6 +123,19 @@ before changing it:
   candidate. A hard-coded `NFD41-Segment-Subnet-Pool` would fail naming a string that appears in
   no schema.
 
+**`status` is honoured by one generator and inert everywhere else, and that is a gap rather
+than a design.** `ServiceGeneric.status` offers `decommissioning` and `decommissioned` on every
+service kind, but only `generate-network-segment` branches on them. Setting a
+`ServiceFabricPeering`, `ServiceFabricApp`, `ServiceL3vpn`, `ServiceTenantCloud` or
+`ServiceInternetAccess` to `decommissioned` changes nothing: the sessions stay, the Crossplane
+resource is still delivered, and the provider edge still imports the tenant's prefixes.
+`crossplane_fabric_peering.gql` even selects the field and its transform never reads it.
+
+Closing it means teaching each renderer to withdraw, and the WAN renderers are pinned
+byte-for-byte against `../lab/wan/rendered/*/frr.conf` — so it is a deliberate decision about
+what the service layer promises, not a tidy-up. Until it is made, treat `status` on those kinds
+as a label, and do not assume the segment generator's behaviour generalises.
+
 `generate-app-access` sits underneath `ServiceAppAccess` and turns an **approved** grant into
 the firewall objects permitting the session: an address-book entry for the destination VIP, a
 `SecurityService` per permitted port, and the `SecurityPolicyRule` joining them, linked back
