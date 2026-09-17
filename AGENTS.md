@@ -103,7 +103,25 @@ invisible on `main`, so a proposed change that is opened and then rejected does 
 Current generator definitions are registered in `.infrahub.yml`:
 `generate-fabric`, `generate-pod`, `generate-rack`, `generate-server-cabling`,
 `generate-avd-device-hostvar`, `generate-avd-device-structured-config`,
-`backfill-structured-config`, `generate-fabric-peering`, and `generate-app-access`.
+`backfill-structured-config`, `generate-fabric-peering`, `generate-app-access`, and
+`generate-network-segment`.
+
+`generate-network-segment` is the only one that **allocates rather than selects**: every other
+generator here derives from objects that already exist, while a `ServiceNetworkSegment` states a
+size and a tenant and the generator takes the next free subnet and VLAN id. Two things to know
+before changing it:
+
+- **`ServiceNetworkSegment.avd_tags` is what decides whether the segment renders at all.** AVD
+  puts an SVI on a device only where `svis[].tags` intersects that device's node-group
+  `filter.tags`, and in this fabric those filters are the racks' own `AvdTag`s — `k8s`, `app`,
+  `cloud`, `border`. `EvpnSvi.rack_tags` exists, looks like the scoping relationship, and
+  contributes the rack's *name*, `K8S_LEAFS`, which matches no filter. Measured: an untagged SVI
+  rendered on zero switches; tagged `k8s` the same SVI rendered on exactly the two K8S leaves.
+  Nothing errors on that path, so the relationship is mandatory and the generator checks it again.
+- **Its pools are resolved by role rather than by name** — the prefix pool whose resources carry
+  `tenant_host`, and the number pool allocating `IpamVLAN.vlan_id` — and both demand exactly one
+  candidate. A hard-coded `NFD41-Segment-Subnet-Pool` would fail naming a string that appears in
+  no schema.
 
 `generate-app-access` sits underneath `ServiceAppAccess` and turns an **approved** grant into
 the firewall objects permitting the session: an address-book entry for the destination VIP, a

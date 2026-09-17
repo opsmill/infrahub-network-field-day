@@ -408,6 +408,90 @@ so the tracking context, which only removes what this generator created, leaves 
 what keeps `junos-https` alive when a grant that used port 443 is revoked, while the rule the
 grant created disappears.
 
+### NetworkSegmentGenerator
+
+**File**: `generators/generate_network_segment.py`
+
+**Target**: `ServiceNetworkSegment` (group `service_network_segments`)
+
+**Purpose**: Turn a request for a network into the three technical objects a network is — a
+subnet, a VLAN, and a gateway in a VRF
+
+**Actions**:
+
+1. Check `status`. `decommissioning` and `decommissioned` withdraw; everything else builds.
+2. Resolve and validate everything before the first write — the pools, the L2 domain, the AVD
+   tags, and whether anything already wears the requested name.
+3. Allocate an `IpamPrefix` from the subnet pool, or reuse the one already recorded.
+4. Upsert an `IpamVLAN`, with an id that is stated, remembered, or allocated.
+5. Upsert an `EvpnSvi` whose `svi_id` equals the VLAN id and whose virtual address is the
+   subnet's first usable host.
+6. Record all three on the service and set its status to `active`.
+
+**Query**: `generate_network_segment.gql`
+
+This is the first generator here that **allocates rather than selects**. `ServiceL3vpn` and its
+WAN siblings name technical objects that already exist, so a generator beneath them would have
+nothing to create. A segment states a size and a tenant, and leaving `vlan_id` empty is the
+normal case rather than an incomplete request — the person asking for a network is exactly the
+person who does not know which ids are free.
+
+#### `avd_tags` decides whether any of it renders
+
+AVD puts an SVI on a device only where `svis[].tags` intersects that device's node-group
+`filter.tags`, and in this fabric those filters are the racks' own `AvdTag`s:
+
+| Node group | Filter | Rack |
+| --- | --- | --- |
+| K8S_LEAFS | `k8s` | the two Kubernetes leaves |
+| APP_LEAFS | `app`, `cloud` | the two application leaves |
+| BORDER_LEAFS | `border` | the border leaf |
+
+`EvpnSvi.rack_tags` exists, looks like the scoping relationship, and contributes the rack's
+**name** — `K8S_LEAFS` — which matches no filter. Measured on a branch: an SVI with no tags
+rendered on zero switches, and the same SVI tagged `k8s` rendered on exactly the two K8S leaves.
+Nothing errors on that path, so `avd_tags` is mandatory in the schema and checked again in the
+generator. An empty list is not "the whole fabric"; it is nowhere, with an artifact that reports
+`Ready` and simply lacks the interface.
+
+#### The pools are found by role, not by name
+
+A default of `NFD41-Segment-Subnet-Pool` would tie the generator to one lab's object files and,
+when it was missing, fail with a message naming a string that appears in no schema. Instead:
+
+- the subnet pool is the `CoreIPPrefixPool` whose resources carry role `tenant_host`;
+- the VLAN pool is the `CoreNumberPool` allocating `IpamVLAN.vlan_id`.
+
+Both demand exactly one candidate. Zero and several are reported the same way, with the remedy —
+name the pool on the segment — because "ambiguous" on its own sends the reader to the wrong file.
+
+#### Adoption is asked for, never inferred
+
+The VLAN and the SVI take the segment's own name, so a generated segment reads like the four
+hand-written ones beside it. The cost is that a request named `K8S_NODES` would upsert onto the
+lab's existing VLAN — and delete it on decommissioning. So an object wearing the requested name
+that the service does not already record is **refused**. Adopting one is explicit: point the
+service's `vlan` or `svi` at it first.
+
+#### What withdrawal does, and why it is written out
+
+`InfrahubGroupContext.update_group` opens with `if not members: return`, so a run that writes
+nothing prunes nothing — a decommissioned segment would keep its subnet, VLAN and gateway while
+reporting success. Withdrawal is therefore explicit, deletes in reference order (SVI, then VLAN,
+then prefix), and only ever removes what the service records. Deleting the prefix last is also
+what returns the subnet to its pool.
+
+#### Nothing here reaches a switch on its own
+
+The writes land in the graph. `generate-avd-device-hostvar` carries them onto the fabric and is
+registered `execute_after_merge: false`, because the AVD chain is expensive and is run
+explicitly. A correct segment that is invisible on the device means `invoke avd` has not run
+yet, not that the generator failed.
+
+**There is no seeded segment**, deliberately. An active one would allocate a subnet and a VLAN
+into the default data set and change every rendered EOS artifact, and the fixtures those are
+held against are the hand-written baseline. Request one on a branch instead.
+
 ### BackfillStructuredConfigGenerator
 
 **File**: `generators/backfill_structured_config.py`
