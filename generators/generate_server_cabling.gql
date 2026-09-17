@@ -61,6 +61,11 @@ query ServerCablingQuery($name: String!) {
                 profiles {
                   edges {
                     node {
+                      # Selected wherever an inline fragment is, so the generated
+                      # model can key its union on it. Harmless today -- this one
+                      # resolves to a single kind -- and load-bearing the moment
+                      # another kind implements the peer.
+                      __typename
                       id
                       ... on ProfileDcimInterface {
                         profile_name {

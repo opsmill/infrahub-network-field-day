@@ -483,6 +483,13 @@ query FabricPoolCheckQuery($name: String!) {
               ... on InterfacePhysical {
                 device {
                   node {
+                    # Required wherever a selection set carries an inline
+                    # fragment: `device` peers a generic, so the generated model
+                    # is a discriminated union keyed on __typename. Without it
+                    # every DCI link fails to parse with "Unable to extract tag
+                    # using discriminator" -- latent only because this check
+                    # reads raw dicts and the lab has no DCI links.
+                    __typename
                     id
                     ... on DcimFabricSwitch {
                       pod {

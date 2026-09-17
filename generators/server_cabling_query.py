@@ -402,6 +402,7 @@ class ServerCablingQueryComputePhysicalServerEdgesNodeInterfacesEdgesNodeInterfa
         "ProfileServiceGenericInterface",
         "ProfileServiceInternetAccess",
         "ProfileServiceL3vpn",
+        "ProfileServiceNetworkSegment",
         "ProfileServiceTenantCloud",
         "ProfileVirtualizationHostVirtualMachine",
         "ProfileVirtualizationVirtualMachine",
