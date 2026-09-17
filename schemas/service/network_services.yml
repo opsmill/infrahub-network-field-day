@@ -71,15 +71,14 @@ nodes:
       # fabric -- 10.110.0.1 in 10.110.0.0/24, and so on for every segment the
       # lab already has. Derived by the generator rather than stored, because
       # two places to change it is one too many.
-      - name: mtu
-        kind: Number
-        label: MTU
-        optional: true
-        description: "SVI MTU; empty leaves the fabric default in place"
-        order_weight: 1500
-        parameters:
-          min_value: 68
-          max_value: 9214
+      # NO `mtu`, and the omission is deliberate.
+      #
+      # The first draft had one. `EvpnSvi` has no MTU attribute and
+      # `_build_svis_hostvars` emits no `mtu` key, so a requester could set 9000
+      # here and the switch would render the fabric default with nothing
+      # anywhere reporting the discrepancy. Carrying it would need an attribute
+      # on EvpnSvi and a mapping in the hostvar builder; until both exist the
+      # field is a claim the model cannot keep.
     relationships:
       # -- intent ----------------------------------------------------------
       - name: tenant
@@ -116,19 +115,32 @@ nodes:
         description: "Which fabric carries the segment"
         identifier: service__segment_fabric
         order_weight: 930
-      - name: racks
-        peer: LocationRack
-        label: Racks
+      # WHERE THE SEGMENT LANDS, and the field most likely to be got wrong.
+      #
+      # AVD renders an SVI onto a device only where the SVI's tags intersect
+      # that device's node-group filter, and in this fabric those filters are
+      # the rack's own AvdTags: K8S_LEAFS filters on `k8s`, APP_LEAFS on `app`
+      # and `cloud`, BORDER_LEAFS on `border`. So a segment names AvdTags.
+      #
+      # NOT LocationRack. `EvpnSvi.rack_tags` exists and contributes the rack's
+      # NAME -- `K8S_LEAFS` -- which matches no filter, so a segment scoped that
+      # way renders on nothing. Measured: an SVI with no tags, and then one
+      # tagged by rack, both produced zero interfaces; tagged `k8s` it appeared
+      # on exactly the two K8S leaves.
+      #
+      # MANDATORY for the same reason. An empty list does not mean "the whole
+      # fabric" -- there is no filter here accepting `all` -- it means nowhere,
+      # silently, with a rendered configuration that simply lacks the interface.
+      - name: avd_tags
+        peer: AvdTag
+        label: AVD Tags
         kind: Generic
         cardinality: many
-        optional: true
-        # Empty means the whole fabric. EvpnSvi.rack_tags is how AVD scopes an
-        # SVI to a subset of leaves, so this is passed through rather than
-        # interpreted.
+        optional: false
         on_delete: no-action
-        description: "Restrict the segment to these racks; empty means the whole fabric"
-        identifier: service__segment_racks
-        order_weight: 1600
+        description: "Which leaves carry the segment; must match a rack's tags or it lands nowhere"
+        identifier: service__segment_avd_tags
+        order_weight: 940
 
       # -- where to allocate from ------------------------------------------
       - name: subnet_pool

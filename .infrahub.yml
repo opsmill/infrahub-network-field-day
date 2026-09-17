@@ -103,6 +103,10 @@ queries:
   - name: generate_app_access
     file_path: "./generators/generate_app_access.gql"
 
+  # Service-layer generator: allocates a subnet and a VLAN for a segment
+  - name: generate_network_segment
+    file_path: "./generators/generate_network_segment.gql"
+
 
 generator_definitions:
   - name: generate-avd-device-hostvar
@@ -199,6 +203,24 @@ generator_definitions:
     parameters:
       name: name__value
     class_name: AppAccessGenerator
+    convert_query_response: false
+
+  # Sits underneath the service layer, and is the first generator here that
+  # ALLOCATES rather than selects: a segment states a size and a tenant, and
+  # this takes the next free subnet and VLAN id and builds the IpamPrefix,
+  # IpamVLAN and EvpnSvi a tenant network is made of.
+  #
+  # Nothing reaches a switch on its own. The writes land in the graph and
+  # generate-avd-device-hostvar carries them onto the fabric, which is run
+  # explicitly -- so a correct segment that is invisible on the device means
+  # `invoke avd` has not run yet, not that this failed.
+  - name: generate-network-segment
+    file_path: "./generators/generate_network_segment.py"
+    query: generate_network_segment
+    targets: service_network_segments
+    parameters:
+      name: name__value
+    class_name: NetworkSegmentGenerator
     convert_query_response: false
 
   - name: generate-server-cabling

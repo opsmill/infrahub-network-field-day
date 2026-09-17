@@ -1,0 +1,222 @@
+query GenerateNetworkSegmentQuery($name: String!) {
+  # The request. Aliased `target:` like every other service generator here,
+  # because the generator is parameterised on the service's name.
+  target: ServiceNetworkSegment(name__value: $name) {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        description {
+          value
+        }
+        # Drives withdrawal. `decommissioning` and `decommissioned` are the two
+        # states that mean "take it away"; everything else builds.
+        status {
+          value
+        }
+        # Empty is the NORMAL case and means "allocate one". A stated id is
+        # honoured as-is, which is how an existing VLAN is adopted.
+        vlan_id {
+          value
+        }
+        prefix_length {
+          value
+        }
+        tenant {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        vrf {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        fabric {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        # WHERE THE SEGMENT LANDS. Mandatory, because an SVI whose tags match no
+        # node-group filter renders on no switch at all -- silently, with a
+        # configuration that simply lacks the interface.
+        avd_tags {
+          edges {
+            node {
+              id
+              name {
+                value
+              }
+            }
+          }
+        }
+        # Optional. When unset the generator resolves a default from the pools
+        # themselves rather than by name -- see the two unfiltered pool
+        # collections below.
+        subnet_pool {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        vlan_pool {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        # What a previous run already built. Read so a re-run adopts its own
+        # output instead of allocating a second subnet and a second VLAN id.
+        subnet {
+          node {
+            id
+            prefix {
+              value
+            }
+          }
+        }
+        vlan {
+          node {
+            id
+            name {
+              value
+            }
+            vlan_id {
+              value
+            }
+          }
+        }
+        svi {
+          node {
+            id
+            name {
+              value
+            }
+            svi_id {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # ------------------------------------------------------------------------
+  # COLLISION DETECTION. The VLAN and the SVI take the segment's own name --
+  # `K8S_NODES` is a VLAN, an SVI and, were it modelled as a service, a segment
+  # -- so a request can name something that already exists.
+  #
+  # Adoption must be asked for, never inferred from a name. An object found
+  # here that the service does not already record is a collision the generator
+  # refuses, because the alternative is upserting onto a hand-written object
+  # and then DELETING it when the segment is decommissioned.
+  # ------------------------------------------------------------------------
+  existing_vlan: IpamVLAN(name__value: $name) {
+    edges {
+      node {
+        id
+        vlan_id {
+          value
+        }
+      }
+    }
+  }
+
+  existing_svi: EvpnSvi(name__value: $name) {
+    edges {
+      node {
+        id
+        svi_id {
+          value
+        }
+      }
+    }
+  }
+
+  # ------------------------------------------------------------------------
+  # Default resolution, by ROLE rather than by name.
+  #
+  # A hard-coded `NFD41-Segment-Subnet-Pool` would make the generator specific
+  # to this lab's object files, and a missing relationship would fail with a
+  # message naming a string that appears in no schema. Resolving from the data
+  # instead means the rule is a statement about the model: the pool that
+  # allocates tenant host subnets, and the pool that allocates VLAN ids.
+  #
+  # Both resolutions demand EXACTLY ONE candidate. Zero or several is an
+  # ambiguity the generator must not guess at, and the remedy is the same in
+  # both directions -- name the pool on the segment.
+  # ------------------------------------------------------------------------
+  CoreIPPrefixPool {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        # The role lives on the pool's resources, not on the pool, so the
+        # fragment is mandatory: `resources` peers the BuiltinIPPrefix generic
+        # and `role` exists only on the concrete kind.
+        resources {
+          edges {
+            node {
+              id
+              ... on IpamPrefix {
+                role {
+                  value
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # `node` and `node_attribute` are what make this resolvable: a pool
+  # allocating IpamVLAN.vlan_id IS the VLAN pool, whatever it is called.
+  CoreNumberPool {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        node {
+          value
+        }
+        node_attribute {
+          value
+        }
+      }
+    }
+  }
+
+  # IpamVLAN.l2domain is mandatory and the request does not name one. Exactly
+  # one domain exists in this fabric; anything else is an incomplete model and
+  # the generator raises rather than picking.
+  IpamL2Domain {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+      }
+    }
+  }
+}

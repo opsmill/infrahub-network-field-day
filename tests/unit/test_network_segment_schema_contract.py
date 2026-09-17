@@ -128,12 +128,34 @@ def test_the_materialised_objects_are_optional_and_never_cascade(name: str) -> N
     assert relationship.get("on_delete") == "no-action"
 
 
-def test_racks_default_to_the_whole_fabric() -> None:
-    """Empty means every leaf. `EvpnSvi.rack_tags` is how AVD scopes an SVI to a
-    subset, so the value is passed through rather than interpreted."""
-    racks = _relationships()["racks"]
-    assert racks["cardinality"] == "many"
-    assert racks.get("optional") is True
+def test_the_segment_is_scoped_by_avd_tag_and_not_by_rack() -> None:
+    """The measured correction to this kind's first draft.
+
+    AVD renders an SVI onto a device only where the SVI's tags intersect that
+    device's node-group filter, and in this fabric those filters are AvdTags:
+    `{"tags": ["k8s"]}` on K8S_LEAFS. `EvpnSvi.rack_tags` exists and looks like
+    the scoping mechanism, but it contributes the rack's NAME -- `K8S_LEAFS` --
+    which matches no filter.
+
+    Measured on a branch: an SVI with no tags rendered on zero switches, and the
+    same SVI tagged `k8s` rendered on exactly the two K8S leaves. A `racks`
+    relationship would have produced the first result while reading like the
+    second.
+    """
+    avd_tags = _relationships()["avd_tags"]
+    assert avd_tags["peer"] == "AvdTag"
+    assert avd_tags["cardinality"] == "many"
+    assert "racks" not in _relationships()
+
+
+def test_the_scope_is_mandatory_because_empty_means_nowhere() -> None:
+    """There is no filter in this fabric accepting every leaf.
+
+    So an empty list is not "the whole fabric"; it is a segment that renders on
+    nothing, silently, with a configuration that simply lacks the interface and
+    no error anywhere. Mandatory turns that into a rejected request.
+    """
+    assert _relationships()["avd_tags"].get("optional") is False
 
 
 # ---------------------------------------------------------------------------

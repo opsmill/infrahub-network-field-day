@@ -48,3 +48,7 @@ spec:
     # successfully. Consistency with the eight generators already registered
     # wins over the generic guidance.
     - name: service_app_accesses
+    # Generator target for network segment requests. Same shape as the grants
+    # above: a group per service kind, so a generator cannot run against a kind
+    # it cannot read.
+    - name: service_network_segments
