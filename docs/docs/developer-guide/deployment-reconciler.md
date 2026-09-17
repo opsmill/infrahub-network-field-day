@@ -109,11 +109,11 @@ the default for IPv4 unicast, the other two are file directives rather than runn
 Junos reports the eleven zone-pair blocks in a different order (no object carries their order,
 and Junos matches on zone rather than position) and its comment blocks round-tripping.
 
-Read raw, all of that means "this device differs". A reconciler acting on it replaces the
+Read raw, all of that means "this device differs." A reconciler acting on it replaces the
 configuration of every FRR router and the firewall **on every cycle, forever**, while every log
 line says success.
 
-So `differs` is computed from normalised output, never raw text. Three rules govern
+`differs` is therefore computed from normalised output, never raw text. Three rules govern
 `deployment/normalise.py`:
 
 1. **Allowlist, never denylist.** Only named patterns are suppressed.
@@ -196,7 +196,7 @@ Three things bound that, and one thing does not:
 - The interval has a hard floor of 60 seconds; the service **refuses to start** below it rather
   than clamping.
 - `--dry-run` reports differences and changes nothing, on a device or in Infrahub.
-- **Least privilege does not bound it. There is none here.** The service authenticates as the
+- **Least privilege does not bound it. None applies here.** The service authenticates as the
   same lab admin `invoke provision` uses.
 
 For a lab that is the same trust level as running `invoke provision` from a shell. Anywhere

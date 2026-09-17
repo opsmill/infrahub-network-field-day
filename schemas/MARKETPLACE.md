@@ -44,7 +44,7 @@ Pin a specific version with `--version`, for example
 | `cluster/kubernetes.yml` | `ClusterGeneric`, `ClusterGenericComputeUnitNodes` | `ClusterKubernetes`, `ClusterFabricPeering` | Nothing published covers a CNI, pod/service CIDRs, LoadBalancer VIP pools, or a cluster that speaks BGP with a fabric |
 | `tenancy_extensions.yml` | `OrganizationTenant`, `DcimCircuit` | `tenant_id`, `classification`, `sites`, `circuits` | A tenant crosses the provider edge, the fabric and the cluster at once, so these hang off the one adopted tenant rather than a per-domain copy of it |
 | `wan/wan.yml` | — | `WanSite`, `WanInternetPeering` | How a site attaches — its LAN, eBGP or static, its own ASN — and plain transit to one upstream AS have no published equivalent |
-| `service/*.yml` | — | `ServiceGeneric` and six service kinds | There is no service-layer abstraction anywhere in the marketplace |
+| `service/*.yml` | — | `ServiceGeneric` and six service kinds | The marketplace offers no service-layer abstraction anywhere |
 
 ## Evaluated and not adopted
 

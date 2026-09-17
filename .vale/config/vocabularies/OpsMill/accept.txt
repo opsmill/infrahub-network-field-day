@@ -160,3 +160,61 @@ Arista AVD Reference Design
 
 # Ordinary technical vocabulary Vale's dictionary lacks.
 [Bb]oolean
+
+# The rest of this repository's working vocabulary, collected in one pass rather
+# than one entry per cycle. Four kinds of thing, and none of them is a typo:
+#
+#   * tools and libraries the lab actually runs -- vrnetlab, Nornir, busybox,
+#     vtysh, testcontainers, Docusaurus, pnpm, npm, VSCode
+#   * domain terms Vale's dictionary lacks -- unicast, distinguisher, allowlist,
+#     denylist, ciphertext, coroutine, contextvar, toolchain, teardown, topology
+#   * possessives and plurals of acronyms it already accepts bare -- WAN's,
+#     VRF's, cEOS's, XRDs, CIDRs, CLIs, DCs
+#   * negations this documentation forms deliberately, because the absence is
+#     the point -- unconfigured, unapplied, unrun, undeletable, vendored
+#
+# `globex` is a lab tenant, alongside acme. Adding it here rather than rewording
+# the docs that name it, because the seed data uses it and the prose has to.
+Allowlist
+CIDRs
+CLIs
+DCs
+Dicts
+Docusaurus
+Nornir
+Upstream's
+VRF's
+VSCode
+WAN's
+XRDs
+allowlist
+busybox
+cEOS's
+ciphertext
+contextvar
+coroutine
+denylist
+distinguisher
+globex
+namespaces
+npm
+onboarding
+peerings
+pnpm
+preflights
+reimplementing
+renderers
+teardown
+testcontainers
+toolchain
+topology's
+unapplied
+unconfigured
+undeletable
+unicast
+unrun
+vendored
+venv
+vrnetlab
+vtysh
+worktree

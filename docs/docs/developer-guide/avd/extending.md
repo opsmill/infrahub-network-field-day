@@ -34,7 +34,7 @@ Entry identity is resolved from the entries themselves — the first of `name`, 
 
 Within a merged entry, precedence is unchanged: the generated value still wins field by field. Entries only the override declares are kept, and entries only the generator produced are appended. Merging is idempotent, so re-generation does not grow a list.
 
-So an override **can** add a static route to a natively-modelled VRF, or a tenant the design does not model, without the generated `tenants` list wiping it. Before this it could not: a replaced list raises nothing, so the override simply vanished from the rendered configuration.
+An override **can** therefore add a static route to a natively modelled VRF, or a tenant the design does not model, without the generated `tenants` list wiping it. Before this it could not: a replaced list raises nothing, so the override simply vanished from the rendered configuration.
 
 Two deliberate exceptions:
 

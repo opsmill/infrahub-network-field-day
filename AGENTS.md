@@ -53,7 +53,7 @@ Key docs to read before larger changes:
 
 - Data model hierarchy: `NetworkFabric` -> `NetworkPod` -> `LocationRack` ->
   `DcimFabricSwitch` -> `DcimInterface` / `NetworkLink` / `IpamIPAddress`.
-- **There are four device kinds, and they are siblings.** `DcimFabricSwitch` is
+- **Four device kinds exist, and they are siblings.** `DcimFabricSwitch` is
   the fabric's EOS switches, `DcimDevice` the WAN's FRR routers,
   `SecurityFirewall` the perimeter firewall, `ComputePhysicalServer` the hosts
   and Kubernetes nodes. All four inherit `DcimGenericDevice`; none inherits
@@ -179,9 +179,24 @@ targeting the `junos_firewalls` group. Three things to know:
 Check definitions are `cv-config-validation` (`checks/cv_config_check.py`), with its
 workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and
 `checks/cv_helpers.py`; `fabric-pool-validation` (`checks/fabric_pool_check.py`); and
-`peering-consistency` (`checks/peering_consistency_check.py`). The first two are targeted on
-`fabrics`; `peering-consistency` is **global** — it has no `targets`, because its rules are
-statements about the whole graph rather than about one fabric.
+`peering-consistency` (`checks/peering_consistency_check.py`); and `zone-advertisement`
+(`checks/zone_advertisement_check.py`). The first two are targeted on `fabrics`; the last two
+are **global** — they have no `targets`, because their rules are statements about the whole
+graph rather than about one fabric.
+
+`zone-advertisement` discharges the condition cycle 032 attached to its own design. A zone
+names its prefix list rather than relating to one, because no `RoutingPrefixList` object
+exists — the fabric's whole BGP policy lives inside `avd_custom_hostvars` — and that was only
+defensible if a wrong name were detectable. It reports four things: a zone naming a list the
+fabric does not declare, a zone carrying one half of the policy, an approved grant whose VIP
+falls outside its application's `vip_block`, and an approved grant on an application that is
+not exposed.
+
+**It counts fabric scope only, and that is the whole subtlety.** `generate-app-access` creates
+the named list at device scope whenever it advertises, so once a grant has run the device
+declares the very name the rule questions. Reading device scope made the reference
+self-fulfilling: a branch naming a nonexistent list failed the check before a grant ran and
+passed it afterwards.
 
 ## Repository sync, and the one thing that wedges it
 
@@ -274,8 +289,8 @@ device families report a difference against an artifact the device already match
   every time — the artifact states them and `show running-config` never echoes them back.
 - **Junos** reports changed lines every time: zone-pair ordering and comment round-tripping.
 
-Read raw, that means "differs", and the reconciler would replace the configuration of every FRR
-router and the firewall on every cycle forever while logging success. So `differs` is computed
+Read raw, that means "differs," and the reconciler would replace the configuration of every FRR
+router and the firewall on every cycle forever while logging success. `differs` is therefore computed
 from normalised output, never raw text, and the rules are an **allowlist** — anything
 unrecognised counts as a difference, so a gap causes an unnecessary push rather than a missed
 one. `tests/unit/test_deployment_normalise.py` holds real captured device output for both the
@@ -304,7 +319,7 @@ Three things worth knowing before debugging it:
   written against diff prefixes reports "no differences" for a device that has genuinely
   changed.
 - **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load replace` does
-  nothing, and `show | compare` comes back empty — which reads exactly like "in sync".
+  nothing, and `show | compare` comes back empty — which reads exactly like "in sync."
 
 State goes to `DeploymentState` (cycle 029). `last_confirmed_at` moves only when the device
 reported no difference, never because a push was sent; `last_checked_at` moves every cycle so a
@@ -322,7 +337,7 @@ stale confirmation is distinguishable from a dead loop. The service never writes
    **`infrahubctl protocols` does not apply the `extensions:` block.** It renders
    `SecurityZone` with `name` and `interfaces` only — no `trust_level`, no `vrf`, none
    of the advertisement fields — even though all of those are loaded and queryable.
-   So regenerating after an extension-only schema change produces an empty diff, and
+   Regenerating after an extension-only schema change therefore produces an empty diff, and
    **no extension-added field is reachable through the generated protocols**. Code that
    needs one reads it through a generated `*_query.py` model instead.
 3. Implement generators, transforms, object data, menus, checks, or docs using the
@@ -441,7 +456,7 @@ than deterministic.** Seen on a cycle-030 rebuild, one after the other:
   `install-crossplane.sh` separately runs a busybox pod checking API ClusterIP,
   external DNS and egress. A Cilium that is up but still settling fails it. The
   same preflight run by hand a few minutes later passes, so the failure says
-  "too early", not "broken".
+  "too early," not "broken."
 
 Neither is caused by the device step, whichever command runs it: both parties to
 each race are inside `invoke cluster`, which starts only after the devices are

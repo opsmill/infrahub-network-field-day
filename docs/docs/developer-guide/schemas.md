@@ -170,7 +170,7 @@ objects, and the shorter name reads as the wrong one:
 | zone → DC | `PL-BRANCH-PERMITTED` | accepted from the branch |
 
 `advertising_device` peers `Dcim.FabricSwitch`, not `Dcim.Device` — see
-[the four device kinds](#there-are-four-device-kinds-not-one). It records
+[the four device kinds](#four-device-kinds-not-one). It records
 the switch that **applies** the policy to a BGP neighbor, not the seven that merely
 render its definition: the prefix lists sit at fabric scope, so every switch renders them
 and one consults them.
@@ -259,7 +259,7 @@ A cabled connection between interfaces. Inherits `Dcim.Connector`, so it has `na
 
 ## Devices and interfaces
 
-### There are four device kinds, not one
+### Four device kinds, not one
 
 Since cycle 027 the equipment in this lab is modelled as four sibling node kinds, all inheriting `DcimGenericDevice`:
 
@@ -527,7 +527,7 @@ Mixed into kinds that can be generator targets (`NetworkPod`, `LocationRack`, `C
 - **`DcimFabricSwitch.role`**: `super_spine`, `spine`, `leaf`, `border_leaf`, `l2leaf`, `l2spine`, `l3spine`, `p`, `pe`, `rr`. This list must equal the keys of `ROLE_TO_AVD_TYPE` in `src/solution_arista_avd/avd.py`; `get_avd_type` raises `ValueError` on anything else, so the schema and the code state the same boundary from two directions and a test asserts the equality.
 - **`DcimDevice.role`**: `isp_edge`, `isp_core`, `internet_edge`, `customer_edge`, `branch_router`, `k8s_node`. These describe equipment pyAVD never renders and are deliberately absent from `ROLE_TO_AVD_TYPE`.
 
-There is no `firewall` value in either: a firewall is `SecurityFirewall`, its own kind.
+Neither carries a `firewall` value: a firewall is `SecurityFirewall`, its own kind.
 
 **Interface role** (`DcimInterface.role`): `uplink`, `access`, `spine`, `super_spine`, `leaf`, `loopback`, `vtep_loopback`, `server`, `peering`, `storage`, `mlag_peer`.
 
