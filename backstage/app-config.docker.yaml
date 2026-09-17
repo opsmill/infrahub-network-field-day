@@ -14,6 +14,17 @@ app:
 backend:
   baseUrl: ${BACKSTAGE_BASE_URL}
   listen: ':7007'
+  # Backstage's default CSP includes `upgrade-insecure-requests`, which tells
+  # the browser to rewrite every http:// request on the page to https://. This
+  # lab is served over plain HTTP, so the page itself loads and then every
+  # /static/*.js request is upgraded to a port nothing is listening on --
+  # presenting as "scripts failed to load from source" with the assets sitting
+  # right there and answering 200 over http.
+  #
+  # `false` removes the directive. Put a TLS terminator in front of this before
+  # it is reachable by anyone who matters, and delete this block.
+  csp:
+    upgrade-insecure-requests: false
   cors:
     origin: ${BACKSTAGE_BASE_URL}
   # ponytail: in-memory, because everything worth keeping lives in Infrahub.
