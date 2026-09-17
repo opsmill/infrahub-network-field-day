@@ -1,0 +1,99 @@
+---
+# Backstage, in the tooling cluster.
+#
+# The portal is here rather than beside Infrahub on the host for one reason: a
+# branch user has to reach it THROUGH the firewall. Reaching the request portal
+# is itself a firewall decision -- `branch-to-tooling-portal` in
+# objects/32_nfd41_security.yml is that permission -- so the tool for requesting
+# access is itself behind an access rule.
+#
+# It talks to Infrahub at 10.90.0.1, the HOST's address on the tooling bridge.
+# Not 172.20.41.1: that is the management network, and using it here would mean
+# the portal depended on a path the branch cannot see, which is the asymmetry
+# this whole design exists to remove.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backstage-env
+  namespace: nfd41-tooling
+data:
+  # Every URL the BROWSER will be sent to has to be one the branch desktop can
+  # resolve and route to. That rules out localhost, the Tailscale name and the
+  # management range, and leaves the tooling address.
+  BACKSTAGE_BASE_URL: "http://10.90.0.11:32001"
+  BACKSTAGE_OIDC_METADATA_URL: "http://10.90.0.11:32556/dex/.well-known/openid-configuration"
+  BACKSTAGE_OIDC_CLIENT_ID: "backstage"
+  INFRAHUB_ADDRESS: "http://10.90.0.1:8000"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backstage-secrets
+  namespace: nfd41-tooling
+type: Opaque
+stringData:
+  # Lab values, committed on purpose, like everything else in auth/. The token
+  # is the stack's initial admin token; the session secret signs the express
+  # session the OIDC strategy keeps its state in.
+  BACKSTAGE_OIDC_CLIENT_SECRET: "backstage-dex-secret"
+  BACKSTAGE_SESSION_SECRET: "nfd41-lab-backstage-session-secret"
+  INFRAHUB_API_TOKEN: "06438eb2-8019-4776-878c-0941b1f1d1ec"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backstage
+  namespace: nfd41-tooling
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: backstage }
+  template:
+    metadata:
+      labels: { app: backstage }
+    spec:
+      containers:
+        - name: backstage
+          image: nfd41/backstage:local
+          # There is no registry in this lab and the node's containerd cannot see
+          # the host's docker images, so the image is imported directly. Stating
+          # the policy means a bad tag fails as ErrImageNeverPull rather than as
+          # a confusing attempt to reach docker.io.
+          imagePullPolicy: IfNotPresent
+          args:
+            - "node"
+            - "packages/backend"
+            - "--config"
+            - "app-config.yaml"
+            - "--config"
+            - "app-config.docker.yaml"
+          envFrom:
+            - configMapRef: { name: backstage-env }
+            - secretRef: { name: backstage-secrets }
+          ports:
+            - containerPort: 7007
+          readinessProbe:
+            httpGet:
+              path: /.backstage/health/v1/readiness
+              port: 7007
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backstage
+  namespace: nfd41-tooling
+spec:
+  type: NodePort
+  selector: { app: backstage }
+  ports:
+    - name: http
+      port: 7007
+      targetPort: 7007
+      # Fixed, because it is named in three other places that must agree: the
+      # base URL above, the Dex client's redirect URI, and the firewall's
+      # `tooling-portal` service object. A NodePort allocated at random would
+      # break all three silently.
+      nodePort: 32001
