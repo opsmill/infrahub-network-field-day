@@ -657,8 +657,16 @@ def _all_racks_done(branch: str) -> bool:
     return racks > 0 and complete == racks
 
 
+# How long the artifact wait watches for movement before believing a render is
+# finished. Six samples of ten seconds: the post-merge render of this fabric's
+# fourteen artifacts starts and finishes inside a minute, and a shorter window
+# was measured settling on pre-merge checksums. See _wait_for_artifacts.
+SAMPLE_SECONDS = 10
+STABLE_SAMPLES = 6
+
+
 def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG001
-    """Block until every configuration artifact on main is populated AND settled.
+    """Block until every configuration artifact on main is populated and stable.
 
     Artifact generation is **asynchronous**: the REST endpoint returns 200 and
     the rendering happens in a task afterwards, and a merge kicks off another
@@ -669,20 +677,30 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
     artifact would replace a switch's configuration with nothing, so the
     bootstrap waits here rather than racing.
 
-    **Non-empty was not enough, and the gap was measured.** An artifact still
-    holding its PRE-merge content is populated, so the original wait returned
-    immediately on a merge that removed something. A reconcile cycle run straight
-    afterwards then compared each device against stale output, found no
-    difference, and reported `compared=14 differed=0` — while the thing the merge
-    had deleted was still on the switch. Nothing errored, and the next cycle ten
-    minutes later cleaned it up, so the only symptom was a deletion that appeared
-    not to take.
+    **Non-empty is not enough, and neither is one quiet interval.** Both were
+    measured, in that order:
 
-    So the wait also requires the checksums to **settle**: two consecutive
-    samples, ten seconds apart, that agree. Settling rather than "every checksum
-    moved", because an artifact whose content genuinely did not change never
-    moves, and waiting for it would hang on every ordinary merge. The cost is one
-    extra sampling interval on a path that already takes minutes.
+    * An artifact still holding its PRE-merge content is populated, so the
+      original wait returned immediately on a merge that removed something. The
+      reconcile cycle that followed compared every device against stale output,
+      reported `compared=14 differed=0`, and left the deleted interface on both
+      leaves. Nothing errored.
+    * Requiring two consecutive agreeing samples did not fix it, because the two
+      samples agreed on the OLD checksums -- the post-merge render had not begun
+      ten seconds after the merge, so the wait settled on exactly the stale
+      values it was meant to exclude. Measured the same way, with the same
+      `differed=0` and the same interface left behind.
+
+    So stability has to be asserted over a window long enough for the render to
+    have started: `STABLE_SAMPLES` consecutive agreeing samples, and any movement
+    resets the count. The floor is empirical -- the post-merge render of this
+    fabric's fourteen artifacts begins and completes well inside it -- and it is
+    a floor rather than a guarantee, which is why the timeout path says what it
+    could not establish rather than claiming success.
+
+    Waiting instead for every checksum to MOVE would be exact and would never
+    terminate: an artifact whose content genuinely did not change never moves,
+    which is most of them on most merges.
     """
     names = ("AVD EOS Configuration", "FRR Configuration", "Junos Configuration")
     headers = {"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")}
@@ -692,6 +710,7 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
     empty = -1
     wanted: list[str] = []
     previous: dict[str, str] | None = None
+    stable = 0
     while time.time() < deadline:
         current: dict[str, str] = {}
         try:
@@ -711,14 +730,15 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
         except (httpx.HTTPError, KeyError, TypeError):
             empty = -1
             current = {}
-        if empty == 0 and wanted and current == previous:
-            print(f"   all {len(wanted)} configuration artifacts populated and settled")
+        stable = stable + 1 if current and current == previous else 0
+        if empty == 0 and wanted and stable >= STABLE_SAMPLES:
+            print(f"   all {len(wanted)} configuration artifacts populated and stable")
             return
         previous = current
-        sleep(10)
+        sleep(SAMPLE_SECONDS)
 
     if empty == 0:
-        print(f"   WARNING: artifact checksums still moving after {timeout}s -- a push may use stale output")
+        print(f"   WARNING: artifact checksums were still moving after {timeout}s -- a push may use stale output")
     else:
         print(f"   WARNING: {empty} artifact(s) still empty after {timeout}s -- `invoke provision` would push nothing")
 
