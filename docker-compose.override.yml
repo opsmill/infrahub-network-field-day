@@ -24,6 +24,41 @@ x-infrahub-custom-build: &infrahub_custom_build
 services:
   infrahub-server:
     <<: *infrahub_custom_build
+    # ------------------------------------------------------------------
+    # SSO against the lab's Dex. No Infrahub code is involved: 1.10.6 ships
+    # as an OIDC relying party, and this is the whole of the configuration.
+    #
+    # The DISCOVERY URL is fetched by the SERVER, so it uses the address the
+    # server can reach. The URLs *inside* that document are followed by the
+    # BROWSER, so Dex must publish itself as 172.20.41.1 -- which is why its
+    # issuer is set that way rather than to `dex:5556`. Pointing this at
+    # `http://dex:5556` instead would fetch fine and then redirect the browser
+    # to a hostname it cannot resolve.
+    #
+    # `depends_on` is deliberate: Infrahub reads provider configuration at
+    # startup, and a server that starts first shows no SSO button at all.
+    environment:
+      # A JSON ARRAY, not a bare name. The setting is a list field, so
+      # pydantic-settings parses it as JSON -- and `provider1` on its own makes
+      # the server refuse to boot with `error parsing value for field
+      # "oidc_providers"`, which names the field and not the format it wanted.
+      # Refusing to boot is the right failure; silently ignoring it would leave
+      # a login page with no SSO button and nothing to explain why.
+      INFRAHUB_SECURITY_OIDC_PROVIDERS: ${INFRAHUB_SECURITY_OIDC_PROVIDERS:-["provider1"]}
+      INFRAHUB_OIDC_PROVIDER1_CLIENT_ID: ${INFRAHUB_OIDC_PROVIDER1_CLIENT_ID:-infrahub}
+      INFRAHUB_OIDC_PROVIDER1_CLIENT_SECRET: ${INFRAHUB_OIDC_PROVIDER1_CLIENT_SECRET:-infrahub-dex-secret}
+      INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL: >-
+        ${INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL:-http://agentic-agittings-agittings-dev-vm-02.tailc018d.ts.net:5556/dex/.well-known/openid-configuration}
+      INFRAHUB_OIDC_PROVIDER1_DISPLAY_LABEL: ${INFRAHUB_OIDC_PROVIDER1_DISPLAY_LABEL:-Sign in with Dex}
+      INFRAHUB_OIDC_PROVIDER1_ICON: ${INFRAHUB_OIDC_PROVIDER1_ICON:-mdi:account-key}
+      # Every SSO user lands here. Without a default group an SSO account is
+      # created with no permissions at all, logs in successfully, and then sees
+      # nothing -- which reads as a broken integration rather than a missing
+      # setting.
+      INFRAHUB_SECURITY_SSO_USER_DEFAULT_GROUP: ${INFRAHUB_SECURITY_SSO_USER_DEFAULT_GROUP:-Infrahub Users}
+    depends_on:
+      dex:
+        condition: service_healthy
   database:
     ports:
       - 7474:7474
@@ -39,6 +74,35 @@ services:
     volumes:
       - ./:/upstream
       - ./src:/opt/local/src
+
+  # ==========================================================================
+  # The lab's on-prem OpenID Connect provider.
+  #
+  # Infrahub is the relying party: it drives the flow and issues its own token,
+  # so nothing downstream ever sees a Dex token. See auth/dex-config.yaml for
+  # why the issuer is 172.20.41.1 rather than localhost -- it is the one address
+  # that resolves to the same Dex from the browser AND from inside the Infrahub
+  # container, and getting that wrong is how OIDC-in-Docker usually fails.
+  # ==========================================================================
+  dex:
+    image: ghcr.io/dexidp/dex:v2.44.0
+    restart: unless-stopped
+    command: dex serve /etc/dex/config.yaml
+    volumes:
+      - "./auth/dex-config.yaml:/etc/dex/config.yaml:ro"
+      - "dex_data:/var/dex"
+    ports:
+      - "${DEX_PORT:-5556}:5556"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -qO-
+        - http://localhost:5556/dex/.well-known/openid-configuration
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
   service-catalog:
     build:
@@ -145,3 +209,9 @@ services:
       timeout: 5s
       retries: 20
       start_period: 15s
+
+volumes:
+  # Dex's sqlite store. A named volume rather than `storage: memory`, so
+  # restarting the stack does not invalidate every session and force each demo
+  # to log in again part-way through.
+  dex_data:
