@@ -110,7 +110,9 @@ PY
 check "$empty" "0" "configuration artifacts with content"
 
 stage "lab and devices"
-check "$(docker ps -q --filter name=clab-nfd41 | wc -l)" "30" "lab nodes running"
+# 31 since the tooling cluster: `tool-node1` is a lab node like any other,
+# even though nothing in the fabric reaches it.
+check "$(docker ps -q --filter name=clab-nfd41 | wc -l)" "31" "lab nodes running"
 # Cycle 030 made the bootstrap's device step `invoke reconcile --converge`
 # rather than `invoke provision`, so the string this used to grep for is gone.
 grep -q "Every device is confirmed to match its rendered configuration" "$LOG/bootstrap.log" \
@@ -170,6 +172,68 @@ routes=$(docker exec clab-nfd41-k8s-leaf1 Cli -p 15 -c 'show ip route vrf K8S_PR
     | grep -cE '10\.111|10\.112')
 [ "$routes" -ge 4 ] && pass "leaf learns the pod CIDRs and LoadBalancer VIPs ($routes)" \
     || fail "leaf learned only $routes cluster routes"
+
+stage "the tooling cluster, and signing in"
+# A SEPARATE CLUSTER from the one above, with its own kubeconfig, reached
+# through the node rather than from the host. It carries the lab's identity
+# provider and the portal people request services through, and the bootstrap
+# now deploys it -- so a bootstrap that brought up everything except the ability
+# to sign in used to pass this script with nothing to say about it.
+TOOL=clab-nfd41-tool-node1
+DESK=clab-nfd41-branch-desktop
+tk() { docker exec "$TOOL" kubectl -n nfd41-tooling "$@" 2>/dev/null; }
+
+for deploy in dex backstage; do
+    check "$(tk get deploy "$deploy" -o jsonpath='{.status.availableReplicas}')" "1" \
+        "$deploy available in the tooling cluster"
+done
+
+# THE ISSUER, not just a 200. An issuer that disagrees with the address it is
+# served on fails at token validation rather than at connect, which is a much
+# worse error to debug -- and it is the single string Infrahub, Backstage and
+# every browser have to agree on.
+check "$(docker exec "$DESK" curl -s --max-time 10 \
+    http://10.90.0.11:32556/dex/.well-known/openid-configuration 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["issuer"])' 2>/dev/null)" \
+    "http://10.90.0.11:32556/dex" "Dex publishes the issuer everyone is configured with"
+
+# FROM THE BRANCH DESKTOP, which is the whole point. Every one of these passed
+# from the host while being broken for the only audience that uses them, and
+# that is how the two-Dex detour started.
+#
+# `ssl_verify_result=0` is a second claim inside the first: the portal's
+# self-signed certificate is INSTALLED on this desktop, so a real browser gets
+# no warning. Dropping to `curl -k` here would pass while the user sees one.
+read -r portal verify <<EOF
+$(docker exec "$DESK" curl -s -o /dev/null -w '%{http_code} %{ssl_verify_result}' \
+    --max-time 10 https://10.90.0.11:32001/ 2>/dev/null)
+EOF
+check "$portal" "200" "branch desktop reaches the portal over HTTPS"
+check "$verify" "0" "portal certificate is trusted on the branch desktop"
+check "$(docker exec "$DESK" curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+    http://10.90.0.1:8000/api/config 2>/dev/null)" "200" \
+    "branch desktop reaches Infrahub (firewall rule AND return route)"
+
+# The policy is a permit-list, not an any/any that happens to work. If ICMP gets
+# through, everything above passes for the wrong reason.
+docker exec "$DESK" ping -c1 -W3 10.90.0.11 >/dev/null 2>&1 \
+    && fail "ICMP into the tooling zone is permitted; the policy is too broad" \
+    || pass "ICMP into the tooling zone is denied"
+
+# THE ONLY CHECK THAT MEANS "a user can sign in". Everything above can pass
+# with sign-in broken: a reachable IdP, a reachable relying party, and a
+# redirect URI neither of them agrees on. This drives the whole flow --
+# authorize, Dex login as alice, then the code exchange -- and asserts Infrahub
+# minted its own token at the end of it.
+signin=$(docker exec "$DESK" bash -c '
+J=$(mktemp)
+auth=$(curl -s -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 10     "http://10.90.0.1:8000/api/oidc/provider1/authorize")
+curl -s -L -b "$J" -c "$J" -o /tmp/login.html --max-time 15 "$auth"
+form=$(grep -oE "action=\"[^\"]*\"" /tmp/login.html | head -1 | cut -d\" -f2 | sed "s/&amp;/\&/g")
+cb=$(curl -s -b "$J" -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 15     -d "login=alice@nfd41.lab" -d "password=password" "http://10.90.0.11:32556${form}")
+curl -s -b "$J" -c "$J" --max-time 20 "http://10.90.0.1:8000/api/oidc/provider1/token?${cb#*\?}"
+' 2>/dev/null | grep -c access_token)
+check "$signin" "1" "alice signs in to Infrahub through Dex, from the branch desktop"
 
 elapsed=$(( $(date +%s) - started ))
 printf '\n=== [%s] COMPLETE in %sm%ss — %s failure(s) ===\n' \

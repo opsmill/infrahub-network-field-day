@@ -122,6 +122,11 @@ services:
         condition: service_healthy
     environment:
       INFRAHUB_ADDRESS: http://infrahub-server:8000
+      # Where the portal sends a BROWSER when it links out to Infrahub, which is
+      # a different address from the one above -- that one is resolved by docker.
+      # app-config.docker.yaml reads it, so leaving it unset fails config load
+      # rather than defaulting to anything.
+      INFRAHUB_EXTERNAL_ADDRESS: ${INFRAHUB_EXTERNAL_ADDRESS:-http://localhost:8000}
       INFRAHUB_API_TOKEN: ${INFRAHUB_INITIAL_ADMIN_TOKEN:-06438eb2-8019-4776-878c-0941b1f1d1ec}
       # The origin the BROWSER is on. It must match a redirect URI registered on
       # the `backstage` client in tooling/10-dex.yaml, or sign-in fails at Dex
