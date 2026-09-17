@@ -458,16 +458,24 @@ because generation is asynchronous: the REST endpoint returns 200 and the
 rendering happens afterwards. Without that wait `provision` can read an artifact
 that exists, reports `Ready`, and is empty — and push nothing onto a switch.
 
-**That wait requires the artifacts to be non-empty AND settled**, and the second half was
-added after the first half proved insufficient. An artifact still holding its *pre-merge*
-content is populated, so a merge that REMOVED something returned from the wait immediately; a
-reconcile cycle run straight afterwards compared every device against stale output, found
-nothing, and printed `compared=14 differed=0` — with the deleted interface still on the switch.
-Nothing errored, and the next cycle ten minutes later cleaned it up, so the only symptom was a
-deletion that appeared not to take. `_wait_for_artifacts` now also requires two consecutive
-checksum samples to agree. **Settling rather than "every checksum moved"**, because an artifact
-whose content genuinely did not change never moves and waiting for it would hang on every
-ordinary merge.
+**That wait requires the artifacts to be non-empty AND stable over a window**, and both
+halves were added after being measured, in that order:
+
+- An artifact still holding its *pre-merge* content is populated, so a merge that REMOVED
+  something returned from the wait immediately. A reconcile cycle run straight afterwards
+  compared every device against stale output, printed `compared=14 differed=0`, and left the
+  deleted interface on both leaves. Nothing errored, and the next cycle ten minutes later
+  cleaned it up — so the only symptom was a deletion that appeared not to take.
+- Requiring two consecutive agreeing checksum samples **did not fix it**, because the two
+  samples agreed on the *old* checksums: the post-merge render had not begun ten seconds after
+  the merge, so the wait settled on exactly the stale values it was meant to exclude. Same
+  `differed=0`, same interface left behind.
+
+`_wait_for_artifacts` therefore asserts stability over `STABLE_SAMPLES` samples rather than one,
+and any movement resets the count. That is an empirical floor, not a guarantee, which is why the
+timeout path says what it could not establish rather than claiming success. Waiting instead for
+every checksum to **move** would be exact and would never terminate — an artifact whose content
+genuinely did not change never moves, which is most of them on most merges.
 
 `invoke avd --branch X --merge` does the same thing outside a bootstrap.
 
