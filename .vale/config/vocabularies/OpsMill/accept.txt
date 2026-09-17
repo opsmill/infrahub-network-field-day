@@ -153,6 +153,7 @@ requeue
 
 # British spellings this repository uses consistently. Already in use in
 # developer-guide/transforms.md, where it errored before this entry existed.
+datacentre
 unmodelled
 
 # The reference design's own name, used as the landing-page heading.
@@ -211,6 +212,7 @@ topology's
 unapplied
 unconfigured
 undeletable
+unroutable
 unicast
 unrun
 vendored

@@ -305,7 +305,8 @@ deletion candidates.
 
 **Target**: `ServiceAppAccess` (group `service_app_accesses`)
 
-**Purpose**: Turn an approved access grant into the firewall objects that permit the session
+**Purpose**: Turn an approved access grant into the firewall objects that permit the session, and
+into the fabric advertisement that makes its destination reachable
 
 **Actions**:
 
@@ -318,12 +319,52 @@ deletion candidates.
    that protocol and port.
 5. Upsert the `SecurityPolicyRule` joining them, with `managed_by_service: true`.
 6. Link the rule into the grant's `granted_rules` and set its status to `active`.
+7. Add the destination VIP to the prefix list the DC advertises toward the grant's source zone, at
+   device scope on that zone's advertising switch.
+8. Ask for the firewall's artifact to be re-rendered.
+
+A grant therefore acts in all three domains of this lab: Kubernetes through the application it
+names, Junos through the rule, and the fabric through the advertisement.
 
 **Query**: `generate_app_access.gql`
 
 Nothing downstream changes. `junos_config.gql` queries `SecurityGenericAddress` and
 `SecurityPolicy` unfiltered, so a generated object is rendered into the firewall's existing
 artifact the moment it exists, and the deployment reconciler pushes it.
+
+#### The fabric leg, and where it stops
+
+Steps 7 and 8 exist because a firewall rule alone permits a session to somewhere the border leaf
+never re-advertises — permitted and unroutable, which the schema comment on
+`ServiceAppAccess.destination_vip` warns about. The generator uses the two fields
+`Security.Zone` gained for it: `dc_advertised_prefix_list` and `advertising_device`.
+
+The entry is written at **device scope** rather than fabric scope. The hostvar generator merges the
+scopes by entry identity, so a device-scope sequence composes with the fabric's baseline instead of
+replacing it, and the hand-authored policy every other switch shares is untouched.
+
+**The write does not reach a switch on its own.** It lands in `avd_custom_hostvars`, which
+`generate-avd-device-hostvar` reads — and that generator is registered `execute_after_merge: false`
+because the AVD chain is expensive and run explicitly. The model is correct immediately; the switch
+follows on the next `invoke avd`, exactly as it does for any other fabric change. The Junos half has
+no such gap: step 8 re-renders the firewall's artifact, and the reconciler pushes it.
+
+A zone the datacentre advertises nothing toward yields no advertisement, which is not an error —
+four of the six zones are in that state, and a grant from one gets its firewall rule and nothing
+else. A zone carrying one half of the policy raises instead, because acting on it would either write
+into an unnamed list or name a list on no device. [`zone-advertisement`](./checks.md#zone-advertisement)
+refuses the merge that introduces either fault.
+
+#### Why the artifact re-render is explicit
+
+An artifact regenerates when its **target** changes, and the target here is the firewall — a new
+`Security.PolicyRule` is not a change to `fw1`. Without step 8 the objects appear, the rendered
+artifact keeps its old checksum, and the reconciler compares the device against stale output and
+reports no difference. Infrahub's trigger rules cannot close this: `CoreGeneratorAction` and
+`CoreGroupAction` are the only actions, and neither renders an artifact.
+
+The request is best effort. The objects are already written and correct by that point, and raising
+would skip the tracking context's group update, leaving the run's objects outside the group they own.
 
 #### The approval gate
 
