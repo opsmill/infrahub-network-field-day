@@ -257,10 +257,39 @@ targeting the `junos_firewalls` group. Three things to know:
 Check definitions are `cv-config-validation` (`checks/cv_config_check.py`), with its
 workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and
 `checks/cv_helpers.py`; `fabric-pool-validation` (`checks/fabric_pool_check.py`); and
-`peering-consistency` (`checks/peering_consistency_check.py`); and `zone-advertisement`
-(`checks/zone_advertisement_check.py`). The first two are targeted on `fabrics`; the last two
+`peering-consistency` (`checks/peering_consistency_check.py`); `zone-advertisement`
+(`checks/zone_advertisement_check.py`); and `wan-service-consistency`
+(`checks/wan_service_check.py`). The first two are targeted on `fabrics`; the last three
 are **global** — they have no `targets`, because their rules are statements about the whole
 graph rather than about one fabric.
+
+`wan-service-consistency` guards the lab's central claim. The WAN service kinds **name**
+technical objects rather than creating them — which is why no generator sits beneath them, and
+also why every one of their references was unverified. `schemas/service/wan_services.yml` says
+the isolation is *structural*: no VRF imports another's route targets anywhere, so there is no
+east-west path to filter in the first place. That is only true while the services are wired
+correctly, and nothing checked that they were. Four rules:
+
+- **A circuit belonging to another tenant.** `ServiceL3vpn.circuits` is not a label, it is the
+  routing domain — two of a tenant's sites reach each other because both circuits are in the
+  list. A foreign one joins two tenants directly across the provider edge, which is what cycle
+  019's FR-005 warns about.
+- **Two L3VPNs sharing a provider-edge VRF**, which is the same collapse by another route.
+- **A tenant cloud whose zone governs a different VRF.** `generate-app-access` derives a grant's
+  destination zone by matching the application's VRF against `SecurityZone.vrf`, so a mismatch
+  silently writes grants into a policy for somewhere else.
+- **Two clouds sharing a VRF or a zone** — the one that most looks like tidy reuse.
+
+**It judges decommissioned services too**, deliberately. Everywhere except
+`generate-network-segment`, `status` is inert, so a decommissioned `ServiceL3vpn` still
+assembles the provider edge's import policy; skipping it would excuse a live misconfiguration
+because of a label.
+
+A thing worth knowing before extending it: **`IpamVRF.tenant` cannot identify a tenant here.**
+Every tenant VRF in this lab points at the `EvpnTenant` named `TENANT_CLOUD`, not at the
+`OrganizationTenant` — so VRFs are compared by identity and never attributed to an owner.
+`DcimCircuit.tenant` *does* resolve to the organization tenant, which is what makes the first
+rule possible at all.
 
 `zone-advertisement` discharges the condition cycle 032 attached to its own design. A zone
 names its prefix list rather than relating to one, because no `RoutingPrefixList` object

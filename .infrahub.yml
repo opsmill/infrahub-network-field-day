@@ -73,6 +73,9 @@ queries:
   # Global peering-consistency check
   - name: peering_consistency_check
     file_path: "./checks/peering_consistency_check.gql"
+  # Global WAN service-consistency check
+  - name: wan_service_check
+    file_path: "./checks/wan_service_check.gql"
   # Global zone-advertisement check
   - name: zone_advertisement_check
     file_path: "./checks/zone_advertisement_check.gql"
@@ -274,6 +277,13 @@ check_definitions:
   - name: peering-consistency
     file_path: "./checks/peering_consistency_check.py"
     class_name: PeeringConsistencyCheck
+  # Also global. The WAN service layer names technical objects rather than
+  # creating them, so no generator sits beneath it -- and every one of its
+  # references is otherwise unverified. A circuit belonging to another tenant
+  # inside an L3VPN joins two tenants' routing, and nothing errors.
+  - name: wan-service-consistency
+    file_path: "./checks/wan_service_check.py"
+    class_name: WanServiceConsistencyCheck
   # Also global, and for the same reason: "some zone names a prefix list nobody
   # declares" is a statement about the whole graph. It discharges the condition
   # cycle 032 attached to modelling that prefix list as a NAME rather than a
