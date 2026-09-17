@@ -380,6 +380,12 @@ spec:
             icon: "mdi:handshake"
 
           - namespace: Service
+            name: NetworkSegmentServices
+            label: Network Segments
+            kind: ServiceNetworkSegment
+            icon: "mdi:lan"
+
+          - namespace: Service
             name: FabricAppServices
             label: Fabric Applications
             kind: ServiceFabricApp

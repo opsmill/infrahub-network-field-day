@@ -539,6 +539,21 @@ class OrganizationManufacturer(OrganizationGeneric):
     platform: RelationshipManager[DcimPlatform]
 
 
+class ServiceNetworkSegment(ServiceGeneric, GeneratorTarget):
+    mtu: IntegerOptional
+    prefix_length: Integer
+    vlan_id: IntegerOptional
+    fabric: RelationshipAttribute[NetworkFabric]
+    racks: RelationshipManager[LocationRack]
+    subnet: RelationshipAttribute[IpamPrefix]
+    subnet_pool: RelationshipAttribute[CoreIPPrefixPool]
+    svi: RelationshipAttribute[EvpnSvi]
+    tenant: RelationshipAttribute[OrganizationTenant]
+    vlan: RelationshipAttribute[IpamVLAN]
+    vlan_pool: RelationshipAttribute[CoreNumberPool]
+    vrf: RelationshipAttribute[IpamVRF]
+
+
 class NetworkNtpServer(CoreNode):
     iburst: BooleanOptional
     name: String

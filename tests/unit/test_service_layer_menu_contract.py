@@ -30,10 +30,15 @@ EXPECTED_SECTIONS = {
 
 # Every concrete service kind. FR-065 puts them under one grouping, because
 # they are ordered intent rather than device fact.
+# Raised deliberately whenever a service kind is added, never loosened to a
+# subset check -- the same discipline the security extensions file keeps, so
+# that growing the service layer is a visible decision rather than a test
+# quietly accommodating it.
 SERVICE_KINDS = {
     "ServiceFabricPeering",
     "ServiceFabricApp",
     "ServiceAppAccess",
+    "ServiceNetworkSegment",
     "ServiceL3vpn",
     "ServiceInternetAccess",
     "ServiceTenantCloud",

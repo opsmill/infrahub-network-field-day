@@ -1,0 +1,193 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# "Give me a network", as one object.
+#
+# A segment is three technical objects that always appear together and are
+# always consistent with one another: an `IpamPrefix` for the subnet, an
+# `IpamVLAN` carrying its id, and an `EvpnSvi` giving it a gateway inside a
+# VRF. Every segment in this lab follows that shape exactly -- K8S_NODES on
+# VLAN 110 in K8S_PROD, APP_HOSTS on 210 in APP_PROD, ACME_CLOUD on 310 in
+# TENANT_ACME -- and all three were written out by hand, three times, in three
+# different object files.
+#
+# THE PORTAL ALREADY ASKS FOR THIS. `service_catalog/pages/1_Create_Segment.py`
+# has the form, and it writes `IpamVLANCreate` and `IpamVRFCreate` straight into
+# the graph: no record of who asked, no status, no approval, and nothing to
+# withdraw. That is precisely the inversion the service layer exists to fix --
+# see the header of service.yml.
+#
+# THIS KIND ALLOCATES RATHER THAN SELECTS, and that is the whole point of
+# modelling it. `ServiceL3vpn` and its WAN siblings name technical objects that
+# already exist, so a generator beneath them would have nothing to create. A
+# segment instead states a size and a tenant and lets the generator take the
+# next free subnet and the next free VLAN id. Leaving `vlan_id` or `subnet`
+# empty is the normal case, not an incomplete request.
+#
+# SERVICE LAYER. No renderer reads this file; a generator sits underneath and
+# upserts the technical objects, which is why the kind inherits GeneratorTarget.
+# ============================================================================
+
+nodes:
+  - name: NetworkSegment
+    namespace: Service
+    description: "A tenant network: a subnet, a VLAN, and a gateway in a VRF"
+    label: Network Segment
+    icon: mdi:lan
+    include_in_menu: true
+    inherit_from:
+      - ServiceGeneric
+      - GeneratorTarget
+    attributes:
+      # Optional on purpose: empty means "allocate one". A request that had to
+      # name its own VLAN id would be a work order rather than a service, and
+      # the requester is exactly the person who does not know which ids are
+      # free.
+      - name: vlan_id
+        kind: Number
+        label: VLAN ID
+        optional: true
+        description: "Leave empty to allocate the next free id from the segment pool"
+        order_weight: 1300
+        parameters:
+          min_value: 1
+          max_value: 4094
+          # 1 and 4094 are reserved on EOS; the model refuses them here rather
+          # than letting AVD render a VLAN the switch will not accept.
+          excluded_values: "1,4094"
+      - name: prefix_length
+        kind: Number
+        label: Prefix Length
+        optional: false
+        default_value: 24
+        description: "Size of the subnet to allocate, when no subnet is named"
+        order_weight: 1310
+        parameters:
+          min_value: 16
+          max_value: 30
+      # The gateway is always the first usable address of the subnet in this
+      # fabric -- 10.110.0.1 in 10.110.0.0/24, and so on for every segment the
+      # lab already has. Derived by the generator rather than stored, because
+      # two places to change it is one too many.
+      - name: mtu
+        kind: Number
+        label: MTU
+        optional: true
+        description: "SVI MTU; empty leaves the fabric default in place"
+        order_weight: 1500
+        parameters:
+          min_value: 68
+          max_value: 9214
+    relationships:
+      # -- intent ----------------------------------------------------------
+      - name: tenant
+        peer: OrganizationTenant
+        label: Tenant
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        description: "Who the segment is for"
+        identifier: service__segment_tenant
+        order_weight: 910
+      - name: vrf
+        peer: IpamVRF
+        label: VRF
+        kind: Attribute
+        cardinality: one
+        optional: false
+        # The VRF is named rather than created. A segment joins a routing
+        # domain that already exists and is shared -- creating one per segment
+        # would give every segment its own routing table, which is the opposite
+        # of what a tenant network is for.
+        on_delete: no-action
+        description: "The routing domain the gateway lives in; must already exist"
+        identifier: service__segment_vrf
+        order_weight: 920
+      - name: fabric
+        peer: NetworkFabric
+        label: Fabric
+        kind: Attribute
+        cardinality: one
+        optional: false
+        on_delete: no-action
+        description: "Which fabric carries the segment"
+        identifier: service__segment_fabric
+        order_weight: 930
+      - name: racks
+        peer: LocationRack
+        label: Racks
+        kind: Generic
+        cardinality: many
+        optional: true
+        # Empty means the whole fabric. EvpnSvi.rack_tags is how AVD scopes an
+        # SVI to a subset of leaves, so this is passed through rather than
+        # interpreted.
+        on_delete: no-action
+        description: "Restrict the segment to these racks; empty means the whole fabric"
+        identifier: service__segment_racks
+        order_weight: 1600
+
+      # -- where to allocate from ------------------------------------------
+      - name: subnet_pool
+        peer: CoreIPPrefixPool
+        label: Subnet Pool
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "Pool the subnet is taken from when none is named"
+        identifier: service__segment_subnet_pool
+        order_weight: 1700
+      - name: vlan_pool
+        peer: CoreNumberPool
+        label: VLAN Pool
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "Pool the VLAN id is taken from when none is named"
+        identifier: service__segment_vlan_pool
+        order_weight: 1710
+
+      # -- what the generator built ----------------------------------------
+      #
+      # The three objects a segment IS, recorded on the service so the portal
+      # can show them and a reviewer can see what a merge produced. Written by
+      # the generator, never by hand.
+      #
+      # All three are `no-action`: deleting a segment must not cascade into a
+      # subnet other things route to. Withdrawal is the generator's decision,
+      # taken in order.
+      - name: subnet
+        peer: IpamPrefix
+        label: Subnet
+        kind: Generic
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "The allocated subnet; set by the generator"
+        identifier: service__segment_subnet
+        order_weight: 940
+      - name: vlan
+        peer: IpamVLAN
+        label: VLAN
+        kind: Generic
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "The VLAN the generator created"
+        identifier: service__segment_vlan
+        order_weight: 950
+      - name: svi
+        peer: EvpnSvi
+        label: SVI
+        kind: Generic
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        description: "The gateway interface the generator created"
+        identifier: service__segment_svi
+        order_weight: 960
