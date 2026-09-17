@@ -52,8 +52,19 @@ services:
       # desktop through the firewall. That is the whole reason the tooling
       # network exists -- before it there was no single issuer, and Infrahub and
       # the portal had to trust two different ones.
+      # THE OPERATORS' DEX, on the host, at an address their browsers reach.
+      #
+      # NOT the tooling cluster's. That one is reachable from the host, from
+      # this container and from the branch desktop -- but NOT from an operator's
+      # own machine, which arrives over Tailscale and has no route into
+      # 10.90.0.0/24. Consolidating onto it broke Infrahub login for exactly the
+      # people who use Infrahub, and the redirect failed on the IdP rather than
+      # on Infrahub, so nothing pointed at the cause.
+      #
+      # See auth/README.md: two audiences on two networks with no address in
+      # common is why there are two of these.
       INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL: >-
-        ${INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL:-http://10.90.0.11:32556/dex/.well-known/openid-configuration}
+        ${INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL:-http://agentic-agittings-agittings-dev-vm-02.tailc018d.ts.net:5556/dex/.well-known/openid-configuration}
       INFRAHUB_OIDC_PROVIDER1_DISPLAY_LABEL: ${INFRAHUB_OIDC_PROVIDER1_DISPLAY_LABEL:-Sign in with Dex}
       INFRAHUB_OIDC_PROVIDER1_ICON: ${INFRAHUB_OIDC_PROVIDER1_ICON:-mdi:account-key}
       # Every SSO user lands here. Without a default group an SSO account is
@@ -81,6 +92,35 @@ services:
     volumes:
       - ./:/upstream
       - ./src:/opt/local/src
+
+  # ==========================================================================
+  # The lab's on-prem OpenID Connect provider.
+  #
+  # Infrahub is the relying party: it drives the flow and issues its own token,
+  # so nothing downstream ever sees a Dex token. See auth/dex-config.yaml for
+  # why the issuer is 172.20.41.1 rather than localhost -- it is the one address
+  # that resolves to the same Dex from the browser AND from inside the Infrahub
+  # container, and getting that wrong is how OIDC-in-Docker usually fails.
+  # ==========================================================================
+  dex:
+    image: ghcr.io/dexidp/dex:v2.44.0
+    restart: unless-stopped
+    command: dex serve /etc/dex/config.yaml
+    volumes:
+      - "./auth/dex-config.yaml:/etc/dex/config.yaml:ro"
+      - "dex_data:/var/dex"
+    ports:
+      - "${DEX_PORT:-5556}:5556"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -qO-
+        - http://localhost:5556/dex/.well-known/openid-configuration
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
   # ==========================================================================
   # The Backstage service portal.
@@ -252,3 +292,7 @@ services:
       timeout: 5s
       retries: 20
       start_period: 15s
+
+volumes:
+  # Dex's sqlite store, so a restart does not invalidate every session.
+  dex_data:

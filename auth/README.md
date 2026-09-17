@@ -3,16 +3,31 @@
 Dex is the lab's identity provider and **Infrahub is the relying party**. Infrahub drives the
 whole flow itself and mints its own token; nothing downstream ever sees a Dex token.
 
-**There is ONE Dex, and it runs in the tooling cluster** (`tooling/10-dex.yaml`), not beside
-Infrahub on the host. `10.90.0.11:32556` is the only address in this lab that all four parties
-can reach: the host, containers on the host, pods in that cluster, and the branch desktop through
-the firewall. An OIDC issuer has to be a single URL that every browser and every relying party
-can resolve, and before the tooling network existed no such address was available — Infrahub and
-the portal would have had to trust two different providers.
+## There are TWO Dex instances, and that is not a mistake
 
-Infrahub has **no `depends_on`** for it. Dex comes up long after `invoke start`, and Infrahub was
-measured booting cleanly with its discovery URL unreachable: discovery is fetched on first use,
-not at startup. A hard dependency would invert the bootstrap order for nothing.
+| Dex | Issuer | Serves | Reached by |
+| --- | --- | --- | --- |
+| host (`docker-compose`) | `…tailc018d.ts.net:5556/dex` | Infrahub | operators, over Tailscale |
+| tooling cluster (`tooling/10-dex.yaml`) | `10.90.0.11:32556/dex` | Backstage | branch users, through the firewall |
+
+**An OIDC issuer is one URL, and there is no address both audiences can reach.** An operator's
+browser arrives over Tailscale and has no route into `10.90.0.0/24`; the branch desktop routes
+`10.0.0.0/8` through the firewall and has never heard of the Tailscale network. Neither is
+reachable from the other, so neither can be the issuer for both.
+
+This was consolidated onto the cluster Dex once, on the strength of testing from the host, the
+Infrahub container and the branch desktop — every party except the one that matters most.
+Infrahub login broke for exactly the people who use Infrahub, and it broke at the IdP redirect
+rather than at Infrahub, so nothing in Infrahub's logs pointed at the cause. **Before changing
+which Dex anything points at, test from a browser on a different machine**, not from this host.
+
+What makes two tolerable is that `auth/dex-config.yaml` and `tooling/10-dex.yaml` carry the same
+users and the same bcrypt hashes. A person is defined once in the repository and deployed twice;
+they sign in to Infrahub and to the portal separately, with the same credentials.
+
+Infrahub has **no `depends_on`** for its Dex. Dex is needed only when someone signs in, and
+Infrahub was measured booting cleanly with its discovery URL unreachable: discovery is fetched on
+first use, not at startup.
 
 ```text
 browser ──▶ /api/oidc/provider1/authorize?final_url=…
