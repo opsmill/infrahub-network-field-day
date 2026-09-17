@@ -1,0 +1,91 @@
+query GenerateFabricAppQuery($name: String!) {
+  # The request. Aliased `target:` like every other service generator here.
+  target: ServiceFabricApp(name__value: $name) {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        # Drives withdrawal, alongside `exposed`.
+        status {
+          value
+        }
+        # The gate. An unexposed application gets no pool, no VIP and no
+        # advertisement -- the schema says so on `exposed` -- so it gets no
+        # block either, and loses one it previously held.
+        exposed {
+          value
+        }
+        vip_block_size {
+          value
+        }
+        # Whether the block below is this generator's to withdraw. False for a
+        # block a human wrote into objects/, which must survive decommissioning.
+        vip_block_managed {
+          value
+        }
+        vip_block {
+          node {
+            id
+            prefix {
+              value
+            }
+          }
+        }
+        # The cluster is how the pool is found. Its `vip_pools` are the
+        # supernets LoadBalancer addresses may come from, and the leaves'
+        # inbound route policy permits exactly those -- a block from anywhere
+        # else is advertised by the cluster and refused by the fabric.
+        cluster {
+          node {
+            id
+            name {
+              value
+            }
+            vip_pools {
+              edges {
+                node {
+                  # Required wherever an inline fragment appears: the generated
+                  # model keys its union on it. See
+                  # tests/unit/test_graphql_query_contract.py.
+                  __typename
+                  id
+                  ... on IpamPrefix {
+                    prefix {
+                      value
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Candidate pools, resolved against the cluster's own supernets rather than
+  # by name or by a global role scan. An application belongs to a cluster, so
+  # "the pool that allocates from this cluster's VIP supernet" is the precise
+  # statement; a role scan would pick the wrong pool the moment a second
+  # cluster existed.
+  CoreIPPrefixPool {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        resources {
+          edges {
+            node {
+              __typename
+              id
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -334,6 +334,8 @@ class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     policy_allow_ports: JSONAttributeOptional
     policy_default_deny: Boolean
     service_selector: ListAttributeOptional
+    vip_block_managed: Boolean
+    vip_block_size: Integer
     workload_selector: ListAttributeOptional
     allowed_source_prefixes: RelationshipManager[IpamPrefix]
     cluster: RelationshipAttribute[ClusterKubernetes]

@@ -107,6 +107,10 @@ queries:
   - name: generate_network_segment
     file_path: "./generators/generate_network_segment.gql"
 
+  # Service-layer generator: allocates an exposed application's VIP block
+  - name: generate_fabric_app
+    file_path: "./generators/generate_fabric_app.gql"
+
 
 generator_definitions:
   - name: generate-avd-device-hostvar
@@ -221,6 +225,23 @@ generator_definitions:
     parameters:
       name: name__value
     class_name: NetworkSegmentGenerator
+    convert_query_response: false
+
+  # Sits underneath the service layer: gives an exposed application a
+  # LoadBalancer VIP block from its cluster's pool, instead of a human choosing
+  # one by hand with nothing preventing a collision.
+  #
+  # crossplane_fabric_app.py RAISES on an exposed application with no block, so
+  # this is the difference between "state a size" and "pick addresses and hope".
+  # A block that already exists is kept, whoever created it -- which is how the
+  # seeded nfd41-demo keeps 10.112.240.0/28 and its manifest stays byte-identical.
+  - name: generate-fabric-app
+    file_path: "./generators/generate_fabric_app.py"
+    query: generate_fabric_app
+    targets: service_fabric_apps
+    parameters:
+      name: name__value
+    class_name: FabricAppGenerator
     convert_query_response: false
 
   - name: generate-server-cabling

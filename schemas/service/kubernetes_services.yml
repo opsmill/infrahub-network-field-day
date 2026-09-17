@@ -194,6 +194,50 @@ nodes:
         optional: true
         description: "Endpoints the source rules apply to; empty means every pod"
         order_weight: 1660
+      # -- the VIP block, which a requester should not have to choose --------
+      #
+      # An exposed application needs one and `crossplane_fabric_app.py` RAISES
+      # without it -- "is exposed but has no vip_block; the XRD requires
+      # expose.vipBlock" -- so today every exposed application has to have a
+      # block picked by hand out of the cluster's VIP pool, with nothing
+      # preventing two of them from picking the same one.
+      #
+      # `generate-fabric-app` allocates instead. Stating a SIZE is the request;
+      # naming a block is not.
+      - name: vip_block_size
+        kind: Number
+        label: VIP Block Size
+        optional: false
+        default_value: 28
+        description: "Prefix length to allocate for the VIP block when none is named"
+        order_weight: 935
+        parameters:
+          # A /24 would swallow the cluster's whole VIP pool in one application,
+          # and anything longer than /30 has no usable addresses left once the
+          # network and broadcast are gone.
+          min_value: 24
+          max_value: 30
+      # WHO OWNS THE BLOCK, and the reason withdrawal is safe.
+      #
+      # `vip_block` is one field holding two very different things: a block a
+      # human wrote into `objects/` -- 10.112.240.0/28 for nfd41-demo -- and a
+      # block this generator took from the pool. Deleting the first on
+      # decommissioning would remove an object the seed data declares.
+      #
+      # So the generator sets this when, and only when, it allocated the block
+      # itself, and withdraws only what it set. Exactly the role
+      # `managed_by_service` plays on `SecurityPolicyRule` for the firewall:
+      # the guard that makes a generator safe next to hand-maintained data.
+      #
+      # Never set by hand. Setting it true on a hand-written block tells the
+      # generator that block is its to delete.
+      - name: vip_block_managed
+        kind: Boolean
+        label: VIP Block Allocated By Service
+        optional: false
+        default_value: false
+        description: "True when the generator allocated the VIP block, and may withdraw it"
+        order_weight: 936
     relationships:
       - name: cluster
         peer: ClusterKubernetes
