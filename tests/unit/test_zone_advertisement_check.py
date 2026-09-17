@@ -131,16 +131,44 @@ def test_a_zone_naming_a_list_nobody_declares_is_reported() -> None:
     parsed = _query(fabric_hostvars=_hostvars("PL-SOMETHING-ELSE"))
     findings = check_zone_policies(parsed)
     assert len(findings) == 1
-    assert "neither the fabric nor" in findings[0].message
+    assert "the fabric does not declare" in findings[0].message
 
 
-def test_a_list_declared_only_at_device_scope_counts() -> None:
-    """Either scope may declare it, so the fabric alone is not proof of absence."""
+def test_a_list_declared_only_at_device_scope_does_not_count() -> None:
+    """The regression test for a hole a live negative case found.
+
+    `generate-app-access` creates the named list at device scope whenever it
+    advertises -- that is how the merge composes a grant with the baseline. So
+    once a grant has run, the device declares the very name this rule questions
+    and the reference becomes self-fulfilling. Measured: a branch naming
+    PL-DOES-NOT-EXIST failed this check before any grant ran and passed it
+    afterwards.
+
+    A prefix list is declared where a human authored it, which is fabric scope.
+    """
     parsed = _query(
         zones=[_zone("branch", device_hostvars=_hostvars(ADVERTISED_LIST))],
         fabric_hostvars=_hostvars("PL-SOMETHING-ELSE"),
     )
-    assert check_zone_policies(parsed) == []
+    findings = check_zone_policies(parsed)
+    assert len(findings) == 1
+    assert "the fabric does not declare" in findings[0].message
+
+
+def test_the_generators_own_entry_does_not_excuse_a_bad_name() -> None:
+    """The exact live shape: the device declares both the real list and the
+    bogus one the generator created for it."""
+    parsed = _query(
+        zones=[
+            _zone(
+                "branch",
+                prefix_list="PL-DOES-NOT-EXIST",
+                device_hostvars=_hostvars(ADVERTISED_LIST, "PL-DOES-NOT-EXIST"),
+            )
+        ],
+        fabric_hostvars=_hostvars(ADVERTISED_LIST),
+    )
+    assert len(check_zone_policies(parsed)) == 1
 
 
 # ---------------------------------------------------------------------------

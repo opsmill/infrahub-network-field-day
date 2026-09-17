@@ -15,10 +15,11 @@ be *detectable* -- and this is the check that discharges it.
 
 FOUR RULES, and every one of them describes a failure that is silent today.
 
-* **A zone names a prefix list nothing defines.** The generator writes an entry
-  into a list no route map matches, the route never appears, and nothing
-  errors. The name is checked against fabric scope and the advertising device's
-  own scope, because either may declare it.
+* **A zone names a prefix list the fabric does not declare.** The generator
+  then has the leaf create it, a list no route map matches, and the route never
+  appears while nothing errors. Checked against FABRIC scope only: the
+  generator writes a device-scope entry whenever it advertises, so a
+  device-scope name is its own output and proves nothing.
 * **A zone carries one half of the policy and not the other.** The schema
   permits it; the generator raises on it at run time, which is late. Here it
   blocks the merge that introduced it.
@@ -132,14 +133,27 @@ def check_zone_policies(parsed: ZoneAdvertisementCheckQuery) -> list[Finding]:
             )
             continue
 
-        declared = fabric_declared | declared_prefix_lists(_value(device.avd_custom_hostvars))
-        if prefix_list not in declared:
+        # FABRIC SCOPE ONLY, and that is not an oversight.
+        #
+        # A device-scope entry proves nothing, because `generate-app-access`
+        # creates one whenever it advertises: if the named list is absent from
+        # the device it appends it, which is how the merge composes a grant with
+        # the baseline. So the moment a grant runs, the device declares the very
+        # name this rule is meant to question, and the reference becomes
+        # self-fulfilling. Measured: a branch naming PL-DOES-NOT-EXIST failed
+        # this check before any grant ran and passed it afterwards, because the
+        # generator had created PL-DOES-NOT-EXIST on the leaf.
+        #
+        # A prefix list is *declared* where a human authored it, which in this
+        # lab is the fabric's own hostvars. A device-scope list that the fabric
+        # does not also declare is, by construction, generator output.
+        if prefix_list not in fabric_declared:
             findings.append(
                 Finding(
                     message=(
-                        f"Zone {name!r} advertises through prefix list {prefix_list!r}, which neither the "
-                        f"fabric nor {_value(device.name)!r} declares. A grant would add a permit to a list "
-                        "no route map matches: the route never appears and nothing errors."
+                        f"Zone {name!r} advertises through prefix list {prefix_list!r}, which the fabric does "
+                        f"not declare. A grant would have {_value(device.name)!r} create a list no route map "
+                        "matches: the route never appears and nothing errors."
                     ),
                     object_id=zone.id,
                     object_type=KIND_ZONE,
