@@ -217,6 +217,86 @@ class InfrahubClient:
         result = self.execute_graphql(query, branch=branch)
         return [e["node"] for e in result.get("IpamVLAN", {}).get("edges", [])]
 
+    def get_security_zones(self, branch: str = "main") -> list[dict[str, Any]]:
+        """Fetch SecurityZone objects, with the VRF each governs."""
+        query = """
+        query { SecurityZone { edges { node {
+            id name { value }
+            vrf { node { id name { value } } }
+        } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        return [e["node"] for e in result.get("SecurityZone", {}).get("edges", [])]
+
+    def get_security_addresses(self, branch: str = "main") -> list[dict[str, Any]]:
+        """Fetch address-book entries a grant can name as its source.
+
+        An existing entry, never a synthesised CIDR, so a generated rule reads
+        the same way as the hand-written ones beside it.
+        """
+        query = """
+        query { SecurityGenericAddress { edges { node {
+            __typename id display_label
+        } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        return [e["node"] for e in result.get("SecurityGenericAddress", {}).get("edges", [])]
+
+    def get_fabric_apps(self, branch: str = "main") -> list[dict[str, Any]]:
+        """Fetch ServiceFabricApp objects, with their exposure and VIP block."""
+        query = """
+        query { ServiceFabricApp { edges { node {
+            id name { value } exposed { value }
+            vip_block { node { id prefix { value } } }
+            vrf { node { id name { value } } }
+        } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        return [e["node"] for e in result.get("ServiceFabricApp", {}).get("edges", [])]
+
+    def get_ip_addresses(self, branch: str = "main", prefix: str | None = None) -> list[dict[str, Any]]:
+        """Fetch IpamIPAddress objects, optionally only those inside a prefix.
+
+        The filter matters: a grant whose VIP sits outside its application's
+        block is permitted by the firewall and never routed, which is what
+        `zone-advertisement` reports and what this form should make hard to do.
+        """
+        query = """
+        query { IpamIPAddress { edges { node { id address { value } } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        rows = [e["node"] for e in result.get("IpamIPAddress", {}).get("edges", [])]
+        if prefix is None:
+            return rows
+        import ipaddress
+
+        try:
+            network = ipaddress.ip_network(prefix, strict=False)
+        except ValueError:
+            return rows
+        inside = []
+        for row in rows:
+            value = (row.get("address") or {}).get("value")
+            if not value:
+                continue
+            try:
+                if ipaddress.ip_address(value.split("/")[0]) in network:
+                    inside.append(row)
+            except ValueError:
+                continue
+        return inside
+
+    def get_clusters(self, branch: str = "main") -> list[dict[str, Any]]:
+        """Fetch ClusterKubernetes objects."""
+        query = """
+        query { ClusterKubernetes { edges { node {
+            id name { value }
+            vrf { node { id name { value } } }
+        } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        return [e["node"] for e in result.get("ClusterKubernetes", {}).get("edges", [])]
+
     def get_racks(self, branch: str = "main") -> list[dict[str, Any]]:
         """Fetch LocationRack objects, with the leaves in each.
 
@@ -280,7 +360,16 @@ class InfrahubClient:
         variables: dict[str, Any] = {"group": group_id}
 
         for name, value in fields.items():
-            gql_type = "BigInt" if isinstance(value, int) and not isinstance(value, bool) else "String"
+            if isinstance(value, list):
+                # A List attribute (ServiceAppAccess.ports) takes GenericScalar,
+                # not a typed list: the values inside it are arbitrary JSON.
+                gql_type = "GenericScalar"
+            elif isinstance(value, bool):
+                gql_type = "Boolean"
+            elif isinstance(value, int):
+                gql_type = "BigInt"
+            else:
+                gql_type = "String"
             declarations.append(f"${name}: {gql_type}")
             assignments.append(f"{name}: {{ value: ${name} }}")
             variables[name] = value

@@ -68,8 +68,15 @@ Key docs to read before larger changes:
 - AVD transforms render artifacts from the stored files: EOS config, device docs,
   fabric docs, cabling plan, ANTA catalog, and computed interface descriptions.
 - PyAVD is version-sensitive; the project targets `pyavd>=6.4.0,<6.5.0`.
-- The service portal is a Streamlit app for day-2 workflows; every workflow should
-  operate on an Infrahub branch and produce a proposed change for review.
+- The service portal is a Streamlit app for day-2 workflows; every workflow operates on an
+  Infrahub branch and produces a proposed change for review. **Every page now creates exactly
+  one service object and lets a generator build the technical ones.** They used to write
+  `IpamVLAN`, `IpamVRF`, `EvpnSvi`, `EvpnTenant` and `ComputePhysicalServer` directly, which is
+  the inversion the service layer exists to fix — and which also meant forms asked the requester
+  for VLAN ids, VNI bases and gateway CIDRs, the three things they are least able to answer.
+  `create_service` in `service_catalog/utils/api.py` is the one helper they share; it resolves
+  the target group explicitly, because a service outside its generator's group is created and
+  then silently never built.
 
 ## Generator and transform inventory
 
