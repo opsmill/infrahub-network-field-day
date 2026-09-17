@@ -62,6 +62,7 @@ query FabricCablingPlanQuery($name: String!) {
                                     __typename
                                     id
                                     ... on DcimEndpoint {
+                                      __typename
                                       connector {
                                         node {
                                           __typename

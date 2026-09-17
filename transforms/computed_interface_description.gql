@@ -5,6 +5,7 @@ query ComputedInterfaceDescriptionQuery($id: ID!) {
         __typename
         id
         ... on DcimEndpoint {
+          __typename
           connector {
             node {
               __typename
@@ -15,6 +16,7 @@ query ComputedInterfaceDescriptionQuery($id: ID!) {
                     __typename
                     id
                     ... on DcimInterface {
+                      __typename
                       name {
                         value
                       }

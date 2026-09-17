@@ -463,6 +463,7 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                                                       __typename
                                                       id
                                                       ... on DcimInterface {
+                                                        __typename
                                                         name {
                                                           value
                                                         }
@@ -766,6 +767,7 @@ query GenerateAvdDeviceInputsQuery($name: String!) {
                           __typename
                           id
                           ... on DcimInterface {
+                            __typename
                             name {
                               value
                             }

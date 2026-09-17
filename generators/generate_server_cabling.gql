@@ -37,6 +37,7 @@ query ServerCablingQuery($name: String!) {
                 }
                 connector {
                   node {
+                    __typename
                     id
                   }
                 }

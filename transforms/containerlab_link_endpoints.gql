@@ -13,11 +13,13 @@ query ContainerlabLinkEndpointsQuery($ids: [ID!]) {
               # no name for a ComputePhysicalServer endpoint, which drops every
               # server-facing link.
               ... on DcimInterface {
+                __typename
                 name {
                   value
                 }
                 device {
                   node {
+                    __typename
                     name {
                       value
                     }
@@ -30,6 +32,7 @@ query ContainerlabLinkEndpointsQuery($ids: [ID!]) {
                 }
                 device {
                   node {
+                    __typename
                     name {
                       value
                     }

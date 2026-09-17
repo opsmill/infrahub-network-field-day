@@ -28,6 +28,10 @@ query GenerateServerPlacementQuery($name: String!) {
         }
         template {
           node {
+            # CoreObjectTemplate is a GENERIC, so the generated model is a
+            # discriminated union keyed on __typename -- with no inline fragment
+            # anywhere. Omitting it fails at run time for every request.
+            __typename
             id
             template_name {
               value
