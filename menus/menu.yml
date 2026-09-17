@@ -206,6 +206,12 @@ spec:
       children:
         data:
           - namespace: Routing
+            name: Asn
+            label: Autonomous Systems
+            kind: RoutingAsn
+            icon: "mdi:numeric"
+
+          - namespace: Routing
             name: BGPPeerGroup
             label: BGP Peer Groups
             kind: RoutingBGPPeerGroup
@@ -300,6 +306,12 @@ spec:
       icon: "mdi:map-marker"
       children:
         data:
+          - namespace: Location
+            name: Site
+            label: Sites
+            kind: LocationSite
+            icon: "mdi:map-marker-radius"
+
           - namespace: Location
             name: Hall
             label: Halls

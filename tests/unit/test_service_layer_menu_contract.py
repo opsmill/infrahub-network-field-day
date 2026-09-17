@@ -102,12 +102,18 @@ def test_every_menu_kind_exists_in_the_schema() -> None:
     assert not unknown, f"menu references kinds that do not exist: {unknown}"
 
 
-def test_every_menu_visible_kind_in_the_new_domains_is_reachable() -> None:
+def test_every_menu_visible_kind_is_reachable() -> None:
     """A kind that is menu-visible but in no menu section is invisible in the
-    UI -- the failure this cycle exists to fix, so it must not come back."""
+    UI -- the failure this cycle exists to fix, so it must not come back.
+
+    Originally scoped to the four namespaces that cycle introduced, which left
+    the same fault free to appear anywhere else -- and it had: `LocationSite`
+    and `RoutingAsn` were menu-visible, carried six and nine objects, and
+    appeared in no section, so neither could be browsed. Widened to every
+    namespace once those two were listed.
+    """
     in_menu = {item["kind"] for item in _all_items() if item.get("kind")}
-    domains = ("Service", "Security", "Cluster", "Wan")
-    unreachable = sorted(kind for kind in _menu_visible_kinds() if kind.startswith(domains) and kind not in in_menu)
+    unreachable = sorted(kind for kind in _menu_visible_kinds() if kind not in in_menu)
 
     assert not unreachable, f"menu-visible kinds unreachable from the menu: {unreachable}"
 
