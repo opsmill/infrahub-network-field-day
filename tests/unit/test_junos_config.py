@@ -632,13 +632,30 @@ def _rendered_with_custom_service() -> list[str]:
     return asyncio.run(transform.transform(data)).splitlines()
 
 
-def test_a_baseline_firewall_declares_no_applications_stanza() -> None:
-    """The device's own file has none, and rendering an empty one would differ.
+def test_the_applications_stanza_declares_exactly_the_non_builtins() -> None:
+    """It exists only when something needs it, and then says only what is needed.
 
-    Every service the hand-written rules reference is a Junos built-in, so the
-    correct output is no stanza at all rather than `applications { }`.
+    This asserted the stanza was ABSENT until the tooling zone arrived. That was
+    right while every service the rules referenced was a Junos built-in --
+    rendering `applications { }` would have differed from the device for no
+    reason. The tooling portal and its identity provider are on NodePorts, which
+    are not built-ins, so the stanza is now correct and its absence would be the
+    bug: a policy naming an undeclared application makes the device refuse the
+    whole commit with `statements constraint check failed`.
+
+    What is still asserted is the discipline -- every name inside is one the
+    model defines, and nothing built-in is redeclared.
     """
-    assert not any(line.startswith("applications") for line in _rendered())
+    rendered = _rendered()
+    declared = [
+        line.strip().removeprefix("application ").removesuffix(" {")
+        for line in rendered
+        if line.startswith("    application ") and line.rstrip().endswith("{")
+    ]
+    assert declared, "the tooling ports are not Junos built-ins and must be declared"
+    assert not [name for name in declared if name.startswith("junos-")], (
+        "a Junos built-in must never be redeclared; the device already has it"
+    )
 
 
 def test_a_generated_service_is_declared() -> None:

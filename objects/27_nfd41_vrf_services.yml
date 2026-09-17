@@ -145,6 +145,20 @@ spec:
       next_hop: 10.250.170.2
       description: "k8s node subnet, via the firewall's branch zone"
       devices: ["leaf-nfd41-pod1-3-1"]
+    # The tooling network, which is where the request portal lives. Same shape
+    # as every other entry here: the branch gets one more destination it may
+    # ask about, still via the firewall, and the firewall still decides.
+    #
+    # Note the next hop is the BRANCH-zone handoff even though the tooling
+    # network hangs off ge-0/0/6. fw1 is one router with one table -- it
+    # forwards between its own zones, and the policy is what governs whether it
+    # will. Pointing this at the tooling handoff instead would be asking the
+    # border leaf to reach a subnet it has no interface on.
+    - vrf: BRANCH
+      prefix: 10.90.0.0/24
+      next_hop: 10.250.170.2
+      description: "tooling network and the request portal, via the firewall's branch zone"
+      devices: ["leaf-nfd41-pod1-3-1"]
 ---
 apiVersion: infrahub.app/v1
 kind: Object

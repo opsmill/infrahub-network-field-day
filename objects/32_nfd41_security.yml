@@ -336,6 +336,18 @@ spec:
       description: "ICMP echo"
       port: 0
       ip_protocol: icmp
+    # The tooling cluster's two services. NOT `junos-` prefixed, because they are
+    # not Junos built-ins -- which is precisely why the artifact renders an
+    # `applications` stanza declaring them. A rule naming an undeclared
+    # application makes the device refuse the entire commit.
+    - name: tooling-portal
+      description: "The Backstage request portal, on its NodePort"
+      port: 32001
+      ip_protocol: tcp
+    - name: tooling-oidc
+      description: "Dex, the tooling cluster's identity provider"
+      port: 32556
+      ip_protocol: tcp
     # Junos' built-in wildcard. Fourteen rules match `application any`, and the
     # address book carries an `any` SecurityPrefix for the same reason: a rule's
     # relationship needs an object to point at, even though Junos declares
@@ -599,11 +611,20 @@ spec:
       destination_services:
         kind: SecurityService
         data:
-          - name: junos-http
-            port: 80
+          # THE PORTS THE PORTAL AND THE IDENTITY PROVIDER ACTUALLY SERVE, which
+          # are NodePorts rather than 80 and 443. Permitting only the well-known
+          # pair looked right and dropped every packet: the firewall was correct
+          # and the policy was describing a service that does not exist there.
+          #
+          # Naming them explicitly is also the honest thing -- the branch may
+          # reach the portal and the IdP, and nothing else in the tooling
+          # network, which is what a NodePort range full of other services would
+          # otherwise expose.
+          - name: tooling-portal
+            port: 32001
             ip_protocol: tcp
-          - name: junos-https
-            port: 443
+          - name: tooling-oidc
+            port: 32556
             ip_protocol: tcp
     - name: branch-to-k8s-icmp
       index: 30

@@ -1,0 +1,123 @@
+---
+# Dex, for the tooling cluster.
+#
+# THE ISSUER IS THE NODE'S TOOLING ADDRESS, and that is the point of running it
+# here rather than on the host. `10.90.0.11` is reachable from all four places
+# that matter, which no other address in this lab is:
+#
+#   * the host, over the shared bridge
+#   * containers on the host -- Infrahub fetches discovery from here
+#   * pods in this cluster
+#   * the branch desktop, through WAN -> border-leaf1 -> fw1 -> zone tooling
+#
+# An OIDC issuer has to be one URL that every browser and every relying party
+# can reach. Before the tooling network existed there was no such address: the
+# host cannot reach the workload cluster's VIPs, and the branch cannot reach the
+# host's management range.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex-config
+  namespace: nfd41-tooling
+data:
+  config.yaml: |
+    issuer: http://10.90.0.11:32556/dex
+
+    storage:
+      type: sqlite3
+      config:
+        file: /var/dex/dex.db
+
+    web:
+      http: 0.0.0.0:5556
+
+    oauth2:
+      skipApprovalScreen: true
+
+    staticClients:
+      - id: backstage
+        name: NFD41 Service Portal
+        secret: backstage-dex-secret
+        redirectURIs:
+          - http://10.90.0.11:32001/api/auth/oidc/handler/frame
+      - id: infrahub
+        name: Infrahub
+        secret: infrahub-dex-secret
+        redirectURIs:
+          - http://localhost:8000/auth/oidc/provider1/callback
+          - http://172.20.41.1:8000/auth/oidc/provider1/callback
+          - http://agentic-agittings-agittings-dev-vm-02:8000/auth/oidc/provider1/callback
+          - http://10.90.0.1:8000/auth/oidc/provider1/callback
+
+    enablePasswordDB: true
+
+    # The same two people as auth/dex-config.yaml, and the hashes are the same
+    # bcrypt of `password`. Fake, committed, lab-only: a lab that cannot be
+    # rebuilt from its own repository is not reproducible.
+    staticPasswords:
+      - email: "alice@nfd41.lab"
+        hash: "$2b$10$5omzBcjPExC2jYcmjmNA/OSMLLAGYWGhQMczRAjQPOmRdQrNKTHg2"
+        username: "alice"
+        userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+      - email: "bob@nfd41.lab"
+        hash: "$2b$10$5omzBcjPExC2jYcmjmNA/OSMLLAGYWGhQMczRAjQPOmRdQrNKTHg2"
+        username: "bob"
+        userID: "1cb4a5b1-1e3f-4e4c-9b0f-1a2b3c4d5e6f"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex
+  namespace: nfd41-tooling
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dex }
+  template:
+    metadata:
+      labels: { app: dex }
+    spec:
+      containers:
+        - name: dex
+          image: ghcr.io/dexidp/dex:v2.44.0
+          args: ["dex", "serve", "/etc/dex/config.yaml"]
+          ports:
+            - containerPort: 5556
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+            - name: data
+              mountPath: /var/dex
+          readinessProbe:
+            httpGet:
+              path: /dex/.well-known/openid-configuration
+              port: 5556
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap: { name: dex-config }
+        - name: data
+          emptyDir: {}
+---
+# NodePort rather than LoadBalancer, deliberately.
+#
+# k3s's servicelb would bind a LoadBalancer to every node address, which works,
+# but the port would then be 5556 on some addresses and not others depending on
+# what else is bound. A fixed NodePort is one number in one place, and it is
+# what the issuer URL above names -- an issuer that disagrees with the port it
+# is served on fails at token validation rather than at connect, which is a
+# much worse error to debug.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  namespace: nfd41-tooling
+spec:
+  type: NodePort
+  selector: { app: dex }
+  ports:
+    - name: http
+      port: 5556
+      targetPort: 5556
+      nodePort: 32556

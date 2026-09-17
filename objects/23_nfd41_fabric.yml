@@ -209,6 +209,10 @@ spec:
             sequence_numbers:
               - {sequence: 10, action: permit 10.112.240.0/24 le 32}
               - {sequence: 20, action: permit 10.110.0.0/24}
+              # The tooling network, where the request portal lives. A route the
+              # leaf knows but does not advertise is invisible to the branch,
+              # and the symptom is a portal that resolves and never answers.
+              - {sequence: 30, action: permit 10.90.0.0/24}
         custom_structured_configuration_route_maps:
           - name: RM-CILIUM-IN
             sequence_numbers:

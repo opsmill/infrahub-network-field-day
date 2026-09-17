@@ -1053,6 +1053,48 @@
             }
           }
         }
+      },
+      {
+        "node": {
+          "__typename": "SecurityService",
+          "name": {
+            "value": "tooling-portal"
+          },
+          "description": {
+            "value": null
+          },
+          "port": {
+            "value": 32001
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "tcp"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "SecurityService",
+          "name": {
+            "value": "tooling-oidc"
+          },
+          "description": {
+            "value": null
+          },
+          "port": {
+            "value": 32556
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "tcp"
+              }
+            }
+          }
+        }
       }
     ]
   },
@@ -1748,13 +1790,13 @@
                       {
                         "node": {
                           "__typename": "SecurityService",
-                          "display_label": "junos-http"
+                          "display_label": "tooling-portal"
                         }
                       },
                       {
                         "node": {
                           "__typename": "SecurityService",
-                          "display_label": "junos-https"
+                          "display_label": "tooling-oidc"
                         }
                       }
                     ]
