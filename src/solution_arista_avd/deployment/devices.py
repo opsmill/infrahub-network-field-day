@@ -294,6 +294,37 @@ EOS_LIFELINE = (
 )
 
 
+# The FRR equivalent, and the gap it closes is the more dangerous of the two.
+#
+# `frr-reload.py --reload` computes the difference between the running
+# configuration and the file it is given, so an EMPTY file is not a no-op: it is
+# an instruction to delete everything the router is running. Artifact generation
+# is asynchronous and an artifact that has not rendered yet exists, reports
+# `Ready`, and is empty -- so `invoke provision --kind frr` run at the wrong
+# moment would erase all six routers and report success.
+#
+# EOS was already protected: its lifeline names the management interface, so an
+# empty artifact fails the check. Junos is protected by the shape of `load
+# replace`, which only touches hierarchies the file actually tags. FRR had
+# nothing.
+#
+# `hostname` rather than `router bgp`, deliberately. Every one of the five FRR
+# templates emits `hostname {{ node }}`, while a future FRR device that runs no
+# BGP is entirely plausible -- and a guard that refuses a legitimate
+# configuration is a worse failure than the one it prevents.
+FRR_LIFELINE = ("hostname",)
+
+
+def _assert_frr_lifeline(target: Target, config: str) -> None:
+    missing = [needle for needle in FRR_LIFELINE if needle not in config]
+    if missing:
+        raise ProvisionError(
+            f"{target.device}: refusing to reload -- the artifact is missing "
+            f"{', '.join(repr(m) for m in missing)}, and frr-reload would read that as "
+            "an instruction to delete the running configuration"
+        )
+
+
 def _assert_eos_lifeline(target: Target, config: str) -> None:
     missing = [needle for needle in EOS_LIFELINE if needle not in config]
     if missing:
@@ -327,6 +358,8 @@ def push_frr(target: Target, config: str) -> str:
     and failed. Skipping it is right: /etc/frr belongs to the lab repository, and
     the durable copy of this configuration is the artifact in Infrahub.
     """
+    _assert_frr_lifeline(target, config)
+
     if not _container_running(target.container):
         raise ProvisionError(f"{target.device}: container {target.container} is not running")
 
@@ -689,6 +722,7 @@ def provision(targets: list[Target], branch: str, dry_run: bool) -> int:
 
 eos_config_lines = _eos_config_lines
 assert_eos_lifeline = _assert_eos_lifeline
+assert_frr_lifeline = _assert_frr_lifeline
 assert_junos_scope = _assert_junos_scope
 junos_replace_tagged = _junos_replace_tagged
 container_running = _container_running

@@ -15,6 +15,9 @@ quiet:
   the commands were sent**.
 * ``_assert_eos_lifeline`` -- a replace that drops the management path commits
   successfully and takes the device off the network with it.
+* ``_assert_frr_lifeline`` -- ``frr-reload.py`` applies the difference between the
+  running configuration and the file, so an empty artifact is an instruction to
+  **delete everything the router is running**, not a no-op.
 * ``_assert_junos_scope`` -- a ``system`` stanza in the artifact would make the
   push overwrite the firewall's credentials with whatever the model holds.
 * ``_junos_replace_tagged`` -- without the ``replace:`` tags the load stops being
@@ -31,6 +34,7 @@ from solution_arista_avd.deployment.devices import (
     ProvisionError,
     Target,
     _assert_eos_lifeline,  # noqa: PLC2701 - these guards are the point of this file
+    _assert_frr_lifeline,  # noqa: PLC2701
     _assert_junos_scope,  # noqa: PLC2701
     _eos_config_lines,  # noqa: PLC2701
     _junos_replace_tagged,  # noqa: PLC2701
@@ -95,6 +99,45 @@ class TestEosLifeline:
         message = str(error.value)
         assert "spine-9" in message
         assert "management access" in message
+
+
+class TestFrrLifeline:
+    """The guard EOS had and FRR did not.
+
+    `frr-reload.py --reload` applies the difference between the running
+    configuration and the file, so an empty file means "delete everything the
+    router is running" rather than "change nothing". Artifact generation is
+    asynchronous and an artifact that has not rendered yet exists, reports
+    `Ready`, and is empty -- so a provision run at the wrong moment would erase
+    all six WAN routers and report success.
+    """
+
+    def test_a_real_configuration_passes(self) -> None:
+        _assert_frr_lifeline(_target("branch-rtr"), "frr defaults traditional\nhostname branch-rtr\n")
+
+    def test_an_empty_artifact_is_refused(self) -> None:
+        """The case that motivated it."""
+        with pytest.raises(ProvisionError) as error:
+            _assert_frr_lifeline(_target("branch-rtr"), "")
+        assert "delete the running configuration" in str(error.value)
+
+    def test_a_whitespace_only_artifact_is_refused(self) -> None:
+        with pytest.raises(ProvisionError):
+            _assert_frr_lifeline(_target("branch-rtr"), "\n   \n")
+
+    def test_the_refusal_names_the_device(self) -> None:
+        with pytest.raises(ProvisionError) as error:
+            _assert_frr_lifeline(_target("isp-pe1"), "! only a comment\n")
+        assert "isp-pe1" in str(error.value)
+
+    def test_a_router_running_no_bgp_is_still_allowed(self) -> None:
+        """`hostname` rather than `router bgp` is the marker on purpose.
+
+        Every FRR template emits a hostname; a future FRR device that runs no BGP
+        is entirely plausible, and a guard that refuses a legitimate
+        configuration is a worse failure than the one it prevents.
+        """
+        _assert_frr_lifeline(_target("mgmt-rtr"), "hostname mgmt-rtr\nip route 0.0.0.0/0 10.0.0.1\n")
 
 
 class TestJunosScope:

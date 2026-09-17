@@ -363,6 +363,15 @@ Three things worth knowing before debugging it:
   output is `Lines To Add` / `Lines To Delete` sections rather than `+`/`-` prefixes. A parser
   written against diff prefixes reports "no differences" for a device that has genuinely
   changed.
+- **An empty FRR artifact is an instruction to erase the router**, because the reload applies
+  the difference between the running configuration and the file. Artifact generation is
+  asynchronous and an unrendered artifact exists, reports `Ready`, and is empty — so a
+  provision run at the wrong moment would wipe all six WAN routers and report success. EOS was
+  already protected by `_assert_eos_lifeline` and Junos by the shape of `load replace`, which
+  only touches hierarchies the file tags; FRR had nothing until `_assert_frr_lifeline`. It keys
+  on `hostname`, which every FRR template emits, rather than on `router bgp` — a future FRR
+  device running no BGP is plausible, and a guard that refuses a legitimate configuration is a
+  worse failure than the one it prevents.
 - **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load replace` does
   nothing, and `show | compare` comes back empty — which reads exactly like "in sync."
 
