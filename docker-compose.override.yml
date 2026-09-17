@@ -47,8 +47,13 @@ services:
       INFRAHUB_SECURITY_OIDC_PROVIDERS: ${INFRAHUB_SECURITY_OIDC_PROVIDERS:-["provider1"]}
       INFRAHUB_OIDC_PROVIDER1_CLIENT_ID: ${INFRAHUB_OIDC_PROVIDER1_CLIENT_ID:-infrahub}
       INFRAHUB_OIDC_PROVIDER1_CLIENT_SECRET: ${INFRAHUB_OIDC_PROVIDER1_CLIENT_SECRET:-infrahub-dex-secret}
+      # THE TOOLING CLUSTER'S DEX, which is the one address every party can
+      # reach: this container, the host, pods in that cluster, and the branch
+      # desktop through the firewall. That is the whole reason the tooling
+      # network exists -- before it there was no single issuer, and Infrahub and
+      # the portal had to trust two different ones.
       INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL: >-
-        ${INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL:-http://agentic-agittings-agittings-dev-vm-02.tailc018d.ts.net:5556/dex/.well-known/openid-configuration}
+        ${INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL:-http://10.90.0.11:32556/dex/.well-known/openid-configuration}
       INFRAHUB_OIDC_PROVIDER1_DISPLAY_LABEL: ${INFRAHUB_OIDC_PROVIDER1_DISPLAY_LABEL:-Sign in with Dex}
       INFRAHUB_OIDC_PROVIDER1_ICON: ${INFRAHUB_OIDC_PROVIDER1_ICON:-mdi:account-key}
       # Every SSO user lands here. Without a default group an SSO account is
@@ -56,9 +61,11 @@ services:
       # nothing -- which reads as a broken integration rather than a missing
       # setting.
       INFRAHUB_SECURITY_SSO_USER_DEFAULT_GROUP: ${INFRAHUB_SECURITY_SSO_USER_DEFAULT_GROUP:-Infrahub Users}
-    depends_on:
-      dex:
-        condition: service_healthy
+    # NO `depends_on` for the identity provider, deliberately. Dex lives in the
+    # tooling cluster now, which comes up long after `invoke start` -- and
+    # Infrahub was measured booting cleanly with its discovery URL unreachable,
+    # because it fetches discovery on first use rather than at startup. A hard
+    # dependency here would invert the bootstrap order for no benefit.
   database:
     ports:
       - 7474:7474
@@ -75,97 +82,6 @@ services:
       - ./:/upstream
       - ./src:/opt/local/src
 
-  # ==========================================================================
-  # The lab's on-prem OpenID Connect provider.
-  #
-  # Infrahub is the relying party: it drives the flow and issues its own token,
-  # so nothing downstream ever sees a Dex token. See auth/dex-config.yaml for
-  # why the issuer is 172.20.41.1 rather than localhost -- it is the one address
-  # that resolves to the same Dex from the browser AND from inside the Infrahub
-  # container, and getting that wrong is how OIDC-in-Docker usually fails.
-  # ==========================================================================
-  dex:
-    image: ghcr.io/dexidp/dex:v2.44.0
-    restart: unless-stopped
-    command: dex serve /etc/dex/config.yaml
-    volumes:
-      - "./auth/dex-config.yaml:/etc/dex/config.yaml:ro"
-      - "dex_data:/var/dex"
-    ports:
-      - "${DEX_PORT:-5556}:5556"
-    healthcheck:
-      test:
-        - CMD
-        - wget
-        - -qO-
-        - http://localhost:5556/dex/.well-known/openid-configuration
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
-
-  # ==========================================================================
-  # The Backstage service portal.
-  #
-  # A SEPARATE relying party from Infrahub, not a client of it. Both trust the
-  # lab's Dex, so one identity signs in to each, and each mints its own session.
-  # Backstage still talks to Infrahub with a service token: Infrahub's own flow
-  # ends in Infrahub's UI, which keeps the token, so there is no per-user
-  # Infrahub credential to forward. See auth/README.md.
-  #
-  # The bundle is built on the host, so run `invoke backstage-build` before this
-  # image is built or rebuilt.
-  # ==========================================================================
-  backstage:
-    image: nfd41/backstage:local
-    build:
-      context: ./backstage
-      dockerfile: packages/backend/Dockerfile
-    command:
-      - node
-      - packages/backend
-      - --config
-      - app-config.yaml
-      - --config
-      - app-config.docker.yaml
-    restart: unless-stopped
-    depends_on:
-      infrahub-server:
-        condition: service_healthy
-      dex:
-        condition: service_healthy
-    environment:
-      INFRAHUB_ADDRESS: http://infrahub-server:8000
-      INFRAHUB_API_TOKEN: ${INFRAHUB_INITIAL_ADMIN_TOKEN:-06438eb2-8019-4776-878c-0941b1f1d1ec}
-      # The origin the BROWSER is on. It must match a redirect URI registered on
-      # the `backstage` client in auth/dex-config.yaml, or sign-in fails at Dex
-      # with an error naming the exact string it expected.
-      BACKSTAGE_BASE_URL: >-
-        ${BACKSTAGE_BASE_URL:-http://agentic-agittings-agittings-dev-vm-02:3001}
-      BACKSTAGE_OIDC_METADATA_URL: >-
-        ${BACKSTAGE_OIDC_METADATA_URL:-http://agentic-agittings-agittings-dev-vm-02.tailc018d.ts.net:5556/dex/.well-known/openid-configuration}
-      BACKSTAGE_OIDC_CLIENT_ID: ${BACKSTAGE_OIDC_CLIENT_ID:-backstage}
-      BACKSTAGE_OIDC_CLIENT_SECRET: ${BACKSTAGE_OIDC_CLIENT_SECRET:-backstage-dex-secret}
-      # Signs the express session the OIDC strategy keeps its state and nonce
-      # in. A lab default so the stack comes up unattended; override it anywhere
-      # that matters.
-      BACKSTAGE_SESSION_SECRET: ${BACKSTAGE_SESSION_SECRET:-nfd41-lab-backstage-session-secret}
-    ports:
-      # The backend serves the frontend bundle, so one port does both.
-      - "${BACKSTAGE_PORT:-3001}:7007"
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - >-
-          fetch('http://localhost:7007/.backstage/health/v1/readiness').then(r
-          => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 15s
-
   service-catalog:
     build:
       context: .
@@ -173,8 +89,6 @@ services:
     restart: unless-stopped
     depends_on:
       infrahub-server:
-        condition: service_healthy
-      dex:
         condition: service_healthy
     environment:
       INFRAHUB_ADDRESS: http://infrahub-server:8000
@@ -273,9 +187,3 @@ services:
       timeout: 5s
       retries: 20
       start_period: 15s
-
-volumes:
-  # Dex's sqlite store. A named volume rather than `storage: memory`, so
-  # restarting the stack does not invalidate every session and force each demo
-  # to log in again part-way through.
-  dex_data:

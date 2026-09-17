@@ -3,6 +3,17 @@
 Dex is the lab's identity provider and **Infrahub is the relying party**. Infrahub drives the
 whole flow itself and mints its own token; nothing downstream ever sees a Dex token.
 
+**There is ONE Dex, and it runs in the tooling cluster** (`tooling/10-dex.yaml`), not beside
+Infrahub on the host. `10.90.0.11:32556` is the only address in this lab that all four parties
+can reach: the host, containers on the host, pods in that cluster, and the branch desktop through
+the firewall. An OIDC issuer has to be a single URL that every browser and every relying party
+can resolve, and before the tooling network existed no such address was available — Infrahub and
+the portal would have had to trust two different providers.
+
+Infrahub has **no `depends_on`** for it. Dex comes up long after `invoke start`, and Infrahub was
+measured booting cleanly with its discovery URL unreachable: discovery is fetched on first use,
+not at startup. A hard dependency would invert the bootstrap order for nothing.
+
 ```text
 browser ──▶ /api/oidc/provider1/authorize?final_url=…
               └─▶ Dex login ──▶ /auth/oidc/provider1/callback?code&state
