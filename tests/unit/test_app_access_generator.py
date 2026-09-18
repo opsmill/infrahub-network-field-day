@@ -575,6 +575,11 @@ class _RecordingNode:
         self.saves.append(kwargs)
 
 
+class _RecordingResponse:
+    def raise_for_status(self) -> None:
+        return None
+
+
 class _RecordingClient:
     """Enough client to prove what was and was not written."""
 
@@ -582,18 +587,34 @@ class _RecordingClient:
         self.created: list[tuple[str, dict[str, Any]]] = []
         self.fetched: list[str] = []
         self.deleted: list[tuple[str, str]] = []
+        self.posted: list[tuple[str, dict[str, Any]]] = []
         self.nodes: dict[str, _RecordingNode] = {}
 
     async def create(self, kind: str, data: dict[str, Any]) -> Any:
         self.created.append((kind, data))
         return _RecordingNode(f"new-{kind}-{len(self.created)}")
 
-    async def get(self, kind: str, id: str) -> Any:  # noqa: A002
-        self.fetched.append(f"{kind}:{id}")
-        return self.nodes.setdefault(id, _RecordingNode(id))
+    address = "http://infrahub:8000"
+
+    async def get(self, kind: str, id: str | None = None, **filters: Any) -> Any:  # noqa: A002
+        self.fetched.append(f"{kind}:{id or filters}")
+        # Distinct ids per kind, so a payload naming the TARGET rather than the
+        # ARTIFACT is a test failure rather than a coincidence -- passing the
+        # firewall's id is accepted by Infrahub and regenerates nothing.
+        return self.nodes.setdefault(id or kind, _RecordingNode(id or f"{kind}-id"))
 
     async def delete(self, kind: str, id: str) -> None:  # noqa: A002
         self.deleted.append((kind, id))
+
+    async def _post(self, url: str, payload: dict[str, Any]) -> Any:
+        """The artifact re-render. Recorded because the URL is the assertion.
+
+        The branch lives in the query string, and the SDK's own helper omits it
+        -- which made the re-render a no-op on exactly the branch the generator
+        was running on.
+        """
+        self.posted.append((url, payload))
+        return _RecordingResponse()
 
 
 def _generator(client: _RecordingClient) -> AppAccessGenerator:
@@ -606,7 +627,36 @@ def _generator(client: _RecordingClient) -> AppAccessGenerator:
     import logging
 
     generator.logger = logging.getLogger("test")
+    generator.branch = "a-review-branch"
     return generator
+
+
+@pytest.mark.asyncio
+async def test_the_rerender_names_the_branch_it_ran_on() -> None:
+    """The branch is in the query string, and leaving it out is invisible.
+
+    `Node.artifact_generate` posts to `/api/artifact/generate/{id}` with no
+    branch, and that endpoint regenerates against `main` when none is given. So
+    on a branch the objects were written, the generator logged that it had asked
+    for a re-render, and the branch's artifact kept its old checksum -- a
+    proposed change showing the rule as data and no configuration diff.
+
+    Measured against the running lab before this was fixed: identical artifact
+    checksums on `main` and the branch after the generator ran, and the rule
+    appearing the moment the same endpoint was called with `?branch=`.
+    """
+    client = _RecordingClient()
+    generator = _generator(client)
+
+    await generator.generate(_query(approved=True).model_dump(by_alias=True))
+
+    assert client.posted, "the artifact was never asked to re-render"
+    url, payload = client.posted[-1]
+    assert "/api/artifact/generate/" in url
+    assert url.endswith("?branch=a-review-branch")
+    # The ARTIFACT's id, not the firewall's. Infrahub accepts a target id here,
+    # returns 200 and regenerates nothing.
+    assert payload["nodes"] == ["CoreArtifact-id"]
 
 
 @pytest.mark.asyncio

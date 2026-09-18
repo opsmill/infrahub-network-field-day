@@ -87,6 +87,7 @@ from dataclasses import dataclass, field
 from hashlib import blake2b
 from operator import itemgetter
 from typing import Any
+from urllib.parse import quote
 
 from infrahub_sdk.generator import InfrahubGenerator
 
@@ -920,8 +921,45 @@ class AppAccessGenerator(InfrahubGenerator):
             return
 
         try:
-            firewall = await self._init_client.get(kind="SecurityFirewall", id=firewall_id)
-            await firewall.artifact_generate(FIREWALL_ARTIFACT)
+            # NOT `firewall.artifact_generate(...)`, WHICH IS A NO-OP ON A BRANCH.
+            #
+            # The SDK helper posts to `/api/artifact/generate/{id}` with no
+            # `branch` parameter, and that endpoint regenerates against `main`
+            # when none is given. On a branch the objects were therefore written,
+            # this method logged that it had asked for a re-render, and the
+            # branch's artifact kept its old checksum -- so a proposed change
+            # showed the new rule as data and no configuration diff at all.
+            # Measured: identical checksums on `main` and the branch after the
+            # generator ran, and the rule appearing the moment the same endpoint
+            # was called with `?branch=`.
+            #
+            # That is the very failure this method exists to prevent, and a
+            # branch is where AGENTS.md says this work should happen -- so the
+            # helper was hiding the bug in the place it mattered most.
+            branch = self.branch_name
+            # `nodes` NAMES THE ARTIFACT, NOT ITS TARGET, and passing the
+            # firewall's id instead is accepted and silently regenerates
+            # nothing -- the endpoint matches it against no artifact and
+            # returns 200. Measured, and it looks exactly like the missing
+            # branch does.
+            artifact = await self._init_client.get(
+                kind="CoreArtifact",
+                name__value=FIREWALL_ARTIFACT,
+                object__ids=[firewall_id],
+                branch=branch,
+            )
+            definition = await self._init_client.get(
+                kind="CoreArtifactDefinition",
+                artifact_name__value=FIREWALL_ARTIFACT,
+                branch=branch,
+            )
+            url = f"{self._init_client.address}/api/artifact/generate/{definition.id}"
+            if branch:
+                url = f"{url}?branch={quote(branch, safe='')}"
+            # `_post` is private, and is what the SDK's own `generate()` uses;
+            # there is no public call that takes a branch.
+            response = await self._init_client._post(url, payload={"nodes": [artifact.id]})  # noqa: SLF001
+            response.raise_for_status()
         except Exception as exc:  # noqa: BLE001 - see the docstring; never fatal here
             self.logger.warning(
                 "Could not re-render %r (%s). The objects are correct; regenerate the artifact "
