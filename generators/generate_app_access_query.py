@@ -253,24 +253,61 @@ class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddress(
     BaseModel
 ):
     node: Optional[
-        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNode"
+        Annotated[
+            Union[
+                "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityGenericAddress",
+                "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
     ]
 
 
-class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNode(
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityGenericAddress(
     BaseModel
 ):
     typename__: Literal[
         "SecurityFQDN",
         "SecurityGenericAddress",
         "SecurityIPAMIPAddress",
-        "SecurityIPAMIPPrefix",
         "SecurityIPAddress",
         "SecurityIPRange",
         "SecurityPrefix",
     ] = Field(alias="__typename")
     id: Optional[str]
     display_label: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefix(
+    BaseModel
+):
+    typename__: Literal["SecurityIPAMIPPrefix"] = Field(alias="__typename")
+    id: str
+    display_label: Optional[str]
+    ip_prefix: "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefixIpPrefix"
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefixIpPrefix(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefixIpPrefixNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefixIpPrefixNode(
+    BaseModel
+):
+    id: str
+    prefix: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefixIpPrefixNodePrefix"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefixIpPrefixNodePrefix(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeSourceZone(BaseModel):
@@ -775,6 +812,9 @@ GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNode.model_rebuil
 GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDevice.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDeviceNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddress.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefix.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefixIpPrefix.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNodeSecurityIPAMIPPrefixIpPrefixNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZone.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZoneNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDevice.model_rebuild()

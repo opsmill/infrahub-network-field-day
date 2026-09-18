@@ -136,6 +136,21 @@ query GenerateAppAccessQuery($name: String!) {
                 __typename
                 id
                 display_label
+                # THE SAME PREFIX THE GRANT'S OWN ADDRESS CARRIES. A grant that
+                # names a site rather than an address resolves through here, and
+                # that is the normal portal path -- so omitting it would open the
+                # application's policy for a grant naming an address directly and
+                # not for the one a requester actually makes.
+                ... on SecurityIPAMIPPrefix {
+                  ip_prefix {
+                    node {
+                      id
+                      prefix {
+                        value
+                      }
+                    }
+                  }
+                }
               }
             }
           }

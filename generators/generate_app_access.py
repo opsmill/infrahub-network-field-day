@@ -466,8 +466,14 @@ def _selector_labels(service_selector: Any) -> dict[str, str]:
     return labels
 
 
-def source_prefix_id(grant: GrantNode) -> str | None:
-    """The IpamPrefix behind this grant's source address, if it has one.
+def source_prefix_id(source_address: Any) -> str | None:
+    """The IpamPrefix behind a grant's RESOLVED source address, if it has one.
+
+    THE RESOLVED one, which is why this takes the address rather than the grant.
+    A grant may name a `source_site` instead of an address and let the site
+    supply both -- and that is the normal path, because the portal asks for a
+    site. Reading `grant.source_address` directly worked for a grant that named
+    one and silently did nothing for every grant a requester actually makes.
 
     THE THIRD GATE'S INPUT. A session needs three independent things and the
     generator opens all three: the route has to exist, the firewall has to
@@ -485,8 +491,7 @@ def source_prefix_id(grant: GrantNode) -> str | None:
     `SecurityIPAMIPAddress`, a hand-written range -- yields None, and the grant
     then opens the two gates it can and says so.
     """
-    address = _node_of(grant.source_address)
-    peer = _node_of(getattr(address, "ip_prefix", None)) if address is not None else None
+    peer = _node_of(getattr(source_address, "ip_prefix", None)) if source_address is not None else None
     return peer.id if peer is not None else None
 
 
@@ -809,7 +814,7 @@ def validate_model(parsed: GenerateAppAccessQuery, derived_ports: list[int] | No
         application_name=_value(application_node.name) if application_node else None,
         requester=_value(grant.requester),
         application_id=application_node.id if application_node else None,
-        source_prefix_id=source_prefix_id(grant),
+        source_prefix_id=source_prefix_id(source_address),
         already_allowed=frozenset(prefix.id for prefix in _edges_of(application_node.allowed_source_prefixes))
         if application_node
         else frozenset(),

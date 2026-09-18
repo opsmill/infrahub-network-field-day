@@ -661,6 +661,10 @@ BRANCH_SITE = {
                 "__typename": "SecurityIPAMIPPrefix",
                 "id": "addr-branch-users",
                 "display_label": "branch-users",
+                # The prefix the site's address carries. A grant that names a
+                # SITE rather than an address resolves its source through here,
+                # and that is the path the portal actually produces.
+                "ip_prefix": {"node": {"id": PREFIX, "prefix": {"value": "10.70.0.0/24"}}},
             }
         },
     }
@@ -1242,6 +1246,27 @@ async def test_the_grant_names_its_source_in_the_applications_own_policy() -> No
     # BOTH SIDES. The application permits it, and the grant records that it was
     # this grant which added it -- the only safe basis for removing it again.
     assert client.nodes[f"grant-{GRANT}"].granted_source_prefixes.peer_ids == [PREFIX]
+
+
+@pytest.mark.asyncio
+async def test_a_grant_naming_only_a_site_still_opens_the_applications_policy() -> None:
+    """THE PATH THE PORTAL ACTUALLY PRODUCES, and the one this missed first.
+
+    A grant may name a `source_site` and let the site supply both the zone and
+    the address -- which is what the portal asks for, because a person knows
+    their site and not which security zone it is. Reading the prefix off
+    `grant.source_address` therefore worked for a grant that named an address
+    directly and did nothing at all for a real request: the generator logged
+    "no IPAM-backed source" and left the third gate shut.
+    """
+    client = _RecordingClient()
+    generator = _generator(client)
+    # No address of its own; everything comes from the site.
+    parsed = _query(approved=True, source_address=False, source_zone=None, site=BRANCH_SITE)
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    assert client.nodes[f"app-{APP}"].allowed_source_prefixes.peer_ids == [PREFIX]
 
 
 @pytest.mark.asyncio
