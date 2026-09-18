@@ -520,6 +520,30 @@ The failure seen here was a race between the two `task-worker` replicas importin
 repository, surfacing as `Multiple CoreMenuItem nodes have the same hfid` on a menu item whose
 HFID is not in fact duplicated.
 
+## Services expand on their branch, by event rule
+
+`triggers.yml` fires each service generator on `created`, scoped to
+`other_branches`. Until that existed a service was expanded only because the PORTAL
+asked for it, so one created any other way — the Streamlit pages, the API, a human in the
+UI — sat unbuilt, and the branch diff showed a request with none of its consequences.
+That reads as "nothing happened" rather than "not built yet".
+
+**The point is that the proposed change carries the outcome before anyone merges it.** The
+alternative is `execute_after_merge`, where the technical objects and the rendered configuration
+appear only once the decision has already been taken — which hides exactly what the review is
+for.
+
+**`ServiceAppAccess` has two rules, and the second is the one that matters.** A grant is gated on
+`approved`, so the run at creation is a deliberate no-op. The approver sets `approved` **on the
+branch**, the second rule fires, and the firewall objects and the re-rendered Junos artifact
+appear in the proposed change already open. Approval happens inside the review rather than after
+the merge, and the gate survives — measured: zero rules while unapproved, and after approving on
+the branch, one rule, its `SecurityService`, and the artifact carrying both.
+
+That last part only works because `generate-app-access` asks for the artifact to be re-rendered
+**on its own branch**. Without that the proposed change shows new firewall objects against an
+unchanged configuration, which is worse than showing nothing.
+
 ## Deployment state, and the one rule about it
 
 `DeploymentState` and `DeploymentDiffFile` (`schemas/deployment.yml`) record whether each

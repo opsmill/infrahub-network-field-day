@@ -15,6 +15,24 @@ spec:
     - name: run-server-cabling-generator
       generator: generate-server-cabling
 
+    # The service layer. Until these existed, a service created on a branch was
+    # expanded only because the PORTAL asked for it -- so a service created any
+    # other way (the Streamlit pages, the API, a human in the UI) sat unbuilt
+    # until a proposed-change pipeline or a merge picked it up, and the branch
+    # diff showed the request with none of its consequences.
+    - name: run-network-segment-generator
+      generator: generate-network-segment
+    - name: run-fabric-app-generator
+      generator: generate-fabric-app
+    - name: run-app-access-generator
+      generator: generate-app-access
+    - name: run-tenant-onboarding-generator
+      generator: generate-tenant-onboarding
+    - name: run-server-placement-generator
+      generator: generate-server-placement
+    - name: run-fabric-peering-generator
+      generator: generate-fabric-peering
+
 ---
 apiVersion: infrahub.app/v1
 kind: Object
@@ -148,3 +166,69 @@ spec:
       node_kind: ComputePhysicalServer
       mutation_action: "created"
       action: run-server-cabling-generator
+
+    # ---------------------------------------------------------------- services
+    # `other_branches`, never main. A service is requested ON A BRANCH and
+    # reviewed as a proposed change; expanding it on main would put the
+    # technical objects there with nothing to review.
+    #
+    # The point is that the branch carries the CONSEQUENCES of the request by
+    # the time anyone looks at it. Without these the diff shows a
+    # ServiceNetworkSegment and no subnet, no VLAN and no SVI -- which reads as
+    # "nothing happened" rather than "not built yet".
+    - name: trigger-network-segment-generator-created
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "created"
+      action: run-network-segment-generator
+
+    - name: trigger-fabric-app-generator-created
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "created"
+      action: run-fabric-app-generator
+
+    - name: trigger-tenant-onboarding-generator-created
+      branch_scope: "other_branches"
+      node_kind: ServiceTenantOnboarding
+      mutation_action: "created"
+      action: run-tenant-onboarding-generator
+
+    - name: trigger-server-placement-generator-created
+      branch_scope: "other_branches"
+      node_kind: ServiceServerPlacement
+      mutation_action: "created"
+      action: run-server-placement-generator
+
+    - name: trigger-fabric-peering-generator-created
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricPeering
+      mutation_action: "created"
+      action: run-fabric-peering-generator
+
+    # ServiceAppAccess gets BOTH, and the second is the one that matters.
+    #
+    # A grant is gated on `approved`, so the run at creation is a deliberate
+    # no-op -- it logs that the grant is unapproved and writes nothing. The
+    # approver then sets `approved` ON THE BRANCH, this fires again, and the
+    # firewall objects and the re-rendered Junos artifact appear in the same
+    # proposed change the reviewer is already looking at.
+    #
+    # That is what keeps the gate and still shows the configuration before the
+    # merge: approve inside the review, see the consequence, then merge.
+    - name: trigger-app-access-generator-created
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "created"
+      action: run-app-access-generator
+
+    - name: trigger-app-access-generator-approved
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "updated"
+      action: run-app-access-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: approved
+            value_match: any
