@@ -113,8 +113,26 @@ for manifest in "$HERE"/tooling/*.yaml; do
     kf apply -f - < "$manifest" >/dev/null
 done
 
-k -n "$NAMESPACE" rollout restart deploy/dex deploy/backstage >/dev/null
+# DEX FIRST, AND FULLY, BEFORE BACKSTAGE IS TOUCHED. Restarting both at once
+# raced them, and Backstage lost: its OIDC authenticator calls `Issuer.discover`
+# ONCE at startup and keeps the promise, so a single boot-time ECONNREFUSED is
+# cached for the life of the process. Dex then comes up, is reachable from
+# everywhere, and every sign-in still fails with
+#
+#   Request failed with status 500 connect ECONNREFUSED 10.90.0.11:32556
+#
+# forever -- a permanent failure caused by a few seconds of startup ordering,
+# and one that looks like a network fault because the address in the message is
+# reachable by the time anyone tests it. Recovery is a Backstage restart, which
+# is exactly what makes it hard to attribute: the fix for the symptom is also
+# the thing that hides the cause.
+#
+# `rollout status` on Dex is the right gate rather than a sleep, because Dex's
+# readiness probe is a GET of `/dex/.well-known/openid-configuration` -- the very
+# document Backstage is about to fetch. Ready means discovery is being served.
+k -n "$NAMESPACE" rollout restart deploy/dex >/dev/null
 k -n "$NAMESPACE" rollout status deploy/dex --timeout=180s
+k -n "$NAMESPACE" rollout restart deploy/backstage >/dev/null
 k -n "$NAMESPACE" rollout status deploy/backstage --timeout=300s
 
 # --------------------------------------------------------------------------

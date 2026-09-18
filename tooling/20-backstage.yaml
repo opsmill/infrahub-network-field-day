@@ -64,6 +64,59 @@ spec:
     metadata:
       labels: {app: backstage}
     spec:
+      # WAIT FOR DEX'S DISCOVERY DOCUMENT BEFORE THE BACKEND STARTS.
+      #
+      # The OIDC authenticator resolves `Issuer.discover` exactly once, at
+      # startup, and holds the promise for the life of the process. A rejection
+      # there is therefore permanent: Dex comes up seconds later, is reachable
+      # from the branch desktop, from this pod and from the host, and every
+      # sign-in still fails with
+      #
+      #   Request failed with status 500 connect ECONNREFUSED 10.90.0.11:32556
+      #
+      # until someone restarts this Deployment. deploy_tooling.sh sequences the
+      # two rollouts, but that only covers deploys -- a node reboot starts both
+      # pods at once with nothing ordering them, which is the same race with no
+      # script in the path. The gate belongs here, where it holds however the
+      # pod came to be started.
+      #
+      # It uses the backstage image rather than a shell image so nothing new is
+      # pulled: the node has no registry access to this repository's images and
+      # this one is already imported. Failing after ~150s rather than blocking
+      # forever makes a genuinely broken Dex show up as a CrashLoop naming this
+      # container, instead of as a pod wedged in Init with no message.
+      initContainers:
+        - name: wait-for-dex
+          image: nfd41/backstage:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: backstage-env}
+          command:
+            - node
+            - "-e"
+            - |
+              const url = process.env.BACKSTAGE_OIDC_METADATA_URL;
+              const get = require(url.startsWith('https') ? 'https' : 'http').get;
+              let attempts = 0;
+              const retry = why => {
+                if (++attempts > 50) {
+                  console.error(`dex never served ${url}: ${why}`);
+                  process.exit(1);
+                }
+                console.log(`waiting for dex (${why})`);
+                setTimeout(poll, 3000);
+              };
+              function poll() {
+                get(url, res => {
+                  res.resume();
+                  if (res.statusCode === 200) {
+                    console.log('dex is serving discovery');
+                    process.exit(0);
+                  }
+                  retry(`status ${res.statusCode}`);
+                }).on('error', err => retry(err.message));
+              }
+              poll();
       containers:
         - name: backstage
           image: nfd41/backstage:local
