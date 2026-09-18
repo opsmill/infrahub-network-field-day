@@ -178,16 +178,15 @@ class SecurityAddressGroup(SecurityGenericAddressGroup):
 
 
 class ServiceAppAccess(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
-    approved: Boolean
-    approved_at: DateTimeOptional
-    approved_by: StringOptional
     justification: StringOptional
     ports: ListAttributeOptional
     requester: String
     application: RelationshipAttribute[ServiceFabricApp]
     destination_vip: RelationshipAttribute[IpamIPAddress]
     granted_rules: RelationshipManager[SecurityPolicyRule]
+    granted_source_prefixes: RelationshipManager[IpamPrefix]
     source_address: RelationshipAttribute[SecurityGenericAddress]
+    source_site: RelationshipAttribute[LocationSite]
     source_zone: RelationshipAttribute[SecurityZone]
 
 
@@ -320,13 +319,12 @@ class NetworkFabric(CoreArtifactTarget, NetworkBuildingBlock):
 
 
 class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
-    chart_name: StringOptional
-    chart_repository: StringOptional
+    chart_name: String
+    chart_repository: String
     chart_values: JSONAttributeOptional
-    chart_version: StringOptional
+    chart_version: String
     communities: ListAttributeOptional
     exposed: Boolean
-    manifests: JSONAttributeOptional
     namespace_name: String
     policy_allow_dns: Boolean
     policy_allow_egress_api_server: Boolean
@@ -338,17 +336,13 @@ class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     vip_block_managed: Boolean
     vip_block_size: Integer
     workload_selector: ListAttributeOptional
+    advertised_services: RelationshipManager[SecurityService]
     allowed_source_prefixes: RelationshipManager[IpamPrefix]
     cluster: RelationshipAttribute[ClusterKubernetes]
-    manifests_file: RelationshipAttribute[ServiceFabricAppManifestsFile]
     peering_service: RelationshipAttribute[ServiceFabricPeering]
     values_file: RelationshipAttribute[ServiceFabricAppValuesFile]
     vip_block: RelationshipAttribute[IpamPrefix]
     vrf: RelationshipAttribute[IpamVRF]
-
-
-class ServiceFabricAppManifestsFile(CoreFileObject):
-    app: RelationshipAttribute[ServiceFabricApp]
 
 
 class ServiceFabricAppValuesFile(CoreFileObject):
@@ -717,7 +711,8 @@ class SecurityServiceRange(SecurityGenericService):
 
 
 class LocationSite(LocationGeneric, LocationHosting):
-    pass
+    security_source_address: RelationshipAttribute[SecurityGenericAddress]
+    security_zone: RelationshipAttribute[SecurityZone]
 
 
 class WanSite(CoreNode):

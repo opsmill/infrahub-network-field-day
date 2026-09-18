@@ -130,14 +130,14 @@ kind validates cleanly as long as both are loaded together.
 |---------|----------|------------|
 | `Service.Generic` | `name`, `description`, `status`, `owner` | every service kind |
 | `Generator.Target` | `checksum` for change detection | every service kind |
-| `CoreArtifactTarget` | artifact rendering | only the kinds delivered to the cluster as manifests |
+| `CoreArtifactTarget` | artifact rendering | only the kinds delivered to the cluster as Crossplane resources |
 
 Every service kind inherits the first two, which is the mechanism by which a generator
 sits underneath the service layer: it targets a group of service objects and uses
 `checksum` to stay idempotent.
 
 `CoreArtifactTarget` is applied to `Service.FabricPeering`, `Service.FabricApp` and
-`Service.AppAccess` only. Those three render into Crossplane manifests, so marking them
+`Service.AppAccess` only. Those three render into Crossplane resources, so marking them
 now means an artifact definition can be attached later without a schema migration.
 `Service.L3vpn`, `Service.InternetAccess` and `Service.TenantCloud` render through
 device-scoped artifacts instead, so they are not artifact targets themselves.
@@ -483,18 +483,36 @@ Four properties of these kinds are deliberate and each looks like an oversight:
 - **`device` is optional, and identity lives on the copied `name` instead.** A relationship used in `human_friendly_id` or `uniqueness_constraints` must be mandatory, and a mandatory `device` makes any device that has ever held a record permanently undeletable. The consequence is that the graph enforces one record per *name*; keeping `name` equal to the device's name is the writer's job.
 - **Both kinds are `branch: agnostic`.** Deployment state is a fact about the physical world, not about a branch: modelled branch-aware, a branch cut on Monday and merged on Friday would carry Monday's state into `main`, and every proposed change would display deployment records as proposed intent.
 
-## Application payload attachments
+## An application is a Helm chart
 
-### `ServiceFabricAppValuesFile` · `ServiceFabricAppManifestsFile`
+`ServiceFabricApp` carries `chart_repository`, `chart_name` and `chart_version`, and all three
+are **mandatory together**. That mirrors the Crossplane composite definition, whose `chart`
+block requires the same three, so an incomplete chart is refused here rather than by the
+cluster.
 
-An application's deployment payload — Helm values and raw Kubernetes manifests — is stored as
-an attached file rather than as a JSON attribute. Both kinds inherit `CoreFileObject`, so they
-carry `file_name`, `file_size`, `file_type`, `checksum` and `storage_id` without declaring
-them, and the content lives in object storage rather than in the graph.
+No second way to describe a workload remains. The `manifests` attribute and the
+`ServiceFabricAppManifestsFile` kind were withdrawn: an application whose fields were all
+optional had three valid shapes — a chart, raw API objects, or both — and left the renderer to
+infer which one it was looking at from whichever fields happened to be populated.
 
-Each is reached from its application as `values_file` or `manifests_file`: a `Component`
-relationship of cardinality one, so an application holds at most one of each and deleting the
-application removes them.
+The consequence worth knowing is that **a chart's Kubernetes Services are not visible to
+Infrahub**. They exist only once Helm has run in the cluster, so an exposed application states
+the ports its VIP answers on through `advertised_services`, a relationship to the
+`SecurityService` objects a firewall rule already names as its destination. That keeps the
+application's advertised port and the rule's permitted port one object rather than two numbers
+that have to agree.
+
+## Application payload attachment
+
+### `ServiceFabricAppValuesFile`
+
+An application's Helm values are stored as an attached file rather than as a JSON attribute.
+The kind inherits `CoreFileObject`, so it carries `file_name`, `file_size`, `file_type`,
+`checksum` and `storage_id` without declaring them, and the content lives in object storage
+rather than in the graph.
+
+It is reached from its application as `values_file`: a `Component` relationship of cardinality
+one, so an application holds at most one and deleting the application removes it.
 
 **Why a file rather than an attribute.** Three reasons, all found by inspection:
 
@@ -505,10 +523,10 @@ application removes them.
   configuration, none of which is network intent.
 - They are human-authored and reviewed, and a file gives a real diff.
 
-**Precedence.** When both a file and its corresponding attribute are set, **the file wins**.
-`chart_values` and `manifests` remain as an inline escape hatch for payloads small enough not
-to need a file, and are read only when no file is attached. The schema documents this rule;
-it cannot enforce it.
+**Precedence.** When both the file and `chart_values` are set, **the file wins**.
+`chart_values` remains as an inline escape hatch for values small enough not to need a file,
+and is read only when no file is attached. The schema documents this rule; it cannot enforce
+it.
 
 **Content is uploaded, not loaded.** `infrahubctl object load` cannot write file content. Use
 the SDK's `upload_from_bytes()` or `upload_from_path()` before the first `save()`, as
