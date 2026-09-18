@@ -1485,6 +1485,21 @@ export class InfrahubEntityProvider implements EntityProvider {
     ].join('\n');
   }
 
+  /**
+   * The guarded per-relationship update, for an OPTIONAL cardinality-one
+   * relationship. A mandatory one is set by the create instead.
+   *
+   * ITS COMPOSITE BRANCH IS CURRENTLY UNREACHABLE, and worth saying so rather
+   * than leaving it to look exercised. Every optional relationship whose peer
+   * has a composite hfid -- `ServiceFabricApp.vip_block`,
+   * `ServiceNetworkSegment.subnet` and `.svi` -- is generator-allocated and sits
+   * in that kind's `formExclude`, so no template emits a step for one. Swept
+   * across all nine templates: five have relationship steps, none composite.
+   *
+   * The branch is here because the create path needs the same rule and a
+   * relationship that is optional today can be mandatory tomorrow; the single
+   * element path is the one with live coverage.
+   */
   private relationshipMutation(
     kind: string,
     field: string,
