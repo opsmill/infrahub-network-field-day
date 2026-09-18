@@ -190,6 +190,7 @@ const CHANGE = {
 };
 
 const DEFAULTS: CatalogConfig = {
+  actAsUser: true,
   // `requester` is filled from the signed-in user, not typed.
   userFields: ['requester'],
   refreshMinutes: 1,
@@ -477,6 +478,33 @@ describe('InfrahubEntityProvider', () => {
     );
     expect(step.input.query).toContain('$description: String!');
     expect(step.input.variables.description).toContain('user.entity.spec.profile');
+  });
+
+  it('writes to Infrahub as the signed-in user', async () => {
+    // Infrahub attributes a write to the account that made it, which for a
+    // portal is its service account. Every mutation takes an optional
+    // `context: { account: { id } }`, resolved by UUID or by NAME -- and an SSO
+    // login provisions an account named for the local part of the email, the
+    // same rule the Backstage sign-in resolver uses. So the two agree with
+    // nothing shared between them.
+    //
+    // It is attribution, not authorization: the write still runs with the
+    // SERVICE account's permissions. The portal stays the authorization
+    // boundary.
+    const template = (await run())['Template:wireless-request'];
+    const steps = template.spec!.steps as any[];
+
+    const create = steps.find(s => s.id === 'create');
+    expect(create.input.query).toContain(
+      'context: { account: { id: $infrahub_context_account } }',
+    );
+    expect(create.input.variables.infrahub_context_account).toContain('split("@")');
+
+    // Every generated write, not just the create -- a per-field update left
+    // out would be attributed to the service account while the rest was not.
+    const update = steps.find(s => s.id === 'ssid');
+    expect(update.input.query).toContain('context: { account:');
+    expect(update.input.variables.infrahub_context_account).toBeDefined();
   });
 
   it('fills the requester from the session instead of asking for it', async () => {

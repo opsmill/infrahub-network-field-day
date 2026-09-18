@@ -213,6 +213,30 @@ const relationshipsOf = (schema: KindSchema): SchemaRelationship[] =>
         relationship.optional === false),
   );
 
+/**
+ * The variable name carrying the account a mutation is attributed to.
+ *
+ * Prefixed so it cannot collide with an attribute or relationship of the same
+ * name on some kind -- every other variable here is named for a field.
+ */
+const ACCOUNT_VAR = 'infrahub_context_account';
+
+/**
+ * The account to write as: the local part of the signed-in user's email.
+ *
+ * Infrahub resolves `context.account.id` by UUID **or by name**, and an SSO
+ * login provisions an account named for the identity -- `alice@nfd41.lab`
+ * becomes `alice`, which is the same rule the Backstage sign-in resolver uses
+ * (`emailLocalPartMatchingUserEntityName`). So the two agree without anything
+ * having to share a UUID.
+ *
+ * The account only exists once that person has signed in to Infrahub at least
+ * once; before that the mutation fails with "Unable to set context for account
+ * that doesn't exist".
+ */
+const ACCOUNT_VALUE =
+  '${{ (user.entity.spec.profile.email or user.ref) | split("@") | first }}';
+
 /** A mandatory cardinality-many relationship: one field, many hfids. */
 const isMultiple = (relationship: SchemaRelationship): boolean =>
   relationship.cardinality === 'many';
@@ -1333,6 +1357,7 @@ export class InfrahubEntityProvider implements EntityProvider {
                 userAttributes,
               ),
               variables: {
+                ...this.contextVariables(),
                 // WHO ASKED, taken from the Backstage session rather than typed.
                 // `user.entity` is the catalog User the sign-in resolver matched,
                 // so this is the identity that signed in, not a claim about it.
@@ -1387,6 +1412,7 @@ export class InfrahubEntityProvider implements EntityProvider {
                   branch,
                   query: this.updateMutation(kind.kind, name, property.type),
                   variables: {
+                    ...this.contextVariables(),
                     id: identifier,
                     value: `\${{ parameters.${name} }}`,
                   },
@@ -1407,6 +1433,7 @@ export class InfrahubEntityProvider implements EntityProvider {
                 relationship.hfidLength,
               ),
               variables: {
+                ...this.contextVariables(),
                 id: identifier,
                 value: this.relationshipValue(relationship),
               },
@@ -1568,6 +1595,9 @@ export class InfrahubEntityProvider implements EntityProvider {
     return [
       `mutation (${declarations}) {`,
       `  ${kind}Create(`,
+      // WHO THE WRITE IS ATTRIBUTED TO. Without it Infrahub records the
+      // portal's service account for work a person asked for.
+      ...(this.catalog.actAsUser ? [this.contextArgument()] : []),
       '    data: {',
       fields,
       '    }',
@@ -1594,15 +1624,31 @@ export class InfrahubEntityProvider implements EntityProvider {
    * relationship that is optional today can be mandatory tomorrow; the single
    * element path is the one with live coverage.
    */
+  /** `context: { account: { id: $... } }`, indented for a mutation argument. */
+  private contextArgument(): string {
+    return `    context: { account: { id: $${ACCOUNT_VAR} } }`;
+  }
+
+  /** The declaration and value a step needs when writing as the user. */
+  private contextVariables(): Record<string, string> {
+    return this.catalog.actAsUser ? { [ACCOUNT_VAR]: ACCOUNT_VALUE } : {};
+  }
+
   private relationshipMutation(
     kind: string,
     field: string,
     hfidLength = 1,
   ): string {
     const composite = hfidLength > 1;
+    const account = this.catalog.actAsUser ? `, $${ACCOUNT_VAR}: String!` : '';
+    const context = this.catalog.actAsUser
+      ? `context: { account: { id: $${ACCOUNT_VAR} } }, `
+      : '';
     return [
-      `mutation ($id: String!, $value: ${composite ? '[String]' : 'String'}!) {`,
-      `  ${kind}Update(data: { hfid: [$id], ${field}: { hfid: ${
+      `mutation ($id: String!, $value: ${
+        composite ? '[String]' : 'String'
+      }!${account}) {`,
+      `  ${kind}Update(${context}data: { hfid: [$id], ${field}: { hfid: ${
         composite ? '$value' : '[$value]'
       } } }) {`,
       '    ok',
@@ -1612,11 +1658,15 @@ export class InfrahubEntityProvider implements EntityProvider {
   }
 
   private updateMutation(kind: string, field: string, type: string): string {
+    const account = this.catalog.actAsUser ? `, $${ACCOUNT_VAR}: String!` : '';
+    const context = this.catalog.actAsUser
+      ? `context: { account: { id: $${ACCOUNT_VAR} } }, `
+      : '';
     return [
       `mutation ($id: String!, $value: ${
         JSON_TO_GRAPHQL[type] ?? 'String'
-      }!) {`,
-      `  ${kind}Update(data: { hfid: [$id], ${field}: { value: $value } }) {`,
+      }!${account}) {`,
+      `  ${kind}Update(${context}data: { hfid: [$id], ${field}: { value: $value } }) {`,
       '    ok',
       '  }',
       '}',

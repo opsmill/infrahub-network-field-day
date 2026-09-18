@@ -31,6 +31,22 @@ export type CatalogConfig = {
   owner: string;
   system?: string;
   /**
+   * Write to Infrahub AS the signed-in user, via the mutation `context`.
+   *
+   * Infrahub attributes a write to the account that made it, which for a portal
+   * is its service account. Every mutation takes an optional
+   * `context: { account: { id } }`, and the caller needs the OVERRIDE_CONTEXT
+   * permission with ALLOW_ALL (SUPER_ADMIN bypasses it). The id may be the
+   * account's UUID or its name.
+   *
+   * IT IS ATTRIBUTION, NOT AUTHORIZATION. Permissions are loaded once, before
+   * the resolver runs, so the write executes with the SERVICE account's
+   * permissions wearing the user's name -- and nothing in the graph
+   * distinguishes "portal acting as alice" from "alice". The portal is
+   * therefore the authorization boundary, and must remain so.
+   */
+  actAsUser: boolean;
+  /**
    * Attributes filled from the SIGNED-IN USER rather than asked for.
    *
    * A request carries who asked for it, and asking them to type that is both
@@ -74,6 +90,7 @@ export function slugFor(kind: string): string {
 export function readCatalogConfig(config: RootConfigService): CatalogConfig {
   const root = config.getOptionalConfig('infrahub.catalog');
   const userFields = root?.getOptionalStringArray('userFields') ?? [];
+  const actAsUser = root?.getOptionalBoolean('actAsUser') ?? false;
 
   const kinds = (root?.getOptionalConfigArray('kinds') ?? []).map(entry => {
     const kind = entry.getString('kind');
@@ -110,6 +127,7 @@ export function readCatalogConfig(config: RootConfigService): CatalogConfig {
     // No default: a plugin should not invent a System entity nobody asked
     // for. Name one and every ingested Component is grouped under it.
     system: root?.getOptionalString('system'),
+    actAsUser,
     userFields,
     kinds,
     discover,

@@ -238,6 +238,21 @@ infrahub:
   # fields: each kind's own Infrahub schema decides what its entity says, so
   # adding an attribute in Infrahub needs no change here.
   catalog:
+    # WRITE AS THE SIGNED-IN USER. Infrahub records the account that made a
+    # write, which for a portal is its service account; every mutation takes a
+    # `context: { account: { id } }` naming someone else instead.
+    #
+    # ATTRIBUTION, NOT AUTHORIZATION. Permissions are loaded before the resolver
+    # runs, so the write executes with the SERVICE account's rights wearing the
+    # user's name, and the graph cannot tell "the portal acting as alice" from
+    # "alice". This portal is therefore the authorization boundary and has to
+    # stay one. The caller needs OVERRIDE_CONTEXT with ALLOW_ALL; SUPER_ADMIN
+    # bypasses it, which is why the lab's admin token works untouched.
+    #
+    # The account is matched by NAME -- the local part of the email, the same
+    # rule the sign-in resolver uses -- so nothing has to share a UUID. It only
+    # exists once that person has signed in to Infrahub at least once.
+    actAsUser: true
     # Filled from the SIGNED-IN USER, never asked for. A request records who
     # asked, and typing that is both busywork and unenforceable -- anyone could
     # type anyone. Kept off every form and set from the Backstage identity.
