@@ -374,20 +374,55 @@ def is_withdrawn(grant: GrantNode) -> bool:
     return _value(grant.status) in WITHDRAWN_STATUSES
 
 
-def normalise_ports(grant: GrantNode) -> list[int]:
+def application_ports(application: Any) -> list[int]:
+    """The TCP ports the APPLICATION says it serves.
+
+    `policy_allow_ports` is the same list that becomes the cluster's network
+    policy, as `[{"port": "8080", "protocol": "TCP"}]`. Non-TCP entries are
+    skipped: a firewall rule here is TCP, and silently widening it to UDP
+    because the application mentions one would be a different permission.
+    """
+    raw = _value(application.policy_allow_ports) if application is not None else None
+    ports: list[int] = []
+    for entry in raw or []:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("protocol", "TCP")).upper() != "TCP":
+            continue
+        try:
+            ports.append(int(entry["port"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return ports
+
+
+def normalise_ports(grant: GrantNode, application: Any = None) -> list[int]:
     """V2, V3. The permitted TCP ports, sorted, validated, de-duplicated.
 
-    An EMPTY list is rejected rather than read as "all ports". That is the
+    A grant that names NO ports takes the application's own
+    `policy_allow_ports`, because the application already knows what it serves
+    and the requester mostly does not. Asking them was worse than redundant: a
+    grant naming a port the application does not answer on is permitted by the
+    firewall and refused by the cluster's network policy, which reads as a
+    firewall fault. Deriving it makes that mismatch impossible rather than
+    merely tested for.
+
+    Naming ports explicitly still works, and is how you ask for a SUBSET.
+
+    An EMPTY result is rejected rather than read as "all ports". That is the
     worst defect this generator could have, and the lab's own `FirewallAccess`
-    CRD makes the same choice with ``minItems: 1``.
+    CRD makes the same choice with ``minItems: 1``. It now means the grant named
+    nothing AND the application declares nothing, which is a request nobody can
+    fulfil.
     """
-    raw = _value(grant.ports)
+    raw = _value(grant.ports) or application_ports(application)
     name = _value(grant.name)
 
     if not raw:
         msg = (
-            f"grant {name!r} permits no ports; an empty list is rejected rather than "
-            "read as 'all ports', which is what a permit-everything rule would mean"
+            f"grant {name!r} permits no ports and application declares none; an empty "
+            "list is rejected rather than read as 'all ports', which is what a "
+            "permit-everything rule would mean"
         )
         raise ValueError(msg)
 
@@ -563,7 +598,8 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
         raise ValueError(msg)
 
     name = _value(grant.name)
-    ports = normalise_ports(grant)
+    # The application is the fallback for ports it did not name.
+    ports = normalise_ports(grant, _node_of(grant.application))
     policy_id = derive_policy(parsed, name)
     destination_zone_id = derive_destination_zone(parsed, grant)
 

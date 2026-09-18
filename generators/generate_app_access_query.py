@@ -71,11 +71,18 @@ class GenerateAppAccessQueryTargetEdgesNodeApplication(BaseModel):
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNode(BaseModel):
     id: str
     name: Optional["GenerateAppAccessQueryTargetEdgesNodeApplicationNodeName"]
+    policy_allow_ports: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodePolicyAllowPorts"
+    ]
     vrf: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf"
 
 
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeName(BaseModel):
     value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodePolicyAllowPorts(BaseModel):
+    value: Optional[Any]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf(BaseModel):

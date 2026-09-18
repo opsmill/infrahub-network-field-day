@@ -106,6 +106,7 @@ def _grant(
     prefix_list: str | None = ADVERTISED_LIST,
     advertising_device: str | None = BORDER_LEAF,
     device_hostvars: dict[str, Any] | None = None,
+    app_ports: Any = _UNSET,
 ) -> dict[str, Any]:
     """One ServiceAppAccess as GraphQL returns it.
 
@@ -114,6 +115,8 @@ def _grant(
     enforce.
     """
     resolved_ports = [8080] if ports is _UNSET else ports
+    # What nfd41-demo actually declares, unless a test says otherwise.
+    resolved_app_ports = [{"port": "8080", "protocol": "TCP"}] if app_ports is _UNSET else list(app_ports)
     return {
         "node": {
             "id": f"grant-{GRANT}",
@@ -128,6 +131,9 @@ def _grant(
                 "node": {
                     "id": f"app-{APP}",
                     "name": {"value": APP},
+                    # What the application says it serves. A grant naming no
+                    # ports takes these.
+                    "policy_allow_ports": {"value": resolved_app_ports},
                     "vrf": ({"node": {"id": app_vrf, "name": {"value": "K8S_PROD"}}} if app_vrf else {"node": None}),
                 }
             },
@@ -903,6 +909,32 @@ async def test_the_grant_is_saved_without_joining_the_tracking_group() -> None:
     assert all(save.get("update_group_context") is False for save in grant.saves)
 
 
+def test_a_grant_naming_no_ports_takes_the_applications_own() -> None:
+    """The application already knows what it serves; the requester mostly does
+    not. Asking them was worse than redundant -- a grant naming a port the
+    application does not answer on is permitted by the firewall and refused by
+    the cluster's network policy, which reads as a firewall fault."""
+    parsed = _query(ports=[], app_ports=({"port": "8080", "protocol": "TCP"},))
+    grant = parsed.target.edges[0].node
+    assert normalise_ports(grant, grant.application.node) == [8080]
+
+
+def test_a_grant_naming_ports_keeps_them() -> None:
+    """Naming them explicitly is how you ask for a SUBSET."""
+    parsed = _query(ports=[443], app_ports=({"port": "8080", "protocol": "TCP"},))
+    grant = parsed.target.edges[0].node
+    assert normalise_ports(grant, grant.application.node) == [443]
+
+
+def test_a_non_tcp_application_port_is_not_borrowed() -> None:
+    """A firewall rule here is TCP. Widening it to UDP because the application
+    mentions one would be a different permission than the one asked for."""
+    parsed = _query(ports=[], app_ports=({"port": "53", "protocol": "UDP"},))
+    grant = parsed.target.edges[0].node
+    with pytest.raises(ValueError, match="empty list is rejected"):
+        normalise_ports(grant, grant.application.node)
+
+
 @pytest.mark.asyncio
 async def test_a_validation_failure_records_error_and_raises() -> None:
     """`error` is distinct from `provisioning` on purpose: both leave no
@@ -910,7 +942,10 @@ async def test_a_validation_failure_records_error_and_raises() -> None:
     indistinguishable from "not built yet"."""
     client = _RecordingClient()
     generator = _generator(client)
-    parsed = _query(approved=True, ports=[])
+    # BOTH empty. A grant naming no ports now takes the application's own
+    # `policy_allow_ports`, so the unfulfillable case is a grant that names
+    # nothing AND an application that declares nothing.
+    parsed = _query(approved=True, ports=[], app_ports=())
 
     with pytest.raises(ValueError, match="empty list is rejected"):
         await generator.generate(parsed.model_dump(by_alias=True))

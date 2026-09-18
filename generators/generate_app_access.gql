@@ -35,6 +35,14 @@ query GenerateAppAccessQuery($name: String!) {
             name {
               value
             }
+            # What the application ITSELF says it serves. A grant that names no
+            # ports takes these, so a requester cannot ask for a port the
+            # application does not answer on -- which the firewall permits and
+            # the cluster's network policy then refuses, reading as a firewall
+            # fault.
+            policy_allow_ports {
+              value
+            }
             vrf {
               node {
                 id
