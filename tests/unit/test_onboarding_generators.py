@@ -300,6 +300,21 @@ class _Node:
         self.saves.append(kwargs)
 
 
+class _Relationships:
+    """The peers hanging off a node, as the SDK presents them.
+
+    `_Node` carries none by default, so `getattr(live, "vrfs", None)` returns
+    None and the withdrawal guard skips its check entirely -- which is why that
+    guard had no test until one was written with this.
+    """
+
+    def __init__(self, *peer_ids: str) -> None:
+        self.peer_ids = list(peer_ids)
+
+    async def fetch(self) -> None:
+        return None
+
+
 @dataclass
 class _Client:
     created: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
@@ -378,3 +393,46 @@ async def test_decommissioning_a_placement_that_built_nothing_deletes_nothing() 
     await _gen(ServerPlacementGenerator, client).generate(parsed.model_dump(by_alias=True))
 
     assert client.deleted == []
+
+
+# ---------------------------------------------------------------------------
+# Withdrawal, and the guard that stops it taking a live tenant with it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_withdrawing_a_tenant_that_still_has_vrfs_is_refused() -> None:
+    """The one destructive path in this generator, and it had no test.
+
+    An `EvpnTenant` deleted while VRFs hang off it takes the tenant out from
+    under live routing. The generator checks `vrfs` and `l2vlans` and refuses,
+    recording `error` -- but `_Node` carries no relationship managers, so the
+    check was skipped by every existing test and the guard was never exercised.
+    """
+    client = _Client()
+    tenant = _Node("evpn-x")
+    tenant.vrfs = _Relationships("vrf-1", "vrf-2")  # type: ignore[attr-defined]
+    client.nodes["evpn-x"] = tenant
+
+    parsed = _onboarding_query(_onboarding(status="decommissioning", built=("evpn-x", "TENANT_PLATFORM", 14000)))
+    await _gen(TenantOnboardingGenerator, client).generate(parsed.model_dump(by_alias=True))
+
+    assert client.deleted == [], "the tenant was deleted while VRFs still pointed at it"
+    assert client.nodes["onb-1"].status.value == "error"
+
+
+@pytest.mark.asyncio
+async def test_withdrawing_a_tenant_with_nothing_attached_deletes_it() -> None:
+    """The positive case beside it, so the refusal above is evidence of a guard
+    rather than of a generator that never deletes anything."""
+    client = _Client()
+    tenant = _Node("evpn-x")
+    tenant.vrfs = _Relationships()  # type: ignore[attr-defined]
+    tenant.l2vlans = _Relationships()  # type: ignore[attr-defined]
+    client.nodes["evpn-x"] = tenant
+
+    parsed = _onboarding_query(_onboarding(status="decommissioning", built=("evpn-x", "TENANT_PLATFORM", 14000)))
+    await _gen(TenantOnboardingGenerator, client).generate(parsed.model_dump(by_alias=True))
+
+    assert ("EvpnTenant", "evpn-x") in client.deleted
+    assert client.nodes["onb-1"].status.value == "decommissioned"
