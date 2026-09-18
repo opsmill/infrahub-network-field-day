@@ -1,0 +1,37 @@
+---
+# WHERE THE PEOPLE AT EACH SITE APPEAR FROM, on the firewall.
+#
+# Loaded at 39 rather than beside the sites in 30, because these reference the
+# zones and address-book entries that 32 declares. `tests/unit/test_object_load_order.py`
+# asserts that direction: a file may only point at objects an earlier file
+# created.
+#
+# This is what lets a `ServiceAppAccess` name a SITE and derive its source. A
+# requester knows where they sit; they do not reliably know which security zone
+# that is, nor which address-book entry the hand-written rules use for it.
+#
+# `internet-edge` and `provider-edge` deliberately carry neither. They are
+# infrastructure with nobody sitting at them, and a site with no mapping simply
+# cannot be used to derive a source -- which is the honest outcome rather than
+# an error.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: LocationSite
+  data:
+    - name: branch-office
+      security_zone: branch
+      security_source_address: branch-users
+
+    # The customer sites arrive over the WAN, so their zone is `wan` and their
+    # address is the per-site entry the perimeter already declares -- not a
+    # synthesised CIDR, so a derived rule reads like the hand-written ones.
+    - name: acme-hq
+      security_zone: wan
+      security_source_address: acme-hq
+    - name: acme-dr
+      security_zone: wan
+      security_source_address: acme-dr
+    - name: globex-hq
+      security_zone: wan
+      security_source_address: globex-hq

@@ -38,6 +38,7 @@ class GenerateAppAccessQueryTargetEdgesNode(BaseModel):
     justification: Optional["GenerateAppAccessQueryTargetEdgesNodeJustification"]
     ports: Optional["GenerateAppAccessQueryTargetEdgesNodePorts"]
     application: "GenerateAppAccessQueryTargetEdgesNodeApplication"
+    source_site: "GenerateAppAccessQueryTargetEdgesNodeSourceSite"
     source_zone: "GenerateAppAccessQueryTargetEdgesNodeSourceZone"
     source_address: "GenerateAppAccessQueryTargetEdgesNodeSourceAddress"
     destination_vip: "GenerateAppAccessQueryTargetEdgesNodeDestinationVip"
@@ -112,6 +113,108 @@ class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrfNode(BaseModel):
 
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrfNodeName(BaseModel):
     value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSite(BaseModel):
+    node: Optional["GenerateAppAccessQueryTargetEdgesNodeSourceSiteNode"]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNode(BaseModel):
+    id: str
+    name: Optional["GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeName"]
+    security_zone: "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZone"
+    security_source_address: (
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddress"
+    )
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeName(BaseModel):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZone(BaseModel):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNode(BaseModel):
+    id: str
+    name: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeName"
+    ]
+    dc_advertised_prefix_list: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeDcAdvertisedPrefixList"
+    ]
+    advertising_device: "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDevice"
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeDcAdvertisedPrefixList(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDevice(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDeviceNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDeviceNode(
+    BaseModel
+):
+    id: str
+    name: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDeviceNodeName"
+    ]
+    avd_custom_hostvars: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDeviceNodeAvdCustomHostvars"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDeviceNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDeviceNodeAvdCustomHostvars(
+    BaseModel
+):
+    value: Optional[Any]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddress(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddressNode(
+    BaseModel
+):
+    typename__: Literal[
+        "SecurityFQDN",
+        "SecurityGenericAddress",
+        "SecurityIPAMIPAddress",
+        "SecurityIPAMIPPrefix",
+        "SecurityIPAddress",
+        "SecurityIPRange",
+        "SecurityPrefix",
+    ] = Field(alias="__typename")
+    id: Optional[str]
+    display_label: Optional[str]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeSourceZone(BaseModel):
@@ -487,6 +590,13 @@ GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlockNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrfNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSite.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZone.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDevice.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecurityZoneNodeAdvertisingDeviceNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceSiteNodeSecuritySourceAddress.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZone.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZoneNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDevice.model_rebuild()

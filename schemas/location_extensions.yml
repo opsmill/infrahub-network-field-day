@@ -24,6 +24,39 @@ nodes:
       - LocationHosting
     parent: null
     children: null
+    relationships:
+      # WHERE A PERSON AT THIS SITE APPEARS FROM, on the firewall.
+      #
+      # A service request records who asked, and a requester knows where they
+      # sit far better than they know which security zone that is. These two
+      # turn "someone at branch-office wants access" into the zone and the
+      # address-book entry a rule is actually written from, so
+      # `ServiceAppAccess` can ask for a SITE and derive the rest -- the same
+      # way it derives ports and the destination from the application.
+      #
+      # Optional, and most sites carry neither: `internet-edge` and
+      # `provider-edge` are infrastructure with nobody sitting at them, and a
+      # site with no mapping simply cannot be used to derive a source.
+      - name: security_zone
+        peer: SecurityZone
+        label: Security Zone
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        identifier: location__site_security_zone
+        order_weight: 1500
+      - name: security_source_address
+        peer: SecurityGenericAddress
+        label: Security Source Address
+        kind: Attribute
+        cardinality: one
+        optional: true
+        # An address-book ENTRY, never a synthesised CIDR, so a derived rule
+        # references the same vocabulary the hand-written rules beside it use.
+        on_delete: no-action
+        identifier: location__site_security_source_address
+        order_weight: 1510
 
   - name: Hall
     namespace: Location

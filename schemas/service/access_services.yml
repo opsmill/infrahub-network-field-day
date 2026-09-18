@@ -75,12 +75,30 @@ nodes:
         on_delete: no-action
         identifier: service__access_application
         order_weight: 910
+      # WHERE THE REQUESTER SITS. Naming a site is the easy half of the
+      # question a requester can actually answer; the zone and the address-book
+      # entry come from `LocationSite.security_zone` and
+      # `.security_source_address`. Naming the zone and address directly still
+      # works, and wins -- that is how the platform team asks for a source that
+      # is not a person's desk.
+      - name: source_site
+        peer: LocationSite
+        label: Source Site
+        kind: Attribute
+        cardinality: one
+        optional: true
+        on_delete: no-action
+        identifier: service__access_source_site
+        order_weight: 915
       - name: source_zone
         peer: SecurityZone
         label: Source Zone
         kind: Attribute
         cardinality: one
-        optional: false
+        # Optional, because a grant naming a `source_site` derives it. One of
+        # the two has to resolve, and the generator refuses a grant where
+        # neither does rather than inventing a source.
+        optional: true
         on_delete: no-action
         identifier: service__access_source_zone
         order_weight: 920
@@ -89,7 +107,8 @@ nodes:
         label: Source Address
         kind: Attribute
         cardinality: one
-        optional: false
+        # Optional for the same reason as source_zone: a site derives it.
+        optional: true
         # An existing address-book entry, never a synthesised CIDR. The
         # firewall's own objects stay the vocabulary so a generated rule reads
         # the same way as the hand-written ones beside it.

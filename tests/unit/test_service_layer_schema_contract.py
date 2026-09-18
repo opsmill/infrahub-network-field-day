@@ -522,15 +522,24 @@ def test_app_access_names_every_object_needed_to_grant_and_revoke() -> None:
     access = _node(_load_yaml(ACCESS_SERVICES_SCHEMA), "Service", "AppAccess")
     relationships = _relationships(access)
 
-    # Mandatory: nothing can derive these.
+    # Mandatory: nothing can derive this one.
+    assert relationships["application"]["peer"] == "ServiceFabricApp"
+    assert relationships["application"]["cardinality"] == "one"
+    assert relationships["application"]["optional"] is False
+
+    # Derivable from `source_site`, which is the half of the question a
+    # requester can actually answer -- a person knows where they sit far better
+    # than they know which security zone that is. Naming either directly still
+    # wins, which is how the platform team asks for a source that is not
+    # somebody's desk. The generator refuses a grant where neither resolves.
     for name, peer in (
-        ("application", "ServiceFabricApp"),
+        ("source_site", "LocationSite"),
         ("source_zone", "SecurityZone"),
         ("source_address", "SecurityGenericAddress"),
     ):
         assert relationships[name]["peer"] == peer
         assert relationships[name]["cardinality"] == "one"
-        assert relationships[name]["optional"] is False
+        assert relationships[name]["optional"] is True
 
     # OPTIONAL, and empty is the normal case. Cilium assigns the VIP to a
     # LoadBalancer service at runtime, so a requester cannot honestly know it;

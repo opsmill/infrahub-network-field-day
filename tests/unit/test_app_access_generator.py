@@ -108,6 +108,8 @@ def _grant(
     device_hostvars: dict[str, Any] | None = None,
     app_ports: Any = _UNSET,
     app_vip_block: str | None = "prefix-nfd41-demo-vips",
+    site: dict[str, Any] | None = None,
+    source_address: bool = True,
 ) -> dict[str, Any]:
     """One ServiceAppAccess as GraphQL returns it.
 
@@ -169,6 +171,9 @@ def _grant(
                 if source_zone
                 else {"node": None}
             ),
+            # Where the requester sits. None by default: the fixture names its
+            # zone and address directly, which is still the explicit path.
+            "source_site": ({"node": None} if site is None else site),
             "source_address": (
                 {
                     "node": {
@@ -177,6 +182,8 @@ def _grant(
                         "display_label": "branch-users",
                     }
                 }
+                if source_address
+                else {"node": None}
             ),
             "destination_vip": (
                 {"node": {"id": vip_id, "address": {"value": "10.112.240.10/32"}}} if vip_id else {"node": None}
@@ -547,6 +554,70 @@ def test_validate_model_raises_when_the_grant_is_missing() -> None:
     )
     with pytest.raises(ValueError, match="no ServiceAppAccess matched"):
         validate_model(parsed)
+
+
+BRANCH_SITE = {
+    "node": {
+        "id": "site-branch-office",
+        "name": {"value": "branch-office"},
+        "security_zone": {
+            "node": {
+                "id": "zone-branch",
+                "name": {"value": "branch"},
+                "dc_advertised_prefix_list": {"value": "PL-DC-ADVERTISED-BRANCH"},
+                # BOTH halves. A zone carrying one and not the other is refused
+                # -- it would either write into an unnamed list or name a list
+                # on no device.
+                "advertising_device": {
+                    "node": {
+                        "id": BORDER_LEAF,
+                        "name": {"value": "leaf-nfd41-pod1-3-1"},
+                        "avd_custom_hostvars": {"value": {}},
+                    }
+                },
+            }
+        },
+        "security_source_address": {
+            "node": {
+                "__typename": "SecurityIPAMIPPrefix",
+                "id": "addr-branch-users",
+                "display_label": "branch-users",
+            }
+        },
+    }
+}
+
+
+def test_a_grant_naming_only_a_site_derives_its_source() -> None:
+    """A person knows where they sit far better than they know which security
+    zone that is. The site carries both, so "someone at branch-office wants
+    access" resolves to a zone and an address-book entry."""
+    context = validate_model(_query(site=BRANCH_SITE, source_zone=None, source_address=False))
+    assert context.source_zone_id == "zone-branch"
+    assert context.source_address_id == "addr-branch-users"
+
+
+def test_a_named_zone_beats_the_site() -> None:
+    """How the platform team asks for a source that is not somebody's desk."""
+    context = validate_model(_query(site=BRANCH_SITE))
+    assert context.source_zone_id == "zone-branch"
+
+
+def test_a_site_that_maps_to_nothing_is_refused() -> None:
+    """Rather than inventing a source, which would be a rule from somewhere
+    nobody asked for."""
+    bare = {"node": {**BRANCH_SITE["node"], "security_zone": {"node": None}}}
+    with pytest.raises(ValueError, match="maps to none"):
+        validate_model(_query(site=bare, source_zone=None, source_address=False))
+
+
+def test_the_advertisement_follows_a_derived_zone() -> None:
+    """Reading only `source_zone` would give a site-based grant its firewall
+    rule and silently no advertisement -- permitted and unroutable."""
+    parsed = _query(site=BRANCH_SITE, source_zone=None, source_address=False)
+    advertisement = derive_advertisement(parsed.target.edges[0].node)
+    assert advertisement is not None
+    assert advertisement.prefix_list == "PL-DC-ADVERTISED-BRANCH"
 
 
 def test_a_grant_with_no_vip_permits_to_the_applications_block() -> None:

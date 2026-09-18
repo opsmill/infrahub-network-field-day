@@ -64,6 +64,50 @@ query GenerateAppAccessQuery($name: String!) {
             }
           }
         }
+        # WHERE THE REQUESTER SITS, when they named a site rather than a zone.
+        # The site carries the zone and the address-book entry a rule is
+        # written from, so "someone at branch-office wants access" resolves to
+        # both without the requester knowing either.
+        source_site {
+          node {
+            id
+            name {
+              value
+            }
+            security_zone {
+              node {
+                id
+                name {
+                  value
+                }
+                dc_advertised_prefix_list {
+                  value
+                }
+                advertising_device {
+                  node {
+                    id
+                    name {
+                      value
+                    }
+                    avd_custom_hostvars {
+                      value
+                    }
+                  }
+                }
+              }
+            }
+            security_source_address {
+              node {
+                # SecurityGenericAddress is abstract, so the discriminator is
+                # mandatory: without it the generated model yields None and the
+                # derived source silently disappears.
+                __typename
+                id
+                display_label
+              }
+            }
+          }
+        }
         # The zone the request comes from, and -- since cycle 032 -- the fabric
         # side of that zone: which prefix list governs what the DC advertises
         # toward it, and which switch applies that list to a BGP neighbor.

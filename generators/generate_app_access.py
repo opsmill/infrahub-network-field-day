@@ -188,8 +188,15 @@ class Advertisement:
 
 
 def derive_advertisement(grant: GrantNode) -> Advertisement | None:
-    """The fabric side of the grant's source zone, or None if it has none."""
-    zone = _node_of(grant.source_zone)
+    """The fabric side of the grant's source zone, or None if it has none.
+
+    The zone may be DERIVED from `source_site`, so this has to look in the same
+    two places `validate_model` does. Reading only `source_zone` would give a
+    site-based grant its firewall rule and silently no advertisement -- the
+    permitted-but-unroutable outcome the model exists to prevent.
+    """
+    site = _node_of(grant.source_site)
+    zone = _node_of(grant.source_zone) or (_node_of(getattr(site, "security_zone", None)) if site else None)
     if zone is None:
         return None
 
@@ -613,14 +620,27 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
 
     # V7. All three are mandatory in the schema, so a null here means the
     # query returned a grant whose peer was deleted out from under it.
-    source_zone = _node_of(grant.source_zone)
-    source_address = _node_of(grant.source_address)
+    # THE SOURCE, named or derived from where the requester sits. A person
+    # knows their site far better than they know which security zone it is, so
+    # a grant may name a `source_site` and take both from it. Naming the zone
+    # or the address directly WINS, which is how the platform team asks for a
+    # source that is not somebody's desk.
+    site = _node_of(grant.source_site)
+    source_zone = _node_of(grant.source_zone) or (_node_of(getattr(site, "security_zone", None)) if site else None)
+    source_address = _node_of(grant.source_address) or (
+        _node_of(getattr(site, "security_source_address", None)) if site else None
+    )
     for label, node in (
         ("source_zone", source_zone),
         ("source_address", source_address),
     ):
         if node is None:
-            msg = f"grant {name!r} has no {label}; the rule cannot be built"
+            hint = (
+                f" and its site {_value(site.name)!r} maps to none"
+                if site is not None
+                else " and it names no source_site to derive one from"
+            )
+            msg = f"grant {name!r} has no {label}{hint}; the rule cannot be built"
             raise ValueError(msg)
 
     # THE DESTINATION, named or derived. A requester cannot honestly know the
