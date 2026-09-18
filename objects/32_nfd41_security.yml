@@ -265,6 +265,13 @@ kind: Object
 spec:
   kind: SecurityIPAMIPAddress
   data:
+    # NOTHING ANSWERS ON THIS VIP ANY MORE. It belonged to the lab repository's
+    # `nfd41-access` application, and `invoke cluster`'s handover now deletes
+    # that along with `nfd41-observability`: the cluster carries only what a
+    # service object declares. The address and the rule that names it stay
+    # because they are on `fw1` -- the rendered Junos artifact is held
+    # byte-for-byte against the device's own configuration, so removing them
+    # here is a change to the firewall's baseline, not a tidy-up.
     - name: access-portal
       book_index: 40
       description: "The only DC service the branch may reach before requesting access"

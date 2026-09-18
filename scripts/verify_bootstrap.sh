@@ -160,14 +160,23 @@ done
 # still terminating, which does not resolve on its own.
 check "$(kubectl get object --no-headers 2>/dev/null | grep -c 'nfd41-demo.*Namespace')" \
     "1" "exactly one composed Namespace"
+# Only the applications Infrahub declares. The lab's installer applies its own
+# two as well and the handover deletes them, so anything left here is a workload
+# no proposed change can account for. Counted as well as named: a third
+# application from somewhere else would pass the two absence checks.
+check "$(kubectl get fabricapp --no-headers 2>/dev/null | wc -l | tr -d ' ')" "1" \
+    "exactly one FabricApp, the one Infrahub models"
 for app in nfd41-access nfd41-observability; do
-    check "$(kubectl get fabricapp $app -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" \
-        "True" "lab-owned $app untouched"
+    check "$(kubectl get fabricapp $app --no-headers 2>/dev/null | wc -l | tr -d ' ')" "0" \
+        "unmodelled $app removed by the handover"
 done
 
 stage "the cluster is inside the fabric"
 check "$(kubectl -n kube-system exec ds/cilium -- cilium-dbg bgp peers 2>/dev/null | grep -c established)" \
     "2" "Cilium sessions to both k8s leaves"
+# Four is now the exact set rather than a floor with slack in it: three pod
+# CIDRs, one per node, and the one VIP of the one application Infrahub models.
+# It used to carry the lab's two applications as well, so a missing VIP passed.
 routes=$(docker exec clab-nfd41-k8s-leaf1 Cli -p 15 -c 'show ip route vrf K8S_PROD bgp' 2>/dev/null \
     | grep -cE '10\.111|10\.112')
 [ "$routes" -ge 4 ] && pass "leaf learns the pod CIDRs and LoadBalancer VIPs ($routes)" \

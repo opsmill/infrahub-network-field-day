@@ -18,6 +18,11 @@
 # before requesting access", and the branch -> k8s-prod zone pair permits
 # branch-users to reach it and nothing else. This address is what a request
 # names next.
+#
+# That staging is now the FIREWALL's alone: the application behind the
+# access-portal VIP was the lab repository's `nfd41-access`, which `invoke
+# cluster`'s handover deletes. The rule is permitted and unoccupied, and the
+# portal a branch user actually arrives at is Backstage in the tooling cluster.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:

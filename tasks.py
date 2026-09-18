@@ -985,10 +985,21 @@ INFRAHUB_OWNED_RESOURCES = (
     ("fabricpeering", "nfd41"),
 )
 
-# The lab's own two applications, which Infrahub does not model. They stay the
-# lab's, and the operator never sees them: it only ever deletes a resource that
-# leaves a manifest it delivered itself.
-LAB_OWNED_APPS = ("nfd41-access", "nfd41-observability")
+# The lab's own two applications, which Infrahub does not model: the access
+# broker and the kube-prometheus-stack. The handover deletes them, so a finished
+# bootstrap carries only the applications Infrahub declares -- an unmodelled
+# application in the cluster is state no proposed change can explain, and both of
+# these predate the service layer that now requests applications.
+#
+# Vidra never sees them either way; it only ever deletes a resource that leaves a
+# manifest it delivered itself. They are the lab's installer's, and deleting them
+# here is the only seam: `install-crossplane.sh` has no flag to skip a claim, so
+# they are applied, waited on, and then removed.
+LAB_ONLY_APPS = ("nfd41-access", "nfd41-observability")
+
+# Everything the handover deletes: the two the lab declares and Infrahub owns,
+# which Vidra then re-delivers, and the two that simply go.
+HANDOVER_DELETIONS = INFRAHUB_OWNED_RESOURCES + tuple(("fabricapp", name) for name in LAB_ONLY_APPS)
 
 # The namespace the demo application composes. Waiting on this, rather than on
 # composed-object names, is what makes the teardown check correct -- see
@@ -1012,7 +1023,7 @@ def _lab_kubeconfig(lab_dir: str = "") -> Path:
 @task(
     help={
         "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
-        "handover": "Delete the lab's copies of the resources Infrahub models, so Vidra can own them.",
+        "handover": "Delete the lab's claims, so the cluster carries only what Infrahub declares.",
     }
 )
 def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
@@ -1047,11 +1058,18 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
     All three were measured against this lab, which is why Vidra owning the
     resource from the start is worth the ordering.
 
-    `--handover` (the default) deletes the two claims the lab's bootstrap applies
-    which Infrahub models -- the demo application and the fabric peering. Vidra
-    picks them up on its next sync, within `requeueSyncAfter`. The delete is
-    still needed because the lab's script has no flag to skip them; it is the one
-    seam between "the lab's cluster" and "Infrahub's resources".
+    `--handover` (the default) deletes every claim the lab's bootstrap applies,
+    and that is two different things rather than one:
+
+      - The demo application and the fabric peering are **modelled**, so Vidra
+        re-delivers them on its next sync, within `requeueSyncAfter`.
+      - The access broker and the observability stack are **not**, so they stay
+        gone. A finished bootstrap then carries only the applications Infrahub
+        declares, which is what makes the cluster explainable from the graph.
+
+    The delete is the one seam between "the lab's cluster" and "Infrahub's
+    resources", and it is a delete rather than a skip because the lab's script
+    has no flag to leave a claim unapplied.
     """
     lab_path = find_lab_directory(lab_dir)
     kubeconfig = _lab_kubeconfig(lab_dir)
@@ -1069,20 +1087,26 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
     ctx.run(f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-crossplane.sh'))}", pty=True)
 
     if handover:
-        print("\n - Removing the lab's copies of the resources Infrahub models")
-        for kind, name in INFRAHUB_OWNED_RESOURCES:
+        print("\n - Removing the lab's claims, so only what Infrahub declares is left")
+        for kind, name in HANDOVER_DELETIONS:
+            # --wait=false, because a claim's finalizer holds the delete open
+            # until Crossplane has torn its composed resources down, and the
+            # observability stack takes minutes to go. _wait_for_teardown polls
+            # for the same condition, so the four tear down in parallel rather
+            # than one after another.
             ctx.run(
-                f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))} delete {kind} {name} --ignore-not-found",
+                f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))} "
+                f"delete {kind} {name} --ignore-not-found --wait=false",
                 pty=True,
                 warn=True,
             )
-        print(f"   The lab keeps {', '.join(LAB_OWNED_APPS)}; Infrahub owns the two above.")
+        print(f"   {', '.join(LAB_ONLY_APPS)} are unmodelled and stay gone; Infrahub owns the other two.")
         _wait_for_teardown(ctx, kubeconfig)
         _force_resync(ctx, kubeconfig)
         print("\n - Waiting for Vidra to deliver them from Infrahub")
         _wait_for_syncs(ctx, kubeconfig)
     else:
-        print("\n - Handover skipped: the lab keeps all four resources and Vidra will not adopt them.")
+        print("\n - Handover skipped: the lab keeps all four claims and Vidra will not adopt them.")
 
     print("\n - Cluster ready.")
 
@@ -1141,7 +1165,7 @@ def _wait_for_cluster_dns(ctx: Context, kubeconfig: Path, timeout: int = 300) ->
         print("   CoreDNS did not report available; Crossplane's preflight may fail")
 
 
-def _wait_for_teardown(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
+def _wait_for_teardown(ctx: Context, kubeconfig: Path, timeout: int = 600) -> None:
     """Wait for a deleted claim's composed resources to finish disappearing.
 
     Deleting a FabricApp only *starts* the teardown: Crossplane deletes each
@@ -1160,31 +1184,42 @@ def _wait_for_teardown(ctx: Context, kubeconfig: Path, timeout: int = 300) -> No
 
     So: wait for the composed Objects to go, and for the namespace with them,
     before anything recreates the claim.
+
+    It waits on the unmodelled applications too, which are not recreated by
+    anybody. That is not for the race -- it is so the function's return means
+    what the caller reports: nothing the lab claimed is left.
     """
     kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
     print(" - Waiting for the composed resources to finish tearing down")
     deadline = time.time() + timeout
+    outstanding: list[str] = []
     while time.time() < deadline:
         # Wait on the application NAMESPACE, not on composed-object names.
         # Matching objects by name prefix does not work here: composed objects are
         # named `<claim>-<hash>`, and the peering claim is called `nfd41`, which is
-        # a prefix of `nfd41-access-...` and `nfd41-observability-...` too -- the
-        # lab's own applications, which are never torn down. That filter matched
-        # them forever and the wait always timed out.
+        # a prefix of `nfd41-access-...` and `nfd41-observability-...` too. Those
+        # were the lab's own applications, left in place at the time, so the filter
+        # matched them forever and the wait always timed out.
         #
         # The namespace is the right thing to wait on regardless: it is what the
         # new composed resources collide with while it is Terminating.
         namespace = ctx.run(f"{kube} get ns {APP_NAMESPACE} --no-headers", hide=True, warn=True)
-        claims_gone = all(
-            not (ctx.run(f"{kube} get {kind} {name} --no-headers", hide=True, warn=True) or MISSING).ok
-            for kind, name in INFRAHUB_OWNED_RESOURCES
-        )
-        if claims_gone and not (namespace and namespace.ok):
+        outstanding = [
+            f"{kind}/{name}"
+            for kind, name in HANDOVER_DELETIONS
+            if (ctx.run(f"{kube} get {kind} {name} --no-headers", hide=True, warn=True) or MISSING).ok
+        ]
+        if namespace and namespace.ok:
+            outstanding.append(f"ns/{APP_NAMESPACE}")
+        if not outstanding:
             print("   torn down")
             return
         sleep(10)
 
-    print(f"   still tearing down after {timeout}s; recreating anyway may leave a stuck namespace")
+    print(
+        f"   still tearing down after {timeout}s ({', '.join(outstanding)}); "
+        "recreating anyway may leave a stuck namespace"
+    )
 
 
 def _force_resync(ctx: Context, kubeconfig: Path) -> None:

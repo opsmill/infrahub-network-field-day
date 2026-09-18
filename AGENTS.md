@@ -878,9 +878,12 @@ scripts/verify_bootstrap.sh          # ~20 minutes, destroys and rebuilds everyt
 ```
 
 Tears the environment down, rebuilds it with `invoke bootstrap --fresh`, and
-asserts sixteen things about the result. Use it after changing anything in the
-bootstrap path; "it worked" and "it is stable" are different claims, and only a
-full teardown distinguishes them.
+asserts the result stage by stage — seed data, artifacts, the devices, the
+cluster, the tooling cluster and signing in. Use it after changing anything in
+the bootstrap path; "it worked" and "it is stable" are different claims, and only
+a full teardown distinguishes them. (This said "sixteen things" for several
+cycles after it stopped being sixteen, which is why the count is no longer
+stated: the stages are what stays true.)
 
 Several checks are deliberately about **state rather than exit status**, because
 every bug this found was quiet:
@@ -1020,31 +1023,46 @@ Three measured behaviours are why that is worth arranging:
   still `Terminating` — which leaves two composed `Namespace` objects and a
   `FabricApp` stuck `Ready=False`.
 
-**The handover is the remaining seam.** The lab's bootstrap applies
-`crossplane/platform/10-peering.yaml` and `crossplane/apps/10-demo.yaml`, which
-declare the same two resources Infrahub models, and its script has no flag to
-skip them. `invoke cluster` deletes those two afterwards — and then **deletes
-and re-applies `vidra/infrahub-syncs.yaml`**, which is not optional. Deleting a
-delivered resource does not move the artifact's checksum, so the next sync skips
-the apply, reports `Succeeded`, and leaves the cluster without it. Recreating the
-sync resets its checksum state and delivery follows in seconds. This was
-measured twice: first by deleting a resource by hand, then by `invoke cluster`
-itself walking into it before the reset was added.
+**The handover is the remaining seam.** The lab's bootstrap applies four claims —
+`crossplane/platform/10-peering.yaml`, `crossplane/apps/10-demo.yaml`,
+`crossplane/apps/20-observability.yaml` and `crossplane/access/10-access-portal.yaml`
+— and its script has no flag to skip any of them. `invoke cluster` deletes **all
+four** afterwards, and what happens next divides them:
+
+| Resource | Owner | After the handover |
+| --- | --- | --- |
+| `fabricpeering.nfd41.lab/nfd41` | **Infrahub**, via `ServiceFabricPeering` | re-delivered by Vidra |
+| `fabricapp.nfd41.lab/nfd41-demo` | **Infrahub**, via `ServiceFabricApp` | re-delivered by Vidra |
+| `fabricapp.nfd41.lab/nfd41-observability` | the lab repository | gone |
+| `fabricapp.nfd41.lab/nfd41-access` | the lab repository | gone |
+
+**The bottom two are deleted because nothing models them.** A cluster carrying a
+workload no service object declares is state no proposed change can explain, which
+is the opposite of the claim this lab makes; the access broker and the
+observability stack both predate the service layer that now requests applications.
+`verify_bootstrap.sh` asserts their absence **and** counts the applications, because
+two absence checks say nothing about a third application arriving from somewhere
+else. `tests/unit/test_handover_scope.py` is the cheap version of the same claim:
+it parses the lab installer's own `kubectl apply` lines and fails when it applies
+a claim `HANDOVER_DELETIONS` does not name, so a lab that adds an application is
+caught in a second rather than at the end of a twenty-minute rebuild. Pass `--no-handover` to keep the lab in charge of all four; Vidra will then
+never adopt its two, and the other two stay up.
+
+The delete is `--wait=false` and a poll afterwards rather than four blocking
+deletes: a claim's finalizer holds the delete open until Crossplane has torn its
+composed resources down, and kube-prometheus-stack takes minutes. `_wait_for_teardown`
+waits for the same condition, so the four go in parallel.
+
+The handover then **deletes and re-applies `vidra/infrahub-syncs.yaml`**, which is
+not optional. Deleting a delivered resource does not move the artifact's checksum,
+so the next sync skips the apply, reports `Succeeded`, and leaves the cluster
+without it. Recreating the sync resets its checksum state and delivery follows in
+seconds. This was measured twice: first by deleting a resource by hand, then by
+`invoke cluster` itself walking into it before the reset was added.
 
 The wait afterwards checks **the resources**, not `syncState`, for the same
 reason — a wait on the sync state returns happily from a cluster where nothing
-was delivered:
-
-| Resource | Owner |
-| --- | --- |
-| `fabricpeering.nfd41.lab/nfd41` | **Infrahub**, via `ServiceFabricPeering` |
-| `fabricapp.nfd41.lab/nfd41-demo` | **Infrahub**, via `ServiceFabricApp` |
-| `fabricapp.nfd41.lab/nfd41-observability` | the lab repository |
-| `fabricapp.nfd41.lab/nfd41-access` | the lab repository |
-
-The lab's two are safe because the operator only ever deletes a resource that
-leaves a manifest **it delivered**. Pass `--no-handover` to keep the lab in
-charge of all four; Vidra will then never adopt them.
+was delivered.
 
 `scripts/install_vidra.sh` follows the order the
 operator requires: namespace, ConfigMap, Secret and the CRD shim **before** the

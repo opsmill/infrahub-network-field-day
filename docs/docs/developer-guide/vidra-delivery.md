@@ -42,20 +42,25 @@ merge, which is why no trigger definition was added.
 | --- | --- | --- |
 | `fabricapp.nfd41.lab/nfd41-demo` | Infrahub | Modelled as a `ServiceFabricApp` in the `service_fabric_apps` group |
 | `fabricpeering.nfd41.lab/nfd41` | Infrahub | Modelled as a `ServiceFabricPeering` |
-| `fabricapp.nfd41.lab/nfd41-access` | the lab repository | Not modelled |
-| `fabricapp.nfd41.lab/nfd41-observability` | the lab repository | Not modelled |
 
 An application joins delivery by joining the target group. No cluster-side change is needed —
 a sync selects by artifact **name**, so it already covers every member of the group.
 
+**Those two are the whole list, and that is enforced rather than assumed.** The lab repository's
+bootstrap also applies `nfd41-observability` and `nfd41-access`, which nothing in Infrahub models.
+`invoke cluster`'s handover deletes them along with the two above, so a finished cluster carries
+only applications a service object declares — a workload no proposed change can account for is
+exactly what this delivery path exists to rule out. `scripts/verify_bootstrap.sh` checks their
+absence and counts the applications, so a third one arriving from elsewhere fails too.
+
 :::warning Two files in the lab repository are now dead
 `crossplane/apps/10-demo.yaml` and `crossplane/platform/10-peering.yaml` declare the same two
 resources Infrahub now owns. Re-applying either restores a second writer, and the two then fight over the resource.
-`10-access.yaml` and `20-observability.yaml` are unaffected and remain the lab's.
 :::
 
-The operator only ever deletes a resource that leaves a manifest **it delivered**. Resources it
-never created are invisible to it, which is what keeps the two unmodelled applications safe.
+The operator only ever deletes a resource that leaves a manifest **it delivered**, so it plays no
+part in removing the unmodelled applications — the handover deletes those directly, and Vidra
+never sees them.
 
 ## Deploying the operator
 
