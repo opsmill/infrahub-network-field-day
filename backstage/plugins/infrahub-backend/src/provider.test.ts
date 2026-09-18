@@ -507,7 +507,11 @@ describe('InfrahubEntityProvider', () => {
     // that Infrahub rejects with "Variable '$...' is not defined" -- the
     // template looked right and every write failed.
     expect(create.input.query).toContain('$infrahub_context_account: String!');
-    expect(create.input.variables.infrahub_context_account).toContain('split("@")');
+    // `metadata.name`, NOT a filter over the email: nunjucks has no `split`,
+    // so that expression yields nothing and Infrahub rejects the empty account.
+    expect(create.input.variables.infrahub_context_account).toBe(
+      '${{ user.entity.metadata.name }}',
+    );
 
     // Every generated write, not just the create -- a per-field update left
     // out would be attributed to the service account while the rest was not.

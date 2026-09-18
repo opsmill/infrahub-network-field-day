@@ -222,20 +222,24 @@ const relationshipsOf = (schema: KindSchema): SchemaRelationship[] =>
 const ACCOUNT_VAR = 'infrahub_context_account';
 
 /**
- * The account to write as: the local part of the signed-in user's email.
+ * The account to write as: the catalog User's own name.
  *
  * Infrahub resolves `context.account.id` by UUID **or by name**, and an SSO
- * login provisions an account named for the identity -- `alice@nfd41.lab`
- * becomes `alice`, which is the same rule the Backstage sign-in resolver uses
- * (`emailLocalPartMatchingUserEntityName`). So the two agree without anything
- * having to share a UUID.
+ * login provisions an account named for the identity. The Backstage sign-in
+ * resolver matched this User by the same rule
+ * (`emailLocalPartMatchingUserEntityName`), so `metadata.name` is already
+ * `alice` for `alice@nfd41.lab` and the two agree with nothing shared.
+ *
+ * DERIVING IT FROM THE EMAIL DOES NOT WORK: nunjucks has no `split` filter, so
+ * `email | split("@") | first` silently yields nothing and Infrahub answers
+ * "Unable to set context for account that doesn't exist" -- naming the account
+ * rather than the empty expression that produced it.
  *
  * The account only exists once that person has signed in to Infrahub at least
  * once; before that the mutation fails with "Unable to set context for account
  * that doesn't exist".
  */
-const ACCOUNT_VALUE =
-  '${{ (user.entity.spec.profile.email or user.ref) | split("@") | first }}';
+const ACCOUNT_VALUE = '${{ user.entity.metadata.name }}';
 
 /** A mandatory cardinality-many relationship: one field, many hfids. */
 const isMultiple = (relationship: SchemaRelationship): boolean =>
