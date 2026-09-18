@@ -346,7 +346,7 @@ therefore done by deleting the service, not by labelling it.
 the firewall objects permitting the session: an address-book entry for the destination VIP, a
 `SecurityService` per permitted port, and the `SecurityPolicyRule` joining them, linked back
 through `granted_rules`. Generated objects render into the existing Junos artifact, because
-`junos_config.gql` queries `SecurityGenericAddress` and `SecurityPolicy` unfiltered. Seven things
+`junos_config.gql` queries `SecurityGenericAddress` and `SecurityPolicy` unfiltered. Nine things
 to know before changing it:
 
 - **A grant's ports come from the application's ADVERTISED SERVICES, and `policy_allow_ports` is
@@ -363,6 +363,28 @@ to know before changing it:
   wrong port by another route; and the derivation now **refuses rather than guessing** when it can
   find no advertised Service, because the old fallback was always populated and always plausible,
   which is precisely why a wrong port was never once reported as wrong.
+- **IT OPENS ALL THREE GATES, and the third was the one nobody could see.** A session needs the
+  route to exist, the firewall to permit it, and the APPLICATION's own CiliumNetworkPolicy to name
+  the source — `policy_default_deny` is true on every application here, so an unnamed source is
+  dropped at the pod. The generator opened the first two. The third was left to whoever created the
+  application, and **the portal cannot ask for it**: `allowed_source_prefixes` is an optional
+  cardinality-many relationship and the form builder admits cardinality-one plus *mandatory* many
+  only. So an application requested through the portal deployed cleanly, took a VIP, passed the
+  firewall and dropped every packet — measured, with `allowFrom: []`, the rule on the device and the
+  leaf holding the VIP's `/32`. **Nothing logged a denial, because the drop is not on `fw1`.**
+  The grant now adds its source to the application, which needs no parsing and creates nothing: a
+  `SecurityIPAMIPPrefix` address already points at the very `IpamPrefix` that
+  `allowed_source_prefixes` peers, so both gates name one object. A source of another kind opens the
+  two gates it can and says so.
+- **`granted_source_prefixes` is what makes revoking it safe**, and it is not decoration.
+  `allowed_source_prefixes` is a SHARED list — `nfd41-demo` declares three by hand and two grants may
+  name one source — so withdrawal removes only what this grant recorded, minus what a **live sibling
+  grant on the same application** still records. Both halves are load bearing: the first keeps a
+  human's entry out of reach, the second stops one revocation closing a gate another grant relies on,
+  which would fail in the worst direction — firewall still permitting, pod still dropping. It plays
+  exactly the role `managed_by_service` plays for rules and `vip_block_managed` for VIP blocks.
+  Withdrawal runs **outside** the `if removed:` branch, because a grant whose rule an earlier run
+  already cleaned up still has its source named.
 - **It asks for the firewall's artifact to be re-rendered, and must.** An artifact regenerates
   when its *target* changes, and the target is `fw1` — a new `SecurityPolicyRule` is not a
   change to the firewall. Without the explicit request the objects appear, the artifact keeps

@@ -58,6 +58,9 @@ GRANT = "branch-to-nfd41-demo"
 APP = "nfd41-demo"
 VIP_ID = "ip-10.112.240.10"
 VIP_ADDRESS = "10.112.240.10/32"
+# The IpamPrefix behind `branch-users`, which is what the application has to
+# name before Cilium will let the session reach a pod.
+PREFIX = "pfx-10.70.0.0-24"
 # The fabric side of the `branch` zone, from objects/32_nfd41_security.yml.
 ADVERTISED_LIST = "PL-DC-ADVERTISED-BRANCH"
 BORDER_LEAF = "leaf-nfd41-pod1-3-1"
@@ -112,6 +115,8 @@ def _grant(
     app_vip_block: str | None = "prefix-nfd41-demo-vips",
     site: dict[str, Any] | None = None,
     source_address: bool = True,
+    app_allows: tuple[str, ...] = (),
+    granted_prefixes: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """One ServiceAppAccess as GraphQL returns it.
 
@@ -150,6 +155,9 @@ def _grant(
                     # `policy_allow_ports`, which is the pod-level network
                     # policy and is the wrong layer (see
                     # test_the_pod_policy_port_is_not_the_firewall_port).
+                    "allowed_source_prefixes": {
+                        "edges": [{"node": {"id": pid, "prefix": {"value": "x"}}} for pid in app_allows]
+                    },
                     "manifests": {"value": resolved_manifests},
                     "manifests_file": {"node": None},
                     "service_selector": {"value": ["nfd41.lab/advertise=true"]},
@@ -196,6 +204,11 @@ def _grant(
                         "__typename": "SecurityIPAMIPPrefix",
                         "id": "addr-branch-users",
                         "display_label": "branch-users",
+                        # The IpamPrefix the address already points at, which is
+                        # the very peer `allowed_source_prefixes` takes -- so
+                        # the two gates name one object and nothing is parsed
+                        # or created.
+                        "ip_prefix": {"node": {"id": PREFIX, "prefix": {"value": "10.70.0.0/24"}}},
                     }
                 }
                 if source_address
@@ -204,6 +217,9 @@ def _grant(
             "destination_vip": (
                 {"node": {"id": vip_id, "address": {"value": "10.112.240.10/32"}}} if vip_id else {"node": None}
             ),
+            "granted_source_prefixes": {
+                "edges": [{"node": {"id": pid, "prefix": {"value": "x"}}} for pid in granted_prefixes]
+            },
             "granted_rules": {
                 "edges": [{"node": {"id": rid, "name": {"value": rid}}} for rid in (granted_rule_ids or [])]
             },
@@ -301,6 +317,9 @@ def _query(
     """The whole parsed response, with the lab's real context by default."""
     zones = ZONE_VRFS if zones is None else zones
     vip_entry_for = grant_kwargs.pop("existing_vip_entry_for", None)
+    # Sibling grants, so withdrawal can tell whether another one still needs a
+    # source prefix. Each is (id, application_id, status, prefix ids).
+    siblings = grant_kwargs.pop("siblings", ())
     from_previous_run = grant_kwargs.pop("from_previous_run", False)
     ours_kind = grant_kwargs.pop("ours_kind", "SecurityIPAMIPAddress")
     services = list(FIREWALL_SERVICES)
@@ -318,8 +337,40 @@ def _query(
         for n in range(policy_targets)
     ]
 
+    grant_node = _grant(**grant_kwargs)
     return GenerateAppAccessQuery(
-        target={"edges": [_grant(**grant_kwargs)]},
+        target={"edges": [grant_node]},
+        ServiceAppAccess={
+            "edges": [
+                # The grant under test appears here too, exactly as Infrahub
+                # returns it: the collection is unfiltered. The generator has
+                # to exclude itself by id, and a fixture that omitted it would
+                # never exercise that.
+                {
+                    "node": {
+                        "id": grant_node["node"]["id"],
+                        "name": grant_node["node"]["name"],
+                        "status": grant_node["node"]["status"],
+                        "application": {"node": {"id": f"app-{APP}"}},
+                        "granted_source_prefixes": grant_node["node"]["granted_source_prefixes"],
+                    }
+                },
+                *(
+                    {
+                        "node": {
+                            "id": sid,
+                            "name": {"value": sid},
+                            "status": {"value": status},
+                            "application": {"node": {"id": app_id}},
+                            "granted_source_prefixes": {
+                                "edges": [{"node": {"id": pid, "prefix": {"value": "x"}}} for pid in pids]
+                            },
+                        }
+                    }
+                    for sid, app_id, status, pids in siblings
+                ),
+            ]
+        },
         SecurityPolicy={"edges": policies},
         SecurityZone={
             "edges": [
@@ -573,6 +624,7 @@ def test_validate_model_resolves_everything_before_any_write() -> None:
 def test_validate_model_raises_when_the_grant_is_missing() -> None:
     parsed = GenerateAppAccessQuery(
         target={"edges": []},
+        ServiceAppAccess={"edges": []},
         SecurityPolicy={"edges": []},
         SecurityZone={"edges": []},
         SecurityService={"edges": []},
@@ -704,6 +756,10 @@ class _RecordingNode:
         self.saves: list[dict[str, Any]] = []
         self.status = _RecordingAttribute("provisioning")
         self.granted_rules = _RecordingRelationship()
+        # The third gate: what the application permits, and what this grant
+        # recorded adding to it.
+        self.allowed_source_prefixes = _RecordingRelationship()
+        self.granted_source_prefixes = _RecordingRelationship()
         # The advertising switch's shared JSON blob. Starts empty, as every
         # fabric switch in the lab does.
         self.avd_custom_hostvars = _RecordingAttribute({})
@@ -1160,6 +1216,141 @@ def test_a_non_tcp_service_port_is_not_borrowed() -> None:
     parsed = _query(ports=[], app_ports=({"port": 53, "protocol": "UDP"},))
     with pytest.raises(ValueError, match="no advertised Service"):
         normalise_ports(parsed.target.edges[0].node, _derived(parsed))
+
+
+@pytest.mark.asyncio
+async def test_the_grant_names_its_source_in_the_applications_own_policy() -> None:
+    """THE THIRD GATE.
+
+    A session needs three independent things and the grant is meant to be the
+    one thing a requester asks for. The route and the firewall were opened; the
+    application's own CiliumNetworkPolicy was not, and `policy_default_deny` is
+    true on every application here -- so Cilium dropped the traffic at the pod.
+    Measured on a live cluster: `allowFrom: []`, the rule on the firewall, the
+    leaf holding the VIP's /32, and no TCP from the branch at all. Nothing
+    logged a denial, because the drop is not on fw1.
+    """
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(approved=True)
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    application = client.nodes[f"app-{APP}"]
+    assert application.allowed_source_prefixes.peer_ids == [PREFIX]
+    assert application.allowed_source_prefixes.fetched, "a manager must be fetched before editing"
+    # BOTH SIDES. The application permits it, and the grant records that it was
+    # this grant which added it -- the only safe basis for removing it again.
+    assert client.nodes[f"grant-{GRANT}"].granted_source_prefixes.peer_ids == [PREFIX]
+
+
+@pytest.mark.asyncio
+async def test_a_source_the_application_already_permits_is_not_added_twice() -> None:
+    """Two grants may name one source, and `allowed_source_prefixes` is shared.
+    The second must converge rather than duplicate the entry."""
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(approved=True, app_allows=(PREFIX,))
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    # The application is never even fetched: nothing to change.
+    assert f"ServiceFabricApp:app-{APP}" not in client.fetched
+    # Still RECORDED on the grant, or withdrawing it would leave the gate open
+    # with nothing saying who relies on it.
+    assert client.nodes[f"grant-{GRANT}"].granted_source_prefixes.peer_ids == [PREFIX]
+
+
+@pytest.mark.asyncio
+async def test_a_source_that_is_not_ipam_backed_leaves_the_policy_alone() -> None:
+    """A hand-written address range has no IpamPrefix to name. The grant opens
+    the two gates it can rather than failing or inventing a prefix."""
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(approved=True, source_address=True)
+    # Strip the peer the way a non-IPAM address returns it.
+    parsed.target.edges[0].node.source_address.node.ip_prefix.node = None  # type: ignore[union-attr]
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    assert f"ServiceFabricApp:app-{APP}" not in client.fetched
+
+
+@pytest.mark.asyncio
+async def test_withdrawing_a_grant_stops_naming_its_source() -> None:
+    """Revocation has to close all three gates. Leaving the source named would
+    keep the application permitting a session nobody is permitted."""
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(approved=False, granted_prefixes=(PREFIX,), app_allows=(PREFIX,))
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    application = client.nodes[f"app-{APP}"]
+    assert application.allowed_source_prefixes.peer_ids == []
+
+
+@pytest.mark.asyncio
+async def test_withdrawal_keeps_a_source_another_live_grant_needs() -> None:
+    """THE GUARD THAT MAKES REVOCATION SAFE.
+
+    `allowed_source_prefixes` is one shared list. Two grants may name the same
+    source -- two sites behind one prefix, or one site asking for two
+    applications -- so removing what this grant recorded without checking would
+    revoke access nobody revoked. It would fail in the worst direction too: the
+    firewall would go on permitting the session and the pod would drop it,
+    which is the failure this whole change exists to remove.
+    """
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(
+        approved=False,
+        granted_prefixes=(PREFIX,),
+        app_allows=(PREFIX,),
+        siblings=(("grant-other", f"app-{APP}", "active", (PREFIX,)),),
+    )
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    # Left alone entirely -- not fetched, so not rewritten and not re-rendered.
+    assert f"ServiceFabricApp:app-{APP}" not in client.fetched
+
+
+@pytest.mark.asyncio
+async def test_a_withdrawn_sibling_does_not_pin_a_source_open() -> None:
+    """`decommissioning` counts as gone everywhere else here, so a sibling in
+    that state must not keep a prefix alive for a grant that no longer wants
+    it."""
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(
+        approved=False,
+        granted_prefixes=(PREFIX,),
+        app_allows=(PREFIX,),
+        siblings=(("grant-other", f"app-{APP}", "decommissioning", (PREFIX,)),),
+    )
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    assert client.nodes[f"app-{APP}"].allowed_source_prefixes.peer_ids == []
+
+
+@pytest.mark.asyncio
+async def test_a_sibling_on_another_application_is_not_consulted() -> None:
+    """The list is per-application. A grant on a different app naming the same
+    prefix says nothing about whether THIS app still needs it."""
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(
+        approved=False,
+        granted_prefixes=(PREFIX,),
+        app_allows=(PREFIX,),
+        siblings=(("grant-elsewhere", "app-somewhere-else", "active", (PREFIX,)),),
+    )
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    assert client.nodes[f"app-{APP}"].allowed_source_prefixes.peer_ids == []
 
 
 @pytest.mark.asyncio

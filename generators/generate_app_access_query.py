@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 
 class GenerateAppAccessQuery(BaseModel):
     target: "GenerateAppAccessQueryTarget"
+    service_app_access: "GenerateAppAccessQueryServiceAppAccess" = Field(
+        alias="ServiceAppAccess"
+    )
     security_policy: "GenerateAppAccessQuerySecurityPolicy" = Field(
         alias="SecurityPolicy"
     )
@@ -42,6 +45,9 @@ class GenerateAppAccessQueryTargetEdgesNode(BaseModel):
     source_zone: "GenerateAppAccessQueryTargetEdgesNodeSourceZone"
     source_address: "GenerateAppAccessQueryTargetEdgesNodeSourceAddress"
     destination_vip: "GenerateAppAccessQueryTargetEdgesNodeDestinationVip"
+    granted_source_prefixes: (
+        "GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixes"
+    )
     granted_rules: "GenerateAppAccessQueryTargetEdgesNodeGrantedRules"
 
 
@@ -77,6 +83,9 @@ class GenerateAppAccessQueryTargetEdgesNodeApplicationNode(BaseModel):
     service_selector: Optional[
         "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeServiceSelector"
     ]
+    allowed_source_prefixes: (
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixes"
+    )
     vip_block: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock"
     vrf: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf"
 
@@ -101,6 +110,37 @@ class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFileNode(Base
 
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeServiceSelector(BaseModel):
     value: Optional[Any]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixes(
+    BaseModel
+):
+    edges: list[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdges"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdges(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdgesNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdgesNode(
+    BaseModel
+):
+    id: str
+    prefix: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdgesNodePrefix"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdgesNodePrefix(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock(BaseModel):
@@ -289,21 +329,62 @@ class GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNodeAv
 
 
 class GenerateAppAccessQueryTargetEdgesNodeSourceAddress(BaseModel):
-    node: Optional["GenerateAppAccessQueryTargetEdgesNodeSourceAddressNode"]
+    node: Optional[
+        Annotated[
+            Union[
+                "GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityGenericAddress",
+                "GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefix",
+            ],
+            Field(discriminator="typename__"),
+        ]
+    ]
 
 
-class GenerateAppAccessQueryTargetEdgesNodeSourceAddressNode(BaseModel):
+class GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityGenericAddress(
+    BaseModel
+):
     typename__: Literal[
         "SecurityFQDN",
         "SecurityGenericAddress",
         "SecurityIPAMIPAddress",
-        "SecurityIPAMIPPrefix",
         "SecurityIPAddress",
         "SecurityIPRange",
         "SecurityPrefix",
     ] = Field(alias="__typename")
     id: Optional[str]
     display_label: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefix(
+    BaseModel
+):
+    typename__: Literal["SecurityIPAMIPPrefix"] = Field(alias="__typename")
+    id: str
+    display_label: Optional[str]
+    ip_prefix: "GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefixIpPrefix"
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefixIpPrefix(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefixIpPrefixNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefixIpPrefixNode(
+    BaseModel
+):
+    id: str
+    prefix: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefixIpPrefixNodePrefix"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefixIpPrefixNodePrefix(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeDestinationVip(BaseModel):
@@ -316,6 +397,29 @@ class GenerateAppAccessQueryTargetEdgesNodeDestinationVipNode(BaseModel):
 
 
 class GenerateAppAccessQueryTargetEdgesNodeDestinationVipNodeAddress(BaseModel):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixes(BaseModel):
+    edges: list["GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixesEdges"]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixesEdges(BaseModel):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixesEdgesNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixesEdgesNode(BaseModel):
+    id: str
+    prefix: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixesEdgesNodePrefix"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixesEdgesNodePrefix(
+    BaseModel
+):
     value: Optional[str]
 
 
@@ -334,6 +438,60 @@ class GenerateAppAccessQueryTargetEdgesNodeGrantedRulesEdgesNode(BaseModel):
 
 class GenerateAppAccessQueryTargetEdgesNodeGrantedRulesEdgesNodeName(BaseModel):
     value: Optional[str]
+
+
+class GenerateAppAccessQueryServiceAppAccess(BaseModel):
+    edges: list["GenerateAppAccessQueryServiceAppAccessEdges"]
+
+
+class GenerateAppAccessQueryServiceAppAccessEdges(BaseModel):
+    node: Optional["GenerateAppAccessQueryServiceAppAccessEdgesNode"]
+
+
+class GenerateAppAccessQueryServiceAppAccessEdgesNode(BaseModel):
+    id: str
+    name: Optional["GenerateAppAccessQueryServiceAppAccessEdgesNodeName"]
+    status: Optional["GenerateAppAccessQueryServiceAppAccessEdgesNodeStatus"]
+    application: "GenerateAppAccessQueryServiceAppAccessEdgesNodeApplication"
+    granted_source_prefixes: (
+        "GenerateAppAccessQueryServiceAppAccessEdgesNodeGrantedSourcePrefixes"
+    )
+
+
+class GenerateAppAccessQueryServiceAppAccessEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryServiceAppAccessEdgesNodeStatus(BaseModel):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryServiceAppAccessEdgesNodeApplication(BaseModel):
+    node: Optional["GenerateAppAccessQueryServiceAppAccessEdgesNodeApplicationNode"]
+
+
+class GenerateAppAccessQueryServiceAppAccessEdgesNodeApplicationNode(BaseModel):
+    id: str
+
+
+class GenerateAppAccessQueryServiceAppAccessEdgesNodeGrantedSourcePrefixes(BaseModel):
+    edges: list[
+        "GenerateAppAccessQueryServiceAppAccessEdgesNodeGrantedSourcePrefixesEdges"
+    ]
+
+
+class GenerateAppAccessQueryServiceAppAccessEdgesNodeGrantedSourcePrefixesEdges(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQueryServiceAppAccessEdgesNodeGrantedSourcePrefixesEdgesNode"
+    ]
+
+
+class GenerateAppAccessQueryServiceAppAccessEdgesNodeGrantedSourcePrefixesEdgesNode(
+    BaseModel
+):
+    id: str
 
 
 class GenerateAppAccessQuerySecurityPolicy(BaseModel):
@@ -603,6 +761,9 @@ GenerateAppAccessQueryTargetEdgesNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplication.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFile.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixes.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdges.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdgesNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlockNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf.model_rebuild()
@@ -619,11 +780,23 @@ GenerateAppAccessQueryTargetEdgesNodeSourceZoneNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDevice.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZoneNodeAdvertisingDeviceNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceAddress.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefix.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefixIpPrefix.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeSourceAddressNodeSecurityIPAMIPPrefixIpPrefixNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeDestinationVip.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeDestinationVipNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixes.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixesEdges.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeGrantedSourcePrefixesEdgesNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeGrantedRules.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeGrantedRulesEdges.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeGrantedRulesEdgesNode.model_rebuild()
+GenerateAppAccessQueryServiceAppAccess.model_rebuild()
+GenerateAppAccessQueryServiceAppAccessEdges.model_rebuild()
+GenerateAppAccessQueryServiceAppAccessEdgesNode.model_rebuild()
+GenerateAppAccessQueryServiceAppAccessEdgesNodeApplication.model_rebuild()
+GenerateAppAccessQueryServiceAppAccessEdgesNodeGrantedSourcePrefixes.model_rebuild()
+GenerateAppAccessQueryServiceAppAccessEdgesNodeGrantedSourcePrefixesEdges.model_rebuild()
 GenerateAppAccessQuerySecurityPolicy.model_rebuild()
 GenerateAppAccessQuerySecurityPolicyEdges.model_rebuild()
 GenerateAppAccessQuerySecurityPolicyEdgesNode.model_rebuild()

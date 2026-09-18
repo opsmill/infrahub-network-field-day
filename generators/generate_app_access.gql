@@ -62,6 +62,19 @@ query GenerateAppAccessQuery($name: String!) {
             service_selector {
               value
             }
+            # What the application already permits, so adding is idempotent and
+            # withdrawal can tell a prefix this grant added from one a human
+            # declared or another grant needs.
+            allowed_source_prefixes {
+              edges {
+                node {
+                  id
+                  prefix {
+                    value
+                  }
+                }
+              }
+            }
             # The block its VIPs come from. A grant naming no `destination_vip`
             # permits to this instead -- the set of addresses the application
             # can ever be advertised on.
@@ -166,6 +179,22 @@ query GenerateAppAccessQuery($name: String!) {
             id
             __typename
             display_label
+            # THE THIRD GATE'S INPUT. The application's own network policy has
+            # to name the source as an IpamPrefix, and a SecurityIPAMIPPrefix
+            # address already points at exactly that object -- so the grant's
+            # source resolves to the right peer without parsing a CIDR or
+            # creating anything. An address of any other kind yields nothing
+            # here and the grant simply does not open that gate.
+            ... on SecurityIPAMIPPrefix {
+              ip_prefix {
+                node {
+                  id
+                  prefix {
+                    value
+                  }
+                }
+              }
+            }
           }
         }
         destination_vip {
@@ -177,6 +206,16 @@ query GenerateAppAccessQuery($name: String!) {
           }
         }
         # What a previous run already granted.
+        granted_source_prefixes {
+          edges {
+            node {
+              id
+              prefix {
+                value
+              }
+            }
+          }
+        }
         granted_rules {
           edges {
             node {
@@ -199,6 +238,38 @@ query GenerateAppAccessQuery($name: String!) {
   # SecurityPolicyRule.policy is mandatory and cardinality one, and the grant
   # does not name a policy. Exactly one policy targets the firewall; anything
   # else is an incomplete model and the generator raises.
+  # EVERY OTHER GRANT, so withdrawal does not close a gate somebody else is
+  # still using. Two grants may name the same source -- two sites behind one
+  # prefix, or the same site asking for two applications -- and the
+  # application's `allowed_source_prefixes` is one shared list. Removing what
+  # THIS grant recorded without checking the others would revoke access nobody
+  # revoked, and it would fail silently: the firewall would still permit the
+  # session and the pod would drop it.
+  ServiceAppAccess {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        application {
+          node {
+            id
+          }
+        }
+        granted_source_prefixes {
+          edges {
+            node {
+              id
+            }
+          }
+        }
+      }
+    }
+  }
   SecurityPolicy {
     edges {
       node {

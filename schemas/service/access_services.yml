@@ -137,6 +137,37 @@ nodes:
         on_delete: no-action
         identifier: service__access_destination_vip
         order_weight: 940
+      - name: granted_source_prefixes
+        peer: IpamPrefix
+        label: Granted Source Prefixes
+        kind: Generic
+        cardinality: many
+        optional: true
+        # THE THIRD GATE, recorded so it can be closed again.
+        #
+        # A grant has to open three independent things before a session works:
+        # the route has to exist, the firewall has to permit it, and the
+        # application's own CiliumNetworkPolicy has to name the source. The
+        # generator opens all three; this records which prefixes it added to
+        # `ServiceFabricApp.allowed_source_prefixes` so revocation removes
+        # exactly those.
+        #
+        # It is needed because the relationship it writes into is shared.
+        # `nfd41-demo` declares three prefixes by hand and two grants may name
+        # the same source, so "remove what the app allows" would delete a
+        # human's entry or another grant's. This plays the role
+        # `managed_by_service` plays for rules and `vip_block_managed` plays
+        # for VIP blocks: it records authorship, which is the only safe basis
+        # for deletion.
+        # `no-action`, like every other service relationship: deleting a grant
+        # must never delete the prefix it named. `ServiceFabricApp.
+        # allowed_source_prefixes` -- the same peer, the list this one shadows
+        # -- says the same, and `test_no_service_relationship_cascades_into_
+        # infrastructure` fails without it.
+        on_delete: no-action
+        description: "The source prefixes this grant added to its application"
+        identifier: service__access_granted_source_prefixes
+        order_weight: 955
       - name: granted_rules
         peer: SecurityPolicyRule
         label: Granted Firewall Rules

@@ -135,6 +135,10 @@ FIREWALL_ARTIFACT = "Junos Configuration"
 # read-modify-write that preserves everything else in it.
 PREFIX_LISTS_KEY = "custom_structured_configuration_prefix_lists"
 
+# The application's delivered manifest, re-rendered when a grant changes the
+# network policy the application enforces on its own pods.
+APPLICATION_ARTIFACT = "Crossplane FabricApp"
+
 MIN_PORT = 1
 MAX_PORT = 65535
 
@@ -328,6 +332,12 @@ class GrantContext:
     vip_is_block: bool = False
     """True when the destination is the application's `vip_block` rather than a
     single VIP the requester named. The address-book entry is then a prefix."""
+    application_id: str | None = None
+    source_prefix_id: str | None = None
+    """The IpamPrefix behind the source address, for the application's own
+    network policy. None when the source is not an IPAM-backed address."""
+    already_allowed: frozenset[str] = frozenset()
+    """Prefix ids the application already permits, so adding is idempotent."""
     taken_book_indexes: frozenset[int] = field(default_factory=frozenset)
     services_by_port: dict[int, Existing] = field(default_factory=dict)
     """Existing TCP service objects, keyed by port. Referenced, never duplicated."""
@@ -369,8 +379,13 @@ class GrantContext:
 WITHDRAWN_STATUSES = frozenset({"decommissioning", "decommissioned"})
 
 
-def is_withdrawn(grant: GrantNode) -> bool:
+def is_withdrawn(grant: Any) -> bool:
     """Whether this grant should hold any firewall objects at all.
+
+    `Any` rather than `GrantNode` because two generated types reach here and
+    they are structurally identical: the query's target, and each sibling grant
+    fetched so withdrawal can tell whether another one still needs a source
+    prefix. Both carry `status`, and nothing else is read.
 
     REPLACES THE `approved` GATE, which was a second gate in front of one the
     workflow already has: a grant is requested on a branch and reaches no device
@@ -449,6 +464,61 @@ def _selector_labels(service_selector: Any) -> dict[str, str]:
         key, _, value = text.partition("=")
         labels[key.strip()] = value.strip()
     return labels
+
+
+def source_prefix_id(grant: GrantNode) -> str | None:
+    """The IpamPrefix behind this grant's source address, if it has one.
+
+    THE THIRD GATE'S INPUT. A session needs three independent things and the
+    generator opens all three: the route has to exist, the firewall has to
+    permit it, and the application's own CiliumNetworkPolicy has to name the
+    source. The third was left to whoever created the application -- and the
+    portal cannot ask for it, because `allowed_source_prefixes` is an optional
+    cardinality-many relationship and the form builder admits cardinality-one
+    plus MANDATORY many only. So an application requested through the portal
+    deployed cleanly, took a VIP, passed the firewall and dropped every packet,
+    with nothing logged on the firewall because the drop happens at the pod.
+
+    No parsing and no creation: a `SecurityIPAMIPPrefix` address already points
+    at the very `IpamPrefix` that `allowed_source_prefixes` peers, so the two
+    gates reference one object. An address of another kind -- a bare
+    `SecurityIPAMIPAddress`, a hand-written range -- yields None, and the grant
+    then opens the two gates it can and says so.
+    """
+    address = _node_of(grant.source_address)
+    peer = _node_of(getattr(address, "ip_prefix", None)) if address is not None else None
+    return peer.id if peer is not None else None
+
+
+def prefixes_other_grants_need(
+    parsed: GenerateAppAccessQuery, grant: GrantNode, application_id: str | None
+) -> set[str]:
+    """Source prefixes a LIVE sibling grant on the same application recorded.
+
+    Withdrawal removes what this grant added MINUS this set. Two grants may
+    name the same source -- two sites behind one prefix, or one site asking for
+    two applications -- and `allowed_source_prefixes` is a single shared list,
+    so removing this grant's record outright would revoke access nobody
+    revoked. It would also fail silently, in the worst direction: the firewall
+    would go on permitting the session and the pod would drop it.
+
+    Withdrawn siblings are excluded rather than skipped as unknown. A
+    `decommissioning` grant counts as gone everywhere else in this repository,
+    and treating it as live here would pin a prefix open for a grant that no
+    longer wants it.
+    """
+    needed: set[str] = set()
+    for edge in parsed.service_app_access.edges:
+        node = edge.node
+        if node is None or node.id == grant.id:
+            continue
+        if is_withdrawn(node):
+            continue
+        peer = _node_of(node.application)
+        if application_id is not None and (peer is None or peer.id != application_id):
+            continue
+        needed.update(prefix.id for prefix in _edges_of(node.granted_source_prefixes))
+    return needed
 
 
 def normalise_ports(grant: GrantNode, derived: list[int] | None = None) -> list[int]:
@@ -738,6 +808,11 @@ def validate_model(parsed: GenerateAppAccessQuery, derived_ports: list[int] | No
         tcp_protocol_id=derive_tcp_protocol(parsed, name),
         application_name=_value(application_node.name) if application_node else None,
         requester=_value(grant.requester),
+        application_id=application_node.id if application_node else None,
+        source_prefix_id=source_prefix_id(grant),
+        already_allowed=frozenset(prefix.id for prefix in _edges_of(application_node.allowed_source_prefixes))
+        if application_node
+        else frozenset(),
         existing_vip_entry=entries_by_address.get(vip.id),
         taken_book_indexes=taken,
         services_by_port=index_tcp_services(parsed),
@@ -775,6 +850,7 @@ class AppAccessGenerator(InfrahubGenerator):
 
         await self._link_granted_rules(context, [rule_id])
         await self._set_status(grant.id, "active")
+        await self._permit_source(context)
         await self._advertise(context, derive_advertisement(grant))
         await self._rerender_firewall(context.firewall_id)
 
@@ -1002,6 +1078,14 @@ class AppAccessGenerator(InfrahubGenerator):
                 await self.client.delete(kind="SecurityService", id=node.id)
                 removed += 1
 
+        # BEFORE the `if removed:` below, and deliberately outside it. The
+        # firewall objects and the application's policy entry are independent:
+        # a grant whose rule was already cleaned up by an earlier run still has
+        # its source named in the application, and gating this on `removed`
+        # would leave that gate open forever while reporting "nothing to
+        # remove".
+        removed += await self._revoke_source(parsed, grant)
+
         if removed:
             self.logger.info("Grant %r is withdrawn; removed %s object(s)", name, removed)
             # `decommissioned` -- "withdrawn" -- and NOT `provisioning`, which
@@ -1023,6 +1107,129 @@ class AppAccessGenerator(InfrahubGenerator):
             await self._rerender_firewall(derive_firewall(parsed))
         else:
             self.logger.info("Grant %r is withdrawn; nothing to remove", name)
+
+    async def _permit_source(self, context: GrantContext) -> None:
+        """Name the grant's source in the APPLICATION's own network policy.
+
+        The third of three gates. The firewall permitting a session and the
+        route existing are not enough: `policy_default_deny` is true on every
+        application here, so Cilium drops anything whose source the application
+        does not name. Measured on a live cluster -- an application requested
+        through the portal had `allowFrom: []`, the rule was on the firewall,
+        the leaf had the VIP's /32, and the branch got no TCP at all. Nothing
+        logged a denial, because the drop is at the pod rather than on fw1.
+
+        BOTH SIDES ARE RECORDED, and that is what makes revocation safe. The
+        prefix goes onto the application, and its id goes onto the GRANT --
+        which is the only basis on which it may ever be removed again, because
+        `allowed_source_prefixes` is shared: nfd41-demo declares three by hand
+        and another grant may name the same source. It plays exactly the role
+        `managed_by_service` plays for rules.
+
+        Adding is idempotent: a prefix the application already permits is
+        recorded on the grant and not written again, so two grants naming one
+        source converge rather than fight.
+        """
+        prefix_id = context.source_prefix_id
+        if prefix_id is None or context.application_id is None:
+            self.logger.info(
+                "Grant %r has no IPAM-backed source, so the application's own policy is "
+                "left alone; the firewall permits the session and the pod may still drop it",
+                context.grant_name,
+            )
+            return
+
+        if prefix_id not in context.already_allowed:
+            application = await self._init_client.get(kind="ServiceFabricApp", id=context.application_id)
+            # A RelationshipManager is not a list: fetch before editing, and
+            # edit through add/remove rather than assignment.
+            allowed = application.allowed_source_prefixes  # type: ignore[attr-defined]
+            await allowed.fetch()
+            allowed.add(prefix_id)
+            await application.save(update_group_context=False)
+            self.logger.info("Permitted the grant's source on application %r", context.application_name)
+
+        grant = await self.client.get(kind="ServiceAppAccess", id=context.grant.id)
+        recorded = grant.granted_source_prefixes  # type: ignore[attr-defined]
+        await recorded.fetch()
+        if prefix_id not in set(recorded.peer_ids):
+            recorded.add(prefix_id)
+            await grant.save(update_group_context=False)
+
+        await self._rerender_application(context.application_id)
+
+    async def _revoke_source(self, parsed: GenerateAppAccessQuery, grant: GrantNode) -> int:
+        """Stop naming a revoked grant's source in the application's policy.
+
+        Removes only what THIS grant recorded, and only what no LIVE sibling
+        grant on the same application still records. Both halves matter: the
+        first keeps a hand-declared prefix and another grant's out of reach, the
+        second stops one revocation closing a gate somebody else is using --
+        which would leave the firewall permitting a session the pod drops, the
+        exact failure this whole change exists to remove.
+        """
+        application = _node_of(grant.application)
+        application_id = application.id if application is not None else None
+        mine = {prefix.id for prefix in _edges_of(grant.granted_source_prefixes)}
+        if not mine or application_id is None:
+            return 0
+
+        removable = mine - prefixes_other_grants_need(parsed, grant, application_id)
+        if not removable:
+            self.logger.info(
+                "Grant %r's source is still needed by another grant, so the application's policy keeps it",
+                _value(grant.name),
+            )
+            return 0
+
+        node = await self._init_client.get(kind="ServiceFabricApp", id=application_id)
+        allowed = node.allowed_source_prefixes  # type: ignore[attr-defined]
+        await allowed.fetch()
+        current = set(allowed.peer_ids)
+        for prefix_id in sorted(removable & current):
+            allowed.remove(prefix_id)
+        await node.save(update_group_context=False)
+        await self._rerender_application(application_id)
+        return len(removable)
+
+    async def _rerender_application(self, application_id: str) -> None:
+        """Ask for the application's Crossplane artifact to be re-rendered.
+
+        Unlike the firewall's, this artifact's TARGET is the object that
+        changed, so Infrahub regenerates it on its own -- but not synchronously,
+        and a request made before the write is visible renders the old content
+        and leaves the checksum where it was. Vidra compares checksums, so an
+        unchanged one means the policy is never delivered and the pod goes on
+        dropping the traffic. Measured exactly that way by hand: the first
+        regeneration produced byte-identical output and only a second one moved
+        it. Asking explicitly, after the save, is what closes that window.
+        """
+        branch = self.branch if isinstance(getattr(self, "branch", None), str) else None
+        try:
+            artifact = await self._init_client.get(
+                kind="CoreArtifact",
+                name__value=APPLICATION_ARTIFACT,
+                object__ids=[application_id],
+                branch=branch,
+            )
+            definition = await self._init_client.get(
+                kind="CoreArtifactDefinition",
+                artifact_name__value=APPLICATION_ARTIFACT,
+                branch=branch,
+            )
+        except Exception as exc:  # noqa: BLE001 - the grant is built; this is delivery
+            self.logger.info(
+                "Could not request a re-render of %r (%s); the next artifact run picks it up",
+                APPLICATION_ARTIFACT,
+                exc,
+            )
+            return
+
+        url = f"{self._init_client.address}/api/artifact/generate/{definition.id}"
+        if branch:
+            url = f"{url}?branch={quote(branch, safe='')}"
+        await self._init_client._post(url, payload={"nodes": [artifact.id]})  # noqa: SLF001
+        self.logger.info("Requested a re-render of %r", APPLICATION_ARTIFACT)
 
     async def _advertise(self, context: GrantContext, advertisement: Advertisement | None) -> None:
         """Make the grant's VIP routable from its source zone.
