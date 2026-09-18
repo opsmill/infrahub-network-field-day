@@ -121,6 +121,14 @@ Four things about it are deliberate and each looks like an oversight:
   https://localhost:7007/api/catalog/entities/by-name/User/default/alice failed`, which names the
   catalog and never mentions TLS.
 
+**`br-nfd41-tool` is a precondition of every deploy, not a setup step.** It is a `kind: bridge`
+node, and ContainerLab does not create one — it refuses the topology outright with
+`Bridge "br-nfd41-tool" referenced in topology but does not exist.` before starting any node. A
+host bridge does not survive a reboot, so both deploy paths now run
+`lab/scripts/tooling-bridge.sh` first: the lab's `deploy` and `deploy-lite` targets, and
+`invoke lab`, which drives ContainerLab directly and never reads that Makefile. For a while
+nothing called it at all and the bridge existed only because someone had run it by hand.
+
 The firewall's `branch-to-tooling-portal` rule names three services explicitly — `tooling-portal`
 (32001), `tooling-oidc` (32556) and `infrahub-api` (8000) — rather than 80 and 443, which
 permitted nothing because the services are on NodePorts. The **return path** is the other half and

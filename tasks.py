@@ -863,6 +863,23 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
         ctx.run(f"{clab} destroy -t {shlex.quote(str(topology))} --cleanup", pty=True)
         return
 
+    # THE TOOLING BRIDGE, BEFORE THE DEPLOY, and it is not optional.
+    #
+    # `br-nfd41-tool` is a `kind: bridge` node, which means ContainerLab expects
+    # the HOST to already have it -- it does not create one. A missing bridge is
+    # refused outright, before any node starts:
+    #
+    #   ERROR  Bridge "br-nfd41-tool" referenced in topology but does not exist.
+    #
+    # A host bridge does not survive a reboot, so this is not a once-per-machine
+    # setup step; it is a precondition of every deploy. The script is idempotent
+    # and also lays down the route back to the branch LAN, which is why it runs
+    # here rather than being left to whoever remembers.
+    bridge = lab_path / "scripts/tooling-bridge.sh"
+    if bridge.is_file():
+        print(" - Ensuring the tooling bridge exists")
+        ctx.run(shlex.quote(str(bridge)), pty=True)
+
     print(f" - Deploying {topology.name} (cEOS takes a few minutes to boot)")
     ctx.run(f"{clab} deploy -t {shlex.quote(str(topology))} --reconfigure", pty=True)
 
