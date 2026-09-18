@@ -235,6 +235,41 @@ curl -s -b "$J" -c "$J" --max-time 20 "http://10.90.0.1:8000/api/oidc/provider1/
 ' 2>/dev/null | grep -c access_token)
 check "$signin" "1" "alice signs in to Infrahub through Dex, from the branch desktop"
 
+# WHAT THE PORTAL ACTUALLY OFFERS, not merely that it answers.
+#
+# Every check above passes against a portal whose catalogue is EMPTY: it serves
+# its bundle, signs a user in, and has nothing for them to ask for. That is not
+# hypothetical -- three of the nine service kinds were missing for a whole
+# session because Infrahub's json_schema endpoint 500s on a List attribute, and
+# the only trace was a warning in the backend log.
+#
+# THE EXPECTED NUMBER COMES FROM INFRAHUB, not from the portal's config, and
+# that is the point: the claim is "every service kind can be requested", which
+# is a statement about the two agreeing. Counting the portal's own configuration
+# would let a kind be missing from both and still pass -- and it undercounts
+# anyway, because the provider DISCOVERS kinds under a configured generic.
+# `ServiceFabricPeering` is in no `kinds` list and has a template.
+want_templates=$(uv run python - <<'PYWANT'
+import json, os, httpx
+r = httpx.get(
+    f"{os.environ['INFRAHUB_ADDRESS']}/api/schema",
+    headers={"X-INFRAHUB-KEY": os.environ["INFRAHUB_API_TOKEN"]},
+    timeout=60,
+)
+print(sum(1 for n in r.json()["nodes"]
+          if "ServiceGeneric" in (n.get("inherit_from") or [])))
+PYWANT
+)
+docker cp scripts/lib/portal_signin.sh "$DESK:/tmp/portal_signin.sh" >/dev/null 2>&1
+docker exec "$DESK" chmod +x /tmp/portal_signin.sh 2>/dev/null
+got_templates=$(docker exec "$DESK" sh -c '
+T=$(/tmp/portal_signin.sh)
+[ -n "$T" ] || exit 1
+curl -s -H "Authorization: Bearer $T" --max-time 25 \
+  "https://10.90.0.11:32001/api/catalog/entities?filter=kind=template,metadata.tags=generated" \
+  | python3 -c "import json,sys; print(len(json.load(sys.stdin)))"' 2>/dev/null)
+check "${got_templates:-0}" "$want_templates" "request templates in the portal catalogue"
+
 elapsed=$(( $(date +%s) - started ))
 printf '\n=== [%s] COMPLETE in %sm%ss — %s failure(s) ===\n' \
     "$LABEL" "$((elapsed / 60))" "$((elapsed % 60))" "$FAILURES"
