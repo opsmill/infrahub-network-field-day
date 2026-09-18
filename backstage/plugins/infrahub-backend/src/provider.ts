@@ -191,6 +191,18 @@ const synthesiseJsonSchema = (schema: KindSchema): any => {
  */
 const GENERATED_FORM_EXCLUDES = ['status', 'checksum'];
 
+/**
+ * The relationships a form has to carry: cardinality one, and not Infrahub's own
+ * bookkeeping. Shared so the hfid prefetch and the resolution below cannot drift
+ * apart and leave a relationship with no looked-up peer.
+ */
+const relationshipsOf = (schema: KindSchema): SchemaRelationship[] =>
+  (schema.relationships ?? []).filter(
+    relationship =>
+      relationship.cardinality === 'one' &&
+      !relationship.peer.startsWith('Core'),
+  );
+
 /** A mapped kind with the schema needed to read it and form a template. */
 type LoadedKind = {
   mapping: KindMapping;
@@ -243,7 +255,24 @@ type SchemaRelationship = {
 };
 
 /** A relationship plus where its field's options come from, if anywhere. */
-type ResolvedRelationship = SchemaRelationship & { picker?: Picker };
+type ResolvedRelationship = SchemaRelationship & {
+  picker?: Picker;
+  /**
+   * How many elements the PEER's human_friendly_id has.
+   *
+   * `hfid: [$value]` is right only when that is one. `IpamIPAddress` is
+   * `[address__value, ip_namespace__name__value]`, so a single-element lookup is
+   * refused outright:
+   *
+   *   Unable to lookup node by HFID, schema 'IpamIPAddress' HFID does not
+   *   contain the same number of elements as ['10.112.240.10/32']
+   *
+   * Five cardinality-one relationships across four service kinds have composite
+   * HFIDs here, two of them mandatory -- so two kinds could not be created from
+   * the portal at all.
+   */
+  hfidLength?: number;
+};
 
 type KindSchema = {
   name: string;
@@ -291,6 +320,9 @@ export class InfrahubEntityProvider implements EntityProvider {
     private readonly logger: LoggerService,
     private readonly scheduler: SchedulerService,
   ) {}
+
+  /** Peer kind -> how many elements its human_friendly_id has. */
+  private readonly hfidLengths = new Map<string, number>();
 
   getProviderName(): string {
     return 'infrahub';
@@ -563,6 +595,35 @@ export class InfrahubEntityProvider implements EntityProvider {
    * emit, sites and devices are Resources we emit, and anything else has no
    * entities behind it, so its field becomes a plain hfid instead of a picker.
    */
+  /**
+   * The peer's HFID length, fetched once per kind and cached.
+   *
+   * Peers are not necessarily ingested -- `IpamIPAddress` is not -- so this
+   * cannot be read off the kinds already loaded. A peer whose schema cannot be
+   * read is treated as single-element, which is the previous behaviour: no
+   * worse than before, and it keeps one unreadable peer from dropping a field.
+   */
+  private async peerHfidLength(peer: string): Promise<number> {
+    const cached = this.hfidLengths.get(peer);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let length = 1;
+    try {
+      const schema: KindSchema = await infrahubGet(
+        this.infrahub,
+        `/api/schema/${peer}`,
+      );
+      length = schema.human_friendly_id?.length || 1;
+    } catch (error) {
+      this.logger.warn(
+        `Could not read ${peer}'s schema (${error}); assuming a single-element hfid`,
+      );
+    }
+    this.hfidLengths.set(peer, length);
+    return length;
+  }
+
   private pickerFor(peer: string, mappings: KindMapping[]): Picker | undefined {
     const exact = mappings.find(mapping => mapping.kind === peer);
     if (exact) {
@@ -618,6 +679,16 @@ export class InfrahubEntityProvider implements EntityProvider {
             `/api/schema/${kind}`,
           );
 
+          // Each peer's hfid length, before the relationships are resolved --
+          // it decides whether a field is one string or an array of them.
+          const peerHfids = new Map<string, number>();
+          for (const relationship of relationshipsOf(schema)) {
+            peerHfids.set(
+              relationship.peer,
+              await this.peerHfidLength(relationship.peer),
+            );
+          }
+
           let jsonSchema: any;
           try {
             jsonSchema = await infrahubGet(
@@ -670,16 +741,16 @@ export class InfrahubEntityProvider implements EntityProvider {
             // Every cardinality-one relationship, whether or not we can offer a
             // picker for its peer. Dropping one would lose a field, and lose a
             // required one's value entirely.
-            relationships: (schema.relationships ?? [])
-              .filter(
-                relationship =>
-                  relationship.cardinality === 'one' &&
-                  // Group and profile membership is Infrahub bookkeeping.
-                  !relationship.peer.startsWith('Core'),
-              )
-              .map(relationship => ({
+            relationships: relationshipsOf(schema).map(relationship => ({
                 ...relationship,
-                picker: this.pickerFor(relationship.peer, mappings),
+                // NO PICKER for a composite hfid: a picker yields one name, and
+                // this peer needs every element. An array field is the only
+                // thing that can carry them.
+                picker:
+                  (peerHfids.get(relationship.peer) ?? 1) > 1
+                    ? undefined
+                    : this.pickerFor(relationship.peer, mappings),
+                hfidLength: peerHfids.get(relationship.peer) ?? 1,
               })),
           };
         } catch (error) {
@@ -1113,18 +1184,26 @@ export class InfrahubEntityProvider implements EntityProvider {
         ? `The ${relationship.peer} this service belongs to`
         : `The ${relationship.peer} this service belongs to, by its Infrahub identifier`;
 
+      // A composite hfid needs every element, so the field is an array and the
+      // description says which parts, in order -- nothing else in the form
+      // tells a requester that `10.112.240.10/32` alone will be refused.
+      const composite = (relationship.hfidLength ?? 1) > 1;
+      const shape = composite
+        ? { type: 'array', items: { type: 'string' } }
+        : { type: 'string', ...widget };
+      const text = composite
+        ? `${description}, as its ${relationship.hfidLength} hfid elements in order`
+        : description;
+
       createProperties[relationship.name] = {
         title: this.fieldTitle(relationship.name),
-        type: 'string',
-        description,
-        ...widget,
+        ...shape,
+        description: text,
       };
       if (relationship.optional !== false) {
         changeProperties[relationship.name] = {
-          title: this.fieldTitle(relationship.name),
-          type: 'string',
-          description: `${description}. Leave empty to keep the current value`,
-          ...widget,
+          ...createProperties[relationship.name],
+          description: `${text}. Leave empty to keep the current value`,
         };
       }
     }
@@ -1268,7 +1347,11 @@ export class InfrahubEntityProvider implements EntityProvider {
             action: 'infrahub:graphql:execute',
             input: {
               branch,
-              query: this.relationshipMutation(kind.kind, relationship.name),
+              query: this.relationshipMutation(
+                kind.kind,
+                relationship.name,
+                relationship.hfidLength,
+              ),
               variables: {
                 id: identifier,
                 value: this.relationshipValue(relationship),
@@ -1337,7 +1420,7 @@ export class InfrahubEntityProvider implements EntityProvider {
   private createMutation(
     kind: string,
     attributes: [string, any][],
-    relationships: SchemaRelationship[],
+    relationships: ResolvedRelationship[],
     groups: string[],
   ): string {
     const declarations = [
@@ -1345,7 +1428,14 @@ export class InfrahubEntityProvider implements EntityProvider {
         ([name, property]) =>
           `$${name}: ${JSON_TO_GRAPHQL[property.type] ?? 'String'}!`,
       ),
-      ...relationships.map(relationship => `$${relationship.name}: String!`),
+      // `[String]!` for a composite hfid, because the lookup needs every
+      // element and Infrahub refuses a list of the wrong length outright.
+      ...relationships.map(
+        relationship =>
+          `$${relationship.name}: ${
+            (relationship.hfidLength ?? 1) > 1 ? '[String]' : 'String'
+          }!`,
+      ),
     ].join(', ');
 
     const fields = [
@@ -1365,9 +1455,10 @@ export class InfrahubEntityProvider implements EntityProvider {
       // materialised, which is exactly what a new request is. Sending any
       // literal would just be a different schema's vocabulary hardcoded into
       // this one.
-      ...relationships.map(
-        relationship =>
-          `      ${relationship.name}: { hfid: [$${relationship.name}] }`,
+      ...relationships.map(relationship =>
+        (relationship.hfidLength ?? 1) > 1
+          ? `      ${relationship.name}: { hfid: $${relationship.name} }`
+          : `      ${relationship.name}: { hfid: [$${relationship.name}] }`,
       ),
       // An Infrahub generator definition targets a group, so a new object has
       // to join it or nothing will ever expand the object.
@@ -1394,10 +1485,17 @@ export class InfrahubEntityProvider implements EntityProvider {
     ].join('\n');
   }
 
-  private relationshipMutation(kind: string, field: string): string {
+  private relationshipMutation(
+    kind: string,
+    field: string,
+    hfidLength = 1,
+  ): string {
+    const composite = hfidLength > 1;
     return [
-      'mutation ($id: String!, $value: String!) {',
-      `  ${kind}Update(data: { hfid: [$id], ${field}: { hfid: [$value] } }) {`,
+      `mutation ($id: String!, $value: ${composite ? '[String]' : 'String'}!) {`,
+      `  ${kind}Update(data: { hfid: [$id], ${field}: { hfid: ${
+        composite ? '$value' : '[$value]'
+      } } }) {`,
       '    ok',
       '  }',
       '}',

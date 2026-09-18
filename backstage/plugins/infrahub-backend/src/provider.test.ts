@@ -88,8 +88,23 @@ const SCHEMA: Record<string, any> = {
         cardinality: 'one',
         optional: false,
       },
+      // A peer whose hfid has TWO elements. A single-element lookup is refused
+      // by Infrahub outright, so this cannot be sent as one string.
+      {
+        name: 'vip',
+        peer: 'IpamIPAddress',
+        cardinality: 'one',
+        optional: false,
+      },
       { name: 'profiles', peer: 'CoreProfile', cardinality: 'many' },
     ],
+  },
+  '/api/schema/IpamIPAddress': {
+    name: 'IPAddress',
+    namespace: 'Ipam',
+    human_friendly_id: ['address__value', 'ip_namespace__name__value'],
+    attributes: [],
+    relationships: [],
   },
   '/api/schema/json_schema/ServiceWireless': {
     title: 'Wireless',
@@ -412,6 +427,36 @@ describe('InfrahubEntityProvider', () => {
     // says "WPA2 Personal".
     expect(security.enum).toEqual(['open', 'wpa2-personal']);
     expect(security.enumNames).toEqual(['Open', 'WPA2 Personal']);
+  });
+
+  it('asks for every element of a composite hfid', async () => {
+    // `IpamIPAddress` is keyed by [address, namespace], and a one-element lookup
+    // is refused:
+    //
+    //   Unable to lookup node by HFID, schema 'IpamIPAddress' HFID does not
+    //   contain the same number of elements as ['10.112.240.10/32']
+    //
+    // Two of this lab's service kinds have a MANDATORY relationship to such a
+    // peer, so they could not be created from the portal at all.
+    const template = (await run())['Template:wireless-request'];
+    const [parameters] = template.spec!.parameters as any[];
+    const create = parameters.dependencies.mode.oneOf.find(
+      (branch: any) => branch.properties.mode.enum[0] === 'create',
+    );
+
+    expect(create.properties.vip).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+    });
+    // No picker: one would yield a single name and could never supply both.
+    expect(create.properties.vip['ui:field']).toBeUndefined();
+
+    const step = (template.spec!.steps as any[]).find(s => s.id === 'create');
+    expect(step.input.query).toContain('$vip: [String]!');
+    expect(step.input.query).toContain('vip: { hfid: $vip }');
+    // A single-element peer is untouched.
+    expect(step.input.query).toContain('$location: String!');
+    expect(step.input.query).toContain('location: { hfid: [$location] }');
   });
 
   it('lets the schema decide a new object\'s status', async () => {
