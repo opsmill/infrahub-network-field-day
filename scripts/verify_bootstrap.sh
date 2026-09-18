@@ -260,7 +260,7 @@ print(sum(1 for n in r.json()["nodes"]
           if "ServiceGeneric" in (n.get("inherit_from") or [])))
 PYWANT
 )
-docker cp scripts/lib/portal_signin.sh "$DESK:/tmp/portal_signin.sh" >/dev/null 2>&1
+docker cp scripts/portal/portal_signin.sh "$DESK:/tmp/portal_signin.sh" >/dev/null 2>&1
 docker exec "$DESK" chmod +x /tmp/portal_signin.sh 2>/dev/null
 got_templates=$(docker exec "$DESK" sh -c '
 T=$(/tmp/portal_signin.sh)
@@ -286,7 +286,7 @@ T=$(/tmp/portal_signin.sh)
 [ -n "$T" ] || exit 1
 curl -s -H "Authorization: Bearer $T" --max-time 25 \
   "https://10.90.0.11:32001/api/catalog/entities/by-name/template/default/app-access-request"' \
-  2>/dev/null | uv run python scripts/lib/portal_request_check.py; then
+  2>/dev/null | uv run python scripts/portal/portal_request_check.py; then
     pass "a request can be submitted through the portal's own create mutation"
 else
     fail "the portal's create mutation is not one Infrahub accepts"
