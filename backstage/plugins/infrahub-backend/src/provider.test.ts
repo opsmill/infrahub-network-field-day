@@ -96,8 +96,21 @@ const SCHEMA: Record<string, any> = {
         cardinality: 'one',
         optional: false,
       },
+      // MANDATORY and cardinality MANY, like `ServiceNetworkSegment.avd_tags`.
+      // Dropping it makes Infrahub refuse the create outright.
+      { name: 'tags', peer: 'AvdTag', cardinality: 'many', optional: false },
+      // Optional and many: still left off, or the form would ask for every
+      // derived collection a kind has.
+      { name: 'extras', peer: 'AvdTag', cardinality: 'many', optional: true },
       { name: 'profiles', peer: 'CoreProfile', cardinality: 'many' },
     ],
+  },
+  '/api/schema/AvdTag': {
+    name: 'Tag',
+    namespace: 'Avd',
+    human_friendly_id: ['name__value'],
+    attributes: [],
+    relationships: [],
   },
   '/api/schema/IpamIPAddress': {
     name: 'IPAddress',
@@ -444,6 +457,36 @@ describe('InfrahubEntityProvider', () => {
     );
     expect(step.input.query).toContain('CoreProposedChangeCreate');
     expect(step.input.query).not.toContain('tags');
+  });
+
+  it('offers a mandatory many-relationship, and sends it as a list', async () => {
+    // `ServiceNetworkSegment.avd_tags` is mandatory and cardinality many. The
+    // provider handled only cardinality one, so the field was dropped from the
+    // form AND from the mutation, and Infrahub refused the create:
+    //
+    //   avd_tags is mandatory for ServiceNetworkSegment at avd_tags
+    //
+    // The kind was unrequestable behind a form that looked complete.
+    const template = (await run())['Template:wireless-request'];
+    const [parameters] = template.spec!.parameters as any[];
+    const create = parameters.dependencies.mode.oneOf.find(
+      (branch: any) => branch.properties.mode.enum[0] === 'create',
+    );
+
+    expect(create.properties.tags).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+    });
+    expect(create.required).toEqual(expect.arrayContaining(['tags']));
+    // An OPTIONAL many is still left off; otherwise every derived collection
+    // would appear on the form.
+    expect(create.properties.extras).toBeUndefined();
+
+    const step = (template.spec!.steps as any[]).find(s => s.id === 'create');
+    expect(step.input.query).toContain('$tags: [RelatedNodeInput]');
+    expect(step.input.query).toContain('tags: $tags');
+    // The action wraps the plain hfids into [{hfid: [...]}]; a template cannot.
+    expect(step.input.relatedNodeLists).toEqual(['tags']);
   });
 
   it('asks for every element of a composite hfid', async () => {

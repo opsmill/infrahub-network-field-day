@@ -199,9 +199,23 @@ const GENERATED_FORM_EXCLUDES = ['status', 'checksum'];
 const relationshipsOf = (schema: KindSchema): SchemaRelationship[] =>
   (schema.relationships ?? []).filter(
     relationship =>
-      relationship.cardinality === 'one' &&
-      !relationship.peer.startsWith('Core'),
+      !relationship.peer.startsWith('Core') &&
+      // Cardinality-one, plus a MANDATORY cardinality-many. An optional many is
+      // still left off -- there are a lot of them, most are derived, and a form
+      // asking for every one would be unusable. A mandatory one cannot be
+      // skipped: `ServiceNetworkSegment.avd_tags` is mandatory and many, so
+      // dropping it made the create fail outright with
+      //
+      //   avd_tags is mandatory for ServiceNetworkSegment at avd_tags
+      //
+      // -- the whole kind unrequestable, with a form that looked complete.
+      (relationship.cardinality === 'one' ||
+        relationship.optional === false),
   );
+
+/** A mandatory cardinality-many relationship: one field, many hfids. */
+const isMultiple = (relationship: SchemaRelationship): boolean =>
+  relationship.cardinality === 'many';
 
 /** A mapped kind with the schema needed to read it and form a template. */
 type LoadedKind = {
@@ -1188,12 +1202,17 @@ export class InfrahubEntityProvider implements EntityProvider {
       // description says which parts, in order -- nothing else in the form
       // tells a requester that `10.112.240.10/32` alone will be refused.
       const composite = (relationship.hfidLength ?? 1) > 1;
-      const shape = composite
-        ? { type: 'array', items: { type: 'string' } }
-        : { type: 'string', ...widget };
-      const text = composite
-        ? `${description}, as its ${relationship.hfidLength} hfid elements in order`
-        : description;
+      const multiple = isMultiple(relationship);
+      const shape =
+        composite || multiple
+          ? { type: 'array', items: { type: 'string' } }
+          : { type: 'string', ...widget };
+      let text = description;
+      if (multiple) {
+        text = `The ${relationship.peer}s this service belongs to, one identifier per entry`;
+      } else if (composite) {
+        text = `${description}, as its ${relationship.hfidLength} hfid elements in order`;
+      }
 
       createProperties[relationship.name] = {
         title: this.fieldTitle(relationship.name),
@@ -1312,6 +1331,17 @@ export class InfrahubEntityProvider implements EntityProvider {
                   ]),
                 ),
               },
+              // The form collects plain hfids; a cardinality-many relationship
+              // needs them as `[{ hfid: [value] }]`, and the scaffolder cannot
+              // build objects from a template. The action does the wrapping and
+              // this names the variables that need it.
+              ...(requiredRels.some(isMultiple)
+                ? {
+                    relatedNodeLists: requiredRels
+                      .filter(isMultiple)
+                      .map(relationship => relationship.name),
+                  }
+                : {}),
             },
           },
           // One guarded step per attribute. An upfront attribute is already set
@@ -1441,12 +1471,16 @@ export class InfrahubEntityProvider implements EntityProvider {
       ),
       // `[String]!` for a composite hfid, because the lookup needs every
       // element and Infrahub refuses a list of the wrong length outright.
-      ...relationships.map(
-        relationship =>
-          `$${relationship.name}: ${
-            (relationship.hfidLength ?? 1) > 1 ? '[String]' : 'String'
-          }!`,
-      ),
+      // `[RelatedNodeInput]` for a cardinality-many relationship, whose input
+      // is a list of peers rather than one.
+      ...relationships.map(relationship => {
+        if (isMultiple(relationship)) {
+          return `$${relationship.name}: [RelatedNodeInput]`;
+        }
+        return `$${relationship.name}: ${
+          (relationship.hfidLength ?? 1) > 1 ? '[String]' : 'String'
+        }!`;
+      }),
     ].join(', ');
 
     const fields = [
@@ -1466,11 +1500,16 @@ export class InfrahubEntityProvider implements EntityProvider {
       // materialised, which is exactly what a new request is. Sending any
       // literal would just be a different schema's vocabulary hardcoded into
       // this one.
-      ...relationships.map(relationship =>
-        (relationship.hfidLength ?? 1) > 1
+      ...relationships.map(relationship => {
+        if (isMultiple(relationship)) {
+          // Already a list of RelatedNodeInput -- the action wraps the plain
+          // hfids the form collected. See `relatedNodeLists`.
+          return `      ${relationship.name}: $${relationship.name}`;
+        }
+        return (relationship.hfidLength ?? 1) > 1
           ? `      ${relationship.name}: { hfid: $${relationship.name} }`
-          : `      ${relationship.name}: { hfid: [$${relationship.name}] }`,
-      ),
+          : `      ${relationship.name}: { hfid: [$${relationship.name}] }`;
+      }),
       // An Infrahub generator definition targets a group, so a new object has
       // to join it or nothing will ever expand the object.
       ...(groups.length

@@ -116,6 +116,14 @@ export const infrahubActionsModule = createBackendModule({
                     .string()
                     .optional()
                     .describe('Infrahub branch, defaults to main'),
+                relatedNodeLists: z =>
+                  z
+                    .array(z.string())
+                    .optional()
+                    .describe(
+                      'Variables holding a list of hfids to wrap as ' +
+                        '[{ hfid: [value] }], for a cardinality-many relationship',
+                    ),
               },
               output: {
                 data: z =>
@@ -130,10 +138,26 @@ export const infrahubActionsModule = createBackendModule({
             },
             async handler(ctx) {
               const branch = ctx.input.branch ?? 'main';
+
+              // A cardinality-many relationship takes `[RelatedNodeInput]`, so
+              // `["k8s", "app"]` has to become `[{hfid: ["k8s"]}, ...]`. The
+              // scaffolder templates a parameter to its own value and cannot
+              // build objects, so the wrapping happens here and the step says
+              // which variables need it.
+              const variables = { ...(ctx.input.variables ?? {}) };
+              for (const name of ctx.input.relatedNodeLists ?? []) {
+                const value = variables[name];
+                if (Array.isArray(value)) {
+                  variables[name] = value
+                    .filter(entry => entry !== undefined && entry !== null && entry !== '')
+                    .map(entry => ({ hfid: [String(entry)] }));
+                }
+              }
+
               const data = await infrahubQuery({
                 config: infrahub,
                 query: ctx.input.query,
-                variables: ctx.input.variables,
+                variables,
                 branch,
               });
 
