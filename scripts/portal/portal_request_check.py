@@ -32,6 +32,8 @@ import httpx
 ADDRESS = os.environ.get("INFRAHUB_ADDRESS", "http://localhost:8000")
 HEADERS = {"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")}
 BRANCH = f"verify-portal-request-{uuid.uuid4().hex[:8]}"
+# An account that exists, because the mutation context is resolved by name.
+ACCOUNT = os.environ.get("INFRAHUB_VERIFY_ACCOUNT", "alice")
 
 
 def gql(
@@ -102,16 +104,25 @@ def main() -> int:
             if step.get("action") != "infrahub:graphql:execute":
                 continue
             if step["id"] == "create":
-                values = variables
+                values = dict(variables)
             elif step["id"] == "proposed_change":
-                # DERIVED from what the mutation declares, not hardcoded. This
-                # check listed `name` and `source_branch` and broke the moment
-                # the step gained a `description` -- reporting a 500 against the
-                # portal when the portal was correct and the check was stale.
-                declared = re.findall(r"\$(\w+):", step["input"]["query"])
-                values = {name: {"source_branch": BRANCH}.get(name, f"verify {BRANCH}") for name in declared}
+                values = {"source_branch": BRANCH, "name": f"verify {BRANCH}"}
             else:
                 continue
+
+            # EVERY DECLARED VARIABLE, filled from what we know and defaulted
+            # otherwise. Hardcoding the list broke this check twice against a
+            # portal that was correct: once when `proposed_change` gained a
+            # `description`, and again when every mutation gained the account
+            # context. A checker that fails whenever the thing it checks
+            # improves costs more than it catches.
+            for name in re.findall(r"\$(\w+):", step["input"]["query"]):
+                if name in values:
+                    continue
+                # The account context has to name an account that exists --
+                # Infrahub refuses an unknown one, which is itself worth
+                # exercising rather than stubbing.
+                values[name] = ACCOUNT if name.endswith("_account") else f"verify {BRANCH}"
             data = gql(
                 step["input"]["query"],
                 values,

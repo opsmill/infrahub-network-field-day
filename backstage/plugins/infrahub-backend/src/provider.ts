@@ -1298,8 +1298,17 @@ export class InfrahubEntityProvider implements EntityProvider {
                 oneOf: [
                   {
                     required: [
+                      // THE FULL off-form set, not just the global excludes. A
+                      // field that is required but absent from `properties`
+                      // fails rjsf validation before anything is submitted --
+                      // "must have required property requester" -- so the form
+                      // cannot be sent at all.
+                      //
+                      // It only bit once a MANDATORY attribute was excluded:
+                      // every `formExclude` entry before `userFields` was
+                      // optional, so the mismatch was invisible.
                       ...kind.required.filter(
-                        name => !GENERATED_FORM_EXCLUDES.includes(name),
+                        name => !this.offForm(kind.mapping).includes(name),
                       ),
                       ...formRels
                         .filter(relationship => relationship.optional === false)
@@ -1534,6 +1543,10 @@ export class InfrahubEntityProvider implements EntityProvider {
     userAttributes: string[] = [],
   ): string {
     const declarations = [
+      // The account the write is attributed to. Declared here as well as used
+      // below -- a clause without its declaration is accepted by the template
+      // and rejected by Infrahub with "Variable '$...' is not defined".
+      ...(this.catalog.actAsUser ? [`$${ACCOUNT_VAR}: String!`] : []),
       ...userAttributes.map(name => `$${name}: String!`),
       ...attributes.map(
         ([name, property]) =>

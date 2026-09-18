@@ -123,7 +123,12 @@ const SCHEMA: Record<string, any> = {
   },
   '/api/schema/json_schema/ServiceWireless': {
     title: 'Wireless',
-    required: ['ssid', 'service_identifier'],
+    // `requester` is REQUIRED here on purpose. It is excluded from the form and
+    // filled from the session, so it must also leave the `required` list -- and
+    // an assertion about that is vacuous unless the fixture makes it required
+    // in the first place. Without this line, reverting the filter left the test
+    // passing on a form rjsf refuses to submit.
+    required: ['ssid', 'service_identifier', 'requester'],
     properties: {
       service_identifier: { type: 'string' },
       requester: { type: 'string' },
@@ -498,12 +503,17 @@ describe('InfrahubEntityProvider', () => {
     expect(create.input.query).toContain(
       'context: { account: { id: $infrahub_context_account } }',
     );
+    // DECLARED as well as used. Asserting only the clause let a mutation ship
+    // that Infrahub rejects with "Variable '$...' is not defined" -- the
+    // template looked right and every write failed.
+    expect(create.input.query).toContain('$infrahub_context_account: String!');
     expect(create.input.variables.infrahub_context_account).toContain('split("@")');
 
     // Every generated write, not just the create -- a per-field update left
     // out would be attributed to the service account while the rest was not.
     const update = steps.find(s => s.id === 'ssid');
     expect(update.input.query).toContain('context: { account:');
+    expect(update.input.query).toContain('$infrahub_context_account: String!');
     expect(update.input.variables.infrahub_context_account).toBeDefined();
   });
 
@@ -517,6 +527,10 @@ describe('InfrahubEntityProvider', () => {
       (branch: any) => branch.properties.mode.enum[0] === 'create',
     );
     expect(create.properties.requester).toBeUndefined();
+    // AND not listed as required. A required field missing from `properties`
+    // fails rjsf validation before submit -- "must have required property
+    // requester" -- so the form cannot be sent.
+    expect(create.required).not.toContain('requester');
 
     const step = (template.spec!.steps as any[]).find(s => s.id === 'create');
     // It is MANDATORY, so dropping it from the form without setting it here
