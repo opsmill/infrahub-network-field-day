@@ -115,11 +115,36 @@ Four things about it are deliberate and each looks like an oversight:
   makes Backstage generate its own inside the container, so a pod restart produces a new one and
   the branch user re-accepts a browser exception every time. The script's lives in a Secret and
   outlives the pod.
+- **Three service kinds reach the portal only through a fallback.**
+  `GET /api/schema/json_schema/{kind}` returns 500 on Infrahub 1.10.6 for any kind with a
+  `List` attribute — `ServiceAppAccess`, `ServiceFabricApp` and `ServiceFabricPeering` here —
+  and the catalog provider used to drop the whole kind. It now synthesises the schema from
+  `/api/schema/{kind}`, which answers 200 and carries everything a form needs. When the
+  upstream bug is fixed the fallback stops firing on its own; the warning naming the kind is
+  how you tell.
 - **`NODE_EXTRA_CA_CERTS` on the Deployment is load bearing.** Backstage's sign-in resolver calls
   its own catalog back through `https://localhost:7007`, and Node refuses a self-signed peer. The
   failure surfaces inside the OIDC popup as `FetchError: request to
   https://localhost:7007/api/catalog/entities/by-name/User/default/alice failed`, which names the
   catalog and never mentions TLS.
+
+**Building the portal is two steps, and `invoke backstage-build` is the one that does both.**
+The Dockerfile compiles nothing: it unpacks `packages/backend/dist/bundle.tar.gz`, which
+`yarn build:backend` produces on the host. A bare `docker compose build` therefore packages
+whatever bundle was last built and reports success — a new image, new layers, old JavaScript.
+`app-config*.yaml` is COPYed separately and *does* ship, which is what makes it confusing:
+configuration changes arrive and code changes do not.
+
+Two traps inside that step, both of which cost real time before being read rather than guessed:
+
+- **`cd`, never `yarn --cwd`.** The portal pins Yarn 4 through `.yarnrc.yml` and `.yarn/`, and
+  Yarn finds that only when run from inside the project. `--cwd` is resolved after the version
+  decision, so Corepack concludes there is no project, falls back to Yarn Classic and asks
+  `Corepack is about to download … yarn-1.22.22.tgz … Do you want to continue? [Y/n]`. Nobody
+  watches that prompt, so the build sits on it looking exactly like a slow typecheck.
+- **A bounded heap.** Node sizes its old space against *total* system memory, so on this host it
+  grows past what is free with the lab up and the build is **killed** rather than failing.
+  `invoke backstage-build` sets `--max-old-space-size=4096`.
 
 **`br-nfd41-tool` is a precondition of every deploy, not a setup step.** It is a `kind: bridge`
 node, and ContainerLab does not create one — it refuses the topology outright with
