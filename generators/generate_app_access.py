@@ -985,7 +985,15 @@ class AppAccessGenerator(InfrahubGenerator):
         for edge in parsed.security_generic_address.edges:
             node = edge.node
             if node is not None and _value(getattr(node, "name", None)) == vip_entry_name:
-                await self.client.delete(kind="SecurityIPAMIPAddress", id=node.id)
+                # THE KIND COMES FROM THE NODE, because `_upsert_vip_entry`
+                # chooses between two of them: a derived destination is the
+                # application's `vip_block`, which is a prefix, so the entry is
+                # a `SecurityIPAMIPPrefix` rather than a `SecurityIPAMIPAddress`.
+                # Hard-coding the host kind here made withdrawal fail for every
+                # grant that took the derived path -- the common one -- with
+                # `exists, but it is a SecurityIPAMIPPrefix`, leaving the entry
+                # declared in the address book and referenced by nothing.
+                await self.client.delete(kind=node.typename__, id=node.id)
                 removed += 1
 
         for edge in parsed.security_service.edges:
@@ -996,9 +1004,21 @@ class AppAccessGenerator(InfrahubGenerator):
 
         if removed:
             self.logger.info("Grant %r is withdrawn; removed %s object(s)", name, removed)
-            # Back to "ordered, not built". Leaving it `active` would claim a
-            # rule that no longer exists.
-            await self._set_status(grant.id, "provisioning")
+            # `decommissioned` -- "withdrawn" -- and NOT `provisioning`, which
+            # is what this wrote while `approved` was the gate. Status was an
+            # independent label then, so "ordered, not built" was a fair
+            # description of an un-approved grant. Now status IS the gate, and
+            # writing a non-withdrawn value here erases the very signal that
+            # caused the withdrawal: the next run reads `provisioning`, decides
+            # the grant is live, and rebuilds the rule it just deleted. Measured
+            # on a live branch -- two consecutive runs went withdraw, rebuild,
+            # leaving the grant `active` and the firewall permitting a session
+            # somebody had revoked.
+            #
+            # `decommissioned` is terminal and is in WITHDRAWN_STATUSES, so the
+            # second run is a no-op and the generator is idempotent again. It
+            # mirrors the build path's `provisioning` -> `active`.
+            await self._set_status(grant.id, "decommissioned")
             await self._withdraw_advertisement(name, derive_advertisement(grant))
             await self._rerender_firewall(derive_firewall(parsed))
         else:

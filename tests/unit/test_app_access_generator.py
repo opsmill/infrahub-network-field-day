@@ -31,6 +31,7 @@ from generators.generate_app_access import (
     BOOK_INDEX_FLOOR,
     PREFIX_LISTS_KEY,
     RULE_INDEX_FLOOR,
+    WITHDRAWN_STATUSES,
     AppAccessGenerator,
     GrantContext,
     advertised_service_ports,
@@ -210,7 +211,12 @@ def _grant(
     }
 
 
-def _address_book(*, vip_entry_for: str | None = None, ours: bool = False) -> dict[str, Any]:
+def _address_book(
+    *,
+    vip_entry_for: str | None = None,
+    ours: bool = False,
+    ours_kind: str = "SecurityIPAMIPAddress",
+) -> dict[str, Any]:
     """The book. ``vip_entry_for`` adds an entry already wrapping that address.
 
     ``access-portal`` is the hand-written instance of exactly that shape, which
@@ -265,15 +271,20 @@ def _address_book(*, vip_entry_for: str | None = None, ours: bool = False) -> di
             }
         )
     if ours:
-        # What an earlier run of THIS generator left behind.
+        # What an earlier run of THIS generator left behind. The KIND is a
+        # parameter because `_upsert_vip_entry` writes either one: a grant
+        # naming a host VIP gets `SecurityIPAMIPAddress`, and one whose
+        # destination is derived from the application's `vip_block` -- the
+        # common path -- gets `SecurityIPAMIPPrefix`.
+        peer_field = "ip_prefix" if ours_kind == "SecurityIPAMIPPrefix" else "ip_address"
         edges.append(
             {
                 "node": {
-                    "__typename": "SecurityIPAMIPAddress",
+                    "__typename": ours_kind,
                     "id": "addr-ours-from-run-1",
                     "name": {"value": f"svc-{GRANT}-vip"},
                     "book_index": {"value": BOOK_INDEX_FLOOR + 3},
-                    "ip_address": {"node": {"id": VIP_ID}},
+                    peer_field: {"node": {"id": VIP_ID}},
                 }
             }
         )
@@ -291,6 +302,7 @@ def _query(
     zones = ZONE_VRFS if zones is None else zones
     vip_entry_for = grant_kwargs.pop("existing_vip_entry_for", None)
     from_previous_run = grant_kwargs.pop("from_previous_run", False)
+    ours_kind = grant_kwargs.pop("ours_kind", "SecurityIPAMIPAddress")
     services = list(FIREWALL_SERVICES)
     if from_previous_run:
         services.append((f"svc-{GRANT}-tcp-8080", 8080, "tcp"))
@@ -329,7 +341,7 @@ def _query(
             ]
         },
         SecurityIPProtocol={"edges": [{"node": {"id": f"proto-{p}", "name": {"value": p}}} for p in protocols]},
-        SecurityGenericAddress=_address_book(vip_entry_for=vip_entry_for, ours=from_previous_run),
+        SecurityGenericAddress=_address_book(vip_entry_for=vip_entry_for, ours=from_previous_run, ours_kind=ours_kind),
     )
 
 
@@ -857,6 +869,62 @@ async def test_revoking_a_grant_withdraws_what_an_earlier_run_created() -> None:
     assert client.created == []
     deleted_kinds = {kind for kind, _ in client.deleted}
     assert deleted_kinds == {"SecurityPolicyRule", "SecurityIPAMIPAddress", "SecurityService"}
+
+
+@pytest.mark.asyncio
+async def test_revoking_a_grant_whose_vip_entry_is_a_prefix() -> None:
+    """The DERIVED destination is a `vip_block`, so its address-book entry is a
+    `SecurityIPAMIPPrefix` -- and that is the common path, not the exotic one.
+
+    `_withdraw` hard-coded `SecurityIPAMIPAddress` as the delete kind while
+    `_upsert_vip_entry` had always chosen between the two, so withdrawing any
+    derived grant died on `Node with id ... exists, but it is a
+    SecurityIPAMIPPrefix, not SecurityIPAMIPAddress`. The rule went first and
+    was deleted, so the failure left the entry declared in the address book and
+    referenced by nothing -- the configuration still loads, which is why it went
+    unnoticed. Measured against the lab's `alex` grant on nfd41-demo.
+    """
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(
+        approved=False,
+        from_previous_run=True,
+        ours_kind="SecurityIPAMIPPrefix",
+        granted_rule_ids=[f"svc-{GRANT}"],
+    )
+    parsed.target.edges[0].node.granted_rules.edges[0].node.name.value = f"svc-{GRANT}"
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    deleted = {kind for kind, _ in client.deleted}
+    assert deleted == {"SecurityPolicyRule", "SecurityIPAMIPPrefix", "SecurityService"}
+    assert "SecurityIPAMIPAddress" not in deleted
+
+
+@pytest.mark.asyncio
+async def test_withdrawal_leaves_a_status_that_stays_withdrawn() -> None:
+    """A withdrawal that un-withdraws itself is worse than one that fails.
+
+    This wrote `provisioning` -- correct while `approved` was the gate and
+    status was an independent label. Now status IS the gate, so a non-withdrawn
+    value here erases the signal that caused the withdrawal: the next run reads
+    it, decides the grant is live, and rebuilds the rule. Measured on a live
+    branch, two consecutive runs went withdraw, then rebuild, leaving the grant
+    `active` and the firewall permitting a revoked session.
+
+    `decommissioned` is terminal and in WITHDRAWN_STATUSES, so the second run is
+    a no-op.
+    """
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(approved=False, from_previous_run=True, granted_rule_ids=[f"svc-{GRANT}"])
+    parsed.target.edges[0].node.granted_rules.edges[0].node.name.value = f"svc-{GRANT}"
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    written = client.nodes[f"grant-{GRANT}"].status.value
+    assert written == "decommissioned"
+    assert written in WITHDRAWN_STATUSES, "the next run must still read this grant as withdrawn"
 
 
 @pytest.mark.asyncio
