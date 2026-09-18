@@ -1440,16 +1440,33 @@ export class InfrahubEntityProvider implements EntityProvider {
               //
               // Nothing here filters proposed changes by tag, so the label was
               // decoration; a schema that does have the field can add it back.
+              // WHO ASKED, in the description, because Infrahub attributes every
+              // write to the account that made it and that is the portal's
+              // service account -- not the person. Infrahub 1.10.6 offers no way
+              // to change that: it rejects a Dex token outright, its token
+              // mutation mints only for the CALLING account, it exposes no
+              // impersonation, and its OIDC code has to come back to its own
+              // callback with a state it issued. So the reviewer would otherwise
+              // see a change from `admin` with nothing naming the requester.
+              //
+              // `CoreProposedChange` has no author field either -- `approved_by`
+              // and `rejected_by` exist and nothing for the creator -- so the
+              // description is where this belongs.
               query:
-                'mutation ($name: String!, $source_branch: String!) {\n' +
+                'mutation ($name: String!, $source_branch: String!, $description: String!) {\n' +
                 '  CoreProposedChangeCreate(\n' +
                 '    data: {\n' +
                 '      name: { value: $name }\n' +
+                '      description: { value: $description }\n' +
                 '      source_branch: { value: $source_branch }\n' +
                 '      destination_branch: { value: "main" }\n' +
                 '    }\n  ) {\n    ok\n    object { id }\n  }\n}',
               variables: {
                 name: `\${{ ("Implement ${kind.label} " + (parameters.${idField} | lower)) if parameters.mode === "create" else ("Change " + parameters.change_reference + " on " + steps.fetch.output.entity.metadata.title) }}`,
+                description:
+                  '${{ "Requested through the service portal by " + ' +
+                  '(user.entity.spec.profile.displayName or user.ref) + ' +
+                  '" (" + (user.entity.spec.profile.email or user.ref) + ")." }}',
                 source_branch: branch,
               },
             },

@@ -167,6 +167,25 @@ is easy to miss: `lab/scripts/tooling-bridge.sh` routes the branch LAN back via 
 because without it the host answers a branch user out its default route and the request appears to
 vanish with nothing logged anywhere.
 
+**The portal writes to Infrahub as its service account, and that cannot currently be changed.**
+A request records who asked in two places -- `requester` on the service object and the proposed
+change's description, both filled from the Backstage session -- but the *account* Infrahub
+attributes the write to is the portal's token. Four mechanisms were measured against 1.10.6 and
+all are closed:
+
+- A Dex token as a bearer is refused (`401 Invalid token`), and its audience is `backstage`.
+- `InfrahubAccountTokenCreate` takes `name` and `expiration` only, so an admin cannot mint a
+  token *for* another account.
+- There is no impersonation endpoint; the whole auth surface is `/api/auth/login`,
+  `/api/auth/ldap/login`, `/api/auth/refresh` and the OIDC/OAuth2 authorize+token pairs.
+- The OIDC route needs a code returned to **Infrahub's own** callback with a state Infrahub
+  issued -- a tampered state is rejected -- so the portal cannot obtain one, and being HTTPS to
+  Infrahub's HTTP it could not read it anyway.
+
+What *would* fix it is an Infrahub feature: admin-minted per-account tokens, token exchange, or
+an on-behalf-of header. Until then, asking the user for an Infrahub password would be the only
+alternative, which is worse than the service account and defeats the SSO.
+
 See [auth/README.md](auth/README.md) for the sign-in flows and the things that failed first.
 
 ## Generator and transform inventory

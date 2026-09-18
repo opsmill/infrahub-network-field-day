@@ -464,6 +464,21 @@ describe('InfrahubEntityProvider', () => {
     expect(step.input.query).not.toContain('tags');
   });
 
+  it('names the requester on the proposed change', async () => {
+    // Infrahub attributes every write to the account that made it, which is the
+    // portal's service account. 1.10.6 offers no way to act as the person --
+    // measured: it rejects a Dex token, its token mutation mints only for the
+    // calling account, it has no impersonation endpoint, and its OIDC code must
+    // return to its own callback with a state it issued. So a reviewer would
+    // see a change from `admin` and nothing saying who wanted it.
+    const template = (await run())['Template:wireless-request'];
+    const step = (template.spec!.steps as any[]).find(
+      s => s.id === 'proposed_change',
+    );
+    expect(step.input.query).toContain('$description: String!');
+    expect(step.input.variables.description).toContain('user.entity.spec.profile');
+  });
+
   it('fills the requester from the session instead of asking for it', async () => {
     // Asking a person to type who they are is busywork AND unenforceable --
     // anyone can type anyone. `user.entity` is the catalog User the sign-in
