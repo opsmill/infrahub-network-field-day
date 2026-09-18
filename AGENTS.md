@@ -167,11 +167,36 @@ is easy to miss: `lab/scripts/tooling-bridge.sh` routes the branch LAN back via 
 because without it the host answers a branch user out its default route and the request appears to
 vanish with nothing logged anywhere.
 
-**The portal writes to Infrahub as its service account, and that cannot currently be changed.**
-A request records who asked in two places -- `requester` on the service object and the proposed
-change's description, both filled from the Backstage session -- but the *account* Infrahub
-attributes the write to is the portal's token. Four mechanisms were measured against 1.10.6 and
-all are closed:
+**The portal writes to Infrahub AS THE SIGNED-IN USER, through the mutation `context`.** Every
+mutation takes an optional `context: { account: { id } }`; the id resolves by UUID **or by name**,
+and an SSO login provisions an account named for the identity, so `alice@nfd41.lab` is `alice` —
+the same local-part rule the Backstage sign-in resolver uses. Nothing has to share a UUID.
+`infrahub.catalog.actAsUser` turns it on, and the caller needs `OVERRIDE_CONTEXT` with
+`ALLOW_ALL` (SUPER_ADMIN bypasses it, which is why the lab's admin token works).
+
+**It is attribution, not authorization, and that distinction is load bearing.** Permissions are
+loaded once before the resolver runs, so the write executes with the SERVICE account's rights
+wearing the user's name — and nothing in the graph distinguishes "the portal acting as alice"
+from "alice". The portal is therefore the authorization boundary and must remain one. The account
+also only exists once that person has signed in to Infrahub at least once; before that the
+mutation fails with `Unable to set context for account that doesn't exist`.
+
+**Where the attribution is visible is `InfrahubEvent.account_id`**, and finding that took a
+while: `CoreProposedChange` and `Branch` expose no `created_by` on 1.10.6, `/api/diff/tree` does
+not exist, and `DiffTree` returns null. Measured with two identical grants on one branch — the
+one carrying the context produced three events attributed to `alice`, the one without produced
+three attributed to `admin`.
+
+This was previously recorded here as impossible. It is not; the four routes below are simply the
+wrong ones, and `context` is undocumented publicly.
+
+A request also records who asked in two further places — `requester` on the service object and
+the proposed change's description, both filled from the Backstage session — which still matter,
+because `context` attributes the *write* and neither of those is a field a reviewer has to go
+looking for.
+
+**Do not go looking for a way to hand Infrahub the user's own credential**; these four were
+measured against 1.10.6 and all are closed, which is what makes `context` the answer:
 
 - A Dex token as a bearer is refused (`401 Invalid token`), and its audience is `backstage`.
 - `InfrahubAccountTokenCreate` takes `name` and `expiration` only, so an admin cannot mint a
@@ -182,9 +207,10 @@ all are closed:
   issued -- a tampered state is rejected -- so the portal cannot obtain one, and being HTTPS to
   Infrahub's HTTP it could not read it anyway.
 
-What *would* fix it is an Infrahub feature: admin-minted per-account tokens, token exchange, or
-an on-behalf-of header. Until then, asking the user for an Infrahub password would be the only
-alternative, which is worse than the service account and defeats the SSO.
+True per-user *authorization* — Infrahub enforcing the user's own permissions on reads as well as
+writes — would still need one of those: admin-minted per-account tokens, token exchange, or the
+portal holding a per-user Infrahub JWT. `context` is the cheap version: one privileged
+connection, honest attribution, and authorization delegated to the portal.
 
 See [auth/README.md](auth/README.md) for the sign-in flows and the things that failed first.
 
