@@ -4,7 +4,7 @@ version: "1.0"
 
 # ============================================================================
 # The two service kinds whose intent is delivered to the cluster as Crossplane
-# manifests.
+# resources.
 #
 # Both inherit CoreArtifactTarget as well as GeneratorTarget, so a later cycle
 # can register a transform and an artifact definition against them without
@@ -95,35 +95,50 @@ nodes:
         # name would shadow it.
         description: "Kubernetes namespace to create and deploy into"
         order_weight: 1300
+      # -- the workload, which is a chart and nothing else -------------------
+      #
+      # MANDATORY TOGETHER, because the XRD already requires them together:
+      # `chart` carries `required: [repository, name, version]`, so a
+      # two-of-three chart is a resource the cluster rejects. Stating it here
+      # catches it before an artifact renders rather than after delivery.
+      #
+      # They were all optional until cycle 033, alongside a `manifests`
+      # attribute and a manifests file attachment. That gave an application
+      # three valid shapes -- a chart, raw API objects, or both -- and left the
+      # renderer to work out which one it was looking at from whichever fields
+      # happened to be populated. It refused only when everything was empty.
+      #
+      # Tightening these is why the migration order inverts `invoke load`:
+      # making an attribute mandatory is REFUSED while any existing object
+      # leaves it empty, and the server names the node without naming the
+      # field. See scripts/migrate_fabric_app_charts.py.
       - name: chart_repository
         kind: Text
         label: Chart Repository
-        optional: true
+        optional: false
         order_weight: 1400
       - name: chart_name
         kind: Text
         label: Chart Name
-        optional: true
+        optional: false
         order_weight: 1410
       - name: chart_version
         kind: Text
         label: Chart Version
-        optional: true
+        optional: false
         order_weight: 1420
+      # Values small enough not to need a file. The attachment below wins when
+      # both are present -- and it has to exist, because `infrahubctl object
+      # load` returns HTTP 500 for a JSON key containing a dot or a slash and
+      # real Helm values are full of both (grafana.ini, app.kubernetes.io/name).
       - name: chart_values
         kind: JSON
         label: Chart Values
         optional: true
         order_weight: 1430
-      - name: manifests
-        kind: JSON
-        label: Raw Manifests
-        optional: true
-        # The escape hatch for anything a chart cannot express, and for
-        # workloads that simply have no chart. "No chart" does not mean "not
-        # managed". Shape is user-defined, hence JSON.
-        description: "Raw API objects to create in the namespace"
-        order_weight: 1440
+      # 1440 was `manifests`, the raw-API-objects escape hatch, withdrawn in
+      # cycle 033. Left unused rather than reassigned, so the gap reads as a
+      # removal rather than as a renumbering.
       - name: exposed
         kind: Boolean
         label: Exposed to Fabric
@@ -296,6 +311,40 @@ nodes:
         description: "Which peering carries this application's advertisement"
         identifier: service__app_peering
         order_weight: 950
+      # WHAT A GRANT READS INSTEAD OF THE MANIFESTS.
+      #
+      # `generate-app-access` derived a grant's destination ports by reading the
+      # application's manifests for LoadBalancer Services and taking each one's
+      # spec.ports[].port -- and it refuses rather than guessing when it finds
+      # none. A chart's Services exist only once Helm has run inside the
+      # cluster, which Infrahub cannot do, so without this every grant against
+      # every application would refuse.
+      #
+      # A relationship rather than a list of port numbers, because the invariant
+      # that derivation protected is that ONE OBJECT decides both the VIP's port
+      # and the firewall rule's. A number copied into an attribute lets the two
+      # disagree again, and the symptom is a healthy application nobody can
+      # reach. `SecurityPolicyRule.destination_services` peers this same kind,
+      # so the rule names the very object the application named.
+      #
+      # `on_delete: no-action` is the field to watch: the only alternative,
+      # `cascade`, deletes the PEER. Deleting an application would delete
+      # `junos-http` and the four hand-written baseline rules that share it.
+      #
+      # Naming a service never writes to it, so it is never marked
+      # `managed_by_service` and revocation never deletes it -- the rule that
+      # keeps `junos-https` alive for the baseline, now holding because of what
+      # the object is rather than because of a name comparison.
+      - name: advertised_services
+        peer: SecurityService
+        label: Advertised Services
+        kind: Generic
+        cardinality: many
+        optional: true
+        on_delete: no-action
+        description: "Services this application's VIP answers on; a grant permits these"
+        identifier: service__app_advertised_services
+        order_weight: 945
       - name: values_file
         peer: ServiceFabricAppValuesFile
         label: Chart Values File
@@ -305,35 +354,31 @@ nodes:
         description: "Helm values as an attached file; takes precedence over chart_values"
         identifier: fabricapp__values_file
         order_weight: 960
-      - name: manifests_file
-        peer: ServiceFabricAppManifestsFile
-        label: Manifests File
-        kind: Component
-        cardinality: one
-        optional: true
-        description: "Raw manifests as an attached file; takes precedence over manifests"
-        identifier: fabricapp__manifests_file
-        order_weight: 970
 
   # ---------------------------------------------------------------------------
-  # Application payload attachments
+  # Application payload attachment
   #
-  # Helm values and raw Kubernetes manifests are stored as files rather than as
-  # JSON attributes, for three reasons found by inspection:
+  # ONE kind since cycle 033. There were two -- values and raw manifests -- and
+  # the manifests one went with the raw-manifests path it carried. The three
+  # reasons values stay a FILE rather than becoming a JSON attribute all still
+  # hold, and the first is the one that makes it non-negotiable:
   #
   #   1. They cannot be seeded as attributes. `infrahubctl object load` returns
   #      HTTP 500 for a JSON key containing a dot or a slash, and every real
-  #      Kubernetes payload has them -- app.kubernetes.io/name, grafana.ini,
+  #      Helm values file has them -- grafana.ini, app.kubernetes.io/name,
   #      node-role.kubernetes.io/control-plane. The GraphQL path handles the same
   #      payload correctly, so the defect is in the object-load path.
   #   2. They are large and opaque. One chart's values run to ~150 lines of
   #      nested Helm configuration, none of which is network intent.
   #   3. They are human-authored and reviewed, and a file gives a real diff.
   #
-  # Two kinds rather than one kind with a role, following AvdHostvarFile and
-  # AvdStructuredConfigFile: the role is carried by the kind, "one per
-  # application" falls out of cardinality one, and a consumer writes
-  # `app.values_file` instead of filtering a collection.
+  # PRECEDENCE, which is now recorded only here and on the kind itself: the
+  # attachment WINS over the inline `chart_values` attribute, which is read only
+  # when no file is attached. It used to be stated twice, once per kind.
+  #
+  # A kind rather than a role on a shared kind, following AvdHostvarFile and
+  # AvdStructuredConfigFile: "one per application" falls out of cardinality one,
+  # and a consumer writes `app.values_file` instead of filtering a collection.
   # ---------------------------------------------------------------------------
   - name: FabricAppValuesFile
     namespace: Service
@@ -359,28 +404,4 @@ nodes:
         cardinality: one
         optional: false
         identifier: fabricapp__values_file
-        order_weight: 900
-
-  - name: FabricAppManifestsFile
-    namespace: Service
-    # Precedence: this file wins over the inline manifests attribute, which is
-    # read only when no file is attached.
-    description: "Raw manifests as an attached file. Takes precedence over the inline manifests attribute"
-    label: Application Manifests File
-    icon: mdi:file-document-multiple-outline
-    include_in_menu: false
-    inherit_from:
-      - CoreFileObject
-    human_friendly_id:
-      - app__name__value
-    uniqueness_constraints:
-      - ["app"]
-    relationships:
-      - name: app
-        peer: ServiceFabricApp
-        label: Application
-        kind: Parent
-        cardinality: one
-        optional: false
-        identifier: fabricapp__manifests_file
         order_weight: 900

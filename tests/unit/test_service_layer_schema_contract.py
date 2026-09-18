@@ -430,13 +430,27 @@ def test_fabric_app_exposure_fields_are_optional() -> None:
     assert attributes["service_selector"]["optional"] is True
 
 
-def test_fabric_app_workload_source_supports_chart_manifests_or_both() -> None:
-    """FR-025: three valid combinations, so every field must be optional."""
+def test_fabric_app_workload_source_is_a_chart_and_nothing_else() -> None:
+    """033 FR-010 to FR-012. One way to describe a workload, not three.
+
+    Cycle 010 made every chart field optional because an application could be a
+    chart, raw manifests, or both -- so the renderer decided which by looking at
+    what happened to be populated, and refused only when everything was empty.
+
+    The three chart fields are now mandatory TOGETHER, which is the constraint
+    the Crossplane XRD already imposes (`required: [repository, name, version]`).
+    Stating it here catches an incomplete chart before an artifact renders,
+    rather than after the cluster rejects it.
+    """
     app = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", "FabricApp")
     attributes = _attributes(app)
 
-    for name in ("chart_repository", "chart_name", "chart_version", "chart_values", "manifests"):
-        assert attributes[name]["optional"] is True, f"{name} must be optional"
+    for name in ("chart_repository", "chart_name", "chart_version"):
+        assert attributes[name].get("optional") is False, f"{name} must be mandatory"
+
+    # The inline escape hatch for values small enough not to need a file. The
+    # attachment still wins when both are present.
+    assert attributes["chart_values"]["optional"] is True
 
 
 def test_fabric_app_namespace_attribute_avoids_the_reserved_word() -> None:
@@ -677,12 +691,15 @@ def test_no_tenant_cloud_to_tenant_cloud_relationship_exists() -> None:
 # Application file attachments (specs/013-app-file-attachments)
 # ---------------------------------------------------------------------------
 
-APP_FILE_KINDS = ("FabricAppValuesFile", "FabricAppManifestsFile")
+# One kind, not two. Cycle 033 withdrew the manifests attachment along with the
+# raw-manifests path it carried; Helm values are the only payload an application
+# still attaches, and they stay a file because a JSON attribute whose keys
+# contain dots or slashes cannot be seeded through the object-load path.
+APP_FILE_KINDS = ("FabricAppValuesFile",)
 
 # Both sides of each relationship must carry these exact strings.
 APP_FILE_IDENTIFIERS = {
     "FabricAppValuesFile": ("values_file", "fabricapp__values_file"),
-    "FabricAppManifestsFile": ("manifests_file", "fabricapp__manifests_file"),
 }
 
 # Supplied by CoreFileObject. Redeclaring any of them looks harmless and
@@ -773,9 +790,88 @@ def test_precedence_rule_is_documented(name: str) -> None:
 
 
 def test_app_keeps_its_inline_payload_attributes() -> None:
-    """FR-010, GI-6. The attributes stay as an inline escape hatch."""
+    """FR-010, GI-6, 033 FR-013. The attribute stays as an inline escape hatch.
+
+    Singular since cycle 033: `manifests` went with the raw-manifests path, so
+    `chart_values` is the only inline payload left.
+    """
     app = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", "FabricApp")
     attributes = _attributes(app)
 
     assert attributes["chart_values"]["kind"] == "JSON"
-    assert attributes["manifests"]["kind"] == "JSON"
+
+
+# ---------------------------------------------------------------------------
+# A chart is the whole workload source (specs/033-fabricapp-helm-chart)
+# ---------------------------------------------------------------------------
+
+
+def test_the_raw_manifests_path_is_gone_from_the_yaml() -> None:
+    """033 FR-003, FR-014, FR-020, SC-003. Absent, not merely marked absent.
+
+    `state: absent` is how Infrahub is TOLD to remove something, and it is a
+    migration instruction rather than an end state. `infrahubctl protocols`
+    reads these YAML files rather than the loaded schema, so it does not honour
+    it: a `state: absent` block left in place keeps generating a protocol class
+    and two fields for things the graph no longer has, and mypy stays clean
+    because the types are internally consistent.
+
+    So the blocks come out once the removal has been loaded, and this is what
+    notices when they do not.
+    """
+    schema = _load_yaml(KUBERNETES_SERVICES_SCHEMA)
+    app = _node(schema, "Service", "FabricApp")
+
+    assert "manifests" not in _attributes(app)
+    assert "manifests_file" not in _relationships(app)
+
+    kinds = {f"{node.get('namespace')}{node.get('name')}" for node in _nodes(schema)}
+    assert "ServiceFabricAppManifestsFile" not in kinds
+
+    # The identifier has to go with it, or a relationship is left pointing at a
+    # kind nothing defines.
+    raw = (REPO_ROOT / KUBERNETES_SERVICES_SCHEMA).read_text(encoding="utf-8")
+    assert "fabricapp__manifests_file" not in raw
+
+
+def test_advertised_services_relationship_shape() -> None:
+    """033 FR-024, FR-026. What a grant reads instead of the manifests.
+
+    `generate-app-access` derived a grant's destination ports by reading the
+    application's manifests for LoadBalancer Services. A chart's Services exist
+    only once Helm has run, which Infrahub cannot do -- so the application names
+    the service objects instead.
+
+    `on_delete` is the field to watch. Its only alternative, `cascade`, deletes
+    the PEER: deleting an application would delete `junos-http` and take the
+    four hand-written baseline rules that share it with it.
+    """
+    app = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", "FabricApp")
+    relationship = _relationships(app)["advertised_services"]
+
+    assert relationship["peer"] == "SecurityService"
+    assert relationship["kind"] == "Generic"
+    assert relationship["cardinality"] == "many"
+    assert relationship["optional"] is True
+    assert relationship["on_delete"] == "no-action"
+    assert relationship["identifier"] == "service__app_advertised_services"
+
+
+def test_advertised_services_peers_the_node_and_not_the_generic() -> None:
+    """033 FR-027. Every peer must have exactly one port.
+
+    `SecurityGenericService` also covers `SecurityServiceRange`, which has a
+    `start` and an `end`, and `SecurityServiceGroup`, which has neither. The
+    access generator resolves a grant's ports to integers from end to end, so
+    admitting either would hand it a peer it cannot turn into a port number.
+
+    Naming a range is a coherent feature; it is simply not this one.
+    """
+    app = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", "FabricApp")
+    relationship = _relationships(app)["advertised_services"]
+
+    assert relationship["peer"] != "SecurityGenericService"
+
+    security = _load_yaml("schemas/security/security.yml")
+    service = _node(security, "Security", "Service")
+    assert "port" in _attributes(service), "the peer must carry a single port"

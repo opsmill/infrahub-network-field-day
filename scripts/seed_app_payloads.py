@@ -6,7 +6,9 @@ moved out of JSON attributes need a seeding step of their own.
 
 This is the second half of the arrangement cycle 013 chose: git holds the
 reviewable YAML under `payloads/`, Infrahub holds the authoritative
-attachment, and the transform reads the attachment. Running it twice with
+attachment, and the transform reads the attachment. Cycle 033 narrowed it to
+Helm values alone -- an application is a chart now, so there are no raw
+manifests left to attach. Running it twice with
 unchanged content is a no-op, because `save_file_if_changed` compares checksums
 before uploading.
 
@@ -39,8 +41,12 @@ from solution_arista_avd.generator import save_file_if_changed  # noqa: E402
 PAYLOAD_DIR = _REPO_ROOT / "payloads"
 
 # application name -> (payload file, attachment kind, relationship on the app)
+#
+# Helm values only since cycle 033. `ServiceFabricAppManifestsFile` was
+# withdrawn with the raw-manifests path, and the kind no longer resolves --
+# naming it here raises `SchemaNotFoundError` rather than seeding nothing.
 PAYLOADS: dict[str, tuple[str, str, str]] = {
-    "nfd41-demo": ("nfd41-demo-manifests.yaml", "ServiceFabricAppManifestsFile", "manifests_file"),
+    "nfd41-demo": ("nfd41-demo-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
 }
 
 

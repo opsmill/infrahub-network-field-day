@@ -26,7 +26,6 @@ class CrossplaneFabricAppQueryTargetEdgesNode(BaseModel):
     chart_name: Optional["CrossplaneFabricAppQueryTargetEdgesNodeChartName"]
     chart_version: Optional["CrossplaneFabricAppQueryTargetEdgesNodeChartVersion"]
     chart_values: Optional["CrossplaneFabricAppQueryTargetEdgesNodeChartValues"]
-    manifests: Optional["CrossplaneFabricAppQueryTargetEdgesNodeManifests"]
     service_selector: Optional["CrossplaneFabricAppQueryTargetEdgesNodeServiceSelector"]
     communities: Optional["CrossplaneFabricAppQueryTargetEdgesNodeCommunities"]
     workload_selector: Optional[
@@ -53,7 +52,6 @@ class CrossplaneFabricAppQueryTargetEdgesNode(BaseModel):
     allowed_source_prefixes: (
         "CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixes"
     )
-    manifests_file: "CrossplaneFabricAppQueryTargetEdgesNodeManifestsFile"
     values_file: "CrossplaneFabricAppQueryTargetEdgesNodeValuesFile"
 
 
@@ -82,10 +80,6 @@ class CrossplaneFabricAppQueryTargetEdgesNodeChartVersion(BaseModel):
 
 
 class CrossplaneFabricAppQueryTargetEdgesNodeChartValues(BaseModel):
-    value: Optional[Any]
-
-
-class CrossplaneFabricAppQueryTargetEdgesNodeManifests(BaseModel):
     value: Optional[Any]
 
 
@@ -174,28 +168,6 @@ class CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixesEdgesNodePrefi
     value: Optional[str]
 
 
-class CrossplaneFabricAppQueryTargetEdgesNodeManifestsFile(BaseModel):
-    node: Optional["CrossplaneFabricAppQueryTargetEdgesNodeManifestsFileNode"]
-
-
-class CrossplaneFabricAppQueryTargetEdgesNodeManifestsFileNode(BaseModel):
-    id: str
-    file_name: Optional[
-        "CrossplaneFabricAppQueryTargetEdgesNodeManifestsFileNodeFileName"
-    ]
-    checksum: Optional[
-        "CrossplaneFabricAppQueryTargetEdgesNodeManifestsFileNodeChecksum"
-    ]
-
-
-class CrossplaneFabricAppQueryTargetEdgesNodeManifestsFileNodeFileName(BaseModel):
-    value: Optional[str]
-
-
-class CrossplaneFabricAppQueryTargetEdgesNodeManifestsFileNodeChecksum(BaseModel):
-    value: Optional[str]
-
-
 class CrossplaneFabricAppQueryTargetEdgesNodeValuesFile(BaseModel):
     node: Optional["CrossplaneFabricAppQueryTargetEdgesNodeValuesFileNode"]
 
@@ -225,7 +197,5 @@ CrossplaneFabricAppQueryTargetEdgesNodeVipBlockNode.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixes.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixesEdges.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixesEdgesNode.model_rebuild()
-CrossplaneFabricAppQueryTargetEdgesNodeManifestsFile.model_rebuild()
-CrossplaneFabricAppQueryTargetEdgesNodeManifestsFileNode.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeValuesFile.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeValuesFileNode.model_rebuild()

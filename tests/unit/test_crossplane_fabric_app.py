@@ -37,7 +37,6 @@ def _data(
     allowed: list[str] | None = None,
     ports: list[dict[str, Any]] | None = None,
     namespace: str | None = "nfd41-demo",
-    manifests: Any = None,
     vrf: str | None = "K8S_PROD",
     intra: bool = True,
 ) -> CrossplaneFabricAppQuery:
@@ -49,9 +48,6 @@ def _data(
         allowed = ALLOW_FROM
     if ports is None:
         ports = [{"port": "8080", "protocol": "TCP"}]
-    if manifests is None:
-        manifests = [{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "frontend"}}]
-
     return CrossplaneFabricAppQuery(
         target={
             "edges": [
@@ -65,7 +61,6 @@ def _data(
                         "chart_name": None,
                         "chart_version": None,
                         "chart_values": None,
-                        "manifests": {"value": manifests},
                         "service_selector": {"value": service_selector},
                         "communities": None,
                         "workload_selector": {"value": workload_selector},
@@ -82,7 +77,6 @@ def _data(
                         "allowed_source_prefixes": {
                             "edges": [{"node": {"id": f"p-{p}", "prefix": {"value": p}}} for p in allowed]
                         },
-                        "manifests_file": {"node": None},
                         "values_file": {"node": None},
                     }
                 }
@@ -203,7 +197,17 @@ def _render(**kwargs: Any) -> dict[str, Any]:
     transform = CrossplaneFabricAppTransform.__new__(CrossplaneFabricAppTransform)
     spec: dict[str, Any] = {"namespace": "nfd41-demo", "tenant": "k8s-prod"}
     app = _app(**kwargs)
-    spec["manifests"] = app.manifests.value
+    # THE CHART, where the manifests used to be. Cycle 033 made a chart the
+    # whole workload source, and these three tests are about the DUMPER rather
+    # than about manifests -- they need a nested mapping, a sequence and a
+    # dotted key, which the chart's values and the policy's allowFrom supply
+    # exactly as the manifests did.
+    spec["chart"] = {
+        "name": "whoami",
+        "repository": "https://cowboysysop.github.io/charts/",
+        "version": "6.0.0",
+        "values": {"service": {"type": "LoadBalancer", "ports": {"http": 80}}},
+    }
     spec["expose"] = build_expose(app)
     spec["policy"] = build_policy(app)
     manifest = {
@@ -232,5 +236,26 @@ def test_rendering_is_byte_identical_for_an_unchanged_model() -> None:
 
 def test_sequences_are_indented_under_their_parent() -> None:
     """Matches the lab's hand-written manifests, so a diff between the two reads
-    as a field comparison rather than a reindent."""
-    assert "\n    - " in _render()["text"]
+    as a field comparison rather than a reindent.
+
+    Asserted as a PROPERTY rather than a literal indent, because the depth is
+    incidental: it moved from four spaces to six when the workload source became
+    a chart, and a test pinned to the old number would have read as the dumper
+    regressing. What matters is that a list item is never flush with its key,
+    which is the reindent this exists to catch.
+    """
+    text = _render()["text"]
+    lines = text.splitlines()
+    sequences = 0
+
+    for index, line in enumerate(lines):
+        item = line.lstrip()
+        if not item.startswith("- "):
+            continue
+        sequences += 1
+        key = next(candidate for candidate in reversed(lines[:index]) if not candidate.lstrip().startswith("- "))
+        item_indent = len(line) - len(item)
+        key_indent = len(key) - len(key.lstrip())
+        assert item_indent > key_indent, f"{line!r} is not indented under {key!r}"
+
+    assert sequences, "nothing rendered a sequence, so this asserted nothing"

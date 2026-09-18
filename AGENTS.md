@@ -135,9 +135,9 @@ Four things about it are deliberate and each looks like an oversight:
   catalog and never mentions TLS.
 
 **A file payload is pasted into the form and attached by its own step.** A relationship whose
-peer inherits `CoreFileObject` — `ServiceFabricApp.manifests_file` and `values_file` — is offered
-as a `<name>_content` textarea rather than as an identifier, and `infrahub:file:upload` attaches it
-after the create. Three things forced that shape:
+peer inherits `CoreFileObject` — `ServiceFabricApp.values_file`, and `manifests_file` until cycle
+033 withdrew it — is offered as a `<name>_content` textarea rather than as an identifier, and
+`infrahub:file:upload` attaches it after the create. Three things forced that shape:
 
 - **An identifier field for it could never work.** The peer's own `human_friendly_id` is derived
   from its parent and that parent is mandatory, so the file cannot exist before the object that
@@ -147,9 +147,11 @@ after the create. Three things forced that shape:
   groups. Content arrives through the mutation's own `file: Upload!` argument — a GraphQL
   multipart request, which the JSON-posting client cannot express. `Upload` being non-null is the
   useful half: node and content are created in one call, so no file node ever exists empty.
-- **Without it no application could be requested through the portal at all.** `manifests` and
-  `chart_values` are `JSON` kind and `isFormable` rejects those, so a portal-created app had
-  neither a chart nor manifests and `crossplane_fabric_app` raised at artifact render.
+- **Without it no application could be requested through the portal at all.** `chart_values` is
+  `JSON` kind and `isFormable` rejects those, so a portal-created app had no values to give its
+  chart. It mattered more before cycle 033, when `manifests` was `JSON` too and an app could
+  reach artifact render with neither a chart nor manifests, which `crossplane_fabric_app` raised
+  on.
 
 The peer's parent field is read from its schema rather than assumed — `app` here, but nothing else
 in the template knows that — and the step is guarded on the textarea being non-empty, so an
@@ -273,6 +275,32 @@ Current generator definitions are registered in `.infrahub.yml`:
 `backfill-structured-config`, `generate-fabric-peering`, `generate-app-access`, and
 `generate-network-segment`.
 
+**An application is a Helm chart, and nothing else.** Cycle 033 made `chart_repository`,
+`chart_name` and `chart_version` mandatory together — which is what the Crossplane XRD already
+required — and withdrew the `manifests` attribute, the `manifests_file` relationship and the
+`ServiceFabricAppManifestsFile` kind. Four things are worth knowing before touching this:
+
+- **A chart's Kubernetes Services are invisible to Infrahub**, because they exist only once Helm
+  has run. `generate-app-access` used to derive a grant's ports by reading the manifests for
+  LoadBalancer Services; an exposed application now names them through `advertised_services`, a
+  relationship to `SecurityService`. That is the same kind `SecurityPolicyRule.destination_services`
+  peers, so the application's advertised port and the rule's permitted port are **one object**
+  rather than two numbers that have to agree. Naming a service never writes to it, so it is never
+  marked `managed_by_service` and revoking a grant never deletes the firewall's own `junos-http`.
+- **Making an attribute mandatory is refused against existing data**, with
+  `Attribute-level 'optional' constraint violation on schema 'X'. Node (y) is not compliant.` once
+  per attribute per object — naming the node and never the field, so a partial migration looks
+  exactly like none. Objects must be migrated before the schema loads, which inverts `invoke load`.
+  `scripts/migrate_fabric_app_charts.py` is the worked example, and it enumerates from the **graph**
+  rather than from `objects/` because portal-created objects appear in no seed file.
+- **`infrahubctl protocols` ignores `state: absent`.** It reads the YAML rather than the loaded
+  schema, so a block left marked absent keeps generating a protocol class or field for something
+  the graph no longer has — and mypy stays clean, because the types are internally consistent.
+  `state: absent` is a migration step: mark, load, then delete the block and regenerate.
+- **Withdrawing a node kind does not delete its instances.** The loader removes the kind whether or
+  not any exist, and afterwards the kind does not resolve, so anything still attached is
+  unreachable rather than deleted and no query can find it. Delete the instances first.
+
 `generate-fabric-app` gives an exposed `ServiceFabricApp` a LoadBalancer VIP block from its
 cluster's pool. It closes a harder edge than the other allocating generator, because an exposed
 application with no block does not degrade — `crossplane_fabric_app.py` **raises**
@@ -349,20 +377,22 @@ through `granted_rules`. Generated objects render into the existing Junos artifa
 `junos_config.gql` queries `SecurityGenericAddress` and `SecurityPolicy` unfiltered. Nine things
 to know before changing it:
 
-- **A grant's ports come from the application's ADVERTISED SERVICES, and `policy_allow_ports` is
-  the wrong field.** Both are ports on the same application and they are different layers:
-  `policy_allow_ports` is the CiliumNetworkPolicy's ingress port, applied to the **pods**, while
-  a firewall rule's destination is the **VIP**, whose port is a Service's `spec.ports[].port`.
-  For `nfd41-demo` those are 8080 and 80 — the Service maps `port: 80` to `targetPort: 8080`.
-  Deriving from the policy field permitted 8080 to a VIP answering only on 80, and **nothing
-  reported a fault**: the rule rendered, the proposed change merged, the reconciler pushed it and
-  confirmed `fw1` in sync, and the only symptom was a healthy application nobody could reach.
-  `advertised_service_ports` reads the manifests instead, so the same object decides the VIP's
-  port and the rule's. Two consequences worth keeping: a `ClusterIP` Service is skipped, because
-  it has no VIP and `nfd41-demo`'s `backend` is one on 8080 — including it would reintroduce the
-  wrong port by another route; and the derivation now **refuses rather than guessing** when it can
-  find no advertised Service, because the old fallback was always populated and always plausible,
-  which is precisely why a wrong port was never once reported as wrong.
+- **A grant's ports come from `ServiceFabricApp.advertised_services`, and two earlier sources were
+  both wrong in the same direction.** `policy_allow_ports` is the CiliumNetworkPolicy's ingress
+  port, applied to the **pods**, while a firewall rule's destination is the **VIP** — for an
+  application whose Service maps `port: 80` to `targetPort: 8080` those are 80 and 8080, so the
+  rule permitted a port the VIP never answered on. Reading the raw manifests' LoadBalancer Services
+  fixed that and then stopped existing: cycle 033 made a chart the whole workload source, and a
+  chart's Services are created by Helm inside the cluster, which Infrahub cannot do.
+  **Nothing reported a fault in either case** — the rule rendered, the proposed change merged, the
+  reconciler pushed it and confirmed `fw1` in sync, and the only symptom was a healthy application
+  nobody could reach. The relationship names the `SecurityService` objects the firewall already
+  declares, so one object carries the port and the protocol and the rule references the very object
+  the application named, which is what stops the VIP's port and the rule's drifting apart. Two
+  consequences worth keeping: a non-TCP advertised service is skipped, because widening a TCP rule
+  to UDP is a different permission; and the derivation **refuses rather than guessing** when an
+  application advertises nothing, because every earlier fallback was always populated and always
+  plausible, which is precisely why a wrong port was never once reported as wrong.
 - **IT OPENS ALL THREE GATES, and the third was the one nobody could see.** A session needs the
   route to exist, the firewall to permit it, and the APPLICATION's own CiliumNetworkPolicy to name
   the source — `policy_default_deny` is true on every application here, so an unnamed source is

@@ -90,7 +90,6 @@ from operator import itemgetter
 from typing import Any
 from urllib.parse import quote
 
-import yaml
 from infrahub_sdk.generator import InfrahubGenerator
 
 from .generate_app_access_query import (
@@ -338,6 +337,9 @@ class GrantContext:
     network policy. None when the source is not an IPAM-backed address."""
     already_allowed: frozenset[str] = frozenset()
     """Prefix ids the application already permits, so adding is idempotent."""
+    grant_owned_prefixes: frozenset[str] = frozenset()
+    """Of those, the ones some other grant claims. A prefix the application
+    permits that no grant claims was declared by a human and is never touched."""
     taken_book_indexes: frozenset[int] = field(default_factory=frozenset)
     services_by_port: dict[int, Existing] = field(default_factory=dict)
     """Existing TCP service objects, keyed by port. Referenced, never duplicated."""
@@ -400,70 +402,42 @@ def is_withdrawn(grant: Any) -> bool:
     return _value(grant.status) in WITHDRAWN_STATUSES
 
 
-def advertised_service_ports(manifests: Any, service_selector: Any = None) -> list[int]:
-    """The TCP ports the application's ADVERTISED Services answer on.
+def advertised_service_ports(application: Any) -> list[int]:
+    """The TCP ports the application says its VIP answers on.
 
-    THIS IS THE PORT A FIREWALL RULE NEEDS, and it is not the one the
-    application's network policy names. `policy_allow_ports` was read here for
-    two cycles and is the CiliumNetworkPolicy's ingress port, applied to the
-    PODS: 8080 for nfd41-demo, whose Service maps ``port: 80`` to
-    ``targetPort: 8080``. The firewall's destination is the VIP, so the derived
-    rule permitted 8080, the VIP answered only on 80, and the grant was
-    rendered, merged, pushed and confirmed while reaching nothing. Deriving
-    from the Service closes that by construction -- the same object decides
-    both the VIP's port and the rule's.
+    THIS IS THE PORT A FIREWALL RULE NEEDS, and two earlier sources were both
+    wrong in the same direction -- they named a port the VIP does not serve, and
+    nothing downstream noticed:
 
-    ONLY ADVERTISED SERVICES COUNT. A `ClusterIP` Service has no VIP and is
-    unreachable from the branch, so its ports must never widen a rule;
-    nfd41-demo's `backend` is exactly that, on 8080, and including it would
-    have reintroduced the wrong port by another route. A Service qualifies when
-    it is `type: LoadBalancer` or carries the application's `service_selector`
-    labels, which is what gives it an address in the first place.
+      * `policy_allow_ports` is the CiliumNetworkPolicy's ingress port, applied
+        to the PODS. For an application whose Service maps 80 to 8080 that is
+        8080, so the rule permitted a port the VIP never answers on.
+      * The manifests' own LoadBalancer Services were right, and stopped
+        existing: cycle 033 made a chart the whole workload source, and a
+        chart's Services are created by Helm inside the cluster, which Infrahub
+        cannot do.
+
+    `advertised_services` names the `SecurityService` objects the firewall
+    already declares, so one object carries the port AND the protocol, and the
+    rule ends up referencing the very object the application named. That is what
+    keeps the VIP's port and the rule's port from drifting apart.
 
     Non-TCP entries are skipped: a rule here is TCP, and widening it to UDP
-    because a Service mentions one is a different permission.
+    because an application advertises one is a different permission.
     """
-    wanted = _selector_labels(service_selector)
     ports: list[int] = []
-    for document in manifests or []:
-        if not isinstance(document, dict) or document.get("kind") != "Service":
+    for service in _edges_of(getattr(application, "advertised_services", None)):
+        protocol = _node_of(service.ip_protocol)
+        if protocol is None or (_value(protocol.name) or "").lower() != TCP:
             continue
-        spec = document.get("spec")
-        if not isinstance(spec, dict):
+        port = _value(service.port)
+        if port is None:
             continue
-        labels = ((document.get("metadata") or {}).get("labels")) or {}
-        advertised = spec.get("type") == "LoadBalancer" or (
-            bool(wanted) and all(str(labels.get(k)) == v for k, v in wanted.items())
-        )
-        if not advertised:
+        try:
+            ports.append(int(port))
+        except (TypeError, ValueError):
             continue
-        for entry in spec.get("ports") or []:
-            if not isinstance(entry, dict):
-                continue
-            if str(entry.get("protocol", "TCP")).upper() != "TCP":
-                continue
-            try:
-                ports.append(int(entry["port"]))
-            except (KeyError, TypeError, ValueError):
-                continue
-    return ports
-
-
-def _selector_labels(service_selector: Any) -> dict[str, str]:
-    """``["nfd41.lab/advertise=true"]`` as ``{"nfd41.lab/advertise": "true"}``.
-
-    Takes the UNWRAPPED list, like `manifests` beside it, so both arguments to
-    `advertised_service_ports` are plain data and the function is testable
-    without building query models.
-    """
-    labels: dict[str, str] = {}
-    for item in service_selector or []:
-        text = str(item)
-        if "=" not in text:
-            continue
-        key, _, value = text.partition("=")
-        labels[key.strip()] = value.strip()
-    return labels
+    return sorted(set(ports))
 
 
 def source_prefix_id(source_address: Any) -> str | None:
@@ -495,10 +469,28 @@ def source_prefix_id(source_address: Any) -> str | None:
     return peer.id if peer is not None else None
 
 
-def prefixes_other_grants_need(
-    parsed: GenerateAppAccessQuery, grant: GrantNode, application_id: str | None
+def prefixes_other_grants_record(
+    parsed: GenerateAppAccessQuery,
+    grant: GrantNode,
+    application_id: str | None,
+    *,
+    live_only: bool,
 ) -> set[str]:
-    """Source prefixes a LIVE sibling grant on the same application recorded.
+    """Source prefixes a sibling grant on the same application has recorded.
+
+    Two questions are asked of this, and they want different sibling sets.
+
+    `live_only=True` -- WITHDRAWAL. What must survive this revocation, so a gate
+    another grant is using does not close. A withdrawn sibling is excluded:
+    `decommissioning` counts as gone everywhere else here, and treating it as
+    live would pin a prefix open for a grant that no longer wants it.
+
+    `live_only=False` -- AUTHORSHIP. Whether a prefix already on the application
+    is GRANT-OWNED at all, which is the only thing that makes recording it safe.
+    A prefix no grant claims was declared by a human -- `nfd41-demo` names three
+    in `objects/` -- and recording one of those would mean the first revocation
+    deleted it and broke an application nobody touched. Withdrawn siblings count
+    here, because a prefix they added is still not a human's.
 
     Withdrawal removes what this grant added MINUS this set. Two grants may
     name the same source -- two sites behind one prefix, or one site asking for
@@ -517,7 +509,7 @@ def prefixes_other_grants_need(
         node = edge.node
         if node is None or node.id == grant.id:
             continue
-        if is_withdrawn(node):
+        if live_only and is_withdrawn(node):
             continue
         peer = _node_of(node.application)
         if application_id is not None and (peer is None or peer.id != application_id):
@@ -723,7 +715,7 @@ def index_tcp_services(parsed: GenerateAppAccessQuery) -> dict[int, Existing]:
     return by_port
 
 
-def validate_model(parsed: GenerateAppAccessQuery, derived_ports: list[int] | None = None) -> GrantContext:
+def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
     """Resolve and check everything before a single object is written.
 
     Raises:
@@ -739,9 +731,9 @@ def validate_model(parsed: GenerateAppAccessQuery, derived_ports: list[int] | No
 
     name = _value(grant.name)
     # The application's advertised Services are the fallback for ports it did
-    # not name; `generate` resolves them, because the manifests may be an
-    # attachment that has to be downloaded.
-    ports = normalise_ports(grant, derived_ports)
+    # not name. Pure query data now: cycle 033 replaced the manifests -- which
+    # had to be downloaded from object storage -- with a relationship.
+    ports = normalise_ports(grant, advertised_service_ports(_node_of(grant.application)))
     policy_id = derive_policy(parsed, name)
     destination_zone_id = derive_destination_zone(parsed, grant)
 
@@ -815,6 +807,11 @@ def validate_model(parsed: GenerateAppAccessQuery, derived_ports: list[int] | No
         requester=_value(grant.requester),
         application_id=application_node.id if application_node else None,
         source_prefix_id=source_prefix_id(source_address),
+        grant_owned_prefixes=frozenset(
+            prefixes_other_grants_record(
+                parsed, grant, application_node.id if application_node else None, live_only=False
+            )
+        ),
         already_allowed=frozenset(prefix.id for prefix in _edges_of(application_node.allowed_source_prefixes))
         if application_node
         else frozenset(),
@@ -843,8 +840,7 @@ class AppAccessGenerator(InfrahubGenerator):
             return
 
         try:
-            derived_ports = await self._advertised_ports(_node_of(grant.application))
-            context = validate_model(parsed, derived_ports)
+            context = validate_model(parsed)
         except ValueError:
             await self._set_status(grant.id, "error")
             raise
@@ -858,47 +854,6 @@ class AppAccessGenerator(InfrahubGenerator):
         await self._permit_source(context)
         await self._advertise(context, derive_advertisement(grant))
         await self._rerender_firewall(context.firewall_id)
-
-    async def _advertised_ports(self, application: Any) -> list[int]:
-        """The ports this application's advertised Services answer on.
-
-        The manifests are a `CoreFileObject` attachment far more often than an
-        inline attribute -- nfd41-demo's are -- and the query returns the
-        file's METADATA only, its content living in object storage. So the node
-        is re-fetched by id and `download_file()` called on it, which is the
-        same two-step `crossplane_fabric_app._payload` does for the same
-        reason: `download_file` is a method on an SDK node, not on the
-        generated query model.
-
-        A failure here returns nothing rather than raising, and
-        `normalise_ports` then refuses with a message naming the grant. An
-        unreadable payload must not be indistinguishable from an application
-        that genuinely advertises nothing, but neither should it abort a grant
-        that names its own ports.
-        """
-        if application is None:
-            return []
-
-        manifests = _value(getattr(application, "manifests", None))
-        stub = _node_of(getattr(application, "manifests_file", None))
-        if stub is not None:
-            try:
-                file_node = await self._init_client.get(kind="ServiceFabricAppManifestsFile", id=stub.id)
-                content = await file_node.download_file()
-                text = content.decode() if isinstance(content, bytes) else content
-                manifests = yaml.safe_load(text)
-            except Exception:  # noqa: BLE001 - see the docstring: refuse, do not abort
-                return []
-
-        if isinstance(manifests, str):
-            try:
-                manifests = yaml.safe_load(manifests)
-            except yaml.YAMLError:
-                return []
-        if not isinstance(manifests, list):
-            return []
-
-        return advertised_service_ports(manifests, _value(getattr(application, "service_selector", None)))
 
     async def _upsert_vip_entry(self, context: GrantContext) -> str:
         """The address-book entry for the destination VIP.
@@ -1154,6 +1109,21 @@ class AppAccessGenerator(InfrahubGenerator):
             await application.save(update_group_context=False)
             self.logger.info("Permitted the grant's source on application %r", context.application_name)
 
+        # RECORD ONLY WHAT IS GRANT-OWNED, which is either a prefix this run
+        # added or one another grant already claims. A prefix that was already
+        # on the application and that NO grant claims was put there by a human
+        # -- nfd41-demo declares three in `objects/` -- and recording one of
+        # those would make the first revocation delete it, breaking an
+        # application nobody touched. Authorship is the only safe basis for
+        # deletion, exactly as `vip_block_managed` is for VIP blocks.
+        if prefix_id in context.already_allowed and prefix_id not in context.grant_owned_prefixes:
+            self.logger.info(
+                "Application %r already permits the grant's source and no grant claims it, "
+                "so it is left as the declared value rather than recorded as this grant's",
+                context.application_name,
+            )
+            return
+
         grant = await self.client.get(kind="ServiceAppAccess", id=context.grant.id)
         recorded = grant.granted_source_prefixes  # type: ignore[attr-defined]
         await recorded.fetch()
@@ -1179,7 +1149,7 @@ class AppAccessGenerator(InfrahubGenerator):
         if not mine or application_id is None:
             return 0
 
-        removable = mine - prefixes_other_grants_need(parsed, grant, application_id)
+        removable = mine - prefixes_other_grants_record(parsed, grant, application_id, live_only=True)
         if not removable:
             self.logger.info(
                 "Grant %r's source is still needed by another grant, so the application's policy keeps it",

@@ -24,9 +24,6 @@ query CrossplaneFabricAppQuery($name: String!) {
         chart_values {
           value
         }
-        manifests {
-          value
-        }
         service_selector {
           value
         }
@@ -86,17 +83,6 @@ query CrossplaneFabricAppQuery($name: String!) {
         # The payload attachments added by cycle 013. Only metadata comes back
         # here -- the content lives in object storage and is fetched with
         # download_file(), which is why this transform is async.
-        manifests_file {
-          node {
-            id
-            file_name {
-              value
-            }
-            checksum {
-              value
-            }
-          }
-        }
         values_file {
           node {
             id

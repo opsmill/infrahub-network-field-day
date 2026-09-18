@@ -209,18 +209,22 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
             msg = f"application {name!r} has no namespace_name; the XRD requires spec.namespace"
             raise ValueError(msg)
 
-        manifests = await self._payload(
-            app.manifests_file, _value(app.manifests), kind="ServiceFabricAppManifestsFile", name=name
-        )
         values = await self._payload(
             app.values_file, _value(app.chart_values), kind="ServiceFabricAppValuesFile", name=name
         )
         chart = build_chart(app, values)
 
-        if not chart and not manifests:
+        # A CHART IS THE WHOLE WORKLOAD SOURCE since cycle 033. It used to be a
+        # chart, raw manifests, or both, which left this deciding which of three
+        # shapes it was looking at from whichever fields happened to be
+        # populated -- and refusing only when everything was empty. The three
+        # chart fields are mandatory together in the schema now, so reaching
+        # here without one means the object predates that and was never
+        # migrated.
+        if not chart:
             msg = (
-                f"application {name!r} has neither a chart nor manifests; rendering it would produce a "
-                "namespace and a network policy with no workload, which applies cleanly and deploys nothing"
+                f"application {name!r} names no chart; rendering it would produce a namespace and a "
+                "network policy with no workload, which applies cleanly and deploys nothing"
             )
             raise ValueError(msg)
 
@@ -233,10 +237,7 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
             # alone leaves k8s_prod, which is not the XRD's default and not what
             # the hand-written manifest says.
             spec["tenant"] = str(_value(vrf.name)).lower().replace("_", "-")
-        if chart:
-            spec["chart"] = chart
-        if manifests:
-            spec["manifests"] = manifests
+        spec["chart"] = chart
         expose = build_expose(app)
         if expose:
             spec["expose"] = expose

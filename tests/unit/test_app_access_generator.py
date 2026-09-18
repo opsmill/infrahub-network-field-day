@@ -126,16 +126,10 @@ def _grant(
     """
     resolved_ports = [8080] if ports is _UNSET else ports
     # What nfd41-demo actually serves at its VIP, unless a test says otherwise.
-    # `app_ports` is expressed as Service port entries so a test can describe
-    # the shape that matters: the port the VIP answers on.
-    resolved_app_ports = [{"port": 80, "protocol": "TCP"}] if app_ports is _UNSET else list(app_ports)
-    resolved_manifests = [
-        {
-            "kind": "Service",
-            "metadata": {"name": "frontend", "labels": {"nfd41.lab/advertise": "true"}},
-            "spec": {"type": "LoadBalancer", "ports": list(resolved_app_ports)},
-        }
-    ]
+    # Expressed as the SecurityService objects the application advertises, which
+    # is what a grant reads since cycle 033: one object carrying both the port
+    # and the protocol, and the same object the rule ends up referencing.
+    resolved_app_ports = [("junos-http", 80, "tcp")] if app_ports is _UNSET else list(app_ports)
     return {
         "node": {
             "id": f"grant-{GRANT}",
@@ -158,9 +152,19 @@ def _grant(
                     "allowed_source_prefixes": {
                         "edges": [{"node": {"id": pid, "prefix": {"value": "x"}}} for pid in app_allows]
                     },
-                    "manifests": {"value": resolved_manifests},
-                    "manifests_file": {"node": None},
-                    "service_selector": {"value": ["nfd41.lab/advertise=true"]},
+                    "advertised_services": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "id": f"svc-{svc}",
+                                    "name": {"value": svc},
+                                    "port": {"value": port},
+                                    "ip_protocol": {"node": {"name": {"value": proto}}},
+                                }
+                            }
+                            for svc, port, proto in resolved_app_ports
+                        ]
+                    },
                     # The block a grant naming no VIP permits to.
                     "vip_block": (
                         {"node": {"id": app_vip_block, "prefix": {"value": "10.112.240.0/28"}}}
@@ -1152,72 +1156,33 @@ async def test_the_grant_is_saved_without_joining_the_tracking_group() -> None:
 
 
 def _derived(parsed: GenerateAppAccessQuery) -> list[int]:
-    """What `generate` computes and hands to `normalise_ports`."""
-    app = parsed.target.edges[0].node.application.node
-    return advertised_service_ports(
-        app.manifests.value if app.manifests else None,
-        app.service_selector.value if app.service_selector else None,
-    )
+    """What `validate_model` computes and hands to `normalise_ports`."""
+    return advertised_service_ports(parsed.target.edges[0].node.application.node)
 
 
 def test_a_grant_naming_no_ports_takes_its_applications_service_port() -> None:
     """The application already knows what it serves; the requester mostly does
     not. The port that matters is the one the VIP answers on."""
-    parsed = _query(ports=[], app_ports=({"port": 80, "protocol": "TCP"},))
+    parsed = _query(ports=[], app_ports=(("junos-http", 80, "tcp"),))
     assert normalise_ports(parsed.target.edges[0].node, _derived(parsed)) == [80]
-
-
-def test_the_pod_policy_port_is_not_the_firewall_port() -> None:
-    """THE REGRESSION THIS FILE EXISTS FOR.
-
-    nfd41-demo's Service maps `port: 80` to `targetPort: 8080`, and its
-    `policy_allow_ports` -- the CiliumNetworkPolicy ingress applied to the PODS
-    -- is 8080. Deriving the firewall's port from that field permitted 8080 to
-    a VIP that answers only on 80. Nothing failed: the rule rendered, merged,
-    pushed and was confirmed in sync, and the app was simply unreachable.
-
-    So the derivation must yield the SERVICE port and must not be reachable
-    from the pod port, which is what this asserts by making them differ.
-    """
-    manifests = [
-        {
-            "kind": "Service",
-            "metadata": {"name": "frontend", "labels": {"nfd41.lab/advertise": "true"}},
-            "spec": {"type": "LoadBalancer", "ports": [{"port": 80, "targetPort": 8080, "protocol": "TCP"}]},
-        }
-    ]
-    assert advertised_service_ports(manifests, ["nfd41.lab/advertise=true"]) == [80]
-
-
-def test_a_cluster_ip_service_is_not_advertised() -> None:
-    """nfd41-demo's `backend` is ClusterIP on 8080. It has no VIP, is
-    unreachable from the branch, and including it would reintroduce 8080 by
-    another route -- the very port this whole change removes."""
-    manifests = [
-        {
-            "kind": "Service",
-            "metadata": {"name": "frontend", "labels": {"nfd41.lab/advertise": "true"}},
-            "spec": {"type": "LoadBalancer", "ports": [{"port": 80, "protocol": "TCP"}]},
-        },
-        {
-            "kind": "Service",
-            "metadata": {"name": "backend"},
-            "spec": {"type": "ClusterIP", "ports": [{"port": 8080, "protocol": "TCP"}]},
-        },
-    ]
-    assert advertised_service_ports(manifests, ["nfd41.lab/advertise=true"]) == [80]
 
 
 def test_a_grant_naming_ports_keeps_them() -> None:
     """Naming them explicitly is how you ask for a SUBSET."""
-    parsed = _query(ports=[443], app_ports=({"port": 80, "protocol": "TCP"},))
+    parsed = _query(ports=[443], app_ports=(("junos-http", 80, "tcp"),))
     assert normalise_ports(parsed.target.edges[0].node, _derived(parsed)) == [443]
 
 
-def test_a_non_tcp_service_port_is_not_borrowed() -> None:
-    """A firewall rule here is TCP. Widening it to UDP because a Service
-    mentions one would be a different permission than the one asked for."""
-    parsed = _query(ports=[], app_ports=({"port": 53, "protocol": "UDP"},))
+def test_a_grant_refuses_when_its_application_advertises_nothing() -> None:
+    """REFUSE RATHER THAN GUESS, which is the behaviour a chart makes essential.
+
+    An application's Services are created by Helm inside the cluster, so
+    Infrahub cannot see them -- `advertised_services` is the only statement of
+    what the VIP answers on, and an application that names none has not made
+    one. Every earlier fallback was always populated and always plausible,
+    which is exactly why a wrong port was never once reported as wrong.
+    """
+    parsed = _query(ports=[], app_ports=())
     with pytest.raises(ValueError, match="no advertised Service"):
         normalise_ports(parsed.target.edges[0].node, _derived(parsed))
 
@@ -1281,8 +1246,34 @@ async def test_a_source_the_application_already_permits_is_not_added_twice() -> 
 
     # The application is never even fetched: nothing to change.
     assert f"ServiceFabricApp:app-{APP}" not in client.fetched
-    # Still RECORDED on the grant, or withdrawing it would leave the gate open
-    # with nothing saying who relies on it.
+    # AND NOT RECORDED. No grant claims this prefix, so a human declared it --
+    # nfd41-demo names three in objects/ -- and recording it would make the
+    # first revocation delete a value nobody asked to remove.
+    assert client.nodes[f"grant-{GRANT}"].granted_source_prefixes.peer_ids == []
+
+
+@pytest.mark.asyncio
+async def test_a_source_another_grant_already_added_is_recorded_too() -> None:
+    """The other half of the authorship rule.
+
+    A prefix already on the application is only safe to record when some grant
+    claims it -- then it is grant-owned and both grants must be counted, or
+    withdrawing the first would close a gate the second needs. A prefix no
+    grant claims is a human's and is left alone; that is the test above.
+    """
+    client = _RecordingClient()
+    generator = _generator(client)
+    parsed = _query(
+        approved=True,
+        app_allows=(PREFIX,),
+        siblings=(("grant-other", f"app-{APP}", "active", (PREFIX,)),),
+    )
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    # Not added again -- it is already there -- but claimed, so this grant is
+    # counted when the other one is revoked.
+    assert f"ServiceFabricApp:app-{APP}" not in client.fetched
     assert client.nodes[f"grant-{GRANT}"].granted_source_prefixes.peer_ids == [PREFIX]
 
 
@@ -1460,43 +1451,69 @@ def _seeded_app(name: str) -> dict:
     }[name]
 
 
-def test_the_derived_port_is_the_one_the_vip_answers_on() -> None:
-    """AGAINST THE REAL PAYLOAD, because a fixture agreeing with the code is
-    what let this ship.
+# An application advertising one service, as `advertised_services` returns it.
+#
+# This REPLACES the two-tier manifests fixture that stood here. That fixture
+# existed because the port was derived by reading raw manifests and picking the
+# LoadBalancer Services out of them, so the frontend/backend split and the
+# 80 -> 8080 remap were the test: reading the wrong Service, or the container
+# port instead of the Service port, was the defect.
+#
+# Cycle 033 removed the thing that made those mistakes possible. An application
+# is a Helm chart, whose Services exist only after Helm has run inside the
+# cluster, so nothing is parsed and nothing is selected -- the application NAMES
+# the `SecurityService` objects its VIP answers on, and that object carries the
+# port and the protocol together. There is no longer a second port at this layer
+# to read by mistake.
+#
+# What still has to be asserted is what the relationship is FOR: the port comes
+# from the named service, a service the application does not name contributes
+# nothing, and a non-TCP one is not silently widened into a TCP rule.
 
-    `payloads/nfd41-demo-manifests.yaml` is the file Infrahub holds as the
-    application's attachment and Vidra delivers, so it is the same object that
-    decides what the VIP listens on. Deriving 80 from it is the whole claim.
+
+def _app_advertising(*services: tuple[str, int, str]) -> Any:
+    """An application node exposing `advertised_services`, as the query returns it."""
+    return _query(app_ports=services).target.edges[0].node.application.node
+
+
+def test_the_derived_port_is_the_one_the_application_advertises() -> None:
+    """The firewall's destination is the VIP, so its port is the one the
+    application says the VIP answers on.
+
+    Two earlier sources were wrong in the same direction and neither failed
+    loudly. `policy_allow_ports` is the POD-level ingress port -- 8080 for an
+    application whose Service maps 80 to 8080 -- so the rule permitted a port
+    the VIP never answered on, rendered, merged, pushed and confirmed, and the
+    only symptom was a healthy application nobody could reach.
     """
-    app = _seeded_app("nfd41-demo")
-    manifests = list(yaml.safe_load_all((REPO_ROOT / "payloads/nfd41-demo-manifests.yaml").read_text()))
-    documents = manifests[0] if len(manifests) == 1 and isinstance(manifests[0], list) else manifests
+    derived = advertised_service_ports(_app_advertising(("junos-http", 80, "tcp")))
 
-    derived = advertised_service_ports(documents, app.get("service_selector"))
-
-    assert derived == [80], "the advertised Service answers on 80; the firewall rule must permit 80"
+    assert derived == [80]
 
 
-def test_the_pod_policy_port_and_the_service_port_genuinely_differ() -> None:
-    """The guard that makes the test above mean something.
+def test_only_what_the_application_names_is_permitted() -> None:
+    """A service the application does not advertise contributes nothing.
 
-    If nfd41-demo's Service ever stopped remapping its port, the two layers
-    would agree and reading the wrong one would pass unnoticed -- which is
-    exactly the state a future app would NOT be in. This fails when the demo
-    stops exercising the distinction, so the coverage is never quietly lost.
+    This is what replaced "skip ClusterIP Services". The old derivation had to
+    work out which of an application's Services had a VIP; now the application
+    states it, so the guarantee is stronger and the failure mode -- widening a
+    rule with a port that is only reachable inside the cluster -- is gone by
+    construction. Asserted so that a future change cannot quietly start reading
+    every SecurityService in the graph.
     """
-    app = _seeded_app("nfd41-demo")
-    pod_ports = {int(entry["port"]) for entry in app.get("policy_allow_ports", [])}
-    manifests = list(yaml.safe_load_all((REPO_ROOT / "payloads/nfd41-demo-manifests.yaml").read_text()))
-    documents = manifests[0] if len(manifests) == 1 and isinstance(manifests[0], list) else manifests
-    service_ports = set(advertised_service_ports(documents, app.get("service_selector")))
+    derived = advertised_service_ports(_app_advertising(("junos-http", 80, "tcp")))
 
-    assert pod_ports == {8080}
-    assert service_ports == {80}
-    assert pod_ports != service_ports, (
-        "nfd41-demo no longer remaps its port, so nothing here would catch the firewall "
-        "rule being derived from the pod-level policy again"
-    )
+    assert 8080 not in derived
+    assert derived == [80]
+
+
+def test_a_non_tcp_advertised_service_is_not_borrowed() -> None:
+    """A rule here is TCP. An application advertising a UDP service must not
+    widen the grant to UDP -- that is a different permission from the one asked
+    for, and it would be granted silently."""
+    derived = advertised_service_ports(_app_advertising(("dns-udp", 53, "udp")))
+
+    assert derived == []
 
 
 # ---------------------------------------------------------------------------

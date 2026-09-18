@@ -78,11 +78,9 @@ class GenerateAppAccessQueryTargetEdgesNodeApplication(BaseModel):
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNode(BaseModel):
     id: str
     name: Optional["GenerateAppAccessQueryTargetEdgesNodeApplicationNodeName"]
-    manifests: Optional["GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifests"]
-    manifests_file: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFile"
-    service_selector: Optional[
-        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeServiceSelector"
-    ]
+    advertised_services: (
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServices"
+    )
     allowed_source_prefixes: (
         "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixes"
     )
@@ -94,22 +92,65 @@ class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeName(BaseModel):
     value: Optional[str]
 
 
-class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifests(BaseModel):
-    value: Optional[Any]
-
-
-class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFile(BaseModel):
-    node: Optional[
-        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFileNode"
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServices(BaseModel):
+    edges: list[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdges"
     ]
 
 
-class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFileNode(BaseModel):
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdges(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNode(
+    BaseModel
+):
     id: str
+    name: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeName"
+    ]
+    port: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodePort"
+    ]
+    ip_protocol: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeIpProtocol"
 
 
-class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeServiceSelector(BaseModel):
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodePort(
+    BaseModel
+):
     value: Optional[Any]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeIpProtocol(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeIpProtocolNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeIpProtocolNode(
+    BaseModel
+):
+    name: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeIpProtocolNodeName"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeIpProtocolNodeName(
+    BaseModel
+):
+    value: Optional[str]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixes(
@@ -797,7 +838,11 @@ GenerateAppAccessQueryTargetEdges.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplication.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNode.model_rebuild()
-GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFile.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServices.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdges.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeIpProtocol.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAdvertisedServicesEdgesNodeIpProtocolNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixes.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdges.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeAllowedSourcePrefixesEdgesNode.model_rebuild()
