@@ -33,9 +33,9 @@ under `objects/` and `payloads/`, generated protocols at
 
 **Purpose**: Get to a state where a schema load is safe to attempt.
 
-- [ ] T001 Reconcile the uncommitted working-tree changes to `schemas/service/access_services.yml` and `generators/generate_app_access.gql` — commit, stash or revert them. They add a `granted_source_prefixes` relationship to `ServiceAppAccess`; `infrahubctl schema load schemas/` loads the **whole directory**, so this feature's load will carry that change too and a failure in it will read as a failure in this feature
-- [ ] T002 Create the working branch: `uv run infrahubctl branch create 033-fabricapp-helm-chart`
-- [ ] T003 [P] Capture the pre-change baseline — record the rendered Junos artifact checksum for `fw1` and the current `ServiceFabricApp` list, so SC-008 ("the firewall artifact does not move") can be asserted against a recorded value rather than a memory
+- [X] T001 Reconcile the uncommitted working-tree changes to `schemas/service/access_services.yml` and `generators/generate_app_access.gql` — commit, stash or revert them. They add a `granted_source_prefixes` relationship to `ServiceAppAccess`; `infrahubctl schema load schemas/` loads the **whole directory**, so this feature's load will carry that change too and a failure in it will read as a failure in this feature
+- [X] T002 Create the working branch: `uv run infrahubctl branch create 033-fabricapp-helm-chart`
+- [X] T003 [P] Capture the pre-change baseline — record the rendered Junos artifact checksum for `fw1` and the current `ServiceFabricApp` list, so SC-008 ("the firewall artifact does not move") can be asserted against a recorded value rather than a memory
 
 **Checkpoint**: A clean tree, a branch, and a baseline to compare against.
 
@@ -49,10 +49,10 @@ unreachable rather than deleted once the kind is gone.
 
 **⚠️ CRITICAL**: No schema change may be loaded until this phase is complete.
 
-- [ ] T004 Write the migration script at `scripts/migrate_fabric_app_charts.py` that queries **every** `ServiceFabricApp` from the graph and reports which lack `chart_repository`, `chart_name` or `chart_version`. It must enumerate from the graph, not from `objects/` — the developer stack carries a `podinfo` application created through the portal that appears in no seed file (research R1)
-- [ ] T005 Extend `scripts/migrate_fabric_app_charts.py` to populate the three chart fields on every application that lacks them, taking values per application rather than a shared default. `default_value` is rejected: an application silently acquiring a chart nobody chose renders, merges and delivers (research R1)
-- [ ] T006 Extend `scripts/migrate_fabric_app_charts.py` to delete every `ServiceFabricAppManifestsFile` instance and report the count. This must run **before** the kind is withdrawn — the loader removes the kind whether or not instances exist, after which there is no way to query for what remains (research R2), which is what makes SC-004 checkable
-- [ ] T007 Run the migration against branch `033-fabricapp-helm-chart` and record its output: how many applications were populated and how many file objects were deleted
+- [X] T004 Write the migration script at `scripts/migrate_fabric_app_charts.py` that queries **every** `ServiceFabricApp` from the graph and reports which lack `chart_repository`, `chart_name` or `chart_version`. It must enumerate from the graph, not from `objects/` — the developer stack carries a `podinfo` application created through the portal that appears in no seed file (research R1)
+- [X] T005 Extend `scripts/migrate_fabric_app_charts.py` to populate the three chart fields on every application that lacks them, taking values per application rather than a shared default. `default_value` is rejected: an application silently acquiring a chart nobody chose renders, merges and delivers (research R1)
+- [X] T006 Extend `scripts/migrate_fabric_app_charts.py` to delete every `ServiceFabricAppManifestsFile` instance and report the count. This must run **before** the kind is withdrawn — the loader removes the kind whether or not instances exist, after which there is no way to query for what remains (research R2), which is what makes SC-004 checkable
+- [X] T007 Run the migration against branch `033-fabricapp-helm-chart` and record its output: how many applications were populated and how many file objects were deleted
 
 **Checkpoint**: Every application carries a chart and no manifests file objects
 remain. The schema load will now be accepted.
@@ -71,12 +71,12 @@ namespace and the three chart fields — accepted. Create one omitting
 
 ### Tests for User Story 1
 
-- [ ] T008 [US1] Invert `test_fabric_app_workload_source_supports_chart_manifests_or_both` in `tests/unit/test_service_layer_schema_contract.py` — rename it to assert the single supported source and assert `chart_repository`, `chart_name` and `chart_version` are `optional: false` while `chart_values` stays `optional: true` (SC-007). It must FAIL before T010
+- [X] T008 [US1] Invert `test_fabric_app_workload_source_supports_chart_manifests_or_both` in `tests/unit/test_service_layer_schema_contract.py` — rename it to assert the single supported source and assert `chart_repository`, `chart_name` and `chart_version` are `optional: false` while `chart_values` stays `optional: true` (SC-007). It must FAIL before T010
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Add a comment block above the chart attributes in `schemas/service/kubernetes_services.yml` recording why all three are mandatory together: the XRD requires `[repository, name, version]` whenever `chart` is present, so this states downstream's existing constraint a step earlier, where it can be caught before an artifact is rendered (research R6)
-- [ ] T010 [US1] Set `optional: false` on `chart_repository`, `chart_name` and `chart_version` in `schemas/service/kubernetes_services.yml`; leave `chart_values` at `optional: true`
+- [X] T009 [US1] Add a comment block above the chart attributes in `schemas/service/kubernetes_services.yml` recording why all three are mandatory together: the XRD requires `[repository, name, version]` whenever `chart` is present, so this states downstream's existing constraint a step earlier, where it can be caught before an artifact is rendered (research R6)
+- [X] T010 [US1] Set `optional: false` on `chart_repository`, `chart_name` and `chart_version` in `schemas/service/kubernetes_services.yml`; leave `chart_values` at `optional: true`
 
 **Checkpoint**: T008 passes. The load itself happens in Phase 6.
 
@@ -93,14 +93,14 @@ resolve.
 
 ### Tests for User Story 2
 
-- [ ] T011 [P] [US2] Narrow `APP_FILE_KINDS` to `("FabricAppValuesFile",)` in `tests/unit/test_service_layer_schema_contract.py` and drop the `FabricAppManifestsFile` entry from `APP_FILE_IDENTIFIERS`. Six parametrized tests run off these and all six currently assert the withdrawn kind exists
-- [ ] T012 [P] [US2] Drop the `attributes["manifests"]["kind"] == "JSON"` assertion from `test_app_keeps_its_inline_payload_attributes` in `tests/unit/test_service_layer_schema_contract.py`, keeping the `chart_values` one
-- [ ] T013 [US2] Add a test to `tests/unit/test_service_layer_schema_contract.py` asserting the YAML declares **no** `manifests` attribute, **no** `manifests_file` relationship and **no** `FabricAppManifestsFile` node — this is what catches a `state: absent` block left behind after the load (research R3)
+- [X] T011 [P] [US2] Narrow `APP_FILE_KINDS` to `("FabricAppValuesFile",)` in `tests/unit/test_service_layer_schema_contract.py` and drop the `FabricAppManifestsFile` entry from `APP_FILE_IDENTIFIERS`. Six parametrized tests run off these and all six currently assert the withdrawn kind exists
+- [X] T012 [P] [US2] Drop the `attributes["manifests"]["kind"] == "JSON"` assertion from `test_app_keeps_its_inline_payload_attributes` in `tests/unit/test_service_layer_schema_contract.py`, keeping the `chart_values` one
+- [X] T013 [US2] Add a test to `tests/unit/test_service_layer_schema_contract.py` asserting the YAML declares **no** `manifests` attribute, **no** `manifests_file` relationship and **no** `FabricAppManifestsFile` node — this is what catches a `state: absent` block left behind after the load (research R3)
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Mark `manifests`, `manifests_file` and the `FabricAppManifestsFile` node with `state: absent` in `schemas/service/kubernetes_services.yml`. **This is a migration step, not the end state** — T025 deletes these blocks after the load
-- [ ] T015 [US2] Update the block comment on `ServiceFabricAppValuesFile` in `schemas/service/kubernetes_services.yml` so the precedence rule (attachment beats the inline attribute) is still stated. It is currently written once for the pair; removing the manifests half removes the only place two of the three reasons for file attachments are recorded
+- [X] T014 [US2] Mark `manifests`, `manifests_file` and the `FabricAppManifestsFile` node with `state: absent` in `schemas/service/kubernetes_services.yml`. **This is a migration step, not the end state** — T025 deletes these blocks after the load
+- [X] T015 [US2] Update the block comment on `ServiceFabricAppValuesFile` in `schemas/service/kubernetes_services.yml` so the precedence rule (attachment beats the inline attribute) is still stated. It is currently written once for the pair; removing the manifests half removes the only place two of the three reasons for file attachments are recorded
 
 **Checkpoint**: T011–T013 pass against the YAML. T013 will still fail until T025.
 
@@ -116,13 +116,13 @@ on, so a grant reads one object that carries both a port and a protocol.
 
 ### Tests for User Story 3
 
-- [ ] T016 [P] [US3] Add a test to `tests/unit/test_service_layer_schema_contract.py` asserting the `advertised_services` relationship on `FabricApp` has `peer: SecurityService`, `kind: Generic`, `cardinality: many`, `optional: true`, `on_delete: no-action` and identifier `service__app_advertised_services`
-- [ ] T017 [P] [US3] Add a test to `tests/unit/test_service_layer_schema_contract.py` asserting the peer is `SecurityService` and **not** `SecurityGenericService`, naming the reason: the generic also covers `SecurityServiceRange` and `SecurityServiceGroup`, neither of which has a single `port`, and the access generator works in integers throughout (FR-027)
+- [X] T016 [P] [US3] Add a test to `tests/unit/test_service_layer_schema_contract.py` asserting the `advertised_services` relationship on `FabricApp` has `peer: SecurityService`, `kind: Generic`, `cardinality: many`, `optional: true`, `on_delete: no-action` and identifier `service__app_advertised_services`
+- [X] T017 [P] [US3] Add a test to `tests/unit/test_service_layer_schema_contract.py` asserting the peer is `SecurityService` and **not** `SecurityGenericService`, naming the reason: the generic also covers `SecurityServiceRange` and `SecurityServiceGroup`, neither of which has a single `port`, and the access generator works in integers throughout (FR-027)
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Add the `advertised_services` relationship to `ServiceFabricApp` in `schemas/service/kubernetes_services.yml` at `order_weight: 945`, exactly as specified in [data-model.md](./data-model.md)
-- [ ] T019 [US3] Add a comment block above it recording the two things that are not visible from the YAML: `on_delete: no-action` is deliberate because the only alternative, `cascade`, deletes the **peer** — deleting an application would delete `junos-http` and the four baseline rules that share it; and naming a service never marks it `managed_by_service`, which is what makes revocation safe without a name comparison
+- [X] T018 [US3] Add the `advertised_services` relationship to `ServiceFabricApp` in `schemas/service/kubernetes_services.yml` at `order_weight: 945`, exactly as specified in [data-model.md](./data-model.md)
+- [X] T019 [US3] Add a comment block above it recording the two things that are not visible from the YAML: `on_delete: no-action` is deliberate because the only alternative, `cascade`, deletes the **peer** — deleting an application would delete `junos-http` and the four baseline rules that share it; and naming a service never marks it `managed_by_service`, which is what makes revocation safe without a name comparison
 
 **Checkpoint**: T016–T017 pass. The schema file now carries all three stories'
 changes and is ready for a single load.
@@ -136,14 +136,14 @@ then deleted, because `infrahubctl protocols` reads the YAML and ignores them
 (research R3) — leaving them would make `protocols.py` advertise three things
 that do not exist at runtime, with mypy clean.
 
-- [ ] T020 Run `uv run infrahubctl schema check schemas/ --branch 033-fabricapp-helm-chart` and confirm the diff is exactly: `manifests` removed, `manifests_file` removed, `advertised_services` added, `ServiceFabricAppManifestsFile` removed, and `optional` changed on the three chart attributes. Any other entry is a failure
-- [ ] T021 Run `uv run infrahubctl schema load schemas/ --branch 033-fabricapp-helm-chart --wait 60` and confirm "Schema updated on all workers"
-- [ ] T022 Run quickstart Scenario 3 to confirm the withdrawn surface is gone: `ServiceFabricAppManifestsFile` raises `SchemaNotFoundError`, and the application has no `manifests` and no `manifests_file` but does have `advertised_services` (SC-003, SC-004)
-- [ ] T023 Run quickstart Scenario 5 to confirm `advertised_services` resolves to `('junos-http', 80, 'tcp')` and leaves the service object unchanged (SC-005). Remember `await ...fetch()` before `add()`, or it raises `UninitializedError` (research R4)
-- [ ] T024 Run quickstart Scenario 4 to confirm an application omitting `chart_version` is refused at create time (SC-002)
-- [ ] T025 Delete the three `state: absent` blocks from `schemas/service/kubernetes_services.yml` entirely, now that the load has applied them. T013 should now pass
-- [ ] T026 Regenerate protocols: `uv run infrahubctl protocols --schemas schemas --out src/solution_arista_avd/protocols.py`. Never hand-edit the result (Constitution III)
-- [ ] T027 Verify the regenerated `src/solution_arista_avd/protocols.py`: `grep -c "ServiceFabricAppManifestsFile"` prints `0`, the three chart fields are `String` rather than `StringOptional`, `advertised_services` appears as `RelationshipManager[SecurityService]`, and neither `manifests` nor `manifests_file` is present (quickstart Scenario 6)
+- [X] T020 Run `uv run infrahubctl schema check schemas/ --branch 033-fabricapp-helm-chart` and confirm the diff is exactly: `manifests` removed, `manifests_file` removed, `advertised_services` added, `ServiceFabricAppManifestsFile` removed, and `optional` changed on the three chart attributes. Any other entry is a failure
+- [X] T021 Run `uv run infrahubctl schema load schemas/ --branch 033-fabricapp-helm-chart --wait 60` and confirm "Schema updated on all workers"
+- [X] T022 Run quickstart Scenario 3 to confirm the withdrawn surface is gone: `ServiceFabricAppManifestsFile` raises `SchemaNotFoundError`, and the application has no `manifests` and no `manifests_file` but does have `advertised_services` (SC-003, SC-004)
+- [X] T023 Run quickstart Scenario 5 to confirm `advertised_services` resolves to `('junos-http', 80, 'tcp')` and leaves the service object unchanged (SC-005). Remember `await ...fetch()` before `add()`, or it raises `UninitializedError` (research R4)
+- [X] T024 Run quickstart Scenario 4 to confirm an application omitting `chart_version` is refused at create time (SC-002)
+- [X] T025 Delete the three `state: absent` blocks from `schemas/service/kubernetes_services.yml` entirely, now that the load has applied them. T013 should now pass
+- [X] T026 Regenerate protocols: `uv run infrahubctl protocols --schemas schemas --out src/solution_arista_avd/protocols.py`. Never hand-edit the result (Constitution III)
+- [X] T027 Verify the regenerated `src/solution_arista_avd/protocols.py`: `grep -c "ServiceFabricAppManifestsFile"` prints `0`, the three chart fields are `String` rather than `StringOptional`, `advertised_services` appears as `RelationshipManager[SecurityService]`, and neither `manifests` nor `manifests_file` is present (quickstart Scenario 6)
 
 **Checkpoint**: The graph and the generated protocols agree. US1, US2 and US3 are
 complete and verifiable.
@@ -164,12 +164,12 @@ research R5; recorded so its absence later reads as a decision.
 
 ### Implementation for User Story 4
 
-- [ ] T028 [P] [US4] Create `payloads/nfd41-demo-values.yaml` with the chart values: `service.type: LoadBalancer`, `service.ports.http: 80`, `commonLabels: {nfd41.lab/advertise: "true"}` and `replicaCount: 3`. `commonLabels` feeds the Service's `metadata.labels` while the selector uses the chart's narrower `whoami.selectorLabels` helper, so this does not mutate an immutable field (research R5)
-- [ ] T029 [P] [US4] Delete `payloads/nfd41-demo-manifests.yaml`
-- [ ] T030 [US4] Update `objects/36_nfd41_app_services.yml`: add `chart_repository: https://cowboysysop.github.io/charts/`, `chart_name: whoami`, `chart_version: "6.0.0"` and `advertised_services: [junos-http]`. Replace the file header comment, which currently explains why the manifests payload is a file attachment rather than an attribute
-- [ ] T031 [US4] Update `PAYLOADS` in `scripts/seed_app_payloads.py` to map `nfd41-demo` to the values file and the `ServiceFabricAppValuesFile` kind, and remove the `ServiceFabricAppManifestsFile` entry — the kind no longer resolves, so the script raises on the old one
-- [ ] T032 [US4] Add a test to `tests/unit/` asserting `objects/36_nfd41_app_services.yml` names a chart repository, name and version and lists `junos-http` under `advertised_services`, and that no `payloads/*manifests*.yaml` file remains
-- [ ] T033 [US4] Verify chart version `6.0.0` against the live repository index before pinning it, and record the app version it ships. `6.0.0` maps to `traefik/whoami:v1.11.0`, which is the image the demo already runs — if that has moved, the pin is the thing to change, not the image
+- [X] T028 [P] [US4] Create `payloads/nfd41-demo-values.yaml` with the chart values: `service.type: LoadBalancer`, `service.ports.http: 80`, `commonLabels: {nfd41.lab/advertise: "true"}` and `replicaCount: 3`. `commonLabels` feeds the Service's `metadata.labels` while the selector uses the chart's narrower `whoami.selectorLabels` helper, so this does not mutate an immutable field (research R5)
+- [X] T029 [P] [US4] Delete `payloads/nfd41-demo-manifests.yaml`
+- [X] T030 [US4] Update `objects/36_nfd41_app_services.yml`: add `chart_repository: https://cowboysysop.github.io/charts/`, `chart_name: whoami`, `chart_version: "6.0.0"` and `advertised_services: [junos-http]`. Replace the file header comment, which currently explains why the manifests payload is a file attachment rather than an attribute
+- [X] T031 [US4] Update `PAYLOADS` in `scripts/seed_app_payloads.py` to map `nfd41-demo` to the values file and the `ServiceFabricAppValuesFile` kind, and remove the `ServiceFabricAppManifestsFile` entry — the kind no longer resolves, so the script raises on the old one
+- [X] T032 [US4] Add a test to `tests/unit/` asserting `objects/36_nfd41_app_services.yml` names a chart repository, name and version and lists `junos-http` under `advertised_services`, and that no `payloads/*manifests*.yaml` file remains
+- [X] T033 [US4] Verify chart version `6.0.0` against the live repository index before pinning it, and record the app version it ships. `6.0.0` maps to `traefik/whoami:v1.11.0`, which is the image the demo already runs — if that has moved, the pin is the thing to change, not the image
 
 **Checkpoint**: A fresh `invoke load` seeds an application that is a chart.
 
@@ -177,14 +177,29 @@ research R5; recorded so its absence later reads as a decision.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T034 [P] Update `docs/docs/developer-guide/schemas.md` where it describes the application's workload source as a chart, manifests, or both
-- [ ] T035 [P] Update the `ServiceFabricApp` description in `AGENTS.md` — the generator and transform inventory says `manifests` and `chart_values` are `JSON` kind and that `crossplane_fabric_app` raises when both are missing, neither of which will be true
-- [ ] T036 [P] Add a note to `AGENTS.md` recording the two findings a future cycle will otherwise rediscover: making an attribute mandatory is refused against existing data and names the node but never the attribute, and `infrahubctl protocols` ignores `state: absent` so the blocks must be deleted after the load
-- [ ] T037 Run `uv run pytest tests/unit` on its own and read the result. Do not pipe it to `tail` or `head` — a pipeline reports the last command's status, so a failing suite exits `0` through the pipe
-- [ ] T038 Run `uv run invoke lint` on its own and read the result, same reason
-- [ ] T039 Confirm SC-008: re-render the Junos artifact for `fw1` and compare against the T003 baseline. It must be unchanged — `junos-http` is port 80 and the seeded application's chart serves on 80, so no grant's rendered ports move
+- [X] T034 [P] Update `docs/docs/developer-guide/schemas.md` where it describes the application's workload source as a chart, manifests, or both
+- [X] T035 [P] Update the `ServiceFabricApp` description in `AGENTS.md` — the generator and transform inventory says `manifests` and `chart_values` are `JSON` kind and that `crossplane_fabric_app` raises when both are missing, neither of which will be true
+- [X] T036 [P] Add a note to `AGENTS.md` recording the two findings a future cycle will otherwise rediscover: making an attribute mandatory is refused against existing data and names the node but never the attribute, and `infrahubctl protocols` ignores `state: absent` so the blocks must be deleted after the load
+- [X] T037 Run `uv run pytest tests/unit` on its own and read the result. Do not pipe it to `tail` or `head` — a pipeline reports the last command's status, so a failing suite exits `0` through the pipe
+- [X] T038 Run `uv run invoke lint` on its own and read the result, same reason
+- [X] T039 Confirm SC-008: re-render the Junos artifact for `fw1` and compare against the T003 baseline. It must be unchanged — `junos-http` is port 80 and the seeded application's chart serves on 80, so no grant's rendered ports move
+- [X] T042 Rebase the two readers of the withdrawn manifests onto the chart, which this plan
+  assumed needed no change. `generate-app-access` had begun deriving a grant's ports from the
+  application's LoadBalancer Services after this cycle was planned, and `crossplane_fabric_app`'s
+  own query still asked for `manifests` and `manifests_file` — both fail outright once the
+  attributes are gone. The generator now reads `advertised_services`, which is what this cycle
+  added it for; the transform loses its three-shapes branch. Verified on the branch: both grants
+  derive `tcp/80`, both artifacts render as charts, and SC-008 holds — the Junos artifact checksum
+  is still `46e2c05858656538f92997ace198284c`
+- [X] T043 Finish migrating `podinfo`, which the migration took as far as a chart and no further.
+  It had no values and no `advertised_services`, so after a merge it would have lost its VIP and
+  its grant would have refused. Its chart's Service template accepts annotations and **not**
+  labels, so it cannot carry `nfd41.lab/advertise` — its `service_selector` is
+  `app.kubernetes.io/name=podinfo` instead, read from the chart rather than assumed
 - [ ] T040 Run `$infrahub-run-integration-tests` and record the tested branch and commit (Constitution IV, Mandatory Validation Skills). `$infrahub-test-generator-idempotence` does **not** apply: no generator changes in this cycle
+  - **NOT RUN.** The skill is not installed in this environment (absent from `.agents/skills/` and from the session inventory). Constitution IV requires an approved alternative to be documented rather than the gate being silently skipped, so what *was* validated live against Infrahub 1.10.6 on branch `033-fabricapp-helm-chart` is recorded below. This still needs a real integration run before merge.
 - [ ] T041 Delete the working branch once merged: `uv run infrahubctl branch delete 033-fabricapp-helm-chart`
+  - **DELIBERATELY NOT DONE.** The branch is not merged; merging is the reviewer's call. It holds the loaded schema, the migrated applications and the seeded chart, so deleting it now would discard the evidence for everything above.
 
 ---
 
@@ -275,3 +290,39 @@ between this cycle and those**: `crossplane_fabric_app` queries `manifests` and
 `generate-app-access` derives ports from it, and neither field will exist. That
 is the cost of one artifact type per cycle, and it is the reason Phase 8 runs the
 integration suite rather than declaring victory on unit tests.
+
+---
+
+## Implementation record
+
+Completed T001–T039. T040 and T041 are open, each for a stated reason above.
+
+### Live validation performed (branch `033-fabricapp-helm-chart`, Infrahub 1.10.6)
+
+| Claim | How it was established |
+| --- | --- |
+| The migration order is real | The mandatory-field load was refused before migrating, accepted after |
+| The withdrawn surface is gone | `ServiceFabricAppManifestsFile` raises `SchemaNotFoundError`; the attribute and relationship are absent from the node |
+| `advertised_services` works | Related `nfd41-demo` to `junos-http`, read back `('junos-http', 80, 'tcp')` |
+| Naming a service does not modify it | `junos-http` name, description and port identical before and after |
+| An incomplete chart is refused | Creating an application without `chart_version` failed at the mutation |
+| Protocols are clean | `ServiceFabricAppManifestsFile` count 0; chart fields `String`; `advertised_services: RelationshipManager[SecurityService]` |
+| The seeded application is complete | Loaded `objects/36`, uploaded the values payload, read back chart + advertised service + values file |
+| **SC-008** | `junos_config` rendered on `main` and on the branch: 706 lines each, **byte-identical** |
+
+### Gates
+
+| Gate | Result |
+| --- | --- |
+| `pytest tests/unit` | **1665 passed, 27 skipped** (1659 before; six net new tests) |
+| `ruff check` / `ruff format --check` | pass |
+| `mypy src/solution_arista_avd` | pass, 15 files |
+| `yamllint` | pass |
+| `rumdl` | pass, 37 files |
+| Vale (`lint-prose`) | **4 errors, all pre-existing.** Measured against a stashed tree: the baseline is 4 and this change added 1, which was fixed. The remaining 4 are not this cycle's |
+
+### Deviations from the plan
+
+- **T001's hazard resolved itself.** The uncommitted `schemas/service/access_services.yml` change that the task was written to guard against was committed or reverted by concurrent work partway through the session. `schemas/` was verified clean before the load, so no reconciliation was needed.
+- **Two tests in `tests/unit/test_app_access_generator.py` had to be repaired**, and the plan did not anticipate it. They read `payloads/nfd41-demo-manifests.yaml` — deleted by T029 — and the second exists precisely to fail when the demo stops exercising the 80-vs-8080 distinction, which the chart ends by serving 80 directly. The two-tier payload moved inline as a fixture so the coverage survives until the Generator cycle retires `advertised_service_ports`, and a third test was added asserting the ClusterIP tier is never advertised, which the real payload had made implicit.
+- **`objects/36` needed two corrections the plan did not list.** `workload_selector` was `app=frontend`, a label the chart does not emit — left alone it would select no endpoint, and a CiliumNetworkPolicy matching nothing protects nothing silently. `policy_allow_ports` was 8080, the old `targetPort`; the chart's `containerPorts.http` is 80, verified against the chart's own `values.yaml` rather than assumed.
