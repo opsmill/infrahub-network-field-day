@@ -73,6 +73,12 @@ Key docs to read before larger changes:
   host-side one, published on 8501 and reachable only from the management network: the
   firewall permits the branch to 32001, 32556 and 8000 and nothing else. Both create the same
   service objects, so a change to a service kind touches both.
+- **They reference relationships differently, and that is why only one of them broke.** The
+  Streamlit pages pass Infrahub **ids**, taken from a selectbox they populated; Backstage's
+  generated templates pass **hfids**, because a typed field has no id to offer and a picker
+  yields a name. So a peer whose `human_friendly_id` has two elements — `IpamIPAddress`,
+  `IpamPrefix` — was fatal to the generated templates and invisible to Streamlit. Neither is
+  wrong; know which one you are looking at before assuming a bug is shared.
 - The Streamlit portal is for day-2 workflows; every workflow operates on an
   Infrahub branch and produces a proposed change for review. **Every page now creates exactly
   one service object and lets a generator build the technical ones.** They used to write
