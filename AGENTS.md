@@ -241,9 +241,17 @@ take the next free resource from a pool. Two things to know before changing the 
   candidate. A hard-coded `NFD41-Segment-Subnet-Pool` would fail naming a string that appears in
   no schema.
 
-**`status` withdraws, and `decommissioning` counts as gone rather than going.** Every service
-kind's `decommissioning`/`decommissioned` state now means the same thing everywhere: downstream
-treats the service as **absent**.
+**`status` withdraws, and `decommissioning` counts as gone rather than going.** For every kind in
+the table below, `decommissioning`/`decommissioned` means the same thing: downstream treats the
+service as **absent**.
+
+**`ServiceAppAccess` is the exception, and setting its status does nothing visible.** A grant is
+gated on `approved`, so revoking access means setting that to false -- and its generator OWNS the
+status field, rewriting it to `active` when it materialises and `provisioning` when it withdraws.
+An operator who sets `decommissioning` on a grant watches it revert to `active` with the firewall
+rule still in place. Measured on a branch: unapproving deleted the rule, the generated service and
+the address entry, kept the adopted `junos-https` that baseline rules share, and left the other 21
+rules untouched.
 
 | Kind | What withdraws it |
 | --- | --- |
