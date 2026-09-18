@@ -881,6 +881,29 @@ export class InfrahubEntityProvider implements EntityProvider {
   }
 
   /**
+   * The peers on the far side of a relationship, whichever cardinality it has.
+   * Both readers below wanted `?.node?.x` and would silently see nothing on a
+   * many -- which reads as "this object points at nothing" rather than as a
+   * shape mismatch.
+   */
+  private peersOf(
+    node: Record<string, any>,
+    relationship: ResolvedRelationship,
+  ): Record<string, any>[] {
+    const value = node[relationship.name];
+    if (!value) {
+      return [];
+    }
+    return isMultiple(relationship)
+      ? (value.edges ?? [])
+          .map((edge: any) => edge?.node)
+          .filter((peer: any) => Boolean(peer))
+      : value.node
+        ? [value.node]
+        : [];
+  }
+
+  /**
    * Objects of one mapped kind, read with a query built from that kind's own
    * schema. This is the whole ingestion path: there is no per-kind code, so a
    * kind gains an attribute in Infrahub and the entity gains it here.
@@ -894,9 +917,18 @@ export class InfrahubEntityProvider implements EntityProvider {
       ...kind.readOnly.map(name => `${name} { value }`),
       // display_label as well as hfid: hfid names the entity, display_label is
       // what a person recognises in a description.
-      ...kind.relationships.map(
-        relationship =>
-          `${relationship.name} { node { id hfid display_label } }`,
+      // A CARDINALITY-MANY RELATIONSHIP IS A DIFFERENT GRAPHQL TYPE. Infrahub
+      // types a one as `NestedEdged<Peer>`, which has `node`, and a many as
+      // `NestedPaginated<Peer>`, which has `edges { node }`. Asking for `node`
+      // on the paginated type is not a partial result -- it fails the WHOLE
+      // query, so the kind is unreadable and vanishes from the catalog with
+      // one warning. That is what happened to ServiceNetworkSegment, whose
+      // mandatory `avd_tags` is a many: the segment request form did not exist
+      // and nothing said why.
+      ...kind.relationships.map(relationship =>
+        isMultiple(relationship)
+          ? `${relationship.name} { edges { node { id hfid display_label } } }`
+          : `${relationship.name} { node { id hfid display_label } }`,
       ),
     ].join('\n              ');
 
@@ -1006,12 +1038,16 @@ export class InfrahubEntityProvider implements EntityProvider {
     // A relationship to a kind we ingest becomes a real catalog relation; the
     // rest are data, not references.
     const dependsOn = kind.relationships
-      .map(relationship => {
-        const hfid = node[relationship.name]?.node?.hfid?.[0];
-        return hfid && relationship.picker
-          ? `${relationship.picker.kind.toLowerCase()}:default/${hfid}`
-          : undefined;
-      })
+      .flatMap(relationship =>
+        relationship.picker
+          ? this.peersOf(node, relationship).map(peer => {
+              const hfid = peer.hfid?.[0];
+              return hfid
+                ? `${relationship.picker!.kind.toLowerCase()}:default/${hfid}`
+                : undefined;
+            })
+          : [],
+      )
       .filter((ref): ref is string => Boolean(ref));
 
     // Attributes first, then what this object points at, which is usually the
@@ -1033,11 +1069,13 @@ export class InfrahubEntityProvider implements EntityProvider {
         }),
       ...kind.relationships
         .map(relationship => {
-          const peer = node[relationship.name]?.node?.display_label;
-          return peer
+          const peers = this.peersOf(node, relationship)
+            .map(peer => peer.display_label)
+            .filter(Boolean);
+          return peers.length
             ? `${
                 relationship.label ?? this.fieldTitle(relationship.name)
-              } ${peer}`
+              } ${peers.join(', ')}`
             : undefined;
         })
         .filter((line): line is string => Boolean(line)),
