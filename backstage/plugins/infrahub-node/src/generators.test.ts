@@ -176,10 +176,22 @@ describe('awaitGenerators', () => {
       ['dedicated_internet_generator'],
       [
         [
+          // The reason comes from a log line, not from an `error` field:
+          // TaskNode has none, and asking for one failed the whole query --
+          // which killed the await step after the service was already created.
           task({
             state: 'COMPLETED',
             conclusion: 'failure',
-            error: { message: 'prefix length cannot be changed' },
+            logs: {
+              edges: [
+                {
+                  node: {
+                    severity: 'error',
+                    message: 'prefix length cannot be changed',
+                  },
+                },
+              ],
+            },
           }),
         ],
       ],

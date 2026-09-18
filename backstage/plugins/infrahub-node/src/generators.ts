@@ -46,7 +46,14 @@ const TASKS = `
           conclusion
           workflow
           progress
-          error { message remediation }
+          # NO error field here. TaskNode has none on Infrahub 1.10.6, and
+          # asking for it fails the WHOLE query -- so the await step died on its
+          # first poll, after the service had been created and the generator had
+          # already been asked to run. The scaffolder then skipped the proposed
+          # change, leaving a request that exists and reaches nobody.
+          #
+          # The failure detail comes from logs instead, which is where the
+          # generator writes it anyway.
           logs { edges { node { message severity } } }
         }
       }
@@ -61,7 +68,6 @@ type TaskNode = {
   conclusion: string | null;
   workflow: string | null;
   progress: unknown;
-  error: { message?: string | null; remediation?: string | null } | null;
   logs?: { edges: { node: { message: string; severity: string } }[] };
 };
 
@@ -196,10 +202,21 @@ export async function awaitGenerators(
       reportedLogs.set(task.id, lines.length);
 
       if (isFailure(task)) {
+        // The reason comes from the LOGS, because TaskNode carries no
+        // structured error. Quoting the last error-severity line keeps the
+        // failure legible on the run page without it: a bare "failure" sends
+        // the reader looking for a reason that is three lines further up.
+        const worst = [...(task.logs?.edges ?? [])]
+          .reverse()
+          .find(line =>
+            ['error', 'critical'].includes(
+              (line.node.severity ?? '').toLowerCase(),
+            ),
+          );
         throw new Error(
           `Generator task "${task.title}" ${task.conclusion}: ${
-            task.error?.message ?? 'see the logs above'
-          }${task.error?.remediation ? ` -- ${task.error.remediation}` : ''}`,
+            worst?.node.message ?? 'see the logs above'
+          }`,
         );
       }
     }
