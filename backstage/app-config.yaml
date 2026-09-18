@@ -300,6 +300,16 @@ infrahub:
         entity: Component
       - kind: ServiceTenantCloud
         entity: Component
+      # NAMED EXPLICITLY, ONLY FOR ITS GROUP. The provider discovers it anyway,
+      # under the service generic -- but a discovered kind has no `groups`, and
+      # `generate-fabric-peering` targets `service_fabric_peerings`. A peering
+      # requested through the portal therefore joined nothing, its generator
+      # never saw it, and the request opened a proposed change that materialised
+      # no sessions. Created and silently never built is the failure mode
+      # AGENTS.md warns about for exactly this reason.
+      - kind: ServiceFabricPeering
+        entity: Component
+        groups: [service_fabric_peerings]
       - kind: ServiceInternetAccess
         entity: Component
     # The point of the generic form: a service kind added to Infrahub under
