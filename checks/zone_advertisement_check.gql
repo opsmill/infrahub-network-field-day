@@ -57,7 +57,7 @@ query ZoneAdvertisementCheckQuery {
         name {
           value
         }
-        approved {
+        status {
           value
         }
         destination_vip {

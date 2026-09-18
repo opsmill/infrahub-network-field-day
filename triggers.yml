@@ -206,29 +206,15 @@ spec:
       mutation_action: "created"
       action: run-fabric-peering-generator
 
-    # ServiceAppAccess gets BOTH, and the second is the one that matters.
-    #
-    # A grant is gated on `approved`, so the run at creation is a deliberate
-    # no-op -- it logs that the grant is unapproved and writes nothing. The
-    # approver then sets `approved` ON THE BRANCH, this fires again, and the
-    # firewall objects and the re-rendered Junos artifact appear in the same
-    # proposed change the reviewer is already looking at.
-    #
-    # That is what keeps the gate and still shows the configuration before the
-    # merge: approve inside the review, see the consequence, then merge.
+    # ServiceAppAccess is now just another service kind. It carried an
+    # `approved` Boolean and a second rule watching it, because nothing was
+    # composed until someone flipped the field. The branch already decides
+    # whether a request reaches a device, so the field is gone and the grant
+    # builds on creation like the rest -- the reviewer sees the rule, the
+    # service objects and the re-rendered firewall configuration in the
+    # proposed change, and merging it is the approval.
     - name: trigger-app-access-generator-created
       branch_scope: "other_branches"
       node_kind: ServiceAppAccess
       mutation_action: "created"
       action: run-app-access-generator
-
-    - name: trigger-app-access-generator-approved
-      branch_scope: "other_branches"
-      node_kind: ServiceAppAccess
-      mutation_action: "updated"
-      action: run-app-access-generator
-      matches:
-        kind: CoreNodeTriggerAttributeMatch
-        data:
-          - attribute_name: approved
-            value_match: any

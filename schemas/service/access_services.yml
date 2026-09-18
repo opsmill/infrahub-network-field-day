@@ -41,28 +41,21 @@ nodes:
         label: Justification
         optional: true
         order_weight: 1310
-      - name: approved
-        kind: Boolean
-        label: Approved
-        optional: false
-        default_value: false
-        # The gate. Nothing is composed while this is false, so an unapproved
-        # request is inert rather than merely hidden. Approval is a patch on
-        # this one field, which puts it in the change history and lets it come
-        # from the portal or from the API.
-        description: "Nothing is materialized until this is true"
-        order_weight: 1400
-      - name: approved_by
-        kind: Text
-        label: Approved By
-        optional: true
-        order_weight: 1410
-      - name: approved_at
-        kind: DateTime
-        label: Approved At
-        optional: true
-        description: "So the audit trail lives with the grant, not only in change history"
-        order_weight: 1420
+      # NO `approved` FIELD, AND THAT IS DELIBERATE.
+      #
+      # A grant used to carry `approved`, `approved_by` and `approved_at`, and
+      # the generator composed nothing while the first was false. That was a
+      # SECOND gate in front of one the workflow already has: a request is made
+      # on a branch and reaches no device until its proposed change is merged.
+      # Two gates can only disagree -- a grant approved but unmerged changes
+      # nothing, and one merged but unapproved is an object on main that does
+      # nothing and says nothing about why.
+      #
+      # Merging IS the approval, and it is the better record: it has a reviewer,
+      # a diff and a history, where the Boolean had one person's patch. Since
+      # the generators run on the branch, the reviewer sees the rule, the
+      # service objects and the re-rendered firewall configuration before
+      # deciding -- which the Boolean never showed them.
       - name: ports
         kind: List
         label: Permitted Ports

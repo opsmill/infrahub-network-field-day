@@ -290,13 +290,10 @@ take the next free resource from a pool. Two things to know before changing the 
 the table below, `decommissioning`/`decommissioned` means the same thing: downstream treats the
 service as **absent**.
 
-**`ServiceAppAccess` is the exception, and setting its status does nothing visible.** A grant is
-gated on `approved`, so revoking access means setting that to false -- and its generator OWNS the
-status field, rewriting it to `active` when it materialises and `provisioning` when it withdraws.
-An operator who sets `decommissioning` on a grant watches it revert to `active` with the firewall
-rule still in place. Measured on a branch: unapproving deleted the rule, the generated service and
-the address entry, kept the adopted `junos-https` that baseline rules share, and left the other 21
-rules untouched.
+`ServiceAppAccess` joins that list rather than being the exception it was. It used to be gated on
+an `approved` Boolean, so withdrawal meant unapproving and setting `decommissioning` did nothing
+visible. The field is gone — see the generator — and the grant now withdraws on status like
+everything else.
 
 | Kind | What withdraws it |
 | --- | --- |
@@ -324,7 +321,7 @@ artifact that rendered empty would be a manifest Vidra has to interpret, and
 deletes a resource when the manifest it delivered goes away. Withdrawing a delivered resource is
 therefore done by deleting the service, not by labelling it.
 
-`generate-app-access` sits underneath `ServiceAppAccess` and turns an **approved** grant into
+`generate-app-access` sits underneath `ServiceAppAccess` and turns a grant into
 the firewall objects permitting the session: an address-book entry for the destination VIP, a
 `SecurityService` per permitted port, and the `SecurityPolicyRule` joining them, linked back
 through `granted_rules`. Generated objects render into the existing Junos artifact, because
@@ -344,14 +341,18 @@ to know before changing it:
   which names no object and points at no line. `_applications` now emits the stanza for any
   service without the `junos-` prefix, and renders nothing when they are all built-ins — which
   is what keeps the artifact byte-identical to the device file.
-- **An unapproved grant is a deliberate no-op, and that is the seeded state.** `approved` is
-  the gate, so `objects/38_nfd41_access_grants.yml` generates nothing and the rendered Junos
-  artifact stays byte-identical to what `tests/unit/test_junos_config.py` holds against
-  `junos.conf`. Approving it in the seed data would add a rule the device file has no
-  counterpart for, so there would be nothing true to update those assertions to —
-  `test_the_seeded_grant_is_unapproved` fails when someone tries. The cost is that "ran
-  successfully and created nothing" is the normal outcome, which reads exactly like a broken
-  generator. Check `approved` before debugging anything else.
+- **THE BRANCH IS THE GATE, and there is no `approved` field.** The kind carried `approved`,
+  `approved_by` and `approved_at`, and composed nothing while the first was false. That was a
+  second gate in front of one the workflow already has: a request is made on a branch and reaches
+  no device until its proposed change merges. Two gates can only disagree — approved but unmerged
+  changed nothing, and merged but unapproved left an object on `main` doing nothing and saying
+  nothing about why. Merging is the approval, and it is the better record: a reviewer, a diff and
+  a history, where the Boolean had one person's patch.
+- **Nothing is seeded, and `test_no_grant_is_seeded` keeps it that way.** While the gate existed a
+  seeded grant was inert; without it one would materialise a rule, a service object and an
+  address-book entry into the default data set permanently, and the rendered Junos artifact is
+  held byte-for-byte against a device file that has no such rule. A real request through the
+  portal takes about thirty seconds, which is the workflow worth demonstrating anyway.
 - **Two allocation floors, and both are load bearing.** Rule `index` starts at 100 because
   Junos is first-match within a zone pair and the baseline puts `deny-spoofed-infra` at index
   10 — a generated permit below it would turn every grant into a bypass for a spoofed
@@ -533,12 +534,10 @@ alternative is `execute_after_merge`, where the technical objects and the render
 appear only once the decision has already been taken — which hides exactly what the review is
 for.
 
-**`ServiceAppAccess` has two rules, and the second is the one that matters.** A grant is gated on
-`approved`, so the run at creation is a deliberate no-op. The approver sets `approved` **on the
-branch**, the second rule fires, and the firewall objects and the re-rendered Junos artifact
-appear in the proposed change already open. Approval happens inside the review rather than after
-the merge, and the gate survives — measured: zero rules while unapproved, and after approving on
-the branch, one rule, its `SecurityService`, and the artifact carrying both.
+**`ServiceAppAccess` is just another service kind now.** It had a second rule watching `approved`,
+because nothing was composed until someone flipped that field. The field is gone, so the grant
+builds on creation like the rest: the reviewer sees the rule, the service objects and the
+re-rendered Junos artifact in the proposed change, and merging it is the approval.
 
 That last part only works because `generate-app-access` asks for the artifact to be re-rendered
 **on its own branch**. Without that the proposed change shows new firewall objects against an

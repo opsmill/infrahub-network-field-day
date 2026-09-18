@@ -1,30 +1,23 @@
 ---
-# A branch user asking to reach the demo application.
+# The VIP a branch user's access request will name.
 #
-# THE GRANT IS UNAPPROVED, AND THAT IS THE DESIGN RATHER THAN A PLACEHOLDER.
+# THE SEEDED GRANT ITSELF IS GONE. It existed to be the thing you flip: the kind
+# had `approved`, the grant shipped with it false, and the whole demo was one
+# field away. Removing that gate -- a branch already decides whether a request
+# reaches a device -- left the grant with no job, and an ungated seed grant
+# would materialise a rule, a service object and an address-book entry into the
+# default data set permanently. The rendered Junos artifact is held byte-for-
+# byte against the hand-written baseline on fw1, which has no such rule, so
+# there would be nothing true to update those assertions to.
 #
-# `approved: false` is the gate generate-app-access checks first, so this grant
-# materializes nothing: no address-book entry, no service object, no rule. The
-# rendered Junos artifact is therefore byte-identical to the one
-# tests/unit/test_junos_config.py holds against ../lab/fw/junos.conf, including
-# the line totals test_the_exclusions_add_up computes from the device file.
+# A real request takes about thirty seconds through the portal, and that is the
+# workflow worth demonstrating anyway.
 #
-# An APPROVED seed grant would break both. It would add a rule and an
-# address-book entry to the default data set permanently, and the file those
-# assertions are measured against is the hand-written baseline on fw1, which
-# has no such rule -- so there would be nothing true to update them to.
-#
-# What this buys instead: the kind stops being empty, the generator's target
-# group has a member, and the whole demo is one field away. Flip `approved` to
-# true on a branch and the loop runs end to end. That is also the shape of the
-# real workflow, where approval is a patch on one field that lands in the
-# change history.
-#
-# The lab was staged for this before the generator existed. `access-portal` in
-# objects/32_nfd41_security.yml is described as "The only DC service the branch
-# may reach before requesting access", and the branch -> k8s-prod zone pair
-# permits branch-users to reach it and nothing else. This is the request that
-# follows.
+# The lab is still staged for it. `access-portal` in
+# objects/32_nfd41_security.yml is "The only DC service the branch may reach
+# before requesting access", and the branch -> k8s-prod zone pair permits
+# branch-users to reach it and nothing else. This address is what a request
+# names next.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
@@ -37,40 +30,3 @@ spec:
     # schema comment on destination_vip assigns to a check.
     - address: 10.112.240.10/32
       description: "The nfd41-demo frontend VIP"
-
----
-apiVersion: infrahub.app/v1
-kind: Object
-spec:
-  kind: ServiceAppAccess
-  data:
-    - name: branch-to-nfd41-demo
-      description: "Branch office access to the whoami demo frontend"
-      status: provisioning
-      owner: branch
-
-      # The gate. See the header.
-      approved: false
-
-      requester: "branch-office-user"
-      justification: >-
-        Branch staff need the whoami frontend to verify end-to-end
-        reachability after the private circuit was re-provisioned.
-
-      # 8080 because that is what nfd41-demo's own policy_allow_ports declares
-      # in objects/36_nfd41_app_services.yml. A grant naming a port the
-      # application does not serve is permitted by the firewall and refused by
-      # the cluster's network policy, which reads as a firewall fault.
-      ports:
-        - 8080
-
-      application: nfd41-demo
-      source_zone: branch
-      # An existing address-book entry, never a synthesised CIDR, so the
-      # generated rule references the same vocabulary the hand-written rules
-      # beside it use.
-      source_address: branch-users
-      destination_vip: ["10.112.240.10/32", "default"]
-
-      member_of_groups:
-        - service_app_accesses

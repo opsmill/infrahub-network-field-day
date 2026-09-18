@@ -2,7 +2,7 @@
 
 Cycle 032 gave `SecurityZone` the fabric side of a zone -- the prefix list
 governing what the DC advertises toward it, and the switch that applies it --
-and cycle 033 made an approved grant write its VIP into that list. Both rest on
+and cycle 033 made a live grant write its VIP into that list. Both rest on
 a reference nothing enforces.
 
 **The prefix list is a NAME, not a relationship, and that was forced.** There
@@ -23,12 +23,12 @@ FOUR RULES, and every one of them describes a failure that is silent today.
 * **A zone carries one half of the policy and not the other.** The schema
   permits it; the generator raises on it at run time, which is late. Here it
   blocks the merge that introduced it.
-* **An approved grant's VIP sits outside its application's `vip_block`.** The
+* **A live grant's VIP sits outside its application's `vip_block`.** The
   cluster only ever advertises addresses from that block, so the firewall
   permits a session to an address the fabric will never carry: permitted and
   unroutable, which is exactly what
   `schemas/service/access_services.yml` warns about on `destination_vip`.
-* **An approved grant names an application that is not exposed.** An unexposed
+* **A live grant names an application that is not exposed.** An unexposed
   application gets no pool, no VIP and no advertisement -- the schema comment
   on `exposed` says so -- so the grant cannot work however correct everything
   else is.
@@ -54,6 +54,10 @@ from typing import Any
 from infrahub_sdk.checks import InfrahubCheck
 
 from .zone_advertisement_check_query import ZoneAdvertisementCheckQuery
+
+# The same pair every service generator uses: `decommissioning` counts as gone
+# rather than going.
+WITHDRAWN_STATUSES = frozenset({"decommissioning", "decommissioned"})
 
 KIND_ZONE = "SecurityZone"
 KIND_GRANT = "ServiceAppAccess"
@@ -164,11 +168,14 @@ def check_zone_policies(parsed: ZoneAdvertisementCheckQuery) -> list[Finding]:
 
 
 def check_grant_reachability(parsed: ZoneAdvertisementCheckQuery) -> list[Finding]:
-    """Rules 3 and 4: an approved grant the fabric can never carry."""
+    """Rules 3 and 4: a live grant the fabric can never carry."""
     findings: list[Finding] = []
 
     for grant in _edges_of(parsed.service_app_access):
-        if not _value(grant.approved):
+        # `approved` used to select the grants worth judging. The branch is the
+        # gate now, so the question is whether the grant is still live --
+        # a withdrawn one is on its way out and its VIP no longer matters.
+        if _value(grant.status) in WITHDRAWN_STATUSES:
             continue
 
         name = _value(grant.name)

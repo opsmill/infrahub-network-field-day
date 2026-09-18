@@ -12,11 +12,6 @@ query GenerateAppAccessQuery($name: String!) {
         status {
           value
         }
-        # The gate. Nothing below is materialized while this is false, so an
-        # unapproved request is inert rather than merely hidden.
-        approved {
-          value
-        }
         requester {
           value
         }

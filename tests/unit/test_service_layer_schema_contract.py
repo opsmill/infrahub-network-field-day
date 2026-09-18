@@ -477,29 +477,38 @@ def test_app_access_is_an_artifact_target() -> None:
     assert "CoreArtifactTarget" in access["inherit_from"]
 
 
-def test_app_access_approval_gate_defaults_to_false() -> None:
-    """FR-029 / US5 acceptance scenario 2.
+def test_app_access_carries_no_approval_fields() -> None:
+    """FR-029 / US5 scenario 2, INVERTED, and deliberately.
 
-    Nothing is composed while this is false, so an unapproved request is inert
-    rather than merely hidden. Approval is a patch on one field, which means it
-    lands in the change history and can come from the portal or from the API.
+    The kind carried `approved`, `approved_by` and `approved_at`, and nothing
+    was composed while the first was false. That was a second gate in front of
+    one the workflow already has: a request is made on a branch and reaches no
+    device until its proposed change merges. Two gates can only disagree --
+    approved but unmerged changed nothing, and merged but unapproved left an
+    object on main doing nothing and saying nothing about why.
+
+    Merging is the approval, and it is the better record: a reviewer, a diff and
+    a history, where the Boolean had one person's patch. Re-adding any of these
+    fields means re-deciding that, so the absence is asserted rather than
+    assumed.
     """
     access = _node(_load_yaml(ACCESS_SERVICES_SCHEMA), "Service", "AppAccess")
-    approved = _attributes(access)["approved"]
+    attributes = _attributes(access)
 
-    assert approved["kind"] == "Boolean"
-    assert approved["default_value"] is False
-    assert approved["optional"] is False
+    for gone in ("approved", "approved_by", "approved_at"):
+        assert gone not in attributes, f"{gone} is back; the branch is the gate, and two gates can only disagree"
 
 
-def test_app_access_records_who_approved_and_when() -> None:
-    """US5 acceptance scenario 3: the audit trail lives on the grant."""
+def test_app_access_still_records_who_asked_and_why() -> None:
+    """Removing the approval trail does not remove the REQUEST trail.
+
+    Who asked and why are the parts a reviewer needs; who approved is now the
+    proposed change's own history.
+    """
     access = _node(_load_yaml(ACCESS_SERVICES_SCHEMA), "Service", "AppAccess")
     attributes = _attributes(access)
 
     assert attributes["requester"]["optional"] is False
-    assert attributes["approved_by"]["kind"] == "Text"
-    assert attributes["approved_at"]["kind"] == "DateTime"
     assert attributes["justification"]["kind"] == "TextArea"
 
 

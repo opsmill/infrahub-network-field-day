@@ -34,7 +34,6 @@ class GenerateAppAccessQueryTargetEdgesNode(BaseModel):
     id: str
     name: Optional["GenerateAppAccessQueryTargetEdgesNodeName"]
     status: Optional["GenerateAppAccessQueryTargetEdgesNodeStatus"]
-    approved: Optional["GenerateAppAccessQueryTargetEdgesNodeApproved"]
     requester: Optional["GenerateAppAccessQueryTargetEdgesNodeRequester"]
     justification: Optional["GenerateAppAccessQueryTargetEdgesNodeJustification"]
     ports: Optional["GenerateAppAccessQueryTargetEdgesNodePorts"]
@@ -51,10 +50,6 @@ class GenerateAppAccessQueryTargetEdgesNodeName(BaseModel):
 
 class GenerateAppAccessQueryTargetEdgesNodeStatus(BaseModel):
     value: Optional[str]
-
-
-class GenerateAppAccessQueryTargetEdgesNodeApproved(BaseModel):
-    value: Optional[bool]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeRequester(BaseModel):

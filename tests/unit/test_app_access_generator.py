@@ -41,7 +41,7 @@ from generators.generate_app_access import (
     derive_tcp_protocol,
     index_address_book,
     index_tcp_services,
-    is_approved,
+    is_withdrawn,
     normalise_ports,
     validate_model,
 )
@@ -118,8 +118,9 @@ def _grant(
         "node": {
             "id": f"grant-{GRANT}",
             "name": {"value": GRANT},
-            "status": {"value": "provisioning"},
-            "approved": {"value": approved},
+            # `approved` used to gate this. The branch does now, so the
+            # fixture drives the status the generator actually reads.
+            "status": {"value": "provisioning" if approved else "decommissioning"},
             "requester": {"value": "branch-office-user"},
             "justification": {"value": "verify reachability"},
             "ports": {"value": resolved_ports},
@@ -300,14 +301,18 @@ def _query(
 # ---------------------------------------------------------------------------
 
 
-def test_an_unapproved_grant_is_not_approved() -> None:
-    parsed = _query(approved=False)
-    assert is_approved(parsed.target.edges[0].node) is False
+@pytest.mark.parametrize("status", ["decommissioning", "decommissioned"])
+def test_the_two_statuses_that_withdraw(status: str) -> None:
+    """`decommissioning` counts as gone rather than going, like every other
+    service kind: the alternative is a window in which the intent is withdrawn
+    and the firewall still permits the session."""
+    parsed = _query()
+    parsed.target.edges[0].node.status.value = status  # type: ignore[union-attr]
+    assert is_withdrawn(parsed.target.edges[0].node)
 
 
-def test_an_approved_grant_is_approved() -> None:
-    parsed = _query(approved=True)
-    assert is_approved(parsed.target.edges[0].node) is True
+def test_a_live_grant_is_not_withdrawn() -> None:
+    assert not is_withdrawn(_query().target.edges[0].node)
 
 
 def test_empty_ports_is_rejected_and_never_read_as_all() -> None:
@@ -935,31 +940,26 @@ def _seeded_grants() -> list[dict[str, Any]]:
     return []
 
 
-def test_the_seeded_grant_is_unapproved() -> None:
-    """The load-bearing property of the seed data, asserted rather than assumed.
+def test_no_grant_is_seeded() -> None:
+    """The load-bearing property of the seed data, and it INVERTED.
+
+    While the kind had an `approved` gate a seeded grant was inert, and the
+    assertion here was that it stayed unapproved. The gate is gone -- a branch
+    already decides whether a request reaches a device -- so any seeded grant
+    now materialises a rule, a service object and an address-book entry into the
+    default data set permanently.
 
     tests/unit/test_junos_config.py holds the rendered artifact byte-for-byte
-    against ../lab/configs/fw/vsrx/junos.conf -- but it reads a captured
-    fixture, so it cannot notice a change made here. Approving the seeded grant
-    would add a rule and an address-book entry to the default data set, and the
-    device file those assertions are measured against has no such rule, so
-    there would be nothing true to update them to.
+    against ../lab/configs/fw/vsrx/junos.conf, and reads a captured fixture, so
+    it cannot notice a change made here. The device file has no such rule, so
+    there would be nothing true to update it to.
 
-    If this test fails, do not flip it back without also deciding what
-    test_junos_config.py should now assert.
+    A real request through the portal takes about thirty seconds and is the
+    workflow worth demonstrating. If this test fails, do not delete it without
+    deciding what test_junos_config.py should now assert.
     """
     grants = _seeded_grants()
-    assert grants, "ServiceAppAccess has no seed object; the generator would never run"
-    for grant in grants:
-        assert grant["approved"] is False, (
-            f"seeded grant {grant['name']!r} is approved; it will change the rendered Junos artifact"
-        )
-
-
-def test_the_seeded_grant_joins_the_generator_target_group() -> None:
-    """A grant outside the group is a grant the generator never sees."""
-    for grant in _seeded_grants():
-        assert "service_app_accesses" in grant.get("member_of_groups", [])
+    assert not grants, f"{[g.get('name') for g in grants]} seeded; an ungated grant changes the rendered Junos artifact"
 
 
 def test_the_target_group_is_declared() -> None:

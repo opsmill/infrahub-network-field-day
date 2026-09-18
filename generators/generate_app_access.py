@@ -1,10 +1,10 @@
-"""Turn an approved application access grant into the firewall objects for it.
+"""Turn an application access grant into the firewall objects that permit it.
 
 `ServiceAppAccess` was the one service kind that produced nothing: a schema, a
 menu entry and six contract tests, but no generator, no transform and no
 artifact. This is the generator that makes it act.
 
-An approved grant becomes three things -- an address-book entry for the
+A grant becomes three things -- an address-book entry for the
 destination VIP, a service object per permitted port, and the `permit` rule
 joining them -- and those render into the firewall's existing Junos artifact
 with no change downstream. `transforms/junos_config.gql` queries
@@ -54,13 +54,14 @@ FIVE THINGS THAT LOOK ARBITRARY AND ARE NOT.
   and contain no service VIP, so containment matches nothing and every grant
   raises.
 
-* **An unapproved grant is a silent no-op, deliberately.** `approved` is the
-  gate, and an unapproved request has to be inert rather than merely hidden.
-  The cost is that "ran successfully and created nothing" is the normal
-  outcome, which is indistinguishable from a broken generator unless you check
-  the flag first. The seeded grant in `objects/38_nfd41_access_grants.yml` is
-  unapproved for exactly this reason -- it keeps the rendered artifact
-  byte-identical while leaving the demo one field-flip away.
+* **A grant is gated by its BRANCH, not by a field.** There was an `approved`
+  Boolean here, and it was a second gate in front of one the workflow already
+  has: a request is made on a branch and reaches no device until its proposed
+  change merges. Two gates can only disagree, and the branch is the better
+  record -- it has a reviewer, a diff and a history. Because the generators run
+  on the branch, that reviewer sees the rule, the service objects and the
+  re-rendered firewall configuration before deciding, which the Boolean never
+  showed them.
 
 Validation runs to completion before the first write. The tracking context
 deletes previously-managed objects this run did not touch, so a *partial* write
@@ -354,9 +355,23 @@ class GrantContext:
         return candidate
 
 
-def is_approved(grant: GrantNode) -> bool:
-    """V1. The gate: nothing is materialized while this is false."""
-    return bool(_value(grant.approved))
+WITHDRAWN_STATUSES = frozenset({"decommissioning", "decommissioned"})
+
+
+def is_withdrawn(grant: GrantNode) -> bool:
+    """Whether this grant should hold any firewall objects at all.
+
+    REPLACES THE `approved` GATE, which was a second gate in front of one the
+    workflow already has: a grant is requested on a branch and reaches no device
+    until its proposed change merges. Two gates can only disagree -- approved
+    but unmerged changed nothing, and merged but unapproved left an object on
+    main doing nothing and saying nothing about why.
+
+    `decommissioning` counts as gone rather than going, which is what every
+    other service kind here means by it: the alternative is a window in which
+    the intent is withdrawn and the firewall still permits the session.
+    """
+    return _value(grant.status) in WITHDRAWN_STATUSES
 
 
 def normalise_ports(grant: GrantNode) -> list[int]:
@@ -539,7 +554,7 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
     Raises:
         ValueError: naming the object and the field, for each of V2 to V8 in
             the feature's data model. V1 -- approval -- is checked by the
-            caller, because an unapproved grant is a no-op rather than a
+            caller, because a withdrawn grant is a no-op rather than a
             failure.
     """
     grant = parsed.target.edges[0].node if parsed.target.edges else None
@@ -599,10 +614,10 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
 
 
 class AppAccessGenerator(InfrahubGenerator):
-    """Materialize an approved access grant as firewall objects."""
+    """Materialize an access grant as firewall objects."""
 
     async def generate(self, data: dict) -> None:
-        """Build the rule an approved grant asks for, or do nothing."""
+        """Build the rule this grant asks for, or withdraw what it had."""
         parsed = GenerateAppAccessQuery(**data)
 
         grant = parsed.target.edges[0].node if parsed.target.edges else None
@@ -610,9 +625,9 @@ class AppAccessGenerator(InfrahubGenerator):
             msg = "no ServiceAppAccess matched the requested name"
             raise ValueError(msg)
 
-        # V1, before anything else. An unapproved grant materializes nothing --
-        # and withdraws anything an earlier approved run left behind.
-        if not is_approved(grant):
+        # Withdrawal first. `decommissioning` counts as gone rather than going,
+        # and it removes anything an earlier run left behind.
+        if is_withdrawn(grant):
             await self._withdraw(parsed, grant)
             return
 
@@ -754,7 +769,7 @@ class AppAccessGenerator(InfrahubGenerator):
             self.logger.info("Linked %s rule(s) to the grant", len(wanted))
 
     async def _withdraw(self, parsed: GenerateAppAccessQuery, grant: GrantNode) -> None:
-        """Remove what an earlier approved run created for this grant.
+        """Remove what an earlier run created for this grant.
 
         THE TRACKING CONTEXT DOES NOT COVER THIS, and assuming it did was a
         real bug. `InfrahubGroupContext.update_group` opens with
@@ -799,14 +814,14 @@ class AppAccessGenerator(InfrahubGenerator):
                 removed += 1
 
         if removed:
-            self.logger.info("Grant %r is not approved; withdrew %s object(s)", name, removed)
+            self.logger.info("Grant %r is withdrawn; removed %s object(s)", name, removed)
             # Back to "ordered, not built". Leaving it `active` would claim a
             # rule that no longer exists.
             await self._set_status(grant.id, "provisioning")
             await self._withdraw_advertisement(name, derive_advertisement(grant))
             await self._rerender_firewall(derive_firewall(parsed))
         else:
-            self.logger.info("Grant %r is not approved; nothing to materialize", name)
+            self.logger.info("Grant %r is withdrawn; nothing to remove", name)
 
     async def _advertise(self, context: GrantContext, advertisement: Advertisement | None) -> None:
         """Make the grant's VIP routable from its source zone.

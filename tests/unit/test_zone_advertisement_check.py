@@ -73,7 +73,9 @@ def _grant(
         "node": {
             "id": f"grant-{name}",
             "name": {"value": name},
-            "approved": {"value": approved},
+            # `approved` used to select the grants worth judging; the branch
+            # is the gate now, so a WITHDRAWN grant is the one to skip.
+            "status": {"value": "provisioning" if approved else "decommissioning"},
             "destination_vip": ({"node": {"id": "ip-vip", "address": {"value": vip}}} if vip else {"node": None}),
             "application": {
                 "node": {
@@ -223,7 +225,7 @@ def test_a_grant_on_an_unexposed_application_is_reported() -> None:
     assert "not exposed" in findings[0].message
 
 
-def test_an_unapproved_grant_is_not_judged() -> None:
+def test_a_withdrawn_grant_is_not_judged() -> None:
     """It materializes nothing, so it cannot be unroutable yet. Reporting it
     would block every merge that merely drafts a request."""
     parsed = _query(grants=[_grant(approved=False, vip="10.112.241.10/32", exposed=False)])

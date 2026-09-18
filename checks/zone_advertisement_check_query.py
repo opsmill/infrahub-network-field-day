@@ -107,7 +107,7 @@ class ZoneAdvertisementCheckQueryServiceAppAccessEdges(BaseModel):
 class ZoneAdvertisementCheckQueryServiceAppAccessEdgesNode(BaseModel):
     id: str
     name: Optional["ZoneAdvertisementCheckQueryServiceAppAccessEdgesNodeName"]
-    approved: Optional["ZoneAdvertisementCheckQueryServiceAppAccessEdgesNodeApproved"]
+    status: Optional["ZoneAdvertisementCheckQueryServiceAppAccessEdgesNodeStatus"]
     destination_vip: (
         "ZoneAdvertisementCheckQueryServiceAppAccessEdgesNodeDestinationVip"
     )
@@ -119,8 +119,8 @@ class ZoneAdvertisementCheckQueryServiceAppAccessEdgesNodeName(BaseModel):
     value: Optional[str]
 
 
-class ZoneAdvertisementCheckQueryServiceAppAccessEdgesNodeApproved(BaseModel):
-    value: Optional[bool]
+class ZoneAdvertisementCheckQueryServiceAppAccessEdgesNodeStatus(BaseModel):
+    value: Optional[str]
 
 
 class ZoneAdvertisementCheckQueryServiceAppAccessEdgesNodeDestinationVip(BaseModel):
