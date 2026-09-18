@@ -997,6 +997,13 @@ uv run invoke format
 uv run invoke docs
 ```
 
+**Do not pipe these to `tail` or `head` when the exit status matters.** A shell
+pipeline reports the LAST command's status, so `invoke lint-ruff 2>&1 | tail -3` is
+always successful no matter what the linter found, and a `&& git commit` after it
+runs anyway. Measured: the task itself exits 1 correctly on a formatting failure and
+`0` through the pipe. Read the output, then run the task on its own when its result
+is a gate.
+
 Local tests and linters:
 
 ```bash
