@@ -277,8 +277,15 @@ infrahub:
         groups: [service_app_accesses]
         # `approved` is a second gate, deliberately not on the request form:
         # the point is that asking and approving are different acts by
-        # different people. granted_rules is the generator's output.
-        formExclude: [approved, granted_rules]
+        # different people. `approved_at` and `approved_by` are the record of
+        # that second act and belong to whoever performs it, not to the person
+        # asking. granted_rules is the generator's output. `checksum` is excluded
+        # globally, for every kind, in provider.ts.
+        #
+        # The two approval fields were not noticed until this kind HAD a form: it
+        # carries a List attribute, so Infrahub's json_schema endpoint 500s for
+        # it and the whole kind used to be dropped from the catalogue.
+        formExclude: [approved, approved_at, approved_by, granted_rules]
       - kind: ServiceTenantOnboarding
         entity: Component
         groups: [service_tenant_onboardings]

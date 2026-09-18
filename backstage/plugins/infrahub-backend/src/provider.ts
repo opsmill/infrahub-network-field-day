@@ -75,21 +75,119 @@ const JSON_TO_GRAPHQL: Record<string, string> = {
   number: 'BigInt',
   integer: 'BigInt',
   boolean: 'Boolean',
+  // A List attribute's input is `ListAttributeCreate { value: GenericScalar }`,
+  // and the scaffolder preserves a parameter's type when the whole value is one
+  // expression -- so an array of strings arrives as an array, not as its
+  // stringification.
+  array: 'GenericScalar',
 };
 
 /**
- * An attribute whose json_schema type is not one of the above (a list, a JSON
- * blob) cannot be typed into a mutation, and guessing String would produce a
- * form that fails on submit. Leave it out and say so.
+ * An attribute whose json_schema type is not one of the above (a JSON blob, an
+ * unrecognised Infrahub kind) cannot be typed into a mutation, and guessing
+ * String would produce a form that fails on submit. Leave it out and say so.
  */
 const isFormable = (property: any) =>
   JSON_TO_GRAPHQL[property.type] !== undefined;
 
 /**
- * Never on a request form: the create step sets it to draft, and a request is
- * only really active once its proposed change is merged.
+ * Infrahub's own attribute kinds, mapped to the json_schema types this provider
+ * already understands. Used only when `/api/schema/json_schema/{kind}` cannot be
+ * read -- see `synthesiseJsonSchema`.
+ *
+ * Anything absent maps to `object`, which `isFormable` rejects: an unrecognised
+ * kind is left off the form rather than guessed at. `array` cannot serve as that
+ * sentinel any more, because a List is now a real array field.
  */
-const GENERATED_FORM_EXCLUDES = ['status'];
+const INFRAHUB_KIND_TO_JSON: Record<string, string> = {
+  Text: 'string',
+  TextArea: 'string',
+  Dropdown: 'string',
+  DateTime: 'string',
+  Email: 'string',
+  URL: 'string',
+  File: 'string',
+  Password: 'string',
+  HashedPassword: 'string',
+  IPHost: 'string',
+  IPNetwork: 'string',
+  MacAddress: 'string',
+  Color: 'string',
+  Number: 'integer',
+  Bandwidth: 'integer',
+  Boolean: 'boolean',
+  Checkbox: 'boolean',
+  List: 'array',
+};
+
+/**
+ * Builds a json_schema-shaped payload out of `/api/schema/{kind}`.
+ *
+ * WHY THIS EXISTS: `GET /api/schema/json_schema/{kind}` returns **500 for any
+ * kind carrying a `List` attribute** on Infrahub 1.10.6 --
+ *
+ *   PydanticSchemaGenerationError: Unable to generate pydantic-core schema
+ *   for <class 'infrahub.types.Any'>
+ *
+ * -- and the whole kind was then dropped from the catalogue. In this lab that
+ * is three of nine service kinds, including `ServiceAppAccess`, which is the
+ * request the portal exists to take. The kinds appeared with no form and the
+ * only clue was a warning in the backend log.
+ *
+ * `/api/schema/{kind}` answers 200 for the same kinds and carries everything a
+ * form needs: names, kinds, optionality, defaults and a Dropdown's choices. The
+ * List attribute itself is no obstacle -- `isFormable` already drops an
+ * untypeable attribute and keeps the rest of the kind, which is exactly the
+ * outcome wanted here.
+ *
+ * `required` is derived from `optional`, which is what json_schema does too.
+ */
+const synthesiseJsonSchema = (schema: KindSchema): any => {
+  const properties: Record<string, any> = {};
+  const required: string[] = [];
+
+  for (const attribute of schema.attributes ?? []) {
+    const property: any = {
+      type: INFRAHUB_KIND_TO_JSON[attribute.kind] ?? 'object',
+    };
+    if (property.type === 'array') {
+      // react-jsonschema-form needs `items` to know what to render, and an
+      // Infrahub List is a list of strings -- the schema's own examples are
+      // "443" and "key=value", never structured objects.
+      property.items = { type: 'string' };
+    }
+    if (attribute.description) {
+      property.description = attribute.description;
+    }
+    if (attribute.default_value !== undefined && attribute.default_value !== null) {
+      property.default = attribute.default_value;
+    }
+    if (attribute.choices?.length) {
+      // Values only. `withChoiceLabels` reads the labels off the same schema
+      // and merges them in, so doing it here would duplicate that.
+      property.enum = attribute.choices.map(choice => choice.name);
+    }
+    properties[attribute.name] = property;
+    if (attribute.optional === false) {
+      required.push(attribute.name);
+    }
+  }
+
+  return { properties, required };
+};
+
+/**
+ * Never on a request form, for any kind.
+ *
+ * `status`: the create step sets it to draft, and a request is only really
+ * active once its proposed change is merged.
+ *
+ * `checksum`: bookkeeping an Infrahub generator writes to detect that its input
+ * changed. It sits on the service generic, so it was on the form of every
+ * service kind -- asking a requester to type a checksum for the thing they are
+ * asking for. Excluding it per kind would be the same line nine times.
+ */
+const GENERATED_FORM_EXCLUDES = ['status', 'checksum'];
 
 /** A mapped kind with the schema needed to read it and form a template. */
 type LoadedKind = {
@@ -127,6 +225,8 @@ type SchemaAttribute = {
   kind: string;
   optional?: boolean;
   description?: string;
+  /** Present and null when there is no default, so absence proves nothing. */
+  default_value?: unknown;
   /** A Dropdown's values, each with the label Infrahub shows for it. */
   choices?: { name: string; label?: string }[];
 };
@@ -509,14 +609,29 @@ export class InfrahubEntityProvider implements EntityProvider {
       async mapping => {
         const kind = mapping.kind;
         try {
-          const jsonSchema = await infrahubGet(
-            this.infrahub,
-            `/api/schema/json_schema/${kind}`,
-          );
+          // `/api/schema/{kind}` FIRST, and deliberately: it is the one that
+          // always answers, and it is what the fallback below is built from.
           const schema: KindSchema = await infrahubGet(
             this.infrahub,
             `/api/schema/${kind}`,
           );
+
+          let jsonSchema: any;
+          try {
+            jsonSchema = await infrahubGet(
+              this.infrahub,
+              `/api/schema/json_schema/${kind}`,
+            );
+          } catch (error) {
+            // A kind with a List attribute 500s here on Infrahub 1.10.6. Losing
+            // the kind over it costs more than losing the one attribute, and the
+            // attribute was going to be dropped as untypeable anyway.
+            this.logger.warn(
+              `${kind}: /api/schema/json_schema returned ${error}; building its ` +
+                `form from /api/schema instead`,
+            );
+            jsonSchema = synthesiseJsonSchema(schema);
+          }
 
           return {
             mapping,
@@ -625,9 +740,17 @@ export class InfrahubEntityProvider implements EntityProvider {
    * name is nunjucks' way of asking whether the field was set at all.
    */
   private providedGuard(name: string, type: string): string {
-    return type === 'boolean' || type === 'number' || type === 'integer'
-      ? `parameters.${name} !== unset`
-      : `parameters.${name}`;
+    if (type === 'boolean' || type === 'number' || type === 'integer') {
+      // A blank boolean is `false` and a blank number can be `0`, both falsy.
+      return `parameters.${name} !== unset`;
+    }
+    if (type === 'array') {
+      // `[]` is truthy, so a bare truthiness check would send an empty list --
+      // which `ServiceAppAccess.ports` documents as rejected rather than meaning
+      // "all ports". Leaving the field unset is the honest way to say nothing.
+      return `parameters.${name} and parameters.${name} | length > 0`;
+    }
+    return `parameters.${name}`;
   }
 
   /** Attributes safe to send in a create: required, or actually defaulted. */
@@ -943,6 +1066,10 @@ export class InfrahubEntityProvider implements EntityProvider {
         // field keeps its label rather than one derived from the field name.
         title: property.title ?? this.fieldTitle(name),
         type: property.type,
+        // An array field renders nothing without `items` -- rjsf has no way to
+        // know what one element looks like, and the field silently disappears
+        // from the form while the property is still in the schema.
+        ...(property.items ? { items: property.items } : {}),
         ...(property.enum ? { enum: property.enum } : {}),
         // Infrahub's labels for those values -- see withChoiceLabels.
         ...(property.enumNames ? { enumNames: property.enumNames } : {}),

@@ -1268,18 +1268,57 @@ def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
 )
 def backstage_build(ctx: Context, no_cache: bool = False) -> None:
     """
-    Build the service portal's image.
+    Build the service portal: the JavaScript bundle, then the image around it.
+
+    **BOTH STEPS, because the Dockerfile builds nothing.** It unpacks
+    `packages/backend/dist/bundle.tar.gz`, which `yarn build:backend` produces on
+    the host -- so a `docker compose build` on its own packages whatever bundle
+    was last built and reports success. A change to plugin source then does not
+    ship, and nothing says so: the image is new, its layers are new, and its
+    JavaScript is old. `app-config*.yaml` is COPYed separately and DOES ship,
+    which is what makes the failure so confusing -- configuration changes arrive
+    and code changes do not.
 
     The compose service is `profiles: ["build-only"]` -- the portal RUNS in the
     tooling cluster, not on the host -- so this builds the image and starts
     nothing. `invoke tooling` is what carries it across to the node.
 
-    Use `--no-cache` when a config file changed and the build appears not to have
-    noticed. `app-config.docker.yaml` is COPYed in, so an edit should invalidate
-    the layer, and it has been seen not to; the way to be sure is to look inside
-    the image rather than at the build output.
+    Use `--no-cache` to force the image layers as well; the bundle is rebuilt
+    either way.
     """
+    backstage = compose_root() / "backstage"
+    if not backstage.is_dir():
+        raise Exit(f"{backstage} is missing")
+
+    # A BOUNDED HEAP, because this usually runs on a host that is also running
+    # the lab. Node sizes its old space against total system memory, so on a
+    # 61GB box it will happily grow past what is actually free with thirty
+    # containers up -- and the build is then killed rather than failing, which
+    # looks like an infrastructure hiccup rather than a resource limit.
+    env = {"NODE_OPTIONS": "--max-old-space-size=4096"}
+
+    # `cd`, NOT `yarn --cwd`. This repository pins Yarn 4 through `.yarnrc.yml`
+    # and `.yarn/`, and Yarn finds that only by being run from inside the
+    # project. `yarn --cwd <dir>` is resolved before the directory is consulted,
+    # so Corepack decides there is no project, falls back to Yarn Classic, and
+    # asks whether to download it:
+    #
+    #   ! Corepack is about to download .../yarn-1.22.22.tgz
+    #   ? Do you want to continue? [Y/n]
+    #
+    # Nobody is watching that prompt, so the build sits on it indefinitely --
+    # which looks exactly like a slow typecheck. It sat for twenty-five minutes
+    # before anyone read the output rather than the clock.
+    #
+    # `tsc` first: `build:backend` bundles without typechecking, so a type error
+    # would otherwise reach the image and only fail at runtime.
+    print(" - Typechecking and bundling the portal")
+    with ctx.cd(str(backstage)):
+        ctx.run("yarn tsc", pty=True, env=env)
+        ctx.run("yarn build:backend", pty=True, env=env)
+
     flag = " --no-cache" if no_cache else ""
+    print(" - Building the image around it")
     ctx.run(f"{compose_cmd()} --profile build-only build{flag} backstage", pty=True)
 
 

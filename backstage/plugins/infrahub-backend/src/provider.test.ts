@@ -56,6 +56,12 @@ const SCHEMA: Record<string, any> = {
     label: 'Wireless',
     human_friendly_id: ['service_identifier__value'],
     attributes: [
+      // A List, which is what makes Infrahub 1.10.6 return 500 from
+      // /api/schema/json_schema for a kind. Absent from the json_schema fixture
+      // below for the same reason the real endpoint never gets that far.
+      { name: 'ports', kind: 'List', optional: true },
+      { name: 'ssid', kind: 'Text', optional: false },
+      { name: 'service_identifier', kind: 'Text', optional: false },
       {
         name: 'security',
         kind: 'Dropdown',
@@ -189,12 +195,20 @@ describe('InfrahubEntityProvider', () => {
   });
 
   const run = async (
-    options: { catalog?: Partial<CatalogConfig>; changeState?: string } = {},
+    options: {
+      catalog?: Partial<CatalogConfig>;
+      changeState?: string;
+      /** A path that fails, the way /api/schema/json_schema does for a List. */
+      broken?: string;
+    } = {},
   ): Promise<Record<string, Entity>> => {
     const changeState = options.changeState ?? 'open';
 
     (infrahubGet as jest.Mock).mockImplementation(
       async (_config: unknown, path: string) => {
+        if (options.broken && path === options.broken) {
+          throw new Error('Internal Server Error');
+        }
         if (SCHEMA[path]) {
           return SCHEMA[path];
         }
@@ -398,6 +412,55 @@ describe('InfrahubEntityProvider', () => {
     // says "WPA2 Personal".
     expect(security.enum).toEqual(['open', 'wpa2-personal']);
     expect(security.enumNames).toEqual(['Open', 'WPA2 Personal']);
+  });
+
+  it('builds a form from /api/schema when json_schema fails', async () => {
+    // Infrahub 1.10.6 returns 500 from /api/schema/json_schema/{kind} for any
+    // kind carrying a List attribute. Three of this lab's nine service kinds do,
+    // including the one the portal exists to take requests for, and losing the
+    // json_schema used to lose the whole kind -- it vanished from the catalogue
+    // with only a backend warning to say why.
+    const entities = await run({
+      broken: '/api/schema/json_schema/ServiceWireless',
+    });
+
+    const template = entities['Template:wireless-request'];
+    expect(template).toBeDefined();
+
+    const [parameters] = template.spec!.parameters as any[];
+    const create = parameters.dependencies.mode.oneOf.find(
+      (branch: any) => branch.properties.mode.enum[0] === 'create',
+    );
+
+    // Typed from the Infrahub attribute kinds rather than guessed.
+    expect(create.properties.ssid).toMatchObject({ type: 'string' });
+    expect(create.properties.security.type).toBe('string');
+
+    // The List is the reason the endpoint failed, and it is the substance of an
+    // access request -- a grant naming no ports opens nothing. It is offered as
+    // an array of strings and typed into the mutation as GenericScalar, which is
+    // what `ListAttributeCreate.value` takes.
+    expect(create.properties.ports).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+    });
+
+    const step = (template.spec!.steps as any[]).find(s => s.id === 'ports');
+    expect(step.input.query).toContain('$value: GenericScalar!');
+    // `[]` is truthy, so a bare truthiness guard would send an empty list.
+    expect(step.if).toContain('| length > 0');
+
+    // Dropdown labels still come from /api/schema, which is now the only source.
+    expect(create.properties.security.enum).toEqual(['wpa2-personal', 'open']);
+    expect(create.properties.security.enumNames).toEqual([
+      'WPA2 Personal',
+      'Open',
+    ]);
+
+    // `required` derived from `optional: false`, which is what json_schema does.
+    expect(create.required).toEqual(expect.arrayContaining(['ssid']));
+
+    expect(warnings.join('\n')).toContain('building its form from /api/schema');
   });
 
   it('keeps a generator-allocated field off the form but still on the entity', async () => {
