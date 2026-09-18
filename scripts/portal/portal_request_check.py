@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import uuid
 
@@ -103,7 +104,12 @@ def main() -> int:
             if step["id"] == "create":
                 values = variables
             elif step["id"] == "proposed_change":
-                values = {"name": f"verify {BRANCH}", "source_branch": BRANCH}
+                # DERIVED from what the mutation declares, not hardcoded. This
+                # check listed `name` and `source_branch` and broke the moment
+                # the step gained a `description` -- reporting a 500 against the
+                # portal when the portal was correct and the check was stale.
+                declared = re.findall(r"\$(\w+):", step["input"]["query"])
+                values = {name: {"source_branch": BRANCH}.get(name, f"verify {BRANCH}") for name in declared}
             else:
                 continue
             data = gql(
