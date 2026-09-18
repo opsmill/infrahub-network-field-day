@@ -179,8 +179,10 @@ const synthesiseJsonSchema = (schema: KindSchema): any => {
 /**
  * Never on a request form, for any kind.
  *
- * `status`: the create step sets it to draft, and a request is only really
- * active once its proposed change is merged.
+ * `status`: the kind's own schema decides the initial value -- the create
+ * leaves it out so the default applies -- and a request is only really
+ * active once its proposed change is merged. Not a requester's field either
+ * way.
  *
  * `checksum`: bookkeeping an Infrahub generator writes to detect that its input
  * changed. It sits on the service generic, so it was on the form of every
@@ -1348,7 +1350,21 @@ export class InfrahubEntityProvider implements EntityProvider {
 
     const fields = [
       ...attributes.map(([name]) => `      ${name}: { value: $${name} }`),
-      '      status: { value: "draft" }',
+      // NO `status` HERE, and that is a fix rather than an omission.
+      //
+      // This used to send `status: { value: "draft" }`, which is a value the
+      // upstream example's schema has and this one does not. Infrahub refuses
+      // the whole create:
+      //
+      //   draft must be one of 'active, decommissioned, decommissioning,
+      //   error, provisioning' at status
+      //
+      // -- so every request through every generated template failed at its
+      // first step, for every kind. Leaving it out lets the schema's own
+      // default apply, which here is `provisioning`: ordered, not yet
+      // materialised, which is exactly what a new request is. Sending any
+      // literal would just be a different schema's vocabulary hardcoded into
+      // this one.
       ...relationships.map(
         relationship =>
           `      ${relationship.name}: { hfid: [$${relationship.name}] }`,

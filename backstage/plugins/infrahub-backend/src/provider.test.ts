@@ -414,6 +414,17 @@ describe('InfrahubEntityProvider', () => {
     expect(security.enumNames).toEqual(['Open', 'WPA2 Personal']);
   });
 
+  it('lets the schema decide a new object\'s status', async () => {
+    // This used to send `status: { value: "draft" }`. That is the upstream
+    // example's vocabulary, and a schema without it refuses the whole create --
+    // so every request through every generated template failed at its first
+    // step. Infrahub applies the attribute's own default instead.
+    const template = (await run())['Template:wireless-request'];
+    const create = (template.spec!.steps as any[]).find(s => s.id === 'create');
+    expect(create.input.query).not.toContain('draft');
+    expect(create.input.query).not.toContain('status:');
+  });
+
   it('builds a form from /api/schema when json_schema fails', async () => {
     // Infrahub 1.10.6 returns 500 from /api/schema/json_schema/{kind} for any
     // kind carrying a List attribute. Three of this lab's nine service kinds do,
