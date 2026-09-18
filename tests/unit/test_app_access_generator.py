@@ -1,8 +1,8 @@
 """Unit tests for the application access grant generator.
 
 Fixtures rather than a live server, and the fixtures are built from the real
-shapes in ``objects/32_nfd41_security.yml`` -- six zones, one
-``nfd41-perimeter`` policy, the four service objects the firewall declares, and
+shapes in ``objects/32_otternet_security.yml`` -- six zones, one
+``otternet-perimeter`` policy, the four service objects the firewall declares, and
 the address book's ``book_index`` values 10 to 130. Fixtures invented from
 scratch would pass while missing the two cases that actually matter: adopting
 ``junos-https`` for port 443, and leaving the pinned address-book order alone.
@@ -54,16 +54,16 @@ from generators.generate_app_access_query import GenerateAppAccessQuery
 # generator.
 # ---------------------------------------------------------------------------
 
-GRANT = "branch-to-nfd41-demo"
-APP = "nfd41-demo"
+GRANT = "branch-to-otternet-demo"
+APP = "otternet-demo"
 VIP_ID = "ip-10.112.240.10"
 VIP_ADDRESS = "10.112.240.10/32"
 # The IpamPrefix behind `branch-users`, which is what the application has to
 # name before Cilium will let the session reach a pod.
 PREFIX = "pfx-10.70.0.0-24"
-# The fabric side of the `branch` zone, from objects/32_nfd41_security.yml.
+# The fabric side of the `branch` zone, from objects/32_otternet_security.yml.
 ADVERTISED_LIST = "PL-DC-ADVERTISED-BRANCH"
-BORDER_LEAF = "leaf-nfd41-pod1-3-1"
+BORDER_LEAF = "leaf-otternet-pod1-3-1"
 
 # Zone name -> the IpamVRF it hands off to. SecurityZone.vrf is how the
 # destination zone is derived; the firewall's /30 handoff interfaces contain no
@@ -112,7 +112,7 @@ def _grant(
     advertising_device: str | None = BORDER_LEAF,
     device_hostvars: dict[str, Any] | None = None,
     app_ports: Any = _UNSET,
-    app_vip_block: str | None = "prefix-nfd41-demo-vips",
+    app_vip_block: str | None = "prefix-otternet-demo-vips",
     site: dict[str, Any] | None = None,
     source_address: bool = True,
     app_allows: tuple[str, ...] = (),
@@ -125,7 +125,7 @@ def _grant(
     enforce.
     """
     resolved_ports = [8080] if ports is _UNSET else ports
-    # What nfd41-demo actually serves at its VIP, unless a test says otherwise.
+    # What otternet-demo actually serves at its VIP, unless a test says otherwise.
     # Expressed as the SecurityService objects the application advertises, which
     # is what a grant reads since cycle 033: one object carrying both the port
     # and the protocol, and the same object the rule ends up referencing.
@@ -334,7 +334,7 @@ def _query(
         {
             "node": {
                 "id": f"policy-{n}",
-                "name": {"value": "nfd41-perimeter" if n == 0 else f"other-{n}"},
+                "name": {"value": "otternet-perimeter" if n == 0 else f"other-{n}"},
                 "device_target": {"node": {"id": "dev-fw1", "display_label": "fw1"}},
             }
         }
@@ -654,7 +654,7 @@ BRANCH_SITE = {
                 "advertising_device": {
                     "node": {
                         "id": BORDER_LEAF,
-                        "name": {"value": "leaf-nfd41-pod1-3-1"},
+                        "name": {"value": "leaf-otternet-pod1-3-1"},
                         "avd_custom_hostvars": {"value": {}},
                     }
                 },
@@ -713,7 +713,7 @@ def test_a_grant_with_no_vip_permits_to_the_applications_block() -> None:
     addresses it can ever be advertised on, and IS knowable at request time."""
     context = validate_model(_query(vip_id=None))
     assert context.vip_is_block
-    assert context.vip_id == "prefix-nfd41-demo-vips"
+    assert context.vip_id == "prefix-otternet-demo-vips"
     assert context.vip_address == "10.112.240.0/28"
 
 
@@ -946,7 +946,7 @@ async def test_revoking_a_grant_whose_vip_entry_is_a_prefix() -> None:
     SecurityIPAMIPPrefix, not SecurityIPAMIPAddress`. The rule went first and
     was deleted, so the failure left the entry declared in the address book and
     referenced by nothing -- the configuration still loads, which is why it went
-    unnoticed. Measured against the lab's `alex` grant on nfd41-demo.
+    unnoticed. Measured against the lab's `alex` grant on otternet-demo.
     """
     client = _RecordingClient()
     generator = _generator(client)
@@ -1247,7 +1247,7 @@ async def test_a_source_the_application_already_permits_is_not_added_twice() -> 
     # The application is never even fetched: nothing to change.
     assert f"ServiceFabricApp:app-{APP}" not in client.fetched
     # AND NOT RECORDED. No grant claims this prefix, so a human declared it --
-    # nfd41-demo names three in objects/ -- and recording it would make the
+    # otternet-demo names three in objects/ -- and recording it would make the
     # first revocation delete a value nobody asked to remove.
     assert client.nodes[f"grant-{GRANT}"].granted_source_prefixes.peer_ids == []
 
@@ -1393,7 +1393,7 @@ async def test_a_validation_failure_records_error_and_raises() -> None:
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parents[2]
-GRANTS_FILE = REPO_ROOT / "objects/38_nfd41_access_grants.yml"
+GRANTS_FILE = REPO_ROOT / "objects/38_otternet_access_grants.yml"
 GROUPS_FILE = REPO_ROOT / "objects/00_groups.yml"
 
 
@@ -1442,7 +1442,7 @@ def test_the_target_group_is_declared() -> None:
 
 
 def _seeded_app(name: str) -> dict:
-    app_services = REPO_ROOT / "objects/36_nfd41_app_services.yml"
+    app_services = REPO_ROOT / "objects/36_otternet_app_services.yml"
     return {
         row["name"]: row
         for document in _documents(app_services)

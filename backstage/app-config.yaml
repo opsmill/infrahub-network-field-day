@@ -1,5 +1,5 @@
 app:
-  title: NFD41 Service Portal
+  title: OTTERNET Service Portal
   baseUrl: http://localhost:3001
 
   # Enable all packages by default, this will discover packages from packages/app/package.json
@@ -201,7 +201,7 @@ auth:
         # catalog User entity.
         #
         # `emailLocalPartMatchingUserEntityName` matches the part before the @
-        # against a User entity's name, so `alice@nfd41.lab` resolves to the
+        # against a User entity's name, so `alice@otternet.lab` resolves to the
         # `alice` User in catalog-users.yaml. Dex's static users have no groups,
         # so there is nothing to map beyond identity.
         signIn:

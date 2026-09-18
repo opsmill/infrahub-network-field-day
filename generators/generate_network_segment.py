@@ -6,8 +6,8 @@ technical objects that already exist, so a generator beneath them would have
 nothing to create. A segment states a size, a tenant and a routing domain, and
 this generator takes the next free subnet and the next free VLAN id and builds
 the `IpamPrefix`, `IpamVLAN` and `EvpnSvi` that a tenant network is made of --
-the same three objects `objects/24_nfd41_tenants.yml` and
-`objects/27_nfd41_vrf_services.yml` write out by hand, four times each.
+the same three objects `objects/24_otternet_tenants.yml` and
+`objects/27_otternet_vrf_services.yml` write out by hand, four times each.
 
 FIVE THINGS THAT LOOK ARBITRARY AND ARE NOT.
 
@@ -22,7 +22,7 @@ FIVE THINGS THAT LOOK ARBITRARY AND ARE NOT.
   configuration that simply lacks the interface and no error anywhere.
 
 * **The pools are resolved by ROLE, not by name.** A default of
-  `"NFD41-Segment-Subnet-Pool"` would make this generator specific to one
+  `"OTTERNET-Segment-Subnet-Pool"` would make this generator specific to one
   lab's object files and would fail with a message naming a string that appears
   in no schema. `SEGMENT_PREFIX_ROLE` and the `IpamVLAN.vlan_id` pairing are
   statements about the model instead: the pool that allocates tenant host
@@ -66,7 +66,7 @@ from .generate_network_segment_query import (
 SegmentNode = GenerateNetworkSegmentQueryTargetEdgesNode
 
 # The role a prefix carries when it is tenant host addressing. Declared on the
-# supernet in objects/21_nfd41_pools.yml and on every subnet allocated from it,
+# supernet in objects/21_otternet_pools.yml and on every subnet allocated from it,
 # which is what lets the subnet pool be found without naming it.
 SEGMENT_PREFIX_ROLE = "tenant_host"
 

@@ -21,8 +21,8 @@ from checks.peering_consistency_check import (
 )
 from checks.peering_consistency_check_query import PeeringConsistencyCheckQuery
 
-LEAF1 = "leaf-nfd41-pod1-1-1"
-LEAF2 = "leaf-nfd41-pod1-1-2"
+LEAF1 = "leaf-otternet-pod1-1-1"
+LEAF2 = "leaf-otternet-pod1-1-2"
 ASN = 65101
 ADDR1 = "10.110.0.2/24"
 ADDR2 = "10.110.0.3/24"
@@ -53,7 +53,7 @@ def _svi(
 
 
 def _session(
-    name: str, device: str, *, asn: int = ASN, address: str | None = None, role: str = "leaf", cluster: str = "nfd41"
+    name: str, device: str, *, asn: int = ASN, address: str | None = None, role: str = "leaf", cluster: str = "otternet"
 ) -> dict[str, Any]:
     return {
         "node": {
@@ -79,7 +79,7 @@ def _session(
     }
 
 
-def _service(name: str, cluster: str = "nfd41") -> dict[str, Any]:
+def _service(name: str, cluster: str = "otternet") -> dict[str, Any]:
     return {
         "node": {
             "__typename": "ServiceFabricPeering",
@@ -102,7 +102,7 @@ def _evpn_node(device: str, address: str, *, vlan: int = PEERING_VLAN) -> dict[s
     }
 
 
-def _cluster(*, cabled: list[str] | None = None, name: str = "nfd41") -> dict[str, Any]:
+def _cluster(*, cabled: list[str] | None = None, name: str = "otternet") -> dict[str, Any]:
     if cabled is None:
         cabled = [LEAF1, LEAF2]
     nodes = []
@@ -180,7 +180,7 @@ def _data(
 ) -> PeeringConsistencyCheckQuery:
     """A clean, self-consistent model by default -- what the generator produces."""
     if services is None:
-        services = [_service("nfd41-fabric-peering")]
+        services = [_service("otternet-fabric-peering")]
     if sessions is None:
         sessions = [_session("k8s-leaf1", LEAF1, address=ADDR1), _session("k8s-leaf2", LEAF2, address=ADDR2)]
     if svis is None:

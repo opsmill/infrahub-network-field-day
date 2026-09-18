@@ -1,0 +1,231 @@
+---
+# ============================================================================
+# OTTERNET — workload endpoints and their cabling.
+#
+# The links are pinned rather than auto-cabled. Which port a workload lands on
+# is a fact of lab/otternet.clab.yml -- the containers are wired to eth10 and eth11
+# and the k3s nodes are already running on those links -- so the cabling is
+# recorded, not chosen. Auto-cabling would allocate the first free access port
+# per server and put host-a and acme-cloud1 on each other's ports, which are in
+# different VRFs.
+#
+# These servers are deliberately NOT in the `servers` group: that group triggers
+# the server-cabling generator, which would cable them a second time onto
+# different ports.
+#
+# Edge ports are locked down as a matter of course: access mode, a single VLAN,
+# PortFast so a host does not delay forwarding, and BPDU guard so a workload
+# cannot influence spanning tree.
+#
+# NOTE: storm-control belongs here too and is what you would run on real
+# hardware, but cEOS-LAB has no dataplane policer for it -- EOS rejects the
+# command and the whole config replace fails.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: TemplateComputePhysicalServer
+  data:
+    - template_name: "otternet-workload-host"
+      role: "compute"
+      status: "provisioning"
+      platform: Linux
+      interfaces:
+        kind: TemplateInterfacePhysical
+        data:
+          # `eth1` rather than `Ethernet1`: these are containerlab Linux nodes
+          # and AVD renders the name as the endpoint port.
+          - template_name: "OtternetWorkloadHostEth1"
+            name: "eth1"
+            role: "server"
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: ComputePhysicalServer
+  data:
+    - name: "k8s-node1"
+      status: "provisioning"
+      rack: "K8S_LEAFS"
+      object_template: "otternet-workload-host"
+    - name: "k8s-node2"
+      status: "provisioning"
+      rack: "K8S_LEAFS"
+      object_template: "otternet-workload-host"
+    - name: "k8s-node3"
+      status: "provisioning"
+      rack: "K8S_LEAFS"
+      object_template: "otternet-workload-host"
+    - name: "host-a"
+      status: "provisioning"
+      rack: "APP_LEAFS"
+      object_template: "otternet-workload-host"
+    - name: "host-b"
+      status: "provisioning"
+      rack: "APP_LEAFS"
+      object_template: "otternet-workload-host"
+    - name: "acme-cloud1"
+      status: "provisioning"
+      rack: "APP_LEAFS"
+      object_template: "otternet-workload-host"
+    - name: "globex-cloud1"
+      status: "provisioning"
+      rack: "APP_LEAFS"
+      object_template: "otternet-workload-host"
+---
+# The leaf-side access ports. The description is what AVD renders on the switch
+# port, and the VLAN is what puts the workload in its tenant's VRF.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: InterfacePhysical
+  data:
+    - name: Ethernet10
+      device: leaf-otternet-pod1-1-1
+      role: server
+      description: k3s-server
+      l2_mode: access
+      untagged_vlan: K8S_NODES
+      spanning_tree_portfast: edge
+      spanning_tree_bpduguard: enabled
+    - name: Ethernet10
+      device: leaf-otternet-pod1-1-2
+      role: server
+      description: k3s-agent
+      l2_mode: access
+      untagged_vlan: K8S_NODES
+      spanning_tree_portfast: edge
+      spanning_tree_bpduguard: enabled
+    - name: Ethernet11
+      device: leaf-otternet-pod1-1-2
+      role: server
+      description: k3s-agent
+      l2_mode: access
+      untagged_vlan: K8S_NODES
+      spanning_tree_portfast: edge
+      spanning_tree_bpduguard: enabled
+    - name: Ethernet10
+      device: leaf-otternet-pod1-2-1
+      role: server
+      description: app-host
+      l2_mode: access
+      untagged_vlan: APP_HOSTS
+      spanning_tree_portfast: edge
+      spanning_tree_bpduguard: enabled
+    - name: Ethernet10
+      device: leaf-otternet-pod1-2-2
+      role: server
+      description: app-host
+      l2_mode: access
+      untagged_vlan: APP_HOSTS
+      spanning_tree_portfast: edge
+      spanning_tree_bpduguard: enabled
+    # What makes these the tenant's is the VLAN, and therefore the VRF the SVI
+    # sits in -- otherwise they are ordinary access ports.
+    - name: Ethernet11
+      device: leaf-otternet-pod1-2-1
+      role: server
+      description: acme tenant cloud instance
+      l2_mode: access
+      untagged_vlan: ACME_CLOUD
+      spanning_tree_portfast: edge
+      spanning_tree_bpduguard: enabled
+    - name: Ethernet11
+      device: leaf-otternet-pod1-2-2
+      role: server
+      description: globex tenant cloud instance
+      l2_mode: access
+      untagged_vlan: GLOBEX_CLOUD
+      spanning_tree_portfast: edge
+      spanning_tree_bpduguard: enabled
+    # leaf-otternet-pod1-3-1's Ethernet10-17 are routed handoffs in tenant VRFs, not
+    # access ports. Re-roled to `peering` so nothing treats them as workload
+    # edge: the interface layout comes from the shared leaf template, which
+    # cannot know that this leaf faces a firewall rather than servers.
+    - name: Ethernet10
+      device: leaf-otternet-pod1-3-1
+      role: peering
+      description: FW1_ge-0/0/0_ZONE-K8S-PROD
+    - name: Ethernet11
+      device: leaf-otternet-pod1-3-1
+      role: peering
+      description: FW1_ge-0/0/1_ZONE-APP-PROD
+    - name: Ethernet12
+      device: leaf-otternet-pod1-3-1
+      role: peering
+      description: ISP_PE2_WAN_HANDOFF
+    - name: Ethernet13
+      device: leaf-otternet-pod1-3-1
+      role: peering
+      description: BRANCH_RTR_CIRCUIT
+    - name: Ethernet14
+      device: leaf-otternet-pod1-3-1
+      role: peering
+      description: FW1_ZONE-WAN
+    - name: Ethernet15
+      device: leaf-otternet-pod1-3-1
+      role: peering
+      description: FW1_ZONE-BRANCH
+    - name: Ethernet16
+      device: leaf-otternet-pod1-3-1
+      role: peering
+      description: FW1_ge-0/0/4_ZONE-ACME-CLOUD
+    - name: Ethernet17
+      device: leaf-otternet-pod1-3-1
+      role: peering
+      description: FW1_ge-0/0/5_ZONE-GLOBEX-CLOUD
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: NetworkLink
+  data:
+    - name: otternet-k8s-node1-eth1
+      medium: copper
+      connected_endpoints:
+        kind: InterfacePhysical
+        data:
+          - {name: Ethernet10, device: leaf-otternet-pod1-1-1}
+          - {name: eth1, device: k8s-node1}
+    - name: otternet-k8s-node2-eth1
+      medium: copper
+      connected_endpoints:
+        kind: InterfacePhysical
+        data:
+          - {name: Ethernet10, device: leaf-otternet-pod1-1-2}
+          - {name: eth1, device: k8s-node2}
+    - name: otternet-k8s-node3-eth1
+      medium: copper
+      connected_endpoints:
+        kind: InterfacePhysical
+        data:
+          - {name: Ethernet11, device: leaf-otternet-pod1-1-2}
+          - {name: eth1, device: k8s-node3}
+    - name: otternet-host-a-eth1
+      medium: copper
+      connected_endpoints:
+        kind: InterfacePhysical
+        data:
+          - {name: Ethernet10, device: leaf-otternet-pod1-2-1}
+          - {name: eth1, device: host-a}
+    - name: otternet-host-b-eth1
+      medium: copper
+      connected_endpoints:
+        kind: InterfacePhysical
+        data:
+          - {name: Ethernet10, device: leaf-otternet-pod1-2-2}
+          - {name: eth1, device: host-b}
+    - name: otternet-acme-cloud1-eth1
+      medium: copper
+      connected_endpoints:
+        kind: InterfacePhysical
+        data:
+          - {name: Ethernet11, device: leaf-otternet-pod1-2-1}
+          - {name: eth1, device: acme-cloud1}
+    - name: otternet-globex-cloud1-eth1
+      medium: copper
+      connected_endpoints:
+        kind: InterfacePhysical
+        data:
+          - {name: Ethernet11, device: leaf-otternet-pod1-2-2}
+          - {name: eth1, device: globex-cloud1}

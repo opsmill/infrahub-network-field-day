@@ -233,7 +233,7 @@ def test_adopted_circuit_schema_models_two_sides() -> None:
 def test_circuit_endpoint_names_the_interface_it_terminates_on() -> None:
     """Cycle 020: the change that makes the WAN's addressing queryable.
 
-    Without it, objects/33_nfd41_wan.yml can only record a circuit end as
+    Without it, objects/33_otternet_wan.yml can only record a circuit end as
     `name: isp-pe1-eth2` plus an address inside a description sentence -- an
     interface as a string and a CIDR as prose, which is what cycle 010's
     assumption 4 and SC-008 forbid.

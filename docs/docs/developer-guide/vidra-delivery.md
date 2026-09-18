@@ -40,14 +40,14 @@ merge, which is why no trigger definition was added.
 
 | Resource | Owner | Why |
 | --- | --- | --- |
-| `fabricapp.nfd41.lab/nfd41-demo` | Infrahub | Modelled as a `ServiceFabricApp` in the `service_fabric_apps` group |
-| `fabricpeering.nfd41.lab/nfd41` | Infrahub | Modelled as a `ServiceFabricPeering` |
+| `fabricapp.otternet.lab/otternet-demo` | Infrahub | Modelled as a `ServiceFabricApp` in the `service_fabric_apps` group |
+| `fabricpeering.otternet.lab/otternet` | Infrahub | Modelled as a `ServiceFabricPeering` |
 
 An application joins delivery by joining the target group. No cluster-side change is needed —
 a sync selects by artifact **name**, so it already covers every member of the group.
 
 **Those two are the whole list, and that is enforced rather than assumed.** The lab repository's
-bootstrap also applies `nfd41-observability` and `nfd41-access`, which nothing in Infrahub models.
+bootstrap also applies `otternet-observability` and `otternet-access`, which nothing in Infrahub models.
 `invoke cluster`'s handover deletes them along with the two above, so a finished cluster carries
 only applications a service object declares — a workload no proposed change can account for is
 exactly what this delivery path exists to rule out. `scripts/verify_bootstrap.sh` checks their

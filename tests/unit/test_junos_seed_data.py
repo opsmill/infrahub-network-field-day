@@ -1,6 +1,6 @@
 """Seed-parity tests for the perimeter firewall (objects/32).
 
-`objects/32_nfd41_security.yml` is a hand transcription of
+`objects/32_otternet_security.yml` is a hand transcription of
 `../lab/configs/fw/vsrx/junos.conf`, and cycle 023 found it was not a faithful
 one: cycle 010 modelled the firewall's structure correctly and its values
 approximately. These tests are what stop that recurring.
@@ -28,7 +28,7 @@ from typing import Any
 import pytest
 import yaml
 
-OBJECT_FILE = Path("objects/32_nfd41_security.yml")
+OBJECT_FILE = Path("objects/32_otternet_security.yml")
 JUNOS_CONF = Path("../lab/configs/fw/vsrx/junos.conf")
 
 # Junos keywords, referenced by rules but never declared in the address book.
@@ -311,7 +311,7 @@ def test_book_indexes_are_unique() -> None:
 # Cycle 026: the TCP-MSS clamp.
 # ---------------------------------------------------------------------------
 
-DEVICE_FILE = Path("objects/31_nfd41_offfabric_devices.yml")
+DEVICE_FILE = Path("objects/31_otternet_offfabric_devices.yml")
 
 
 def test_the_tcp_mss_clamp_matches_the_device() -> None:
@@ -321,7 +321,7 @@ def test_the_tcp_mss_clamp_matches_the_device() -> None:
     with each other and prove nothing about the device. This reads the `mss`
     line out of junos.conf.
 
-    `fw1` lives in 31_nfd41_offfabric_devices.yml, not in the security file --
+    `fw1` lives in 31_otternet_offfabric_devices.yml, not in the security file --
     it is a SecurityFirewall declared with the other off-fabric devices. The
     cycle-026 task named the security file and was wrong about it.
     """

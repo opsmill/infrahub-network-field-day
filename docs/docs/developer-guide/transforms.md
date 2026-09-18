@@ -226,7 +226,7 @@ be read, exactly as `AvdAntaCatalogTransform` does for stored structured config.
 **Why the payload is an attachment.** A JSON attribute cannot be seeded: Infrahub's object-load
 path returns a server error for a JSON key containing a dot or a slash, and a Kubernetes
 payload is full of them — `app.kubernetes.io/name`, `kubernetes.io/hostname`,
-`nfd41.lab/advertise`. When both an attachment and the inline attribute are set, **the
+`otternet.lab/advertise`. When both an attachment and the inline attribute are set, **the
 attachment wins**.
 
 **Seeding needs a script.** `infrahubctl object load` cannot upload file content, so

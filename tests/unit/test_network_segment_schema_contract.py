@@ -24,10 +24,10 @@ import yaml
 
 REPO_ROOT = Path(__file__).parents[2]
 SEGMENT_SCHEMA = REPO_ROOT / "schemas/service/network_services.yml"
-POOLS = REPO_ROOT / "objects/21_nfd41_pools.yml"
+POOLS = REPO_ROOT / "objects/21_otternet_pools.yml"
 
-SUBNET_POOL = "NFD41-Segment-Subnet-Pool"
-VLAN_POOL = "NFD41-Segment-VLAN-Pool"
+SUBNET_POOL = "OTTERNET-Segment-Subnet-Pool"
+VLAN_POOL = "OTTERNET-Segment-VLAN-Pool"
 SEGMENT_SUPERNET = "10.230.0.0/16"
 
 # Written by the generator, never by a requester. Each records one of the three

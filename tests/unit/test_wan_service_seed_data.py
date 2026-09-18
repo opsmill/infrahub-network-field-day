@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 import yaml
 
-OBJECT_FILE = Path("objects/37_nfd41_wan_services.yml")
+OBJECT_FILE = Path("objects/37_otternet_wan_services.yml")
 LAB_TENANTS = Path("../lab/wan/tenants.yml")
 
 

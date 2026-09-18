@@ -1,7 +1,7 @@
 [project]
 name = "solution-arista-avd"
 version = "0.1.0"
-description = "Infrahub Network Field Day: the NFD41 lab's Arista EVPN/VXLAN fabric modelled in Infrahub, rendered to EOS configuration through PyAVD."
+description = "The OTTERNET lab's Arista EVPN/VXLAN fabric modelled in Infrahub, rendered to EOS configuration through PyAVD."
 authors = [{ name = "OpsMill", email = "info@opsmill.com" }]
 readme = "README.md"
 requires-python = ">=3.11, <3.14"

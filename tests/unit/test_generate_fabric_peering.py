@@ -29,8 +29,8 @@ from generators.generate_fabric_peering_query import GenerateFabricPeeringQuery
 
 # The values actually loaded on the branch, so a fixture failure means the
 # generator changed rather than the lab did.
-LEAF1 = "leaf-nfd41-pod1-1-1"
-LEAF2 = "leaf-nfd41-pod1-1-2"
+LEAF1 = "leaf-otternet-pod1-1-1"
+LEAF2 = "leaf-otternet-pod1-1-2"
 # The addresses cycle 014 modelled onto each leaf's Vlan110 peering SVI, and
 # which cycle 015 derives instead of reading from an object file.
 LEAF_ADDRESSES = {LEAF1: "10.110.0.2/24", LEAF2: "10.110.0.3/24"}
@@ -196,7 +196,7 @@ def _data(
         {
             "node": {
                 "id": "cluster-1",
-                "name": {"value": "nfd41"},
+                "name": {"value": "otternet"},
                 "local_asn": {"value": local_asn},
                 "fabric_peerings": {"edges": sessions},
                 "nodes": {"edges": nodes},
@@ -212,7 +212,7 @@ def _data(
                 {
                     "node": {
                         "id": "svc-1",
-                        "name": {"value": "nfd41-fabric-peering"},
+                        "name": {"value": "otternet-fabric-peering"},
                         # `active` unless a test says otherwise: the query
                         # selects status so a decommissioned service can withdraw.
                         "status": {"value": status},
@@ -372,7 +372,7 @@ def test_missing_cluster_raises_naming_the_service() -> None:
     with pytest.raises(ValueError, match="cluster") as excinfo:
         validate_model(_parsed(with_cluster=False))
 
-    assert "nfd41-fabric-peering" in str(excinfo.value)
+    assert "otternet-fabric-peering" in str(excinfo.value)
 
 
 def test_missing_local_asn_raises_naming_the_cluster_and_field() -> None:
@@ -380,7 +380,7 @@ def test_missing_local_asn_raises_naming_the_cluster_and_field() -> None:
     with pytest.raises(ValueError, match="local_asn") as excinfo:
         validate_model(_parsed(local_asn=None))
 
-    assert "nfd41" in str(excinfo.value)
+    assert "otternet" in str(excinfo.value)
 
 
 def test_cluster_with_no_nodes_raises() -> None:
@@ -388,7 +388,7 @@ def test_cluster_with_no_nodes_raises() -> None:
     with pytest.raises(ValueError, match="node") as excinfo:
         validate_model(_parsed(nodes=[]))
 
-    assert "nfd41" in str(excinfo.value)
+    assert "otternet" in str(excinfo.value)
 
 
 def test_peer_without_routing_asn_raises_naming_the_device() -> None:
@@ -405,7 +405,7 @@ def test_empty_peer_set_raises_before_writing() -> None:
     with pytest.raises(ValueError, match="peer") as excinfo:
         validate_model(_parsed(nodes=[_node("k8s-node1", "if-1", _device("oob-1", role="isp_edge"))]))
 
-    assert "nfd41" in str(excinfo.value)
+    assert "otternet" in str(excinfo.value)
 
 
 def test_validation_runs_before_any_write_is_attempted() -> None:

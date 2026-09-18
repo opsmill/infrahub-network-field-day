@@ -153,7 +153,7 @@ nodes:
         # exactly those.
         #
         # It is needed because the relationship it writes into is shared.
-        # `nfd41-demo` declares three prefixes by hand and two grants may name
+        # `otternet-demo` declares three prefixes by hand and two grants may name
         # the same source, so "remove what the app allows" would delete a
         # human's entry or another grant's. This plays the role
         # `managed_by_service` plays for rules and `vip_block_managed` plays

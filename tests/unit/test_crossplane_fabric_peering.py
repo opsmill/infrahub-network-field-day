@@ -56,18 +56,18 @@ def _data(
     # "secret" as a possible hardcoded password. This is the *name* of an
     # in-cluster secret, which is precisely what the transform renders instead
     # of a password -- and test_no_secret_value_is_ever_rendered asserts that.
-    auth_secret_name: str | None = "nfd41-bgp-auth",  # noqa: S107
+    auth_secret_name: str | None = "otternet-bgp-auth",  # noqa: S107
     pod_cidr_communities: list[str] | None = None,
     bgp_timers: dict[str, int] | None = None,
-    service_name: str = "nfd41-fabric-peering",
+    service_name: str = "otternet-fabric-peering",
 ) -> dict[str, Any]:
     """A query response shaped like CrossplaneFabricPeeringQuery."""
     if peerings is None:
         peerings = [_peering("k8s-leaf1", LEAF1_ADDRESS), _peering("k8s-leaf2", LEAF2_ADDRESS)]
     if node_selector is None:
-        node_selector = ["nfd41.lab/bgp=true"]
+        node_selector = ["otternet.lab/bgp=true"]
     if advertisement_selector is None:
-        advertisement_selector = ["nfd41.lab/advertise=fabric"]
+        advertisement_selector = ["otternet.lab/advertise=fabric"]
     if pod_cidr_communities is None:
         pod_cidr_communities = ["65401:110"]
     if bgp_timers is None:
@@ -86,7 +86,7 @@ def _data(
                         "cluster": {
                             "node": {
                                 "id": "cluster-1",
-                                "name": {"value": "nfd41"},
+                                "name": {"value": "otternet"},
                                 "local_asn": {"value": local_asn},
                                 "bgp_auth_secret_name": {"value": auth_secret_name},
                                 "bgp_timers": {"value": bgp_timers},
@@ -118,9 +118,9 @@ def test_renders_the_xrd_apiversion_and_kind() -> None:
     """FR-041. The contract with the lab's composition starts here."""
     rendered = _render()
 
-    assert rendered["apiVersion"] == "nfd41.lab/v1alpha1"
+    assert rendered["apiVersion"] == "otternet.lab/v1alpha1"
     assert rendered["kind"] == "FabricPeering"
-    assert rendered["metadata"]["name"] == "nfd41"
+    assert rendered["metadata"]["name"] == "otternet"
 
 
 def test_metadata_name_comes_from_the_cluster_not_the_service() -> None:
@@ -132,14 +132,14 @@ def test_metadata_name_comes_from_the_cluster_not_the_service() -> None:
     """
     rendered = _render(service_name="something-else-entirely")
 
-    assert rendered["metadata"]["name"] == "nfd41"
+    assert rendered["metadata"]["name"] == "otternet"
 
 
 def test_renders_every_field_the_composition_consumes() -> None:
     spec = _render()["spec"]
 
     assert spec["localASN"] == LOCAL_ASN
-    assert spec["authSecretName"] == "nfd41-bgp-auth"
+    assert spec["authSecretName"] == "otternet-bgp-auth"
     assert spec["podCIDRCommunities"] == ["65401:110"]
     assert spec["timers"] == {
         "connectRetrySeconds": 5,
@@ -163,15 +163,15 @@ def test_selector_becomes_a_label_map() -> None:
     """
     spec = _render()["spec"]
 
-    assert spec["nodeSelector"] == {"nfd41.lab/bgp": "true"}
-    assert spec["advertisementSelector"] == {"nfd41.lab/advertise": "fabric"}
+    assert spec["nodeSelector"] == {"otternet.lab/bgp": "true"}
+    assert spec["advertisementSelector"] == {"otternet.lab/advertise": "fabric"}
 
 
 def test_selector_value_may_contain_an_equals_sign() -> None:
     """Split on the FIRST `=` only -- a label value may legitimately have one."""
-    spec = _render(node_selector=["nfd41.lab/x=a=b"])["spec"]
+    spec = _render(node_selector=["otternet.lab/x=a=b"])["spec"]
 
-    assert spec["nodeSelector"] == {"nfd41.lab/x": "a=b"}
+    assert spec["nodeSelector"] == {"otternet.lab/x": "a=b"}
 
 
 def test_selector_label_value_stays_a_string() -> None:
@@ -182,15 +182,15 @@ def test_selector_label_value_stays_a_string() -> None:
     """
     spec = _render()["spec"]
 
-    assert spec["nodeSelector"]["nfd41.lab/bgp"] == "true"
-    assert isinstance(spec["nodeSelector"]["nfd41.lab/bgp"], str)
+    assert spec["nodeSelector"]["otternet.lab/bgp"] == "true"
+    assert isinstance(spec["nodeSelector"]["otternet.lab/bgp"], str)
 
 
 def test_service_advertisement_selector_wins_over_the_cluster() -> None:
     """The service is the more specific statement of intent."""
-    spec = _render(service_advertisement_selector=["nfd41.lab/advertise=override"])["spec"]
+    spec = _render(service_advertisement_selector=["otternet.lab/advertise=override"])["spec"]
 
-    assert spec["advertisementSelector"] == {"nfd41.lab/advertise": "override"}
+    assert spec["advertisementSelector"] == {"otternet.lab/advertise": "override"}
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +263,7 @@ def test_every_value_survives_a_round_trip_with_its_type_intact() -> None:
     output = transform.transform(_data())
     spec = yaml.safe_load(output)["spec"]
 
-    assert isinstance(spec["nodeSelector"]["nfd41.lab/bgp"], str)
+    assert isinstance(spec["nodeSelector"]["otternet.lab/bgp"], str)
     assert isinstance(spec["podCIDRCommunities"][0], str)
     assert spec["podCIDRCommunities"] == ["65401:110"]
     assert "'65401:110'" in output, "a colon-bearing scalar must be quoted for the Go parser"
@@ -291,8 +291,8 @@ def test_no_secret_value_is_ever_rendered() -> None:
     transform = CrossplaneFabricPeeringTransform.__new__(CrossplaneFabricPeeringTransform)
     output = transform.transform(_data())
 
-    assert "nfd41-bgp-auth" in output
-    for forbidden in ("password", "Nfd41-Cilium", "cleartext"):
+    assert "otternet-bgp-auth" in output
+    for forbidden in ("password", "Otternet-Cilium", "cleartext"):
         assert forbidden not in output
 
 
@@ -309,7 +309,7 @@ def test_missing_local_asn_raises_naming_the_cluster_and_field() -> None:
     with pytest.raises(ValueError, match="local_asn") as excinfo:
         transform.transform(_data(local_asn=None))
 
-    assert "nfd41" in str(excinfo.value)
+    assert "otternet" in str(excinfo.value)
 
 
 def test_no_enabled_peerings_raises() -> None:
@@ -342,8 +342,8 @@ def test_malformed_selector_raises_naming_the_entry() -> None:
     """V-4. A selector with no `=` cannot become a label."""
     transform = CrossplaneFabricPeeringTransform.__new__(CrossplaneFabricPeeringTransform)
 
-    with pytest.raises(ValueError, match=re.escape("nfd41.lab/bgp")) as excinfo:
-        transform.transform(_data(node_selector=["nfd41.lab/bgp"]))
+    with pytest.raises(ValueError, match=re.escape("otternet.lab/bgp")) as excinfo:
+        transform.transform(_data(node_selector=["otternet.lab/bgp"]))
 
     assert "=" in str(excinfo.value)
 

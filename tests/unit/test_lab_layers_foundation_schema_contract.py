@@ -1,4 +1,4 @@
-"""Contract tests for the foundational layer of the NFD41 lab schema feature.
+"""Contract tests for the foundational layer of the OTTERNET lab schema feature.
 
 Covers the three shared files every story in
 ``specs/010-lab-service-layer-model`` depends on: the new

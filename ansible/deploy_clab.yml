@@ -30,7 +30,7 @@
 #   ansible-playbook -i inventory_clab.yml deploy_clab.yml -e fabric=<name>
 #
 # Usage from a git checkout:
-#   make -C lab deploy-from-infrahub FABRIC=NFD41_FABRIC
+#   make -C lab deploy-from-infrahub FABRIC=OTTERNET_FABRIC
 #
 # Usage from Semaphore: run the "Deploy ContainerLab" task template and supply
 # the `fabric` survey variable.
@@ -78,7 +78,7 @@
   gather_facts: false
   vars:
     # Mandatory: the play fails with the hint below if -e fabric=... is not set.
-    fabric: "{{ undef(hint='Set the fabric name, e.g. -e fabric=NFD41_FABRIC') }}"
+    fabric: "{{ undef(hint='Set the fabric name, e.g. -e fabric=OTTERNET_FABRIC') }}"
     clab_dir: "{{ playbook_dir }}/../lab"
   tasks:
     - name: Resolve the fabric name to its node ID

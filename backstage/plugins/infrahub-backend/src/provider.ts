@@ -228,7 +228,7 @@ const ACCOUNT_VAR = 'infrahub_context_account';
  * login provisions an account named for the identity. The Backstage sign-in
  * resolver matched this User by the same rule
  * (`emailLocalPartMatchingUserEntityName`), so `metadata.name` is already
- * `alice` for `alice@nfd41.lab` and the two agree with nothing shared.
+ * `alice` for `alice@otternet.lab` and the two agree with nothing shared.
  *
  * DERIVING IT FROM THE EMAIL DOES NOT WORK: nunjucks has no `split` filter, so
  * `email | split("@") | first` silently yields nothing and Infrahub answers

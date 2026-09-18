@@ -5,15 +5,15 @@ Run the Infrahub AVD reference design as a virtual replica on
 
 > **Stale:** the committed `infrahub-avd` lab below models the
 > `Fabric-L3LS-Multi-Domain` example design, which this fork removed in favour of
-> the single `NFD41_FABRIC` design. Its `avd/group_vars/`, `avd/intended/` and
+> the single `OTTERNET_FABRIC` design. Its `avd/group_vars/`, `avd/intended/` and
 > `topology.clab.yml` therefore describe devices no Infrahub design produces any
 > more, and cannot be regenerated as-is. The transform-generated flow below works
-> against `NFD41_FABRIC` and is the one to use. The committed lab is kept rather
+> against `OTTERNET_FABRIC` and is the one to use. The committed lab is kept rather
 > than deleted so the decision to drop or re-point it stays a human one.
 >
-> Note that `NFD41_FABRIC` already *has* a deployed containerlab topology, in the
-> NFD41 lab repository — that is the lab this fork models, and
-> `tests/integration/test_nfd41_fabric.py` asserts parity against it.
+> Note that `OTTERNET_FABRIC` already *has* a deployed containerlab topology, in the
+> OTTERNET lab repository — that is the lab this fork models, and
+> `tests/integration/test_otternet_fabric.py` asserts parity against it.
 
 Two flows live here:
 
@@ -120,7 +120,7 @@ Render it locally to preview:
 ```bash
 # COLUMNS is set because infrahubctl prints via Rich, which wraps long lines at the terminal
 # width — irrelevant to the server-rendered artifact, but needed when saving locally.
-COLUMNS=500 uv run infrahubctl transform containerlab_topology name=NFD41_FABRIC > lab/topology.clab.yml
+COLUMNS=500 uv run infrahubctl transform containerlab_topology name=OTTERNET_FABRIC > lab/topology.clab.yml
 ```
 
 What the render contains:
@@ -172,7 +172,7 @@ importable by the **controller's** Python or they fail with
 
 ```bash
 cd lab
-make deploy-from-infrahub FABRIC=NFD41_FABRIC
+make deploy-from-infrahub FABRIC=OTTERNET_FABRIC
 ```
 
 The playbook lives in `../ansible/` rather than `playbooks/`, because that directory is also the

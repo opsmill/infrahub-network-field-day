@@ -17,7 +17,7 @@ different front doors:
     SecurityFirewall  Junos Configuration    docker exec + ssh to the vSRX VM
 
 **The switches are addressed by IP, the others by name, and that is deliberate.**
-Infrahub calls the switches `leaf-nfd41-pod1-1-1`; ContainerLab calls the same
+Infrahub calls the switches `leaf-otternet-pod1-1-1`; ContainerLab calls the same
 box `k8s-leaf1`. There is no renaming layer, so matching them by name is not
 possible -- but every switch carries a `mgmt_ip` that equals its ContainerLab
 management address, so eAPI reaches them without knowing the lab's name for
@@ -43,17 +43,17 @@ INFRAHUB_ADDRESS = os.getenv("INFRAHUB_ADDRESS", "http://localhost:8000")
 INFRAHUB_API_TOKEN = os.getenv("INFRAHUB_API_TOKEN", "")
 
 # The ContainerLab lab name, which prefixes every container: clab-<lab>-<node>.
-LAB_NAME = os.getenv("NFD41_LAB", "nfd41")
+LAB_NAME = os.getenv("OTTERNET_LAB", "otternet")
 
 # eAPI credentials. The AVD artifact itself defines `username admin`, so these
 # have to match what the rendered configuration sets, not what the device
 # happens to have booted with.
-EOS_USERNAME = os.getenv("NFD41_EOS_USERNAME", "admin")
-EOS_PASSWORD = os.getenv("NFD41_EOS_PASSWORD", "admin")
+EOS_USERNAME = os.getenv("OTTERNET_EOS_USERNAME", "admin")
+EOS_PASSWORD = os.getenv("OTTERNET_EOS_PASSWORD", "admin")
 
 # The vSRX's own credentials, matching `make fw-console` in the lab repository.
-VSRX_USERNAME = os.getenv("NFD41_VSRX_USERNAME", "admin")
-VSRX_PASSWORD = os.getenv("NFD41_VSRX_PASSWORD", "admin@123")
+VSRX_USERNAME = os.getenv("OTTERNET_VSRX_USERNAME", "admin")
+VSRX_PASSWORD = os.getenv("OTTERNET_VSRX_PASSWORD", "admin@123")
 
 ARTIFACT_EOS = "AVD EOS Configuration"
 ARTIFACT_FRR = "FRR Configuration"

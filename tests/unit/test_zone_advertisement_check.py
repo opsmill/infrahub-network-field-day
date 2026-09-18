@@ -26,7 +26,7 @@ from checks.zone_advertisement_check import (
 from checks.zone_advertisement_check_query import ZoneAdvertisementCheckQuery
 
 ADVERTISED_LIST = "PL-DC-ADVERTISED-BRANCH"
-BORDER_LEAF = "leaf-nfd41-pod1-3-1"
+BORDER_LEAF = "leaf-otternet-pod1-3-1"
 VIP_BLOCK = "10.112.240.0/28"
 
 
@@ -62,7 +62,7 @@ def _zone(
 
 
 def _grant(
-    name: str = "branch-to-nfd41-demo",
+    name: str = "branch-to-otternet-demo",
     *,
     approved: bool = True,
     vip: str | None = "10.112.240.10/32",
@@ -79,8 +79,8 @@ def _grant(
             "destination_vip": ({"node": {"id": "ip-vip", "address": {"value": vip}}} if vip else {"node": None}),
             "application": {
                 "node": {
-                    "id": "app-nfd41-demo",
-                    "name": {"value": "nfd41-demo"},
+                    "id": "app-otternet-demo",
+                    "name": {"value": "otternet-demo"},
                     "exposed": {"value": exposed},
                     "vip_block": ({"node": {"id": "pfx-vip", "prefix": {"value": block}}} if block else {"node": None}),
                 }
@@ -102,8 +102,8 @@ def _query(
             "edges": [
                 {
                     "node": {
-                        "id": "fabric-nfd41",
-                        "name": {"value": "NFD41_FABRIC"},
+                        "id": "fabric-otternet",
+                        "name": {"value": "OTTERNET_FABRIC"},
                         "avd_custom_hostvars": {
                             "value": fabric_hostvars if fabric_hostvars is not None else _hostvars(ADVERTISED_LIST)
                         },

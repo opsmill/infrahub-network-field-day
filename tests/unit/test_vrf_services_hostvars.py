@@ -1,6 +1,6 @@
 """Unit tests for the VRF-scoped service hostvars.
 
-Cover the AVD structures the NFD41 design depends on and that the reference
+Cover the AVD structures the OTTERNET design depends on and that the reference
 design previously could not express as inputs: per-node SVI addresses with a
 VARP gateway, VRF static routes, VRF BGP peers, and routed L3 handoffs.
 
@@ -167,7 +167,7 @@ async def test_bgp_peer_carries_policy_and_both_pair_members() -> None:
         ip_address=_attr("10.110.0.11/32"),
         remote_asn=_attr(65401),
         description=_attr("k8s-node1-cilium"),
-        cleartext_password=_attr("Nfd41-Cilium"),
+        cleartext_password=_attr("Otternet-Cilium"),
         send_community=_attr("all"),
         next_hop_self=_attr(True),
         maximum_routes=_attr(100),
@@ -187,7 +187,7 @@ async def test_bgp_peer_carries_policy_and_both_pair_members() -> None:
             "remote_as": "65401",
             "nodes": ["k8s-leaf1", "k8s-leaf2"],
             "description": "k8s-node1-cilium",
-            "cleartext_password": "Nfd41-Cilium",
+            "cleartext_password": "Otternet-Cilium",
             "send_community": "all",
             "next_hop_self": True,
             "maximum_routes": 100,

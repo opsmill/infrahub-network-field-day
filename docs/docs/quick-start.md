@@ -104,14 +104,14 @@ the whole load.
 
 Seed data loads in filename order, and the numeric prefixes encode that order: shared data first
 (`00`–`06` — groups, manufacturers, device types, IPAM, management, profiles, device templates),
-then the `NFD41_FABRIC` design (`20`–`28`): device types and templates, pools, management objects, the fabric and pod, tenants and VRFs, racks, the pinned switches, the VRF services, and the workload endpoints.
+then the `OTTERNET_FABRIC` design (`20`–`28`): device types and templates, pools, management objects, the fabric and pod, tenants and VRFs, racks, the pinned switches, the VRF services, and the workload endpoints.
 
 ## 5. Confirm everything loaded
 
 Open the Infrahub UI at **`http://localhost:8000`** and log in. You should see:
 
 - **Devices → Types & Models → Manufacturers**: Arista, Dell, and other manufacturers.
-- **Fabric Design → Fabrics**: `NFD41_FABRIC` with its pod `nfd41-pod1`.
+- **Fabric Design → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
 - **Locations → Racks**: pre-defined racks per pod.
 - **IPAM → Prefixes**: the fabric supernet and per-fabric prefix pools.
 

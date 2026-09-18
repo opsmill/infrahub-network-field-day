@@ -6,7 +6,7 @@ populated data:
 
   * Making the three attributes mandatory is REFUSED while any application
     leaves them empty. The server answers `Attribute-level 'optional' constraint
-    violation on schema 'ServiceFabricApp'. Node (nfd41-demo) is not compliant.`
+    violation on schema 'ServiceFabricApp'. Node (otternet-demo) is not compliant.`
     -- once per attribute per application, naming the node and never the field,
     so a partial migration looks exactly like none at all.
   * Withdrawing `ServiceFabricAppManifestsFile` succeeds whether or not
@@ -17,7 +17,7 @@ populated data:
 So this runs BEFORE `infrahubctl schema load`, which inverts the usual order --
 `invoke load` does schema then objects, and this is objects then schema.
 
-**It enumerates from the graph, never from `objects/`.** Only `nfd41-demo` is
+**It enumerates from the graph, never from `objects/`.** Only `otternet-demo` is
 seeded; any other application arrived through the portal or the API, and a
 migration written from the seed files would leave exactly those behind. The
 instance this was written against had two.
@@ -47,7 +47,7 @@ CHARTS: dict[str, tuple[str, str, str]] = {
     # chart 6.0.0 ships appVersion 1.11.0, which is `traefik/whoami:v1.11.0`,
     # the image its manifests already ran. Verified against the repository's
     # own index.yaml rather than taken from a chart page.
-    "nfd41-demo": ("https://cowboysysop.github.io/charts/", "whoami", "6.0.0"),
+    "otternet-demo": ("https://cowboysysop.github.io/charts/", "whoami", "6.0.0"),
     # Created through the portal rather than seeded, and the reason this script
     # reads the graph. Its manifests ran ghcr.io/stefanprodan/podinfo:6.7.1, and
     # the podinfo chart version tracks its app version.

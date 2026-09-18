@@ -36,12 +36,12 @@ def _data(
     workload_selector: list[str] | None = None,
     allowed: list[str] | None = None,
     ports: list[dict[str, Any]] | None = None,
-    namespace: str | None = "nfd41-demo",
+    namespace: str | None = "otternet-demo",
     vrf: str | None = "K8S_PROD",
     intra: bool = True,
 ) -> CrossplaneFabricAppQuery:
     if service_selector is None:
-        service_selector = ["nfd41.lab/advertise=true"]
+        service_selector = ["otternet.lab/advertise=true"]
     if workload_selector is None:
         workload_selector = ["app=frontend"]
     if allowed is None:
@@ -54,7 +54,7 @@ def _data(
                 {
                     "node": {
                         "id": "app-1",
-                        "name": {"value": "nfd41-demo"},
+                        "name": {"value": "otternet-demo"},
                         "namespace_name": ({"value": namespace} if namespace else None),
                         "exposed": {"value": exposed},
                         "chart_repository": None,
@@ -97,7 +97,7 @@ def _app(**kwargs: Any) -> Any:
 def test_selector_becomes_a_label_map() -> None:
     """Stored as key=value strings because Infrahub 1.10.6 returns a 500 for a
     JSON key containing a dot or a slash, and every label selector has both."""
-    assert parse_selector(["nfd41.lab/advertise=true"], field="s") == {"nfd41.lab/advertise": "true"}
+    assert parse_selector(["otternet.lab/advertise=true"], field="s") == {"otternet.lab/advertise": "true"}
 
 
 def test_selector_value_may_contain_an_equals_sign() -> None:
@@ -118,8 +118,8 @@ def test_label_values_stay_strings() -> None:
     back a boolean and the API would reject it."""
     expose = build_expose(_app())
 
-    assert expose["serviceSelector"]["nfd41.lab/advertise"] == "true"
-    assert isinstance(expose["serviceSelector"]["nfd41.lab/advertise"], str)
+    assert expose["serviceSelector"]["otternet.lab/advertise"] == "true"
+    assert isinstance(expose["serviceSelector"]["otternet.lab/advertise"], str)
 
 
 def test_ports_render_as_strings() -> None:
@@ -195,7 +195,7 @@ def test_vip_block_comes_from_the_prefix() -> None:
 
 def _render(**kwargs: Any) -> dict[str, Any]:
     transform = CrossplaneFabricAppTransform.__new__(CrossplaneFabricAppTransform)
-    spec: dict[str, Any] = {"namespace": "nfd41-demo", "tenant": "k8s-prod"}
+    spec: dict[str, Any] = {"namespace": "otternet-demo", "tenant": "k8s-prod"}
     app = _app(**kwargs)
     # THE CHART, where the manifests used to be. Cycle 033 made a chart the
     # whole workload source, and these three tests are about the DUMPER rather
@@ -211,9 +211,9 @@ def _render(**kwargs: Any) -> dict[str, Any]:
     spec["expose"] = build_expose(app)
     spec["policy"] = build_policy(app)
     manifest = {
-        "apiVersion": "nfd41.lab/v1alpha1",
+        "apiVersion": "otternet.lab/v1alpha1",
         "kind": "FabricApp",
-        "metadata": {"name": "nfd41-demo"},
+        "metadata": {"name": "otternet-demo"},
         "spec": spec,
     }
     return {"text": transform._dump(manifest), "parsed": yaml.safe_load(transform._dump(manifest))}
@@ -224,7 +224,7 @@ def test_render_round_trips_with_types_intact() -> None:
     out = _render()
     spec = out["parsed"]["spec"]
 
-    assert isinstance(spec["expose"]["serviceSelector"]["nfd41.lab/advertise"], str)
+    assert isinstance(spec["expose"]["serviceSelector"]["otternet.lab/advertise"], str)
     assert isinstance(spec["policy"]["allowFromPorts"][0]["port"], str)
     assert "'true'" in out["text"]
 

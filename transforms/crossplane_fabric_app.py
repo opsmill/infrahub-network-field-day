@@ -13,7 +13,7 @@ arriving in the query response. ``avd_anta_catalog`` is the async precedent.
 The payload is an attachment because a JSON attribute cannot be seeded: Infrahub
 1.10.6's object-load path returns HTTP 500 for a JSON key containing a dot or a
 slash, and every Kubernetes payload is full of them --
-``app.kubernetes.io/name``, ``kubernetes.io/hostname``, ``nfd41.lab/advertise``.
+``app.kubernetes.io/name``, ``kubernetes.io/hostname``, ``otternet.lab/advertise``.
 Cycle 013 added the attachments for exactly this.
 
 Precedence, per cycle 013: **the attachment wins** over the inline attribute,
@@ -39,7 +39,7 @@ from .crossplane_fabric_app_query import (
 
 AppNode = CrossplaneFabricAppQueryTargetEdgesNode
 
-API_VERSION = "nfd41.lab/v1alpha1"
+API_VERSION = "otternet.lab/v1alpha1"
 KIND = "FabricApp"
 
 # Wide enough that PyYAML never folds a scalar, so a one-field change stays a

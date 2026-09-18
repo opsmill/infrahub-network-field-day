@@ -1,7 +1,7 @@
 """Push Infrahub-rendered configuration onto the running ContainerLab devices.
 
 The lab comes up with management connectivity and nothing else -- the cEOS nodes
-in `../lab/nfd41.clab.yml` are given no `startup-config`, only `CLAB_MGMT_VRF`
+in `../lab/otternet.clab.yml` are given no `startup-config`, only `CLAB_MGMT_VRF`
 and a management address. This script is the second half: it fetches each
 device's rendered artifact from Infrahub and makes the device match it, so the
 running lab's configuration comes from the model rather than from a file

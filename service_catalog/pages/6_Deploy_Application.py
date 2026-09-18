@@ -67,7 +67,7 @@ def main() -> None:
 
         col1, col2 = st.columns(2)
         with col1:
-            app_name = st.text_input("Application name", placeholder="e.g. nfd41-metrics")
+            app_name = st.text_input("Application name", placeholder="e.g. otternet-metrics")
             namespace_name = st.text_input("Namespace", placeholder="defaults to the application name")
             description = st.text_input("Description", placeholder="e.g. Prometheus and Grafana")
 

@@ -244,7 +244,7 @@ generator_definitions:
   # crossplane_fabric_app.py RAISES on an exposed application with no block, so
   # this is the difference between "state a size" and "pick addresses and hope".
   # A block that already exists is kept, whoever created it -- which is how the
-  # seeded nfd41-demo keeps 10.112.240.0/28 and its manifest stays byte-identical.
+  # seeded otternet-demo keeps 10.112.240.0/28 and its manifest stays byte-identical.
   - name: generate-fabric-app
     file_path: "./generators/generate_fabric_app.py"
     query: generate_fabric_app

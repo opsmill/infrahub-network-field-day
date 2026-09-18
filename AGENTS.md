@@ -33,7 +33,7 @@ Key docs to read before larger changes:
 - `schemas/` - Infrahub schema definitions, split between base schemas and
   project/feature extensions.
 - `objects/` - seed data loaded in filename order. This repository models one
-  fabric, `NFD41_FABRIC`, which is the containerlab lab in the NFD41 lab repo;
+  fabric, `OTTERNET_FABRIC`, which is the containerlab lab in the OTTERNET lab repo;
   the upstream reference design's example fabrics were removed.
 - `menus/` - Infrahub UI menu definitions.
 - `docs/` - Docusaurus documentation.
@@ -175,9 +175,9 @@ Two traps inside that step, both of which cost real time before being read rathe
   grows past what is free with the lab up and the build is **killed** rather than failing.
   `invoke backstage-build` sets `--max-old-space-size=4096`.
 
-**`br-nfd41-tool` is a precondition of every deploy, not a setup step.** It is a `kind: bridge`
+**`br-otter-tool` is a precondition of every deploy, not a setup step.** It is a `kind: bridge`
 node, and ContainerLab does not create one — it refuses the topology outright with
-`Bridge "br-nfd41-tool" referenced in topology but does not exist.` before starting any node. A
+`Bridge "br-otter-tool" referenced in topology but does not exist.` before starting any node. A
 host bridge does not survive a reboot, so both deploy paths now run
 `lab/scripts/tooling-bridge.sh` first: the lab's `deploy` and `deploy-lite` targets, and
 `invoke lab`, which drives ContainerLab directly and never reads that Makefile. For a while
@@ -192,7 +192,7 @@ vanish with nothing logged anywhere.
 
 **The portal writes to Infrahub AS THE SIGNED-IN USER, through the mutation `context`.** Every
 mutation takes an optional `context: { account: { id } }`; the id resolves by UUID **or by name**,
-and an SSO login provisions an account named for the identity, so `alice@nfd41.lab` is `alice` —
+and an SSO login provisions an account named for the identity, so `alice@otternet.lab` is `alice` —
 the same local-part rule the Backstage sign-in resolver uses. Nothing has to share a UUID.
 `infrahub.catalog.actAsUser` turns it on, and the caller needs `OVERRIDE_CONTEXT` with
 `ALLOW_ALL` (SUPER_ADMIN bypasses it, which is why the lab's admin token works).
@@ -244,8 +244,8 @@ The service layer offers seven kinds, each described where its generator or rend
 appear together and are always consistent — an `IpamPrefix`, an `IpamVLAN`, and an `EvpnSvi`
 giving it a gateway in a VRF. **It allocates rather than selects**, which is what separates it
 from the WAN kinds: leaving `vlan_id` or the subnet empty is the normal case, and
-`generate-network-segment` takes the next free one from `NFD41-Segment-VLAN-Pool` and
-`NFD41-Segment-Subnet-Pool`.
+`generate-network-segment` takes the next free one from `OTTERNET-Segment-VLAN-Pool` and
+`OTTERNET-Segment-Subnet-Pool`.
 
 `service_catalog/pages/1_Create_Segment.py` is the request path. It creates a single
 `ServiceNetworkSegment` on a branch and opens a proposed change; the generator builds the three
@@ -307,7 +307,7 @@ application with no block does not degrade — `crossplane_fabric_app.py` **rais
 `is exposed but has no vip_block; the XRD requires expose.vipBlock`. Two things to know:
 
 - **`vip_block_managed` is what makes withdrawal safe.** `vip_block` holds either a block a
-  human declared in `objects/` — `10.112.240.0/28` for `nfd41-demo` — or one this generator took
+  human declared in `objects/` — `10.112.240.0/28` for `otternet-demo` — or one this generator took
   from the pool, and only the second is ever safe to delete. The flag records which, is set only
   on the allocating path, and is the only thing withdrawal consults; it plays exactly the role
   `managed_by_service` plays on `SecurityPolicyRule`. It is written in the **same save** as the
@@ -332,7 +332,7 @@ take the next free resource from a pool. Two things to know before changing the 
   Nothing errors on that path, so the relationship is mandatory and the generator checks it again.
 - **Its pools are resolved by role rather than by name** — the prefix pool whose resources carry
   `tenant_host`, and the number pool allocating `IpamVLAN.vlan_id` — and both demand exactly one
-  candidate. A hard-coded `NFD41-Segment-Subnet-Pool` would fail naming a string that appears in
+  candidate. A hard-coded `OTTERNET-Segment-Subnet-Pool` would fail naming a string that appears in
   no schema.
 
 **`status` withdraws, and `decommissioning` counts as gone rather than going.** For every kind in
@@ -407,7 +407,7 @@ to know before changing it:
   `allowed_source_prefixes` peers, so both gates name one object. A source of another kind opens the
   two gates it can and says so.
 - **`granted_source_prefixes` is what makes revoking it safe**, and it is not decoration.
-  `allowed_source_prefixes` is a SHARED list — `nfd41-demo` declares three by hand and two grants may
+  `allowed_source_prefixes` is a SHARED list — `otternet-demo` declares three by hand and two grants may
   name one source — so withdrawal removes only what this grant recorded, minus what a **live sibling
   grant on the same application** still records. Both halves are load bearing: the first keeps a
   human's entry out of reach, the second stops one revocation closing a gate another grant relies on,
@@ -904,7 +904,7 @@ than deterministic.** Seen on a cycle-030 rebuild, one after the other:
 
 - **Vidra can beat the lab's installer to a resource.** Vidra goes up before
   Crossplane, so once the XRDs land its next retry may create
-  `fabricpeering/nfd41` in the window between the lab installer's
+  `fabricpeering/otternet` in the window between the lab installer's
   `kubectl apply` reading the resource and creating it. Apply then fails
   `AlreadyExists` — from `apply`, not `create` — and the script `die`s, leaving
   the lab's two FabricApps unapplied and the handover unrun. Re-running
@@ -933,11 +933,11 @@ clone of it fails outright.
 
 ## Bringing the lab up from Infrahub
 
-Two tasks, in order. The topology belongs to the sibling NFD41 lab repository;
+Two tasks, in order. The topology belongs to the sibling OTTERNET lab repository;
 the configuration belongs here.
 
 ```bash
-uv run invoke lab          # deploy ../lab/nfd41.clab.yml, wait for eAPI
+uv run invoke lab          # deploy ../lab/otternet.clab.yml, wait for eAPI
 uv run invoke provision    # push every rendered artifact onto the devices
 ```
 
@@ -946,7 +946,7 @@ renders a topology from Infrahub. The fabric comes up unconfigured on purpose:
 the cEOS nodes are given no `startup-config`, only `CLAB_MGMT_VRF` and a
 management address, so they boot reachable and empty. `../lab` is resolved by
 walking up from this checkout, because a plain `../lab` is wrong from a git
-worktree; set `NFD41_LAB_DIR` to override.
+worktree; set `OTTERNET_LAB_DIR` to override.
 
 `invoke provision` then makes each device match its artifact. Three families,
 three routes in, because the lab gives them three different front doors:
@@ -958,7 +958,7 @@ three routes in, because the lab gives them three different front doors:
 | `SecurityFirewall` | Junos Configuration | container name | `load replace` + `commit confirmed` |
 
 **The switches are reached by address and the rest by name, deliberately.**
-Infrahub calls a switch `leaf-nfd41-pod1-1-1` and ContainerLab calls the same box
+Infrahub calls a switch `leaf-otternet-pod1-1-1` and ContainerLab calls the same box
 `k8s-leaf1`; there is no renaming layer, so names cannot match them. Their
 `mgmt_ip` does equal the lab's management address, so eAPI needs no name. The FRR
 routers and the firewall have no address modelled at all, but their Infrahub
@@ -1031,10 +1031,10 @@ four** afterwards, and what happens next divides them:
 
 | Resource | Owner | After the handover |
 | --- | --- | --- |
-| `fabricpeering.nfd41.lab/nfd41` | **Infrahub**, via `ServiceFabricPeering` | re-delivered by Vidra |
-| `fabricapp.nfd41.lab/nfd41-demo` | **Infrahub**, via `ServiceFabricApp` | re-delivered by Vidra |
-| `fabricapp.nfd41.lab/nfd41-observability` | the lab repository | gone |
-| `fabricapp.nfd41.lab/nfd41-access` | the lab repository | gone |
+| `fabricpeering.otternet.lab/otternet` | **Infrahub**, via `ServiceFabricPeering` | re-delivered by Vidra |
+| `fabricapp.otternet.lab/otternet-demo` | **Infrahub**, via `ServiceFabricApp` | re-delivered by Vidra |
+| `fabricapp.otternet.lab/otternet-observability` | the lab repository | gone |
+| `fabricapp.otternet.lab/otternet-access` | the lab repository | gone |
 
 **The bottom two are deleted because nothing models them.** A cluster carrying a
 workload no service object declares is state no proposed change can explain, which

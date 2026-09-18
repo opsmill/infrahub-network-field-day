@@ -46,7 +46,7 @@ PAYLOAD_DIR = _REPO_ROOT / "payloads"
 # withdrawn with the raw-manifests path, and the kind no longer resolves --
 # naming it here raises `SchemaNotFoundError` rather than seeding nothing.
 PAYLOADS: dict[str, tuple[str, str, str]] = {
-    "nfd41-demo": ("nfd41-demo-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
+    "otternet-demo": ("otternet-demo-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
 }
 
 

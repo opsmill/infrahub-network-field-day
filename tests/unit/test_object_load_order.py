@@ -6,8 +6,8 @@ file that has to move. Worse, it is **invisible on a running instance**: the
 object is already there from a previous load, so everything works right up until
 someone rebuilds from nothing.
 
-That is exactly how `NFD41-VIP-Pool` shipped. It sat in `21_nfd41_pools.yml`
-drawing from `10.112.240.0/24`, which `29_nfd41_offfabric_prefixes.yml` declares
+That is exactly how `OTTERNET-VIP-Pool` shipped. It sat in `21_otternet_pools.yml`
+drawing from `10.112.240.0/24`, which `29_otternet_offfabric_prefixes.yml` declares
 — eight files later. Every test passed, the generator allocated from it
 correctly, and a fresh `invoke load` failed with::
 
@@ -101,9 +101,9 @@ def test_every_pool_resource_is_declared_by_an_earlier_file(path: Path) -> None:
 def test_the_rule_would_have_caught_the_vip_pool() -> None:
     """The regression this file exists for, stated as data rather than prose.
 
-    `10.112.240.0/24` is declared in `29_nfd41_offfabric_prefixes.yml`. Any pool
+    `10.112.240.0/24` is declared in `29_otternet_offfabric_prefixes.yml`. Any pool
     drawing from it must therefore live in that file or later — which is where
-    `NFD41-VIP-Pool` now is, and is not where it shipped.
+    `OTTERNET-VIP-Pool` now is, and is not where it shipped.
     """
     declaring = [f.name for f in _object_files() if "10.112.240.0/24" in _prefixes_declared_by(f)]
     assert declaring, "10.112.240.0/24 is declared nowhere; this test is measuring the wrong thing"

@@ -51,8 +51,8 @@ import yaml
 
 REPO_ROOT = Path(__file__).parents[2]
 
-ROUTES = REPO_ROOT / "objects/32b_nfd41_fw_static_routes.yml"
-SECURITY = REPO_ROOT / "objects/32_nfd41_security.yml"
+ROUTES = REPO_ROOT / "objects/32b_otternet_fw_static_routes.yml"
+SECURITY = REPO_ROOT / "objects/32_otternet_security.yml"
 ORACLE = Path("../lab/configs/fw/vsrx/junos.conf")
 
 FIREWALL = "fw1"
@@ -314,6 +314,6 @@ def test_the_address_book_entries_without_a_route_are_the_expected_five() -> Non
 
 def test_the_file_loads_after_the_one_that_defines_the_firewall() -> None:
     """`fw1` is created in 31_; the routes reference it, so they must follow."""
-    devices = "31_nfd41_offfabric_devices.yml"
+    devices = "31_otternet_offfabric_devices.yml"
     assert (REPO_ROOT / "objects" / devices).is_file()
     assert ROUTES.name > devices

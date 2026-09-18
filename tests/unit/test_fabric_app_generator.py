@@ -1,12 +1,12 @@
 """Unit tests for the fabric application generator.
 
-Fixtures built from the real shapes in `objects/34_nfd41_cluster.yml` and
-`objects/36_nfd41_app_services.yml`: one cluster whose `vip_pools` is
-`10.112.240.0/24`, one pool drawing from it, and `nfd41-demo` holding the
+Fixtures built from the real shapes in `objects/34_otternet_cluster.yml` and
+`objects/36_otternet_app_services.yml`: one cluster whose `vip_pools` is
+`10.112.240.0/24`, one pool drawing from it, and `otternet-demo` holding the
 hand-written `10.112.240.0/28`.
 
 **The claim this file exists to protect is that the seeded application does not
-move.** Its block is declared in `objects/29_nfd41_offfabric_prefixes.yml`, the
+move.** Its block is declared in `objects/29_otternet_offfabric_prefixes.yml`, the
 `zone-advertisement` check measures grant VIPs against it, and the rendered
 Crossplane manifest is delivered into a live cluster. A generator that
 reallocated it, or withdrew it on decommissioning, would break all three -- so
@@ -31,7 +31,7 @@ from generators.generate_fabric_app import (
 )
 from generators.generate_fabric_app_query import GenerateFabricAppQuery
 
-APP_NAME = "nfd41-demo"
+APP_NAME = "otternet-demo"
 POOL_ID = "pool-vip"
 SUPERNET_ID = "pfx-10-112-240-0-24"
 SEEDED_BLOCK_ID = "pfx-10-112-240-0-28"
@@ -65,8 +65,8 @@ def _app(
             "cluster": (
                 {
                     "node": {
-                        "id": "cluster-nfd41",
-                        "name": _wrap("nfd41"),
+                        "id": "cluster-otternet",
+                        "name": _wrap("otternet"),
                         "vip_pools": {
                             "edges": [
                                 {"node": {"__typename": "IpamPrefix", "id": pid, "prefix": _wrap("10.112.240.0/24")}}
@@ -86,9 +86,9 @@ def _pools(*, drawing_from: list[str] | None = None, extra: int = 0) -> dict[str
     """The lab's prefix pools. Only one draws from the cluster's VIP supernet."""
     resources = [SUPERNET_ID] if drawing_from is None else drawing_from
     entries: list[dict[str, Any]] = [
-        {"id": "pool-loopback", "name": "NFD41-Loopback-Pool", "resources": ["pfx-loopback"]},
-        {"id": POOL_ID, "name": "NFD41-VIP-Pool", "resources": resources},
-        {"id": "pool-segment", "name": "NFD41-Segment-Subnet-Pool", "resources": ["pfx-segment"]},
+        {"id": "pool-loopback", "name": "OTTERNET-Loopback-Pool", "resources": ["pfx-loopback"]},
+        {"id": POOL_ID, "name": "OTTERNET-VIP-Pool", "resources": resources},
+        {"id": "pool-segment", "name": "OTTERNET-Segment-Subnet-Pool", "resources": ["pfx-segment"]},
     ]
     entries.extend({"id": f"pool-extra-{n}", "name": f"Extra-{n}", "resources": [SUPERNET_ID]} for n in range(extra))
     return {
@@ -271,7 +271,7 @@ async def test_the_ownership_flag_is_written_with_the_block_not_after_it() -> No
 async def test_an_application_that_already_has_a_block_keeps_it() -> None:
     """THE SEEDED APPLICATION'S PATH.
 
-    nfd41-demo names 10.112.240.0/28, declared in objects/ and delivered into a
+    otternet-demo names 10.112.240.0/28, declared in objects/ and delivered into a
     live cluster. Reallocating it would move a manifest that is already applied.
     """
     client = _RecordingClient()
@@ -314,7 +314,7 @@ async def test_withdrawal_clears_the_reference_before_deleting_the_prefix() -> N
 async def test_a_hand_written_block_survives_decommissioning() -> None:
     """THE REASON `vip_block_managed` EXISTS.
 
-    nfd41-demo's block is declared in objects/29_nfd41_offfabric_prefixes.yml.
+    otternet-demo's block is declared in objects/29_otternet_offfabric_prefixes.yml.
     Deleting it would remove an object the seed data owns and break the next
     `invoke load`.
     """

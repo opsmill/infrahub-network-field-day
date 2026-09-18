@@ -1,13 +1,13 @@
 ---
 # The tooling namespace: things that serve PEOPLE rather than the fabric.
 #
-# This is a different cluster from the workload one. `nfd41-demo` and friends
+# This is a different cluster from the workload one. `otternet-demo` and friends
 # run on k8s-node1..3, which sit on the fabric Infrahub configures; these run on
 # tool-node1, which sits on a bridge the host shares. That separation is the
 # whole reason the tooling cluster exists -- see auth/README.md.
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: nfd41-tooling
+  name: otternet-tooling
   labels:
-    nfd41.lab/tier: tooling
+    otternet.lab/tier: tooling

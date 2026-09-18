@@ -22,7 +22,7 @@ OBJECTS_DIR = Path(__file__).parent.parent.parent / "objects"
 # same hardware a second time as `k8s-leaf1`/`k8s-leaf2` (their containerlab
 # hostnames); those duplicates are NOT valid peer targets, because
 # ClusterFabricPeering.peer_device points at the names below.
-K8S_LEAVES = {"leaf-nfd41-pod1-1-1", "leaf-nfd41-pod1-1-2"}
+K8S_LEAVES = {"leaf-otternet-pod1-1-1", "leaf-otternet-pod1-1-2"}
 
 # The network the Cilium nodes and both leaves share.
 PEERING_PREFIX = ipaddress.ip_network("10.110.0.0/24")

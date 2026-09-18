@@ -32,7 +32,7 @@
 # Usage:  scripts/verify_bootstrap.sh [run-label]
 # Env:    INFRAHUB_ADDRESS     default http://localhost:8000
 #         INFRAHUB_API_TOKEN   default matches docker-compose.override.yml
-#         NFD41_LAB_DIR        default: found beside this checkout
+#         OTTERNET_LAB_DIR        default: found beside this checkout
 #
 # Takes about twenty minutes. Exits non-zero with the number of failed checks.
 set -uo pipefail
@@ -44,10 +44,10 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # checkout, or beside one of its parents, because `../lab` is wrong from a git
 # worktree.
 find_lab() {
-    if [[ -n "${NFD41_LAB_DIR:-}" ]]; then printf '%s' "$NFD41_LAB_DIR"; return; fi
+    if [[ -n "${OTTERNET_LAB_DIR:-}" ]]; then printf '%s' "$OTTERNET_LAB_DIR"; return; fi
     local dir="$REPO"
     while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/../lab/nfd41.clab.yml" ]]; then
+        if [[ -f "$dir/../lab/otternet.clab.yml" ]]; then
             (cd "$dir/../lab" && pwd); return
         fi
         dir="$(dirname "$dir")"
@@ -62,7 +62,7 @@ export INFRAHUB_ADDRESS="${INFRAHUB_ADDRESS:-http://localhost:8000}"
 export INFRAHUB_API_TOKEN="${INFRAHUB_API_TOKEN:-06438eb2-8019-4776-878c-0941b1f1d1ec}"
 export COLUMNS=200
 
-LOG="$(mktemp -d -t nfd41-verify-XXXXXX)"
+LOG="$(mktemp -d -t otternet-verify-XXXXXX)"
 FAILURES=0
 started=$(date +%s)
 
@@ -112,7 +112,7 @@ check "$empty" "0" "configuration artifacts with content"
 stage "lab and devices"
 # 31 since the tooling cluster: `tool-node1` is a lab node like any other,
 # even though nothing in the fabric reaches it.
-check "$(docker ps -q --filter name=clab-nfd41 | wc -l)" "31" "lab nodes running"
+check "$(docker ps -q --filter name=clab-otternet | wc -l)" "31" "lab nodes running"
 # Cycle 030 made the bootstrap's device step `invoke reconcile --converge`
 # rather than `invoke provision`, so the string this used to grep for is gone.
 grep -q "Every device is confirmed to match its rendered configuration" "$LOG/bootstrap.log" \
@@ -133,9 +133,9 @@ PYSTATE
 check "$confirmed" "14" "devices confirmed in_sync in DeploymentState"
 # The outcome, not the artifact: a config can look complete and describe a fabric
 # that is not there.
-check "$(docker exec clab-nfd41-spine1 Cli -p 15 -c 'show ip bgp summary' 2>/dev/null | grep -c Estab)" \
+check "$(docker exec clab-otternet-spine1 Cli -p 15 -c 'show ip bgp summary' 2>/dev/null | grep -c Estab)" \
     "5" "spine1 underlay sessions"
-check "$(docker exec clab-nfd41-spine1 Cli -p 15 -c 'show bgp evpn summary' 2>/dev/null | grep -c Estab)" \
+check "$(docker exec clab-otternet-spine1 Cli -p 15 -c 'show bgp evpn summary' 2>/dev/null | grep -c Estab)" \
     "5" "spine1 EVPN sessions"
 
 stage "kubernetes"
@@ -145,7 +145,7 @@ grep -q "torn down" "$LOG/bootstrap.log" \
     && pass "handover waited for teardown before resyncing" \
     || fail "handover did not report 'torn down'"
 
-for kind_name in "fabricapp nfd41-demo" "fabricpeering nfd41"; do
+for kind_name in "fabricapp otternet-demo" "fabricpeering otternet"; do
     set -- $kind_name
     ready=no
     for _ in $(seq 1 30); do
@@ -158,7 +158,7 @@ done
 
 # Two would mean the handover recreated the claim while the first namespace was
 # still terminating, which does not resolve on its own.
-check "$(kubectl get object --no-headers 2>/dev/null | grep -c 'nfd41-demo.*Namespace')" \
+check "$(kubectl get object --no-headers 2>/dev/null | grep -c 'otternet-demo.*Namespace')" \
     "1" "exactly one composed Namespace"
 # Only the applications Infrahub declares. The lab's installer applies its own
 # two as well and the handover deletes them, so anything left here is a workload
@@ -166,7 +166,7 @@ check "$(kubectl get object --no-headers 2>/dev/null | grep -c 'nfd41-demo.*Name
 # application from somewhere else would pass the two absence checks.
 check "$(kubectl get fabricapp --no-headers 2>/dev/null | wc -l | tr -d ' ')" "1" \
     "exactly one FabricApp, the one Infrahub models"
-for app in nfd41-access nfd41-observability; do
+for app in otternet-access otternet-observability; do
     check "$(kubectl get fabricapp $app --no-headers 2>/dev/null | wc -l | tr -d ' ')" "0" \
         "unmodelled $app removed by the handover"
 done
@@ -177,7 +177,7 @@ check "$(kubectl -n kube-system exec ds/cilium -- cilium-dbg bgp peers 2>/dev/nu
 # Four is now the exact set rather than a floor with slack in it: three pod
 # CIDRs, one per node, and the one VIP of the one application Infrahub models.
 # It used to carry the lab's two applications as well, so a missing VIP passed.
-routes=$(docker exec clab-nfd41-k8s-leaf1 Cli -p 15 -c 'show ip route vrf K8S_PROD bgp' 2>/dev/null \
+routes=$(docker exec clab-otternet-k8s-leaf1 Cli -p 15 -c 'show ip route vrf K8S_PROD bgp' 2>/dev/null \
     | grep -cE '10\.111|10\.112')
 [ "$routes" -ge 4 ] && pass "leaf learns the pod CIDRs and LoadBalancer VIPs ($routes)" \
     || fail "leaf learned only $routes cluster routes"
@@ -188,9 +188,9 @@ stage "the tooling cluster, and signing in"
 # provider and the portal people request services through, and the bootstrap
 # now deploys it -- so a bootstrap that brought up everything except the ability
 # to sign in used to pass this script with nothing to say about it.
-TOOL=clab-nfd41-tool-node1
-DESK=clab-nfd41-branch-desktop
-tk() { docker exec "$TOOL" kubectl -n nfd41-tooling "$@" 2>/dev/null; }
+TOOL=clab-otternet-tool-node1
+DESK=clab-otternet-branch-desktop
+tk() { docker exec "$TOOL" kubectl -n otternet-tooling "$@" 2>/dev/null; }
 
 for deploy in dex backstage; do
     check "$(tk get deploy "$deploy" -o jsonpath='{.status.availableReplicas}')" "1" \
@@ -239,7 +239,7 @@ J=$(mktemp)
 auth=$(curl -s -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 10     "http://10.90.0.1:8000/api/oidc/provider1/authorize")
 curl -s -L -b "$J" -c "$J" -o /tmp/login.html --max-time 15 "$auth"
 form=$(grep -oE "action=\"[^\"]*\"" /tmp/login.html | head -1 | cut -d\" -f2 | sed "s/&amp;/\&/g")
-cb=$(curl -s -b "$J" -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 15     -d "login=alice@nfd41.lab" -d "password=password" "http://10.90.0.11:32556${form}")
+cb=$(curl -s -b "$J" -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 15     -d "login=alice@otternet.lab" -d "password=password" "http://10.90.0.11:32556${form}")
 curl -s -b "$J" -c "$J" --max-time 20 "http://10.90.0.1:8000/api/oidc/provider1/token?${cb#*\?}"
 ' 2>/dev/null | grep -c access_token)
 check "$signin" "1" "alice signs in to Infrahub through Dex, from the branch desktop"

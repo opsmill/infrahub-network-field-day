@@ -621,8 +621,8 @@ def _rendered_with_custom_service() -> list[str]:
         {
             "node": {
                 "__typename": "SecurityService",
-                "name": {"value": "svc-branch-to-nfd41-demo-tcp-8080"},
-                "description": {"value": "tcp/8080, granted by branch-to-nfd41-demo"},
+                "name": {"value": "svc-branch-to-otternet-demo-tcp-8080"},
+                "description": {"value": "tcp/8080, granted by branch-to-otternet-demo"},
                 "port": {"value": 8080},
                 "ip_protocol": {"node": {"name": {"value": "tcp"}}},
             }
@@ -662,14 +662,14 @@ def test_the_applications_stanza_declares_exactly_the_non_builtins() -> None:
 def test_a_generated_service_is_declared() -> None:
     """The bug this stanza exists for.
 
-    Without it a policy referenced `svc-branch-to-nfd41-demo-tcp-8080`, nothing
+    Without it a policy referenced `svc-branch-to-otternet-demo-tcp-8080`, nothing
     declared it, and the device refused the entire commit with
     `statements constraint check failed` -- naming no object and pointing at no
     line. Every stanza test passed, because the rule itself was correct.
     """
     rendered = _rendered_with_custom_service()
     stanza = _stanza(rendered, "applications")
-    assert "    application svc-branch-to-nfd41-demo-tcp-8080 {" in stanza
+    assert "    application svc-branch-to-otternet-demo-tcp-8080 {" in stanza
     assert "        protocol tcp;" in stanza
     assert "        destination-port 8080;" in stanza
 

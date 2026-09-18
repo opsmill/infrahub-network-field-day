@@ -11,10 +11,10 @@
 # edit, and how the image is refreshed after a rebuild.
 set -euo pipefail
 
-NODE="${NFD41_TOOLING_NODE:-clab-nfd41-tool-node1}"
-NAMESPACE="${NFD41_TOOLING_NAMESPACE:-nfd41-tooling}"
-IMAGE="${NFD41_BACKSTAGE_IMAGE:-nfd41/backstage:local}"
-PORTAL_IP="${NFD41_PORTAL_IP:-10.90.0.11}"
+NODE="${OTTERNET_TOOLING_NODE:-clab-otternet-tool-node1}"
+NAMESPACE="${OTTERNET_TOOLING_NAMESPACE:-otternet-tooling}"
+IMAGE="${OTTERNET_BACKSTAGE_IMAGE:-otternet/backstage:local}"
+PORTAL_IP="${OTTERNET_PORTAL_IP:-10.90.0.11}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -58,7 +58,7 @@ else
     log "generating a self-signed certificate for $PORTAL_IP"
     openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
         -keyout "$WORK/tls.key" -out "$WORK/tls.crt" \
-        -subj "/CN=nfd41-portal" \
+        -subj "/CN=otternet-portal" \
         -addext "subjectAltName=IP:${PORTAL_IP},IP:127.0.0.1,DNS:localhost" \
         -addext "basicConstraints=critical,CA:TRUE" \
         2>/dev/null
@@ -146,11 +146,11 @@ k -n "$NAMESPACE" rollout status deploy/backstage --timeout=300s
 # without that preference changes nothing, and setting the preference without
 # installing the certificate changes nothing either.
 # --------------------------------------------------------------------------
-DESKTOP="${NFD41_BRANCH_DESKTOP:-clab-nfd41-branch-desktop}"
+DESKTOP="${OTTERNET_BRANCH_DESKTOP:-clab-otternet-branch-desktop}"
 if docker inspect "$DESKTOP" >/dev/null 2>&1; then
     k -n "$NAMESPACE" get secret backstage-tls -o jsonpath='{.data.tls\.crt}' \
         | base64 -d > "$WORK/portal.crt"
-    docker cp "$WORK/portal.crt" "$DESKTOP:/usr/local/share/ca-certificates/nfd41-portal.crt"
+    docker cp "$WORK/portal.crt" "$DESKTOP:/usr/local/share/ca-certificates/otternet-portal.crt"
     docker exec "$DESKTOP" update-ca-certificates >/dev/null 2>&1
     log "portal certificate trusted on $DESKTOP"
 else

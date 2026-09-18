@@ -142,7 +142,7 @@ def test_kubernetes_cluster_carries_the_cni_and_bgp_settings() -> None:
     assert attributes["bgp_timers"]["kind"] == "JSON"
     # A List of key=value strings, not a JSON map: Infrahub 1.10.6 returns a
     # 500 for a JSON attribute key containing a dot or a slash, and every
-    # Kubernetes label selector looks like `nfd41.lab/bgp`.
+    # Kubernetes label selector looks like `otternet.lab/bgp`.
     assert attributes["node_selector"]["kind"] == "List"
 
 

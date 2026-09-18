@@ -43,8 +43,8 @@ browser ──▶ /api/oidc/provider1/authorize?final_url=…
 
 | User | Password |
 | --- | --- |
-| `alice@nfd41.lab` | `password` |
-| `bob@nfd41.lab` | `password` |
+| `alice@otternet.lab` | `password` |
+| `bob@otternet.lab` | `password` |
 
 These are **fake, committed, lab-only credentials**. A lab that cannot be rebuilt from its own
 repository is not reproducible, which is why they are here rather than in someone's notes.

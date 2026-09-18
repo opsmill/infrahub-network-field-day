@@ -25,11 +25,11 @@ import yaml
 
 REPO_ROOT = Path(__file__).parents[2]
 SECURITY_EXTENSIONS = REPO_ROOT / "schemas/security_extensions.yml"
-SECURITY_OBJECTS = REPO_ROOT / "objects/32_nfd41_security.yml"
+SECURITY_OBJECTS = REPO_ROOT / "objects/32_otternet_security.yml"
 
 # The lab, as configured. Each value is evidence from
 # lab/avd/intended/configs/border-leaf1.cfg, not a preference.
-BORDER_LEAF = "leaf-nfd41-pod1-3-1"
+BORDER_LEAF = "leaf-otternet-pod1-3-1"
 ADVERTISING_ZONES = {
     "branch": "PL-DC-ADVERTISED-BRANCH",
     "wan": "PL-DC-ADVERTISED",
@@ -61,7 +61,7 @@ def _zones() -> dict[str, dict[str, Any]]:
     for document in yaml.safe_load_all(SECURITY_OBJECTS.read_text(encoding="utf-8")):
         if document and document.get("spec", {}).get("kind") == "SecurityZone":
             return {row["name"]: row for row in document["spec"]["data"]}
-    pytest.fail("objects/32_nfd41_security.yml declares no SecurityZone document")
+    pytest.fail("objects/32_otternet_security.yml declares no SecurityZone document")
 
 
 # ---------------------------------------------------------------------------

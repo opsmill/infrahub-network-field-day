@@ -1215,7 +1215,7 @@ async def test_trigger_generator_does_not_tolerate_a_5xx_without_the_flag() -> N
 
 # --- Optional device naming override ------------------------------------------
 # `device_name_template` lets a fabric whose hostnames are already fixed
-# elsewhere keep them. The NFD41 design does not use it — the lab is deployed
+# elsewhere keep them. The OTTERNET design does not use it — the lab is deployed
 # under the generators' default names instead — so it is covered here directly.
 
 
@@ -1228,9 +1228,9 @@ def test_render_device_name_applies_the_template() -> None:
     assert GeneratorMixin.render_device_name("spine{index}", "ignored", pod="pod1", index=2) == "spine2"
     assert (
         GeneratorMixin.render_device_name(
-            "{pod}-leaf{index}", "ignored", pod="nfd41", rack="K8S_LEAFS", rack_index=1, index=2
+            "{pod}-leaf{index}", "ignored", pod="otternet", rack="K8S_LEAFS", rack_index=1, index=2
         )
-        == "nfd41-leaf2"
+        == "otternet-leaf2"
     )
 
 

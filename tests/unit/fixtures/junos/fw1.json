@@ -1124,7 +1124,7 @@
       {
         "node": {
           "name": {
-            "value": "nfd41-perimeter"
+            "value": "otternet-perimeter"
           },
           "device_target": {
             "node": {

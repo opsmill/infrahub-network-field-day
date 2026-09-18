@@ -34,9 +34,9 @@ OBJECTS = REPO_ROOT / "objects"
 
 # Devices are declared across these files; the platforms and types they name
 # are declared in the three numbered files below them.
-DEVICE_FILES = ("31_nfd41_offfabric_devices.yml",)
+DEVICE_FILES = ("31_otternet_offfabric_devices.yml",)
 PLATFORM_FILE = "03_device_type.yml"
-DEVICE_TYPE_FILE = "20_nfd41_device_types.yml"
+DEVICE_TYPE_FILE = "20_otternet_device_types.yml"
 MANUFACTURER_FILE = "02_manufacturer.yml"
 
 # Kinds that can hold a device type. ComputePhysicalServer is absent on purpose.

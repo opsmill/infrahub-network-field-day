@@ -242,7 +242,7 @@ The escape hatch is the delivery mechanism for capabilities the AVD example scen
 ## Native inputs for the AVD example scenarios
 
 :::note
-This repository ships seed data for one fabric, `NFD41_FABRIC`. The schema surface below — the extra device roles, underlay choices and EVPN inputs — is retained from the upstream reference design, so those scenarios remain expressible; there is simply no seed data for them here.
+This repository ships seed data for one fabric, `OTTERNET_FABRIC`. The schema surface below — the extra device roles, underlay choices and EVPN inputs — is retained from the upstream reference design, so those scenarios remain expressible; there is simply no seed data for them here.
 :::
 
 The following native schema inputs anchor the AVD example scenarios. They are optional and default to backward-compatible values, so existing designs are unaffected:

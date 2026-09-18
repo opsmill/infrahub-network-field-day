@@ -26,9 +26,9 @@ from typing import Any
 import pytest
 import yaml
 
-OBJECT_FILE = Path("objects/36_nfd41_app_services.yml")
+OBJECT_FILE = Path("objects/36_otternet_app_services.yml")
 PAYLOAD_DIR = Path("payloads")
-VALUES_FILE = PAYLOAD_DIR / "nfd41-demo-values.yaml"
+VALUES_FILE = PAYLOAD_DIR / "otternet-demo-values.yaml"
 
 # cowboysysop/whoami, verified against the repository's own index.yaml and
 # templates at the time this was pinned:
@@ -55,9 +55,9 @@ def _data(kind: str) -> list[dict[str, Any]]:
 
 def _demo() -> dict[str, Any]:
     for entry in _data("ServiceFabricApp"):
-        if entry.get("name") == "nfd41-demo":
+        if entry.get("name") == "otternet-demo":
             return entry
-    pytest.fail("nfd41-demo is not in the seed data")
+    pytest.fail("otternet-demo is not in the seed data")
 
 
 def _values() -> dict[str, Any]:
@@ -116,7 +116,7 @@ def test_the_named_service_agrees_with_the_charts_port() -> None:
 
     # junos-http's port, from the seed data that declares it rather than from a
     # number repeated here.
-    security = list(yaml.safe_load_all(Path("objects/32_nfd41_security.yml").read_text(encoding="utf-8")))
+    security = list(yaml.safe_load_all(Path("objects/32_otternet_security.yml").read_text(encoding="utf-8")))
     services = [
         entry
         for doc in security

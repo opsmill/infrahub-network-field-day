@@ -260,7 +260,7 @@ cluster's nodes are cabled to
 **Target group**: `service_fabric_peerings`
 
 This is the generator that sits underneath the service layer. Before it, each session's peer
-device, address and BGP AS were written by hand in `objects/34_nfd41_cluster.yml`. The AS was
+device, address and BGP AS were written by hand in `objects/34_otternet_cluster.yml`. The AS was
 a second copy of a number the fabric model already held, and the lab's own notes describe what
 a second copy costs: change either side without the other and BGP either does not come up or
 comes up carrying nothing.
@@ -286,7 +286,7 @@ session first. A leaf with no such SVI, with more than one, or with one carrying
 fails naming the device: the address is derived, never invented.
 
 **Two fields are derived; one is not.** `name` remains a lab-facing label — `k8s-leaf1` is the
-containerlab hostname of the switch the fabric model calls `leaf-nfd41-pod1-1-1`, and the lab
+containerlab hostname of the switch the fabric model calls `leaf-otternet-pod1-1-1`, and the lab
 models the same switches twice — so a session created from scratch takes its device's name.
 That means delete-and-recreate is **not** artifact-neutral: the peer labels in the rendered
 manifest change even though addresses and ASNs do not.
@@ -369,7 +369,7 @@ would skip the tracking context's group update, leaving the run's objects outsid
 #### The approval gate
 
 `approved` is the gate, so an unapproved request is inert rather than merely hidden. The grant
-seeded in `objects/38_nfd41_access_grants.yml` is unapproved deliberately: it keeps the rendered
+seeded in `objects/38_otternet_access_grants.yml` is unapproved deliberately: it keeps the rendered
 artifact byte-identical to what the unit tests hold against the device's own configuration, while
 leaving the whole demo one field-flip away.
 
@@ -498,13 +498,13 @@ before this generator every exposed application needed a block picked by hand ou
 
 | Origin | Example | May the generator delete it? |
 | --- | --- | --- |
-| Declared in `objects/` by a human | `10.112.240.0/28` for `nfd41-demo` | **No** |
+| Declared in `objects/` by a human | `10.112.240.0/28` for `otternet-demo` | **No** |
 | Allocated from the pool by this generator | `10.112.240.16/28` onward | Yes |
 
 `vip_block_managed` records which, is set only on the allocating path, and is the only thing
 withdrawal consults. It plays exactly the role `managed_by_service` plays on
 `SecurityPolicyRule`: the guard that lets a generator work beside hand-maintained data. Deleting
-the seeded block would remove an object `objects/29_nfd41_offfabric_prefixes.yml` owns and break
+the seeded block would remove an object `objects/29_otternet_offfabric_prefixes.yml` owns and break
 the next `invoke load`.
 
 It is written in the **same save** as the block. Two saves leave a window in which the block
@@ -522,7 +522,7 @@ draw from those supernets; two would allocate against each other.
 
 #### What it does not do
 
-Reallocate an existing block. That is what keeps `nfd41-demo` on `10.112.240.0/28`, which matters
+Reallocate an existing block. That is what keeps `otternet-demo` on `10.112.240.0/28`, which matters
 because the `zone-advertisement` check measures grant VIPs against it and the rendered manifest
 is already applied in the cluster.
 
@@ -574,7 +574,7 @@ generator. An empty list is not "the whole fabric"; it is nowhere, with an artif
 
 #### The pools are found by role, not by name
 
-A default of `NFD41-Segment-Subnet-Pool` would tie the generator to one lab's object files and,
+A default of `OTTERNET-Segment-Subnet-Pool` would tie the generator to one lab's object files and,
 when it was missing, fail with a message naming a string that appears in no schema. Instead:
 
 - the subnet pool is the `CoreIPPrefixPool` whose resources carry role `tenant_host`;

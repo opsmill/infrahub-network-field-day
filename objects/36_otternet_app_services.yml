@@ -1,0 +1,92 @@
+---
+# The demo application, as an ordered service.
+#
+# Derived from ../lab/crossplane/apps/10-demo.yaml, which is the oracle the
+# transform is measured against -- with one deliberate divergence since cycle
+# 033. That file expresses the workload as raw manifests, and says why: whoami
+# had no upstream chart worth depending on. An application here is now a chart
+# and nothing else, so this names `cowboysysop/whoami` 6.0.0, whose appVersion
+# 1.11.0 is the same `traefik/whoami:v1.11.0` image. The backend tier and its
+# two L7 policies are not reproducible from one Helm release and are gone.
+#
+# The values payload is a file attachment uploaded by
+# scripts/seed_app_payloads.py rather than an attribute -- see
+# payloads/otternet-demo-values.yaml for why.
+#
+# Selectors are `key=value` strings rather than JSON maps, because Infrahub
+# 1.10.6 returns HTTP 500 for a JSON attribute key containing a dot or a slash
+# and every Kubernetes label selector has both. The transform parses them back
+# into maps. See schemas/MARKETPLACE.md.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: ServiceFabricApp
+  data:
+    - name: otternet-demo
+      description: "The two-tier whoami demo workload"
+      status: active
+      owner: branch
+      cluster: otternet
+      namespace_name: otternet-demo
+      vrf: K8S_PROD
+
+      # The workload. Mandatory together since cycle 033: the XRD requires
+      # repository, name and version whenever a chart is present, so a
+      # two-of-three chart is a resource the cluster rejects.
+      chart_repository: https://cowboysysop.github.io/charts/
+      chart_name: whoami
+      chart_version: "6.0.0"
+
+      # Exposure. The /28 is this app's own block out of the cluster-wide VIP
+      # pool, so a claim cannot hand itself an address from another app's range.
+      exposed: true
+      vip_block: ["10.112.240.0/28", "default"]
+      service_selector:
+        - "otternet.lab/advertise=true"
+
+      # Policy. These three CIDRs are the third of three independent gates --
+      # the route has to exist, the firewall has to permit the session, and then
+      # this has to name the source. They are relationships rather than CIDR
+      # text precisely so all three gates reference the same objects.
+      policy_default_deny: true
+      policy_allow_dns: true
+      # The XRD defaults this to true and the hand-written manifest omits it,
+      # so it is true in the deployed app. Seeding false would have rendered a
+      # manifest that denies intra-namespace traffic where the live one permits
+      # it -- caught by the field-by-field comparison against 10-demo.yaml.
+      policy_allow_intra_namespace: true
+      policy_allow_egress_api_server: false
+      policy_allow_egress_internet: false
+      allowed_source_prefixes:
+        - ["10.210.0.0/24", "default"]
+        - ["10.60.0.0/16", "default"]
+        - ["10.70.0.0/24", "default"]
+      # THE PORT THE PODS ANSWER ON, which is not the port a firewall rule
+      # needs. This is the CiliumNetworkPolicy's ingress port, applied to the
+      # pods; the rule's destination is the VIP. They differed under the old
+      # manifests (Service 80 -> targetPort 8080) and the chart serves 80
+      # directly, so they now agree -- but they are still different questions
+      # and `advertised_services` below is what answers the second one.
+      policy_allow_ports:
+        - port: "80"
+          protocol: TCP
+      # The pods the allow-rules apply to. `app=frontend` until cycle 033, which
+      # was a label the old hand-written Deployment set and the chart does not:
+      # left in place it would select nothing, and a CiliumNetworkPolicy that
+      # matches no endpoint protects nothing while reporting no fault.
+      # `app.kubernetes.io/name` is chart-derived and stable, unlike
+      # `app.kubernetes.io/instance`, which follows the release name.
+      workload_selector:
+        - "app.kubernetes.io/name=whoami"
+
+      # WHAT A GRANT PERMITS. `generate-app-access` read the manifests for
+      # LoadBalancer Services to find this; a chart's Services exist only once
+      # Helm has run, so the application names the service object instead.
+      # `junos-http` is port 80 tcp and is already declared by the firewall, so
+      # a grant references it rather than creating a second application object
+      # for the same port -- and revoking that grant never deletes it.
+      advertised_services:
+        - junos-http
+
+      member_of_groups:
+        - service_fabric_apps

@@ -350,17 +350,17 @@ def test_the_object_template_moved_with_its_flag() -> None:
     ``schemas/`` at all: Infrahub generates it, together with a
     ``TemplateDcimDevice`` kind, from ``generate_template: true`` on the node. So
     it moves by moving the flag, not by moving a YAML block -- and the seeded
-    templates in ``objects/20_nfd41_device_types.yml`` must change kind with it.
+    templates in ``objects/20_otternet_device_types.yml`` must change kind with it.
 
     Checked before moving it: all seven ``object_template`` values in
-    ``objects/26_nfd41_devices.yml`` are spines and leaves. No router uses one.
+    ``objects/26_otternet_devices.yml`` are spines and leaves. No router uses one.
     """
     schema = _yaml(BASE_DCIM)
     assert _node_entry(schema, "Dcim", "FabricSwitch").get("generate_template") is True
     assert _node_entry(schema, "Dcim", "Device").get("generate_template") is not True, (
         "DcimDevice must lose generate_template, or it keeps an object_template relationship the routers never use"
     )
-    assert "kind: TemplateDcimFabricSwitch" in _text("objects/20_nfd41_device_types.yml")
+    assert "kind: TemplateDcimFabricSwitch" in _text("objects/20_otternet_device_types.yml")
 
 
 def test_display_properties_match_dcim_device() -> None:

@@ -528,7 +528,7 @@ nodes:
   #
   # `generate_template: true` moved here FROM DcimDevice. It is what produces
   # the object_template relationship and the TemplateDcimFabricSwitch kind that
-  # objects/20_nfd41_device_types.yml seeds; no router ever used one.
+  # objects/20_otternet_device_types.yml seeds; no router ever used one.
   # ==========================================================================
   - name: FabricSwitch
     label: Fabric Switch

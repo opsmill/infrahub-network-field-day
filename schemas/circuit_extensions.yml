@@ -3,7 +3,7 @@
 version: "1.0"
 
 # ============================================================================
-# NFD41 — what a circuit end actually lands on.
+# OTTERNET — what a circuit end actually lands on.
 #
 # `circuit/circuit.yml` is adopted from the marketplace (`infrahub/circuit`
 # 1.0.1) and is kept byte-identical to the published version so a re-download
@@ -13,7 +13,7 @@ version: "1.0"
 # WHY THIS EXISTS. `DcimCircuitEndpoint` models a side, a name, a status and a
 # location, but not the interface the circuit terminates on. Without that, the
 # addresses on both ends of an attachment circuit have nowhere structural to
-# live, and objects/33_nfd41_wan.yml ended up recording them the only way it
+# live, and objects/33_otternet_wan.yml ended up recording them the only way it
 # could:
 #
 #   - side: a

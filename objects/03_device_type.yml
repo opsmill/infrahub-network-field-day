@@ -1,8 +1,8 @@
 ---
 # ============================================================================
-# Platforms for the NFD41 lab's two node kinds.
+# Platforms for the OTTERNET lab's two node kinds.
 #
-# The ContainerLab image tags are the ones lab/nfd41.clab.yml actually deploys.
+# The ContainerLab image tags are the ones lab/otternet.clab.yml actually deploys.
 # A tag here that does not exist on the ContainerLab host produces a topology
 # that fails to come up, so these track the lab rather than upstream latest.
 # ============================================================================

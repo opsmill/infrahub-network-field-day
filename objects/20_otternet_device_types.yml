@@ -1,0 +1,116 @@
+---
+# ============================================================================
+# OTTERNET — device type and templates for the containerlab cEOS switches.
+#
+# The OTTERNET fabric runs on Arista cEOS-LAB containers, not physical hardware, so
+# it needs its own device type and port layout: every switch presents plain
+# `EthernetN` interfaces and the topology only wires the low-numbered ones.
+#
+# Port layout mirrors lab/otternet.clab.yml, which is the authority -- the
+# containerlab wiring is a physical fact of the deployed lab, and an interface
+# role here that disagrees with it produces a fabric that cables itself onto
+# ports that have no wire.
+#
+#   leaf  Ethernet1-2   uplinks to the two spines       (role spine)
+#   leaf  Ethernet3-4   MLAG peer-link port-channel     (role mlag_peer)
+#   leaf  Ethernet5-24  workload and handoff ports      (role server)
+#   spine Ethernet1-8   downlinks to the leaves         (role leaf)
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDeviceType
+  data:
+    - name: "Arista cEOS-LAB"
+      manufacturer: Arista
+      platform: EOS
+      description: "Arista cEOS-LAB container switch (containerlab)"
+      part_number: cEOS-LAB
+      height: 1
+      full_depth: false
+    # Everything below exists so that every device in the graph says what it
+    # is. Before this, only the seven fabric switches had a device type: the
+    # seven WAN routers and the firewall had neither a type nor a platform, so
+    # the model held devices it could not describe.
+    #
+    # That is not only untidy. `transforms/containerlab_topology.py` reads a
+    # node's kind and image from the platform, so a device without one cannot
+    # render into a topology at all -- which is half the reason that artifact
+    # covers 14 of the lab's 30 nodes.
+    - name: "FRR Container Router"
+      manufacturer: FRRouting
+      platform: FRR
+      description: "FRRouting container; the WAN's PE, P, internet and CE routers"
+      height: 1
+      full_depth: false
+    - name: "Juniper vSRX"
+      manufacturer: Juniper
+      platform: JunOS
+      description: "Juniper vSRX, wrapped by vrnetlab for containerlab"
+      part_number: vSRX
+      height: 1
+      full_depth: false
+    # cust-acme-dr-ce is a customer edge that runs no routing protocol -- acme's
+    # DR site attaches statically -- so the lab gives it a plain multitool
+    # container rather than FRR. Typing it as an FRR router would be a tidier
+    # table and a false one.
+    - name: "Linux Container"
+      manufacturer: Generic
+      platform: Linux
+      description: "Plain Linux container with no network OS of its own"
+      height: 1
+      full_depth: false
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: TemplateDcimFabricSwitch
+  parameters:
+    expand_range: true
+  data:
+    - template_name: "otternet-spine-switch"
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      role: "spine"
+      interfaces:
+        kind: TemplateInterfaceVirtual
+        data:
+          - template_name: "OtternetSpineLoopback0"
+            name: "Loopback0"
+            role: "loopback"
+    - template_name: "otternet-spine-switch"
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      role: "spine"
+      interfaces:
+        kind: TemplateInterfacePhysical
+        parameters:
+          expand_range: true
+        data:
+          - template_name: "OtternetSpineEthernet[1-8]"
+            name: "Ethernet[1-8]"
+            profiles: ["profile-interface-leaf"]
+    - template_name: "otternet-leaf-switch"
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      role: "leaf"
+      interfaces:
+        kind: TemplateInterfaceVirtual
+        data:
+          - template_name: "OtternetLeafLoopback0"
+            name: "Loopback0"
+            role: "loopback"
+    - template_name: "otternet-leaf-switch"
+      device_type: ["Arista", "Arista cEOS-LAB"]
+      role: "leaf"
+      interfaces:
+        kind: TemplateInterfacePhysical
+        parameters:
+          expand_range: true
+        data:
+          - template_name: "OtternetLeafEthernet[1-2]"
+            name: "Ethernet[1-2]"
+            profiles: ["profile-interface-spine"]
+          - template_name: "OtternetLeafEthernet[3-4]"
+            name: "Ethernet[3-4]"
+            profiles: ["profile-interface-mlag-peer"]
+          - template_name: "OtternetLeafEthernet[5-24]"
+            name: "Ethernet[5-24]"
+            profiles: ["profile-interface-server"]

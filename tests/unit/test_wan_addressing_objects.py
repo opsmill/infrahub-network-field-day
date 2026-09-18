@@ -28,9 +28,9 @@ from typing import Any
 import pytest
 import yaml
 
-ADDRESSING_FILE = Path("objects/31a_nfd41_wan_addressing.yml")
-WAN_FILE = Path("objects/33_nfd41_wan.yml")
-SERVICES_FILE = Path("objects/37_nfd41_wan_services.yml")
+ADDRESSING_FILE = Path("objects/31a_otternet_wan_addressing.yml")
+WAN_FILE = Path("objects/33_otternet_wan.yml")
+SERVICES_FILE = Path("objects/37_otternet_wan_services.yml")
 LAB_TENANTS = Path("../lab/wan/tenants.yml")
 
 IPV4 = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
@@ -265,9 +265,9 @@ def test_the_addressing_file_sorts_between_the_devices_and_the_circuits() -> Non
     """Interfaces hang off file 31's devices and are named by file 33's circuits."""
     names = sorted(
         [
-            "31_nfd41_offfabric_devices.yml",
+            "31_otternet_offfabric_devices.yml",
             ADDRESSING_FILE.name,
-            "32_nfd41_security.yml",
+            "32_otternet_security.yml",
             WAN_FILE.name,
         ]
     )
@@ -336,7 +336,7 @@ def test_every_bgp_site_names_its_sessions() -> None:
 
     The branch peers with border-leaf1 over a private fibre, so only the branch
     side belongs to the WAN -- the fabric side is already modelled in
-    objects/27_nfd41_vrf_services.yml.
+    objects/27_otternet_vrf_services.yml.
     """
     sites = {(s["tenant"], s["name"]): s for s in _data(WAN_FILE, "WanSite")}
     expected = {

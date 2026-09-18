@@ -142,7 +142,7 @@ nodes:
         # A List of "key=value" strings, not a JSON map. Infrahub 1.10.6
         # returns a 500 when a JSON attribute's object key contains a dot or a
         # slash, and every Kubernetes label selector looks like
-        # `nfd41.lab/bgp`. opsmill/infrahub-dogfooding hits the same wall and
+        # `otternet.lab/bgp`. opsmill/infrahub-dogfooding hits the same wall and
         # solves it the same way, parsing `key=value` pairs in its transform.
         description: "Selects which cluster members run a BGP speaker, as key=value pairs"
         order_weight: 2000
@@ -153,7 +153,7 @@ nodes:
         # A List of "key=value" strings, not a JSON map. Infrahub 1.10.6
         # returns a 500 when a JSON attribute's object key contains a dot or a
         # slash, and every Kubernetes label selector looks like
-        # `nfd41.lab/bgp`. opsmill/infrahub-dogfooding hits the same wall and
+        # `otternet.lab/bgp`. opsmill/infrahub-dogfooding hits the same wall and
         # solves it the same way, parsing `key=value` pairs in its transform.
         description: "Label tying advertisements to this cluster's sessions, as key=value pairs"
         order_weight: 2010

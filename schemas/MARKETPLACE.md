@@ -101,9 +101,9 @@ an internal server error. Isolated by bisection:
 | Key | Result |
 |-----|--------|
 | `bgp` | ok |
-| `nfd41.lab` | **500** |
-| `nfd41/bgp` | **500** |
-| `nfd41.lab/bgp` | **500** |
+| `otternet.lab` | **500** |
+| `otternet/bgp` | **500** |
+| `otternet.lab/bgp` | **500** |
 
 Every Kubernetes label selector is of the last form, so this blocks storing one
 as a JSON map. `node_selector`, `advertisement_selector`, `service_selector` and
@@ -113,6 +113,6 @@ the transform.
 
 **Still armed for the service-data cycle**: `ServiceFabricApp.manifests` and
 `chart_values` are `JSON` by necessity — arbitrary Kubernetes and Helm payloads,
-which routinely contain dotted keys such as `nfd41.lab/advertise`. Loading real
+which routinely contain dotted keys such as `otternet.lab/advertise`. Loading real
 application data will hit this. Options at that point are to store the payload
 as a text blob, attach it as a `CoreFileObject`, or wait for a server fix.

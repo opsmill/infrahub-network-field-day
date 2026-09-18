@@ -487,7 +487,7 @@ def prefixes_other_grants_record(
 
     `live_only=False` -- AUTHORSHIP. Whether a prefix already on the application
     is GRANT-OWNED at all, which is the only thing that makes recording it safe.
-    A prefix no grant claims was declared by a human -- `nfd41-demo` names three
+    A prefix no grant claims was declared by a human -- `otternet-demo` names three
     in `objects/` -- and recording one of those would mean the first revocation
     deleted it and broke an application nobody touched. Withdrawn siblings count
     here, because a prefix they added is still not a human's.
@@ -583,7 +583,7 @@ def derive_policy(parsed: GenerateAppAccessQuery, grant_name: str) -> str:
 
     ``SecurityPolicyRule.policy`` is mandatory and cardinality one, and the
     grant does not name a policy. Exactly one has to target the firewall; the
-    lab has one, ``nfd41-perimeter``.
+    lab has one, ``otternet-perimeter``.
     """
     policies = [edge.node for edge in parsed.security_policy.edges if edge.node is not None]
     targeted = [policy for policy in policies if _node_of(policy.device_target) is not None]
@@ -1082,7 +1082,7 @@ class AppAccessGenerator(InfrahubGenerator):
         BOTH SIDES ARE RECORDED, and that is what makes revocation safe. The
         prefix goes onto the application, and its id goes onto the GRANT --
         which is the only basis on which it may ever be removed again, because
-        `allowed_source_prefixes` is shared: nfd41-demo declares three by hand
+        `allowed_source_prefixes` is shared: otternet-demo declares three by hand
         and another grant may name the same source. It plays exactly the role
         `managed_by_service` plays for rules.
 
@@ -1112,7 +1112,7 @@ class AppAccessGenerator(InfrahubGenerator):
         # RECORD ONLY WHAT IS GRANT-OWNED, which is either a prefix this run
         # added or one another grant already claims. A prefix that was already
         # on the application and that NO grant claims was put there by a human
-        # -- nfd41-demo declares three in `objects/` -- and recording one of
+        # -- otternet-demo declares three in `objects/` -- and recording one of
         # those would make the first revocation delete it, breaking an
         # application nobody touched. Authorship is the only safe basis for
         # deletion, exactly as `vip_block_managed` is for VIP blocks.

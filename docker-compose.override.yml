@@ -100,7 +100,7 @@ services:
   # image is built or rebuilt.
   # ==========================================================================
   backstage:
-    image: nfd41/backstage:local
+    image: otternet/backstage:local
     build:
       context: ./backstage
       dockerfile: packages/backend/Dockerfile
@@ -143,7 +143,7 @@ services:
       # Signs the express session the OIDC strategy keeps its state and nonce
       # in. A lab default so the stack comes up unattended; override it anywhere
       # that matters.
-      BACKSTAGE_SESSION_SECRET: ${BACKSTAGE_SESSION_SECRET:-nfd41-lab-backstage-session-secret}
+      BACKSTAGE_SESSION_SECRET: ${BACKSTAGE_SESSION_SECRET:-otternet-lab-backstage-session-secret}
     ports:
       # The backend serves the frontend bundle, so one port does both.
       - "${BACKSTAGE_PORT:-3001}:7007"
@@ -221,11 +221,11 @@ services:
       INFRAHUB_API_TOKEN: ${INFRAHUB_INITIAL_ADMIN_TOKEN:-06438eb2-8019-4776-878c-0941b1f1d1ec}
       # Device credentials come from the environment and nowhere else: never
       # baked into the image, never committed, never written into Infrahub.
-      NFD41_EOS_USERNAME: ${NFD41_EOS_USERNAME:-admin}
-      NFD41_EOS_PASSWORD: ${NFD41_EOS_PASSWORD:-admin}
-      NFD41_VSRX_USERNAME: ${NFD41_VSRX_USERNAME:-admin}
-      NFD41_VSRX_PASSWORD: ${NFD41_VSRX_PASSWORD:-admin@123}
-      NFD41_RECONCILE_INTERVAL: ${NFD41_RECONCILE_INTERVAL:-600}
+      OTTERNET_EOS_USERNAME: ${OTTERNET_EOS_USERNAME:-admin}
+      OTTERNET_EOS_PASSWORD: ${OTTERNET_EOS_PASSWORD:-admin}
+      OTTERNET_VSRX_USERNAME: ${OTTERNET_VSRX_USERNAME:-admin}
+      OTTERNET_VSRX_PASSWORD: ${OTTERNET_VSRX_PASSWORD:-admin@123}
+      OTTERNET_RECONCILE_INTERVAL: ${OTTERNET_RECONCILE_INTERVAL:-600}
     command: python scripts/reconcile.py
 
   semaphore:

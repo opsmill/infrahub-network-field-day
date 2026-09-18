@@ -1,9 +1,9 @@
 """Unit tests for the network segment generator.
 
 Fixtures rather than a live server, built from the real shapes in
-``objects/21_nfd41_pools.yml`` and ``objects/24_nfd41_tenants.yml``: one prefix
+``objects/21_otternet_pools.yml`` and ``objects/24_otternet_tenants.yml``: one prefix
 pool whose supernet carries ``tenant_host``, one number pool allocating
-``IpamVLAN.vlan_id``, and one ``NFD41-L2Domain``. Invented fixtures would pass
+``IpamVLAN.vlan_id``, and one ``OTTERNET-L2Domain``. Invented fixtures would pass
 while missing what the defaults are actually resolved from.
 
 **The claim most of this file exists to hold is that a segment lands
@@ -38,7 +38,7 @@ from generators.generate_network_segment_query import GenerateNetworkSegmentQuer
 SEGMENT_NAME = "PLATFORM_HOSTS"
 SUBNET_POOL_ID = "pool-subnet"
 VLAN_POOL_ID = "pool-vlan"
-L2DOMAIN_ID = "l2-nfd41"
+L2DOMAIN_ID = "l2-otternet"
 VRF_ID = "vrf-k8s-prod"
 TAG_K8S = "tag-k8s"
 
@@ -75,7 +75,7 @@ def _segment(
             "prefix_length": _wrap(prefix_length),
             "tenant": _named("tenant-platform", "PLATFORM"),
             "vrf": _named(vrf, "K8S_PROD") if vrf else {"node": None},
-            "fabric": _named("fabric-nfd41", "NFD41_FABRIC"),
+            "fabric": _named("fabric-otternet", "OTTERNET_FABRIC"),
             "avd_tags": {"edges": [{"node": {"id": tag, "name": _wrap(tag.removeprefix("tag-"))}} for tag in tags]},
             "subnet_pool": _named(subnet_pool, "named-subnet-pool") if subnet_pool else {"node": None},
             "vlan_pool": _named(vlan_pool, "named-vlan-pool") if vlan_pool else {"node": None},
@@ -95,10 +95,10 @@ def _segment(
 def _prefix_pools(*, role: str = "tenant_host", extra_with_role: bool = False) -> dict[str, Any]:
     """The lab's four prefix pools. Only the supernet carries ``tenant_host``."""
     pools = [
-        ("pool-loopback", "NFD41-Loopback-Pool", "loopback"),
-        (SUBNET_POOL_ID, "NFD41-Segment-Subnet-Pool", role),
-        ("pool-uplink", "NFD41-Uplink-Pool", "fabric_point_to_point"),
-        ("pool-vtep", "NFD41-VTEP-Pool", "loopback-vtep"),
+        ("pool-loopback", "OTTERNET-Loopback-Pool", "loopback"),
+        (SUBNET_POOL_ID, "OTTERNET-Segment-Subnet-Pool", role),
+        ("pool-uplink", "OTTERNET-Uplink-Pool", "fabric_point_to_point"),
+        ("pool-vtep", "OTTERNET-VTEP-Pool", "loopback-vtep"),
     ]
     if extra_with_role:
         pools.append(("pool-second", "Second-Segment-Pool", "tenant_host"))
@@ -120,9 +120,9 @@ def _prefix_pools(*, role: str = "tenant_host", extra_with_role: bool = False) -
 
 def _number_pools(*, node: str = "IpamVLAN") -> dict[str, Any]:
     pools = [
-        ("pool-asn", "NFD41-ASN-Pool", "RoutingAsn", "asn"),
-        ("pool-nodeid", "NFD41-NodeID-Pool", "DcimFabricSwitch", "node_id"),
-        (VLAN_POOL_ID, "NFD41-Segment-VLAN-Pool", node, "vlan_id"),
+        ("pool-asn", "OTTERNET-ASN-Pool", "RoutingAsn", "asn"),
+        ("pool-nodeid", "OTTERNET-NodeID-Pool", "DcimFabricSwitch", "node_id"),
+        (VLAN_POOL_ID, "OTTERNET-Segment-VLAN-Pool", node, "vlan_id"),
     ]
     return {
         "edges": [
@@ -155,7 +155,7 @@ def _query(
         existing_svi={"edges": existing_svi or []},
         CoreIPPrefixPool=prefix_pools if prefix_pools is not None else _prefix_pools(),
         CoreNumberPool=number_pools if number_pools is not None else _number_pools(),
-        IpamL2Domain={"edges": [{"node": {"id": d, "name": _wrap("NFD41-L2Domain")}} for d in domains]},
+        IpamL2Domain={"edges": [{"node": {"id": d, "name": _wrap("OTTERNET-L2Domain")}} for d in domains]},
     )
 
 

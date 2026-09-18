@@ -1,0 +1,139 @@
+---
+# ============================================================================
+# OTTERNET — the devices outside the Arista fabric.
+#
+# THE FIREWALL IS ITS OWN KIND. fw1 is a SecurityFirewall, not a DcimDevice
+# carrying a `firewall` role: the adopted marketplace security schema makes
+# SecurityFirewall inherit DcimGenericDevice and DcimPhysicalDevice, so the
+# role was removed from the dropdown entirely. Its interfaces live in 32_*,
+# not here: SecurityFirewallInterface.security_zone is mandatory, so the zones
+# have to exist first.
+#
+# THE WAN ROUTERS ARE PLAIN DcimDevice OBJECTS with the non-EOS roles added in
+# schemas/dcim_extensions.yml. None of those roles is in ROLE_TO_AVD_TYPE, and
+# none of these devices joins the avd_devices group — so pyAVD never sees them
+# and never tries to render EOS for an FRR router or a vSRX.
+#
+# No rack is set: DcimDevice requires only a name, and none of this equipment
+# is in the datacentre. The customer-premises routers carry a location instead.
+#
+# Deliberately not loaded here: the demo hosts (cust-*-host, branch-host,
+# branch-desktop, branch-guacd, internet-host). Nothing in the schema
+# references them, and the branch desktop and Guacamole containers are lab
+# plumbing for demonstrating access rather than modelled infrastructure.
+#
+# Sourced from ../lab/wan/tenants.yml and ../lab/configs/fw/vsrx/junos.conf.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityFirewall
+  data:
+    - name: fw1
+      description: "Perimeter vSRX; every tenant VRF's only route out points at one of its zones"
+      role: edge_firewall
+      rack_face: front
+      device_type: ["Juniper", "Juniper vSRX"]
+      platform: JunOS
+      # 9192 (the vSRX interface maximum) - 14 Ethernet - 20 IP - 20 TCP.
+      # The interfaces run 36 bytes short of the fabric's 9214, so two hosts
+      # that both believe the path is 9214 would negotiate MSS 9174 and build a
+      # packet this firewall silently cannot forward. Transcribed from
+      # ../lab/configs/fw/vsrx/junos.conf, `security flow tcp-mss all-tcp`.
+      tcp_mss: 9138
+      member_of_groups:
+        - junos_firewalls
+
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDevice
+  data:
+    # ---- the provider ----------------------------------------------------
+    - name: isp-pe1
+      description: "Customer-facing provider edge; holds a VRF per tenant"
+      role: isp_edge
+      status: active
+      rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
+      member_of_groups:
+        - frr_routers
+    - name: isp-pe2
+      description: "Provider core; default VRF transit and the datacentre handoff"
+      role: isp_core
+      status: active
+      rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
+      member_of_groups:
+        - frr_routers
+    - name: internet-rtr
+      description: "AS 64500 border router"
+      role: internet_edge
+      status: active
+      rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
+      location:
+        kind: LocationSite
+        data:
+          name: internet-edge
+
+      member_of_groups:
+        - frr_routers
+    # ---- customer edge ---------------------------------------------------
+    - name: cust-acme-ce
+      description: "acme hq CE; runs eBGP with the provider edge"
+      role: customer_edge
+      status: active
+      rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
+      location:
+        kind: LocationSite
+        data:
+          name: acme-hq
+      member_of_groups:
+        - frr_routers
+    - name: cust-acme-dr-ce
+      description: "acme dr CE; statically routed, no routing protocol at all"
+      role: customer_edge
+      status: active
+      rack_face: front
+      device_type: ["Generic", "Linux Container"]
+      platform: Linux
+      location:
+        kind: LocationSite
+        data:
+          name: acme-dr
+    - name: cust-globex-ce
+      description: "globex hq CE; runs eBGP with the provider edge"
+      role: customer_edge
+      status: active
+      rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
+      location:
+        kind: LocationSite
+        data:
+          name: globex-hq
+
+      member_of_groups:
+        - frr_routers
+    # ---- the branch ------------------------------------------------------
+    - name: branch-rtr
+      description: "Branch router with an integrated switched LAN; private circuit to the border leaf"
+      role: branch_router
+      status: active
+      rack_face: front
+      device_type: ["FRRouting", "FRR Container Router"]
+      platform: FRR
+      location:
+        kind: LocationSite
+        data:
+          name: branch-office
+
+      member_of_groups:
+        - frr_routers

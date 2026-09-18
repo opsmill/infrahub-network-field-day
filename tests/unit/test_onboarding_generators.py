@@ -2,7 +2,7 @@
 
 Fixtures built from the lab's real shapes: four EVPN tenants at VNI bases
 11000, 12000, 13000 and 15000 -- note the gap at 14000 -- and the racks and
-machines `objects/25_nfd41_racks.yml` and `objects/28_nfd41_endpoints.yml`
+machines `objects/25_otternet_racks.yml` and `objects/28_otternet_endpoints.yml`
 declare.
 
 **The claim most of this file exists to protect is the VNI derivation.** Every
@@ -87,7 +87,7 @@ def _onboarding(
             "status": _wrap(status),
             "mac_vrf_vni_base": _wrap(base),
             "organization": _rel("org-platform", organization) if organization else {"node": None},
-            "fabric": _rel("fabric-nfd41", "NFD41_FABRIC") if fabric else {"node": None},
+            "fabric": _rel("fabric-otternet", "OTTERNET_FABRIC") if fabric else {"node": None},
             "evpn_tenant": (
                 {"node": {"id": built[0], "name": _wrap(built[1]), "mac_vrf_vni_base": _wrap(built[2])}}
                 if built
@@ -203,7 +203,7 @@ def _placement(
                     "node": {
                         "__typename": "CoreObjectTemplate",
                         "id": "tpl-workload",
-                        "template_name": _wrap("nfd41-workload-host"),
+                        "template_name": _wrap("otternet-workload-host"),
                     }
                 }
                 if template

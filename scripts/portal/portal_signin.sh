@@ -6,7 +6,7 @@ start=$(curl -s -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 10 \
 curl -s -L -b "$J" -c "$J" -o /tmp/l.html --max-time 15 "$start"
 form=$(grep -oE 'action="[^"]*"' /tmp/l.html | head -1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')
 cb=$(curl -s -b "$J" -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 15 \
-    -d "login=alice@nfd41.lab" -d "password=password" "http://10.90.0.11:32556${form}")
+    -d "login=alice@otternet.lab" -d "password=password" "http://10.90.0.11:32556${form}")
 curl -s -b "$J" -c "$J" --max-time 20 "$cb" > /tmp/frame.html
 python3 -c '
 import re, urllib.parse

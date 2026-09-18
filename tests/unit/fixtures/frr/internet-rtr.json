@@ -233,7 +233,7 @@
                 "node": {
                   "__typename": "DcimDevice",
                   "name": {
-                    "value": "leaf-nfd41-pod1-1-1"
+                    "value": "leaf-otternet-pod1-1-1"
                   }
                 }
               },
@@ -259,7 +259,7 @@
                 "node": {
                   "__typename": "DcimDevice",
                   "name": {
-                    "value": "leaf-nfd41-pod1-1-2"
+                    "value": "leaf-otternet-pod1-1-2"
                   }
                 }
               },

@@ -4,8 +4,8 @@
 incomplete request: `crossplane_fabric_app.py` fails with "application {name} is
 exposed but has no vip_block; the XRD requires expose.vipBlock". So every exposed
 application has had to have a block chosen by hand out of the cluster's VIP pool
--- `10.112.240.0/28` for `nfd41-demo`, written into
-`objects/29_nfd41_offfabric_prefixes.yml` -- with nothing anywhere preventing the
+-- `10.112.240.0/28` for `otternet-demo`, written into
+`objects/29_otternet_offfabric_prefixes.yml` -- with nothing anywhere preventing the
 next one from choosing the same addresses.
 
 This generator makes stating a SIZE the request, and naming a block the
@@ -191,7 +191,7 @@ class FabricAppGenerator(InfrahubGenerator):
             return
 
         # A block that already exists is kept, whoever put it there. This is the
-        # seeded application's path: nfd41-demo names 10.112.240.0/28 and the
+        # seeded application's path: otternet-demo names 10.112.240.0/28 and the
         # rendered Crossplane manifest must not move.
         if _node_of(app.vip_block) is not None:
             self.logger.info(
@@ -242,8 +242,8 @@ class FabricAppGenerator(InfrahubGenerator):
         success.
 
         `vip_block_managed` is the whole guard. A hand-written block is left
-        exactly where it is: `nfd41-demo`'s `10.112.240.0/28` is declared in
-        `objects/29_nfd41_offfabric_prefixes.yml`, and deleting it would remove
+        exactly where it is: `otternet-demo`'s `10.112.240.0/28` is declared in
+        `objects/29_otternet_offfabric_prefixes.yml`, and deleting it would remove
         an object the seed data owns and break the next `invoke load`.
         """
         name = _value(app.name)

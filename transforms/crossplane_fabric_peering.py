@@ -54,7 +54,7 @@ ClusterNode = CrossplaneFabricPeeringQueryTargetEdgesNodeClusterNode
 PeeringNode = CrossplaneFabricPeeringQueryTargetEdgesNodePeeringsEdgesNode
 
 # The contract with the lab's composition.
-API_VERSION = "nfd41.lab/v1alpha1"
+API_VERSION = "otternet.lab/v1alpha1"
 KIND = "FabricPeering"
 
 # Timer keys the XRD understands, in the order it documents them. Fixing the

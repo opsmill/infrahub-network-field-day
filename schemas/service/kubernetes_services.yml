@@ -235,7 +235,7 @@ nodes:
       # WHO OWNS THE BLOCK, and the reason withdrawal is safe.
       #
       # `vip_block` is one field holding two very different things: a block a
-      # human wrote into `objects/` -- 10.112.240.0/28 for nfd41-demo -- and a
+      # human wrote into `objects/` -- 10.112.240.0/28 for otternet-demo -- and a
       # block this generator took from the pool. Deleting the first on
       # decommissioning would remove an object the seed data declares.
       #

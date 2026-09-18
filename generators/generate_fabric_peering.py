@@ -6,7 +6,7 @@ This is the generator that sits underneath the services schema, and it closes
 the loop cycle 010 opened and cycle 011 half-built -- order a service, the
 generator derives the sessions, the transform renders the manifest.
 
-Before this, `objects/34_nfd41_cluster.yml` declared those sessions by hand,
+Before this, `objects/34_otternet_cluster.yml` declared those sessions by hand,
 including each leaf's BGP AS. That second copy is what the lab's own notes warn
 about:
 

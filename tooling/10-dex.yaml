@@ -18,7 +18,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dex-config
-  namespace: nfd41-tooling
+  namespace: otternet-tooling
 data:
   config.yaml: |
     issuer: http://10.90.0.11:32556/dex
@@ -36,7 +36,7 @@ data:
 
     staticClients:
       - id: backstage
-        name: NFD41 Service Portal
+        name: OTTERNET Service Portal
         secret: backstage-dex-secret
         redirectURIs:
           - https://10.90.0.11:32001/api/auth/oidc/handler/frame
@@ -55,11 +55,11 @@ data:
     # defined. Fake, committed, lab-only: a lab that cannot be
     # rebuilt from its own repository is not reproducible.
     staticPasswords:
-      - email: "alice@nfd41.lab"
+      - email: "alice@otternet.lab"
         hash: "$2b$10$5omzBcjPExC2jYcmjmNA/OSMLLAGYWGhQMczRAjQPOmRdQrNKTHg2"
         username: "alice"
         userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
-      - email: "bob@nfd41.lab"
+      - email: "bob@otternet.lab"
         hash: "$2b$10$5omzBcjPExC2jYcmjmNA/OSMLLAGYWGhQMczRAjQPOmRdQrNKTHg2"
         username: "bob"
         userID: "1cb4a5b1-1e3f-4e4c-9b0f-1a2b3c4d5e6f"
@@ -68,7 +68,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dex
-  namespace: nfd41-tooling
+  namespace: otternet-tooling
 spec:
   replicas: 1
   selector:
@@ -112,7 +112,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dex
-  namespace: nfd41-tooling
+  namespace: otternet-tooling
 spec:
   type: NodePort
   selector: {app: dex}

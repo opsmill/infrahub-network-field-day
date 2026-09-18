@@ -71,9 +71,9 @@ def main() -> int:
     # because IpamIPAddress is keyed that way -- if the template stops asking for
     # both, this call fails, which is the point.
     variables = {
-        "requester": "verify@nfd41.lab",
+        "requester": "verify@otternet.lab",
         "name": f"verify-{uuid.uuid4().hex[:8]}",
-        "application": "nfd41-demo",
+        "application": "otternet-demo",
         "destination_vip": ["10.112.240.10/32", "default"],
         "source_zone": "branch",
         "source_address": "branch-users",

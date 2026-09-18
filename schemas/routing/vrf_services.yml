@@ -63,7 +63,7 @@ nodes:
         order_weight: 900
       # WIDENED to the generic by cycle 027, NOT moved to DcimFabricSwitch --
       # and this one was not predictable from the field name. Its 10 objects
-      # span isp-pe1 AND leaf-nfd41-pod1-3-1: a tenant VRF static route is
+      # span isp-pe1 AND leaf-otternet-pod1-3-1: a tenant VRF static route is
       # shared by the provider edge and the border leaf, the two ends of one
       # tenant handoff. It genuinely spans the split, so no concrete peer is
       # correct. Only counting the objects revealed it.
@@ -236,7 +236,7 @@ nodes:
         optional: false
         identifier: "vrf__l3_interfaces"
         order_weight: 900
-      # 8 objects, all on leaf-nfd41-pod1-3-1. No forward side on the device kind.
+      # 8 objects, all on leaf-otternet-pod1-3-1. No forward side on the device kind.
       - name: device
         label: Device
         peer: DcimFabricSwitch

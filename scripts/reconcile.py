@@ -87,7 +87,7 @@ def main() -> int:
     parser.add_argument(
         "--interval",
         type=int,
-        default=int(os.getenv("NFD41_RECONCILE_INTERVAL", str(DEFAULT_INTERVAL))),
+        default=int(os.getenv("OTTERNET_RECONCILE_INTERVAL", str(DEFAULT_INTERVAL))),
         help=f"Seconds between cycles (default {DEFAULT_INTERVAL})",
     )
     args = parser.parse_args()

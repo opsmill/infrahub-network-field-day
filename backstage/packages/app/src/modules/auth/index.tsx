@@ -87,7 +87,7 @@ const signInPage = SignInPageBlueprint.make({
         // fewer click.
         provider: {
           id: 'oidc',
-          title: 'NFD41 Single Sign-On',
+          title: 'OTTERNET Single Sign-On',
           message: 'Sign in with your lab account',
           apiRef: oidcAuthApiRef,
         },

@@ -121,7 +121,7 @@ class JunosConfig(InfrahubTransform):
             # fxp0 carries no zone, description or MTU on the device, and it is
             # the only interface here that does not. Everything below is
             # optional rather than asserted so that the management interface can
-            # be modelled at all -- see objects/32_nfd41_security.yml for why it
+            # be modelled at all -- see objects/32_otternet_security.yml for why it
             # has to be.
             # 1514 is both the schema's default for DcimInterface.mtu and Junos's
             # own default, which is why the device states an MTU on the data

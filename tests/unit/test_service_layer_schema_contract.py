@@ -1,4 +1,4 @@
-"""Contract tests for the service layer of the NFD41 lab schema feature.
+"""Contract tests for the service layer of the OTTERNET lab schema feature.
 
 The service layer is the abstraction that separates ordered intent from device
 fact. These tests assert the functional requirements in

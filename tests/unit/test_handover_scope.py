@@ -37,7 +37,7 @@ APPLY = re.compile(r'kubectl apply -f "\$LAB_DIR/([^"]+)"')
 # The API group of the lab's own XRDs. Claims are the only things in it that
 # carry a name the handover could delete; the XRDs and Compositions beside them
 # are `apiextensions.crossplane.io`.
-CLAIM_GROUP = "nfd41.lab/"
+CLAIM_GROUP = "otternet.lab/"
 
 
 def _lab_directory() -> Path | None:

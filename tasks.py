@@ -81,13 +81,15 @@ SEMAPHORE_PLAYBOOK_PATH = "/opt/semaphore/playbooks"
 CLAB_STAGING_DIR = "lab/clab-staging"
 
 # The committed ContainerLab topology this project provisions, in the sibling
-# NFD41 lab repository. That repository owns the topology -- which nodes exist
+# OTTERNET lab repository. That repository owns the topology -- which nodes exist
 # and how they are wired -- and this one owns their configuration.
-LAB_TOPOLOGY = "nfd41.clab.yml"
+LAB_TOPOLOGY = "otternet.clab.yml"
 
 # Image variables the topology interpolates. ContainerLab runs under sudo, which
 # scrubs the environment, so they have to be named to survive.
-CLAB_ENV_PASSTHROUGH = "NFD41_CEOS_IMAGE,NFD41_CEOS_MEMORY,NFD41_VSRX_IMAGE,NFD41_FRR_IMAGE,NFD41_GUACAMOLE_IMAGE"
+CLAB_ENV_PASSTHROUGH = (
+    "OTTERNET_CEOS_IMAGE,OTTERNET_CEOS_MEMORY,OTTERNET_VSRX_IMAGE,OTTERNET_FRR_IMAGE,OTTERNET_GUACAMOLE_IMAGE"
+)
 
 # Markdown authored by this project. Vendored agent content (.agents, .claude,
 # .specify), spec-kit process artifacts (specs/), and PyAVD-rendered output
@@ -351,7 +353,7 @@ def init_semaphore(
             "project_id": project_id,
             "json": json.dumps(
                 {
-                    "fabric": "NFD41_FABRIC",
+                    "fabric": "OTTERNET_FABRIC",
                     "clab_staging_dir": clab_container_staging,
                     # Reported back by the playbook so a run tells you where the
                     # files are on the Docker host, not just inside the container.
@@ -744,12 +746,12 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
 
 
 def find_lab_directory(explicit: str = "") -> Path:
-    """Locate the sibling NFD41 lab repository.
+    """Locate the sibling OTTERNET lab repository.
 
     `../lab` is right from a normal checkout and wrong from a git worktree, where
     the repository root sits several levels deeper under `.emdash/worktrees/`.
     Rather than hard-code either, walk up from this file looking for a directory
-    holding the topology. Set NFD41_LAB_DIR to override.
+    holding the topology. Set OTTERNET_LAB_DIR to override.
     """
     if explicit:
         candidate = Path(explicit).expanduser().resolve()
@@ -757,7 +759,7 @@ def find_lab_directory(explicit: str = "") -> Path:
             raise SystemExit(f"No {LAB_TOPOLOGY} in {candidate}")
         return candidate
 
-    if env_dir := os.getenv("NFD41_LAB_DIR"):
+    if env_dir := os.getenv("OTTERNET_LAB_DIR"):
         return find_lab_directory(env_dir)
 
     for parent in [MAIN_DIRECTORY_PATH.resolve(), *MAIN_DIRECTORY_PATH.resolve().parents]:
@@ -767,7 +769,7 @@ def find_lab_directory(explicit: str = "") -> Path:
 
     raise SystemExit(
         f"Could not find the lab repository. Looked for a directory containing {LAB_TOPOLOGY} "
-        "beside this checkout and each of its parents. Set NFD41_LAB_DIR to point at it."
+        "beside this checkout and each of its parents. Set OTTERNET_LAB_DIR to point at it."
     )
 
 
@@ -829,7 +831,7 @@ def _fabric_mgmt_addresses() -> list[str]:
 
 @task(
     help={
-        "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
+        "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
         "destroy": "Tear the lab down instead of deploying it.",
         "wait": "Block until every fabric switch answers eAPI before returning.",
     }
@@ -865,11 +867,11 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
 
     # THE TOOLING BRIDGE, BEFORE THE DEPLOY, and it is not optional.
     #
-    # `br-nfd41-tool` is a `kind: bridge` node, which means ContainerLab expects
+    # `br-otter-tool` is a `kind: bridge` node, which means ContainerLab expects
     # the HOST to already have it -- it does not create one. A missing bridge is
     # refused outright, before any node starts:
     #
-    #   ERROR  Bridge "br-nfd41-tool" referenced in topology but does not exist.
+    #   ERROR  Bridge "br-otter-tool" referenced in topology but does not exist.
     #
     # A host bridge does not survive a reboot, so this is not a once-per-machine
     # setup step; it is a precondition of every deploy. The script is idempotent
@@ -981,8 +983,8 @@ def reconcile(
 # copy exists first wins and the other never arrives. These are handed over
 # before the operator is installed.
 INFRAHUB_OWNED_RESOURCES = (
-    ("fabricapp", "nfd41-demo"),
-    ("fabricpeering", "nfd41"),
+    ("fabricapp", "otternet-demo"),
+    ("fabricpeering", "otternet"),
 )
 
 # The lab's own two applications, which Infrahub does not model: the access
@@ -995,7 +997,7 @@ INFRAHUB_OWNED_RESOURCES = (
 # manifest it delivered itself. They are the lab's installer's, and deleting them
 # here is the only seam: `install-crossplane.sh` has no flag to skip a claim, so
 # they are applied, waited on, and then removed.
-LAB_ONLY_APPS = ("nfd41-access", "nfd41-observability")
+LAB_ONLY_APPS = ("otternet-access", "otternet-observability")
 
 # Everything the handover deletes: the two the lab declares and Infrahub owns,
 # which Vidra then re-delivers, and the two that simply go.
@@ -1004,7 +1006,7 @@ HANDOVER_DELETIONS = INFRAHUB_OWNED_RESOURCES + tuple(("fabricapp", name) for na
 # The namespace the demo application composes. Waiting on this, rather than on
 # composed-object names, is what makes the teardown check correct -- see
 # _wait_for_teardown.
-APP_NAMESPACE = "nfd41-demo"
+APP_NAMESPACE = "otternet-demo"
 
 
 class _Missing:
@@ -1022,7 +1024,7 @@ def _lab_kubeconfig(lab_dir: str = "") -> Path:
 
 @task(
     help={
-        "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
+        "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
         "handover": "Delete the lab's claims, so the cluster carries only what Infrahub declares.",
     }
 )
@@ -1113,7 +1115,7 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
 
 @task(
     help={
-        "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
+        "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
         "wait": "Block until both syncs report a terminal state.",
     }
 )
@@ -1175,7 +1177,7 @@ def _wait_for_teardown(ctx: Context, kubeconfig: Path, timeout: int = 600) -> No
     that does not resolve on its own:
 
         create failed: ... deployments.apps "frontend" is forbidden: unable to
-        create new content in namespace nfd41-demo because it is being terminated
+        create new content in namespace otternet-demo because it is being terminated
 
     The new composed Objects fail against the dying namespace, a second
     composed Namespace Object appears alongside the first, and the FabricApp
@@ -1196,8 +1198,8 @@ def _wait_for_teardown(ctx: Context, kubeconfig: Path, timeout: int = 600) -> No
     while time.time() < deadline:
         # Wait on the application NAMESPACE, not on composed-object names.
         # Matching objects by name prefix does not work here: composed objects are
-        # named `<claim>-<hash>`, and the peering claim is called `nfd41`, which is
-        # a prefix of `nfd41-access-...` and `nfd41-observability-...` too. Those
+        # named `<claim>-<hash>`, and the peering claim is called `otternet`, which is
+        # a prefix of `otternet-access-...` and `otternet-observability-...` too. Those
         # were the lab's own applications, left in place at the time, so the filter
         # matched them forever and the wait always timed out.
         #
@@ -1234,8 +1236,8 @@ def _force_resync(ctx: Context, kubeconfig: Path) -> None:
     `requeueResourcesAfter`. That is ten minutes of a fabric peering that does
     not exist.
 
-    Measured, not supposed: after the handover deleted `fabricapp/nfd41-demo`
-    and `fabricpeering/nfd41`, both syncs read `Succeeded` and both resources
+    Measured, not supposed: after the handover deleted `fabricapp/otternet-demo`
+    and `fabricpeering/otternet`, both syncs read `Succeeded` and both resources
     stayed absent.
 
     Deleting and re-applying the InfrahubSync resets its checksum state, and
@@ -1261,8 +1263,8 @@ def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
     cluster where nothing was delivered, which is the failure that looks most
     like health.
 
-    So the loop asks the API server whether `fabricapp/nfd41-demo` and
-    `fabricpeering/nfd41` are there, and the sync table is printed afterwards as
+    So the loop asks the API server whether `fabricapp/otternet-demo` and
+    `fabricpeering/otternet` are there, and the sync table is printed afterwards as
     context rather than as the verdict.
     """
     kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
@@ -1388,7 +1390,7 @@ _cluster_task = cluster
 @task(
     help={
         "branch": "Branch the AVD chain runs on before being merged. Created if absent.",
-        "lab-dir": "Path to the lab repository. Defaults to NFD41_LAB_DIR, else a search beside this checkout.",
+        "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
         "cluster": "Also bring up Kubernetes: Cilium, Vidra, Crossplane and the handover.",
         "fresh": "Destroy the stack and the lab first, so the run starts from nothing.",
     }

@@ -151,7 +151,7 @@ query GenerateNetworkSegmentQuery($name: String!) {
   # ------------------------------------------------------------------------
   # Default resolution, by ROLE rather than by name.
   #
-  # A hard-coded `NFD41-Segment-Subnet-Pool` would make the generator specific
+  # A hard-coded `OTTERNET-Segment-Subnet-Pool` would make the generator specific
   # to this lab's object files, and a missing relationship would fail with a
   # message naming a string that appears in no schema. Resolving from the data
   # instead means the rule is a statement about the model: the pool that
