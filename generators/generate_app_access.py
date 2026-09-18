@@ -90,6 +90,7 @@ from operator import itemgetter
 from typing import Any
 from urllib.parse import quote
 
+import yaml
 from infrahub_sdk.generator import InfrahubGenerator
 
 from .generate_app_access_query import (
@@ -384,54 +385,103 @@ def is_withdrawn(grant: GrantNode) -> bool:
     return _value(grant.status) in WITHDRAWN_STATUSES
 
 
-def application_ports(application: Any) -> list[int]:
-    """The TCP ports the APPLICATION says it serves.
+def advertised_service_ports(manifests: Any, service_selector: Any = None) -> list[int]:
+    """The TCP ports the application's ADVERTISED Services answer on.
 
-    `policy_allow_ports` is the same list that becomes the cluster's network
-    policy, as `[{"port": "8080", "protocol": "TCP"}]`. Non-TCP entries are
-    skipped: a firewall rule here is TCP, and silently widening it to UDP
-    because the application mentions one would be a different permission.
+    THIS IS THE PORT A FIREWALL RULE NEEDS, and it is not the one the
+    application's network policy names. `policy_allow_ports` was read here for
+    two cycles and is the CiliumNetworkPolicy's ingress port, applied to the
+    PODS: 8080 for nfd41-demo, whose Service maps ``port: 80`` to
+    ``targetPort: 8080``. The firewall's destination is the VIP, so the derived
+    rule permitted 8080, the VIP answered only on 80, and the grant was
+    rendered, merged, pushed and confirmed while reaching nothing. Deriving
+    from the Service closes that by construction -- the same object decides
+    both the VIP's port and the rule's.
+
+    ONLY ADVERTISED SERVICES COUNT. A `ClusterIP` Service has no VIP and is
+    unreachable from the branch, so its ports must never widen a rule;
+    nfd41-demo's `backend` is exactly that, on 8080, and including it would
+    have reintroduced the wrong port by another route. A Service qualifies when
+    it is `type: LoadBalancer` or carries the application's `service_selector`
+    labels, which is what gives it an address in the first place.
+
+    Non-TCP entries are skipped: a rule here is TCP, and widening it to UDP
+    because a Service mentions one is a different permission.
     """
-    raw = _value(application.policy_allow_ports) if application is not None else None
+    wanted = _selector_labels(service_selector)
     ports: list[int] = []
-    for entry in raw or []:
-        if not isinstance(entry, dict):
+    for document in manifests or []:
+        if not isinstance(document, dict) or document.get("kind") != "Service":
             continue
-        if str(entry.get("protocol", "TCP")).upper() != "TCP":
+        spec = document.get("spec")
+        if not isinstance(spec, dict):
             continue
-        try:
-            ports.append(int(entry["port"]))
-        except (KeyError, TypeError, ValueError):
+        labels = ((document.get("metadata") or {}).get("labels")) or {}
+        advertised = spec.get("type") == "LoadBalancer" or (
+            bool(wanted) and all(str(labels.get(k)) == v for k, v in wanted.items())
+        )
+        if not advertised:
             continue
+        for entry in spec.get("ports") or []:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("protocol", "TCP")).upper() != "TCP":
+                continue
+            try:
+                ports.append(int(entry["port"]))
+            except (KeyError, TypeError, ValueError):
+                continue
     return ports
 
 
-def normalise_ports(grant: GrantNode, application: Any = None) -> list[int]:
+def _selector_labels(service_selector: Any) -> dict[str, str]:
+    """``["nfd41.lab/advertise=true"]`` as ``{"nfd41.lab/advertise": "true"}``.
+
+    Takes the UNWRAPPED list, like `manifests` beside it, so both arguments to
+    `advertised_service_ports` are plain data and the function is testable
+    without building query models.
+    """
+    labels: dict[str, str] = {}
+    for item in service_selector or []:
+        text = str(item)
+        if "=" not in text:
+            continue
+        key, _, value = text.partition("=")
+        labels[key.strip()] = value.strip()
+    return labels
+
+
+def normalise_ports(grant: GrantNode, derived: list[int] | None = None) -> list[int]:
     """V2, V3. The permitted TCP ports, sorted, validated, de-duplicated.
 
-    A grant that names NO ports takes the application's own
-    `policy_allow_ports`, because the application already knows what it serves
-    and the requester mostly does not. Asking them was worse than redundant: a
-    grant naming a port the application does not answer on is permitted by the
-    firewall and refused by the cluster's network policy, which reads as a
-    firewall fault. Deriving it makes that mismatch impossible rather than
-    merely tested for.
+    A grant that names NO ports takes the ports its application's ADVERTISED
+    SERVICES answer on, because the application already knows what it serves
+    and the requester mostly does not. `derived` is that list, computed by
+    `advertised_service_ports` from the manifests.
 
     Naming ports explicitly still works, and is how you ask for a SUBSET.
 
     An EMPTY result is rejected rather than read as "all ports". That is the
     worst defect this generator could have, and the lab's own `FirewallAccess`
-    CRD makes the same choice with ``minItems: 1``. It now means the grant named
-    nothing AND the application declares nothing, which is a request nobody can
-    fulfil.
+    CRD makes the same choice with ``minItems: 1``.
+
+    IT REFUSES RATHER THAN GUESSING when nothing can be derived, and that is a
+    deliberate change of behaviour. The previous fallback -- the application's
+    `policy_allow_ports` -- is always populated and always plausible, so a
+    wrong port was never once reported as wrong: the rule rendered, merged,
+    pushed and confirmed, and the only symptom was a healthy app nobody could
+    reach. A request that stops with a message naming the application costs a
+    minute; the silent version cost an afternoon.
     """
-    raw = _value(grant.ports) or application_ports(application)
+    raw = _value(grant.ports) or derived
     name = _value(grant.name)
 
     if not raw:
         msg = (
-            f"grant {name!r} permits no ports and application declares none; an empty "
-            "list is rejected rather than read as 'all ports', which is what a "
+            f"grant {name!r} names no ports and no advertised Service was found on its "
+            "application to derive them from; name the ports explicitly, or give the "
+            "application a LoadBalancer Service in its manifests. An empty list is "
+            "rejected rather than read as 'all ports', which is what a "
             "permit-everything rule would mean"
         )
         raise ValueError(msg)
@@ -598,7 +648,7 @@ def index_tcp_services(parsed: GenerateAppAccessQuery) -> dict[int, Existing]:
     return by_port
 
 
-def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
+def validate_model(parsed: GenerateAppAccessQuery, derived_ports: list[int] | None = None) -> GrantContext:
     """Resolve and check everything before a single object is written.
 
     Raises:
@@ -613,8 +663,10 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
         raise ValueError(msg)
 
     name = _value(grant.name)
-    # The application is the fallback for ports it did not name.
-    ports = normalise_ports(grant, _node_of(grant.application))
+    # The application's advertised Services are the fallback for ports it did
+    # not name; `generate` resolves them, because the manifests may be an
+    # attachment that has to be downloaded.
+    ports = normalise_ports(grant, derived_ports)
     policy_id = derive_policy(parsed, name)
     destination_zone_id = derive_destination_zone(parsed, grant)
 
@@ -711,7 +763,8 @@ class AppAccessGenerator(InfrahubGenerator):
             return
 
         try:
-            context = validate_model(parsed)
+            derived_ports = await self._advertised_ports(_node_of(grant.application))
+            context = validate_model(parsed, derived_ports)
         except ValueError:
             await self._set_status(grant.id, "error")
             raise
@@ -724,6 +777,47 @@ class AppAccessGenerator(InfrahubGenerator):
         await self._set_status(grant.id, "active")
         await self._advertise(context, derive_advertisement(grant))
         await self._rerender_firewall(context.firewall_id)
+
+    async def _advertised_ports(self, application: Any) -> list[int]:
+        """The ports this application's advertised Services answer on.
+
+        The manifests are a `CoreFileObject` attachment far more often than an
+        inline attribute -- nfd41-demo's are -- and the query returns the
+        file's METADATA only, its content living in object storage. So the node
+        is re-fetched by id and `download_file()` called on it, which is the
+        same two-step `crossplane_fabric_app._payload` does for the same
+        reason: `download_file` is a method on an SDK node, not on the
+        generated query model.
+
+        A failure here returns nothing rather than raising, and
+        `normalise_ports` then refuses with a message naming the grant. An
+        unreadable payload must not be indistinguishable from an application
+        that genuinely advertises nothing, but neither should it abort a grant
+        that names its own ports.
+        """
+        if application is None:
+            return []
+
+        manifests = _value(getattr(application, "manifests", None))
+        stub = _node_of(getattr(application, "manifests_file", None))
+        if stub is not None:
+            try:
+                file_node = await self._init_client.get(kind="ServiceFabricAppManifestsFile", id=stub.id)
+                content = await file_node.download_file()
+                text = content.decode() if isinstance(content, bytes) else content
+                manifests = yaml.safe_load(text)
+            except Exception:  # noqa: BLE001 - see the docstring: refuse, do not abort
+                return []
+
+        if isinstance(manifests, str):
+            try:
+                manifests = yaml.safe_load(manifests)
+            except yaml.YAMLError:
+                return []
+        if not isinstance(manifests, list):
+            return []
+
+        return advertised_service_ports(manifests, _value(getattr(application, "service_selector", None)))
 
     async def _upsert_vip_entry(self, context: GrantContext) -> str:
         """The address-book entry for the destination VIP.

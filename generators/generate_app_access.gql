@@ -35,12 +35,31 @@ query GenerateAppAccessQuery($name: String!) {
             name {
               value
             }
-            # What the application ITSELF says it serves. A grant that names no
-            # ports takes these, so a requester cannot ask for a port the
-            # application does not answer on -- which the firewall permits and
-            # the cluster's network policy then refuses, reading as a firewall
-            # fault.
-            policy_allow_ports {
+            # THE MANIFESTS, because the port a grant needs is the port the
+            # VIP answers on, and that is a Service's `spec.ports[].port`.
+            #
+            # `policy_allow_ports` is NOT that port and was read here for two
+            # cycles. It is the CiliumNetworkPolicy's ingress port, applied to
+            # the PODS -- 8080 for nfd41-demo, whose Service maps 80 -> 8080.
+            # So a grant naming no ports derived 8080, the firewall permitted
+            # 8080, the VIP answered only on 80, and the request was rendered,
+            # merged, pushed and confirmed while reaching nothing.
+            #
+            # The attachment wins over the inline attribute, the same
+            # precedence `crossplane_fabric_app` uses; both are fetched because
+            # either may be the one that is set.
+            manifests {
+              value
+            }
+            manifests_file {
+              node {
+                id
+              }
+            }
+            # Which Services get a VIP at all. A ClusterIP service is not
+            # reachable from the branch and its ports must not widen a rule --
+            # nfd41-demo's `backend` is exactly that case, on 8080.
+            service_selector {
               value
             }
             # The block its VIPs come from. A grant naming no `destination_vip`

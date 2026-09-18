@@ -72,8 +72,10 @@ class GenerateAppAccessQueryTargetEdgesNodeApplication(BaseModel):
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNode(BaseModel):
     id: str
     name: Optional["GenerateAppAccessQueryTargetEdgesNodeApplicationNodeName"]
-    policy_allow_ports: Optional[
-        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodePolicyAllowPorts"
+    manifests: Optional["GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifests"]
+    manifests_file: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFile"
+    service_selector: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeServiceSelector"
     ]
     vip_block: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock"
     vrf: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf"
@@ -83,7 +85,21 @@ class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeName(BaseModel):
     value: Optional[str]
 
 
-class GenerateAppAccessQueryTargetEdgesNodeApplicationNodePolicyAllowPorts(BaseModel):
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifests(BaseModel):
+    value: Optional[Any]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFile(BaseModel):
+    node: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFileNode"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFileNode(BaseModel):
+    id: str
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeServiceSelector(BaseModel):
     value: Optional[Any]
 
 
@@ -586,6 +602,7 @@ GenerateAppAccessQueryTargetEdges.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplication.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeManifestsFile.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlockNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf.model_rebuild()

@@ -325,9 +325,23 @@ therefore done by deleting the service, not by labelling it.
 the firewall objects permitting the session: an address-book entry for the destination VIP, a
 `SecurityService` per permitted port, and the `SecurityPolicyRule` joining them, linked back
 through `granted_rules`. Generated objects render into the existing Junos artifact, because
-`junos_config.gql` queries `SecurityGenericAddress` and `SecurityPolicy` unfiltered. Six things
+`junos_config.gql` queries `SecurityGenericAddress` and `SecurityPolicy` unfiltered. Seven things
 to know before changing it:
 
+- **A grant's ports come from the application's ADVERTISED SERVICES, and `policy_allow_ports` is
+  the wrong field.** Both are ports on the same application and they are different layers:
+  `policy_allow_ports` is the CiliumNetworkPolicy's ingress port, applied to the **pods**, while
+  a firewall rule's destination is the **VIP**, whose port is a Service's `spec.ports[].port`.
+  For `nfd41-demo` those are 8080 and 80 — the Service maps `port: 80` to `targetPort: 8080`.
+  Deriving from the policy field permitted 8080 to a VIP answering only on 80, and **nothing
+  reported a fault**: the rule rendered, the proposed change merged, the reconciler pushed it and
+  confirmed `fw1` in sync, and the only symptom was a healthy application nobody could reach.
+  `advertised_service_ports` reads the manifests instead, so the same object decides the VIP's
+  port and the rule's. Two consequences worth keeping: a `ClusterIP` Service is skipped, because
+  it has no VIP and `nfd41-demo`'s `backend` is one on 8080 — including it would reintroduce the
+  wrong port by another route; and the derivation now **refuses rather than guessing** when it can
+  find no advertised Service, because the old fallback was always populated and always plausible,
+  which is precisely why a wrong port was never once reported as wrong.
 - **It asks for the firewall's artifact to be re-rendered, and must.** An artifact regenerates
   when its *target* changes, and the target is `fw1` — a new `SecurityPolicyRule` is not a
   change to the firewall. Without the explicit request the objects appear, the artifact keeps
