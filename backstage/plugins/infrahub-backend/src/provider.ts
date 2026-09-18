@@ -1374,6 +1374,18 @@ export class InfrahubEntityProvider implements EntityProvider {
             name: 'Open proposed change',
             action: 'infrahub:graphql:execute',
             input: {
+              // NO `tags`. This used to add `tags: [{ hfid: ["service_request"] }]`,
+              // and `CoreProposedChange` has no `tags` field on Infrahub 1.10.6:
+              //
+              //   Field 'tags' is not defined by type 'CoreProposedChangeCreateInput'
+              //
+              // It is the LAST step of a request, so everything before it
+              // succeeded -- the object, the branch, the generators -- and then
+              // no proposed change opened. A request that reaches nobody looks
+              // from the catalogue exactly like one that is waiting for review.
+              //
+              // Nothing here filters proposed changes by tag, so the label was
+              // decoration; a schema that does have the field can add it back.
               query:
                 'mutation ($name: String!, $source_branch: String!) {\n' +
                 '  CoreProposedChangeCreate(\n' +
@@ -1381,7 +1393,6 @@ export class InfrahubEntityProvider implements EntityProvider {
                 '      name: { value: $name }\n' +
                 '      source_branch: { value: $source_branch }\n' +
                 '      destination_branch: { value: "main" }\n' +
-                '      tags: [{ hfid: ["service_request"] }]\n' +
                 '    }\n  ) {\n    ok\n    object { id }\n  }\n}',
               variables: {
                 name: `\${{ ("Implement ${kind.label} " + (parameters.${idField} | lower)) if parameters.mode === "create" else ("Change " + parameters.change_reference + " on " + steps.fetch.output.entity.metadata.title) }}`,

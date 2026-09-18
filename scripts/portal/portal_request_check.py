@@ -86,18 +86,45 @@ def main() -> int:
         {"name": BRANCH},
         phase="creating the throwaway branch",
     )
+    proposed_change = None
     try:
-        data = gql(
-            mutation,
-            variables,
-            branch=BRANCH,
-            phase="the portal's own create mutation",
-        )
-        created = next(iter(data.values()))
-        if not created.get("ok"):
-            print("the portal's own create mutation was refused")
-            return 1
+        # EVERY unguarded GraphQL step, not only the create. `proposed_change` is
+        # the LAST one, and it named a `tags` field `CoreProposedChange` does not
+        # have -- so the object, the branch and the generators all succeeded and
+        # no proposed change opened. A request that reaches nobody looks, from
+        # the catalogue, exactly like one waiting for review.
+        #
+        # The per-field steps in between are skipped: each is guarded on the
+        # requester having filled that field in, and supplying all of them would
+        # be testing the scaffolder rather than the mutations.
+        for step in template["spec"]["steps"]:
+            if step.get("action") != "infrahub:graphql:execute":
+                continue
+            if step["id"] == "create":
+                values = variables
+            elif step["id"] == "proposed_change":
+                values = {"name": f"verify {BRANCH}", "source_branch": BRANCH}
+            else:
+                continue
+            data = gql(
+                step["input"]["query"],
+                values,
+                branch=BRANCH,
+                phase=f"the portal's {step['id']} step",
+            )
+            result = next(iter(data.values()))
+            if not result.get("ok"):
+                print(f"the portal's {step['id']} step was refused")
+                return 1
+            if step["id"] == "proposed_change":
+                proposed_change = (result.get("object") or {}).get("id")
     finally:
+        if proposed_change:
+            gql(
+                "mutation ($id: String!) { CoreProposedChangeDelete(data: { id: $id }) { ok } }",
+                {"id": proposed_change},
+                phase="deleting the throwaway proposed change",
+            )
         gql(
             "mutation ($name: String!) { BranchDelete(data: { name: $name }) { ok } }",
             {"name": BRANCH},

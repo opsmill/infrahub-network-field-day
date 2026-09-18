@@ -429,6 +429,23 @@ describe('InfrahubEntityProvider', () => {
     expect(security.enumNames).toEqual(['Open', 'WPA2 Personal']);
   });
 
+  it('opens a proposed change without naming a field the schema lacks', async () => {
+    // `CoreProposedChange` has no `tags` field on Infrahub 1.10.6, and the
+    // mutation is rejected outright:
+    //
+    //   Field 'tags' is not defined by type 'CoreProposedChangeCreateInput'
+    //
+    // It is the LAST step, so the object, the branch and the generators all
+    // succeeded first and no proposed change opened -- a request that reaches
+    // nobody, indistinguishable in the catalogue from one awaiting review.
+    const template = (await run())['Template:wireless-request'];
+    const step = (template.spec!.steps as any[]).find(
+      s => s.id === 'proposed_change',
+    );
+    expect(step.input.query).toContain('CoreProposedChangeCreate');
+    expect(step.input.query).not.toContain('tags');
+  });
+
   it('asks for every element of a composite hfid', async () => {
     // `IpamIPAddress` is keyed by [address, namespace], and a one-element lookup
     // is refused:
