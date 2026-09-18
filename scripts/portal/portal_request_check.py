@@ -76,18 +76,13 @@ def main() -> int:
         "source_address": "branch-users",
         "owner": "branch",
     }
-    missing = [
-        name
-        for name in variables
-        if f"${name}" not in mutation
-    ]
+    missing = [name for name in variables if f"${name}" not in mutation]
     if missing:
         print(f"the template no longer asks for {missing}; update this check")
         return 1
 
     gql(
-        "mutation ($name: String!) { BranchCreate(data: { name: $name, sync_with_git: false })"
-        " { ok } }",
+        "mutation ($name: String!) { BranchCreate(data: { name: $name, sync_with_git: false }) { ok } }",
         {"name": BRANCH},
         phase="creating the throwaway branch",
     )
