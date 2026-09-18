@@ -287,11 +287,14 @@ type SchemaAttribute = {
   choices?: { name: string; label?: string }[];
 };
 
+/** A relationship whose peer is a CoreFileObject: asked for as content. */
 type SchemaRelationship = {
   name: string;
   peer: string;
   cardinality: string;
   optional?: boolean;
+  /** `Parent`, `Component`, `Attribute`, `Group`, `Profile`, `Generic`. */
+  kind?: string;
   /** Infrahub's own label, which reads better than a derived one. */
   label?: string;
 };
@@ -314,6 +317,17 @@ type ResolvedRelationship = SchemaRelationship & {
    * the portal at all.
    */
   hfidLength?: number;
+  /**
+   * When the PEER inherits `CoreFileObject`, the relationship on that peer
+   * pointing back at its owner -- `app` on `ServiceFabricAppManifestsFile`.
+   * Undefined for every other peer, which is what marks this a file field.
+   *
+   * Such a relationship is collected as file CONTENT rather than as an
+   * identifier, and attached by a later step: the peer's parent is mandatory,
+   * so the file cannot exist before its owner, and an identifier field on a
+   * create form could only reference something that does not exist yet.
+   */
+  fileParentField?: string;
 };
 
 type KindSchema = {
@@ -323,6 +337,8 @@ type KindSchema = {
   description?: string;
   /** e.g. ['service_identifier__value'] -- the attribute that names an object. */
   human_friendly_id?: string[];
+  /** Generics this kind inherits; `CoreFileObject` marks a file attachment. */
+  inherit_from?: string[];
   attributes?: SchemaAttribute[];
   relationships?: SchemaRelationship[];
 };
@@ -365,6 +381,15 @@ export class InfrahubEntityProvider implements EntityProvider {
 
   /** Peer kind -> how many elements its human_friendly_id has. */
   private readonly hfidLengths = new Map<string, number>();
+  /**
+   * For a peer inheriting `CoreFileObject`, the name of its OWN relationship
+   * back to the node that owns it -- `app` on `ServiceFabricAppManifestsFile`.
+   * `null` for a peer that is not a file. Cached per kind.
+   *
+   * The name is read from the schema rather than assumed, because it is what
+   * the upload mutation has to set and nothing else in the template knows it.
+   */
+  private readonly filePeerParents = new Map<string, string | null>();
 
   getProviderName(): string {
     return 'infrahub';
@@ -661,6 +686,14 @@ export class InfrahubEntityProvider implements EntityProvider {
         `/api/schema/${peer}`,
       );
       length = schema.human_friendly_id?.length || 1;
+      // Free of charge: the same document says whether this peer is a file
+      // and what it calls its owner, and a second fetch would double the
+      // schema reads on every refresh.
+      const isFile = (schema.inherit_from ?? []).includes('CoreFileObject');
+      const parent = (schema.relationships ?? []).find(
+        relationship => relationship.kind === 'Parent',
+      );
+      this.filePeerParents.set(peer, isFile ? (parent?.name ?? null) : null);
     } catch (error) {
       this.logger.warn(
         `Could not read ${peer}'s schema (${error}); assuming a single-element hfid`,
@@ -797,6 +830,10 @@ export class InfrahubEntityProvider implements EntityProvider {
                     ? undefined
                     : this.pickerFor(relationship.peer, mappings),
                 hfidLength: peerHfids.get(relationship.peer) ?? 1,
+                // A file peer with no Parent relationship cannot be attached
+                // to anything, so it is not offered as one.
+                fileParentField:
+                  this.filePeerParents.get(relationship.peer) ?? undefined,
               })),
           };
         } catch (error) {
@@ -1193,7 +1230,11 @@ export class InfrahubEntityProvider implements EntityProvider {
       relationship => relationship.optional === false,
     );
     const optionalRels = formRels.filter(
-      relationship => relationship.optional !== false,
+      relationship => relationship.optional !== false && !relationship.fileParentField,
+    );
+    // Collected as content and attached by their own step; see `isFile`.
+    const fileRels = formRels.filter(
+      relationship => relationship.fileParentField,
     );
     // The attribute that names an object of this kind, from its schema.
     const idField = kind.identifier ?? 'name';
@@ -1255,6 +1296,36 @@ export class InfrahubEntityProvider implements EntityProvider {
     }
 
     for (const relationship of formRels) {
+      // A FILE PEER IS ASKED FOR AS CONTENT, NOT AS AN IDENTIFIER.
+      //
+      // `manifests_file` peers a CoreFileObject whose own hfid is
+      // `app__name__value` and whose parent is mandatory, so the file cannot
+      // exist before the object that owns it. On a CREATE form an identifier
+      // field for it can therefore only ever reference something that does not
+      // exist yet -- it looked like the way to supply a payload and was
+      // unusable. Worse, the payload is the one thing that makes an
+      // application an application: without it `crossplane_fabric_app` raises
+      // `has neither a chart nor manifests`, so every app requested through
+      // the portal failed at artifact render.
+      //
+      // The content is collected as text and uploaded by a later step, because
+      // a CoreFileObject's `storage_id` and `checksum` are read-only on the
+      // Create input -- content arrives only through the mutation's
+      // `file: Upload!` argument. See the `infrahub:file:upload` action.
+      if (relationship.fileParentField) {
+        const field = `${relationship.name}_content`;
+        const label = relationship.label ?? this.fieldTitle(relationship.name);
+        createProperties[field] = {
+          title: label,
+          type: 'string',
+          'ui:widget': 'textarea',
+          'ui:options': { rows: 16 },
+          description:
+            `${label}, pasted as YAML. Left empty, nothing is attached.`,
+        };
+        continue;
+      }
+
       const widget = relationship.picker
         ? {
             'ui:field': 'EntityPicker',
@@ -1470,6 +1541,28 @@ export class InfrahubEntityProvider implements EntityProvider {
                 },
               };
             }),
+          // THE PAYLOAD, attached to the object the create step just made.
+          //
+          // It runs only in `create` mode and only when the requester pasted
+          // something. `parentId` is read from the create step's output rather
+          // than looked up, because the file's own hfid is derived from its
+          // parent and does not exist until this call returns.
+          ...fileRels.map(relationship => ({
+            id: `${relationship.name}_upload`,
+            name: `Attach ${(relationship.label ?? this.fieldTitle(relationship.name)).toLowerCase()}`,
+            if:
+              `\${{ parameters.mode === "create" and ` +
+              `parameters.${relationship.name}_content }}`,
+            action: 'infrahub:file:upload',
+            input: {
+              branch,
+              kind: relationship.peer,
+              parentField: relationship.fileParentField,
+              parentId: '${{ steps.create.output.data.' + `${kind.kind}Create.object.id }}`,
+              content: `\${{ parameters.${relationship.name}_content }}`,
+              fileName: `\${{ parameters.${idField} }}-${relationship.name}.yaml`,
+            },
+          })),
           // An optional relationship is set the same guarded way, in either mode.
           ...optionalRels.map(relationship => ({
             id: relationship.name,

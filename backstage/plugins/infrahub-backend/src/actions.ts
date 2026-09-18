@@ -103,6 +103,122 @@ export const infrahubActionsModule = createBackendModule({
             },
           }),
           createTemplateAction({
+            id: 'infrahub:file:upload',
+            description:
+              'Attach a file payload to a node, as a CoreFileObject child',
+            schema: {
+              input: {
+                kind: z =>
+                  z
+                    .string()
+                    .describe(
+                      'The CoreFileObject kind to create, e.g. ' +
+                        'ServiceFabricAppManifestsFile',
+                    ),
+                parentField: z =>
+                  z
+                    .string()
+                    .describe(
+                      'The relationship on that kind pointing back at its ' +
+                        'owner, e.g. `app`',
+                    ),
+                parentId: z =>
+                  z.string().describe('The owning node, by id'),
+                content: z => z.string().describe('The file content'),
+                fileName: z => z.string().describe('The stored file name'),
+                branch: z =>
+                  z
+                    .string()
+                    .optional()
+                    .describe('Infrahub branch, defaults to main'),
+              },
+              output: {
+                id: z => z.string().describe('The created file node'),
+                size: z => z.number().describe('Bytes stored'),
+              },
+            },
+            async handler(ctx) {
+              const branch = ctx.input.branch ?? 'main';
+
+              // WHY THIS IS NOT `infrahub:graphql:execute` WITH A VARIABLE.
+              // A CoreFileObject's content fields -- `storage_id`, `checksum`,
+              // `file_name`, `file_size` -- are ALL read-only on the Create
+              // input, which accepts only `id`, the parent relationship and
+              // the group relationships. Content arrives through the
+              // mutation's own `file: Upload!` argument instead, which is a
+              // GraphQL multipart request: a JSON `operations` part, a `map`
+              // part binding a file to a variable path, and the bytes.
+              // `infrahubQuery` posts JSON, so it cannot express this.
+              //
+              // `Upload` is NON-NULL, which is the useful half: the node and
+              // its content are created in ONE call, so there is no window in
+              // which a file node exists with nothing in it.
+              const body = new FormData();
+              const query = [
+                `mutation ($parent: String!, $file: Upload!) {`,
+                `  ${ctx.input.kind}Create(`,
+                `    data: { ${ctx.input.parentField}: { id: $parent } }`,
+                `    file: $file`,
+                `  ) {`,
+                `    ok`,
+                `    object { id file_size { value } }`,
+                `  }`,
+                `}`,
+              ].join('\n');
+              body.append(
+                'operations',
+                JSON.stringify({
+                  query,
+                  variables: { parent: ctx.input.parentId, file: null },
+                }),
+              );
+              body.append('map', JSON.stringify({ '0': ['variables.file'] }));
+              body.append(
+                '0',
+                new Blob([ctx.input.content], { type: 'application/x-yaml' }),
+                ctx.input.fileName,
+              );
+
+              const response = await fetch(
+                `${infrahub.address}/graphql/${encodeURIComponent(branch)}`,
+                {
+                  method: 'POST',
+                  // NO Content-Type HEADER. fetch derives multipart/form-data
+                  // and appends the boundary; setting it by hand omits the
+                  // boundary and the server cannot parse a single part.
+                  headers: { 'X-INFRAHUB-KEY': infrahub.token },
+                  body,
+                },
+              );
+
+              const payload: any = await response.json().catch(() => undefined);
+              if (!response.ok || payload?.errors) {
+                const detail = payload?.errors
+                  ? JSON.stringify(payload.errors).slice(0, 300)
+                  : `HTTP ${response.status}`;
+                throw new Error(
+                  `Uploading ${ctx.input.fileName} as ${ctx.input.kind} failed: ${detail}`,
+                );
+              }
+
+              const object = payload?.data?.[`${ctx.input.kind}Create`]?.object;
+              if (!object?.id) {
+                throw new Error(
+                  `Uploading ${ctx.input.fileName} returned no object; ` +
+                    'the payload was not attached',
+                );
+              }
+
+              ctx.logger.info(
+                `Attached ${ctx.input.fileName} to ${ctx.input.parentId} ` +
+                  `as ${ctx.input.kind} on branch ${branch}`,
+              );
+              ctx.output('id', object.id);
+              ctx.output('size', object.file_size?.value ?? 0);
+            },
+          }),
+
+          createTemplateAction({
             id: 'infrahub:graphql:execute',
             description: 'Execute a GraphQL query or mutation against Infrahub',
             schema: {

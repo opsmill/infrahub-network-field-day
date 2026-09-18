@@ -104,7 +104,36 @@ const SCHEMA: Record<string, any> = {
       // Optional and many: still left off, or the form would ask for every
       // derived collection a kind has.
       { name: 'extras', peer: 'AvdTag', cardinality: 'many', optional: true },
+      // A CoreFileObject peer. Its own hfid is derived from its parent and
+      // that parent is mandatory, so the file cannot exist before this object
+      // -- an identifier field for it could only ever name something absent.
+      // It must therefore become a CONTENT field plus an upload step.
+      {
+        name: 'payload_file',
+        peer: 'ServiceWirelessPayloadFile',
+        cardinality: 'one',
+        optional: true,
+        label: 'Payload File',
+      },
       { name: 'profiles', peer: 'CoreProfile', cardinality: 'many' },
+    ],
+  },
+  '/api/schema/ServiceWirelessPayloadFile': {
+    name: 'WirelessPayloadFile',
+    namespace: 'Service',
+    human_friendly_id: ['service__service_identifier__value'],
+    inherit_from: ['CoreFileObject'],
+    attributes: [],
+    relationships: [
+      // The name the upload step has to set, read from the schema rather than
+      // assumed -- nothing else in the template knows the peer calls it this.
+      {
+        name: 'service',
+        peer: 'ServiceWireless',
+        cardinality: 'one',
+        optional: false,
+        kind: 'Parent',
+      },
     ],
   },
   '/api/schema/AvdTag': {
@@ -451,6 +480,59 @@ describe('InfrahubEntityProvider', () => {
     // says "WPA2 Personal".
     expect(security.enum).toEqual(['open', 'wpa2-personal']);
     expect(security.enumNames).toEqual(['Open', 'WPA2 Personal']);
+  });
+
+  it('asks for a file peer as content, never as an identifier', async () => {
+    // A CoreFileObject's hfid is derived from its parent and that parent is
+    // mandatory, so the file cannot exist before the object that owns it. An
+    // identifier field on a CREATE form could only ever reference something
+    // absent -- it looked like the way to supply a payload and was unusable.
+    const template = (await run())['Template:wireless-request'];
+    const [parameters] = template.spec!.parameters as any[];
+    const create = parameters.dependencies.mode.oneOf.find(
+      (branch: any) => branch.properties.mode.enum[0] === 'create',
+    );
+
+    expect(create.properties.payload_file).toBeUndefined();
+    expect(create.properties.payload_file_content).toMatchObject({
+      type: 'string',
+      'ui:widget': 'textarea',
+    });
+  });
+
+  it('attaches the pasted payload with an upload step', async () => {
+    // `storage_id` and `checksum` are READ-ONLY on the Create input, which
+    // takes only `id`, the parent and the groups -- content arrives through
+    // the mutation's own `file: Upload!`. So this cannot be a graphql step.
+    const template = (await run())['Template:wireless-request'];
+    const step = (template.spec!.steps as any[]).find(
+      s => s.id === 'payload_file_upload',
+    );
+
+    expect(step.action).toBe('infrahub:file:upload');
+    expect(step.input.kind).toBe('ServiceWirelessPayloadFile');
+    // Read from the peer's own schema: nothing else knows it says `service`,
+    // and guessing `app` would work for one kind and no others.
+    expect(step.input.parentField).toBe('service');
+    // The parent comes from the create step's OUTPUT, because the file's hfid
+    // is derived from its parent and cannot be looked up before it exists.
+    expect(step.input.parentId).toContain(
+      'steps.create.output.data.ServiceWirelessCreate.object.id',
+    );
+    // Guarded, so an empty box attaches nothing rather than an empty file.
+    expect(step.if).toContain('parameters.payload_file_content');
+  });
+
+  it('never tries to set a file peer as an ordinary relationship', async () => {
+    // The guard that makes the two tests above mean something: were the
+    // relationship still in `optionalRels`, the form would keep working and a
+    // second step would quietly try to set `payload_file` by an hfid that
+    // cannot exist, failing only at submit time.
+    const template = (await run())['Template:wireless-request'];
+    const ids = (template.spec!.steps as any[]).map(step => step.id);
+
+    expect(ids).not.toContain('payload_file');
+    expect(ids).toContain('payload_file_upload');
   });
 
   it('opens a proposed change without naming a field the schema lacks', async () => {

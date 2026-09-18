@@ -134,6 +134,27 @@ Four things about it are deliberate and each looks like an oversight:
   https://localhost:7007/api/catalog/entities/by-name/User/default/alice failed`, which names the
   catalog and never mentions TLS.
 
+**A file payload is pasted into the form and attached by its own step.** A relationship whose
+peer inherits `CoreFileObject` — `ServiceFabricApp.manifests_file` and `values_file` — is offered
+as a `<name>_content` textarea rather than as an identifier, and `infrahub:file:upload` attaches it
+after the create. Three things forced that shape:
+
+- **An identifier field for it could never work.** The peer's own `human_friendly_id` is derived
+  from its parent and that parent is mandatory, so the file cannot exist before the object that
+  owns it. On a create form the field could only ever name something absent.
+- **It cannot be an `infrahub:graphql:execute` step.** `storage_id`, `checksum`, `file_name` and
+  `file_size` are all read-only on the Create input, which accepts only `id`, the parent and the
+  groups. Content arrives through the mutation's own `file: Upload!` argument — a GraphQL
+  multipart request, which the JSON-posting client cannot express. `Upload` being non-null is the
+  useful half: node and content are created in one call, so no file node ever exists empty.
+- **Without it no application could be requested through the portal at all.** `manifests` and
+  `chart_values` are `JSON` kind and `isFormable` rejects those, so a portal-created app had
+  neither a chart nor manifests and `crossplane_fabric_app` raised at artifact render.
+
+The peer's parent field is read from its schema rather than assumed — `app` here, but nothing else
+in the template knows that — and the step is guarded on the textarea being non-empty, so an
+untouched box attaches nothing instead of an empty file.
+
 **Building the portal is two steps, and `invoke backstage-build` is the one that does both.**
 The Dockerfile compiles nothing: it unpacks `packages/backend/dist/bundle.tar.gz`, which
 `yarn build:backend` produces on the host. A bare `docker compose build` therefore packages
