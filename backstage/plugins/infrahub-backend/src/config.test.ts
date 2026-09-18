@@ -31,6 +31,8 @@ describe('readCatalogConfig', () => {
       refreshMinutes: 1,
       owner: 'user:default/guest',
       system: undefined,
+      // Empty by default: nothing is filled from the session unless asked for.
+      userFields: [],
       kinds: [],
       discover: [],
     });

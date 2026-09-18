@@ -543,7 +543,11 @@ export class InfrahubEntityProvider implements EntityProvider {
    * on the entity -- this is only about what a person is asked to type.
    */
   private offForm(mapping: KindMapping): string[] {
-    return [...GENERATED_FORM_EXCLUDES, ...mapping.formExclude];
+    return [
+      ...GENERATED_FORM_EXCLUDES,
+      ...this.catalog.userFields,
+      ...mapping.formExclude,
+    ];
   }
 
   private async resolveMappings(): Promise<KindMapping[]> {
@@ -1106,6 +1110,13 @@ export class InfrahubEntityProvider implements EntityProvider {
    */
   private serviceTemplate(kind: LoadedKind): Entity {
     const upfront = this.upfrontAttributes(kind);
+    // Attributes filled from the signed-in Backstage user. They are off the
+    // form, so they are not in `upfront` -- and at least one of them
+    // (`ServiceAppAccess.requester`) is MANDATORY, so leaving them out of the
+    // create entirely would fail the mutation rather than merely lose a value.
+    const userAttributes = kind.readOnly.filter(name =>
+      this.catalog.userFields.includes(name),
+    );
     // An optional relationship cannot go in the create: its variable would be
     // non-null and a blank field would fail the mutation.
     // A field a generator allocates is read and shown, but never asked for.
@@ -1319,8 +1330,21 @@ export class InfrahubEntityProvider implements EntityProvider {
                 upfront,
                 requiredRels,
                 kind.mapping.groups,
+                userAttributes,
               ),
               variables: {
+                // WHO ASKED, taken from the Backstage session rather than typed.
+                // `user.entity` is the catalog User the sign-in resolver matched,
+                // so this is the identity that signed in, not a claim about it.
+                // Falls back to the entity ref when a User carries no email --
+                // a Dex account with no catalog entry still signs in.
+                ...Object.fromEntries(
+                  userAttributes.map(name => [
+                    name,
+                    '${{ user.entity.spec.profile.email if ' +
+                      'user.entity.spec.profile.email else user.ref }}',
+                  ]),
+                ),
                 ...Object.fromEntries(
                   upfront.map(([name]) => [name, `\${{ parameters.${name} }}`]),
                 ),
@@ -1463,8 +1487,10 @@ export class InfrahubEntityProvider implements EntityProvider {
     attributes: [string, any][],
     relationships: ResolvedRelationship[],
     groups: string[],
+    userAttributes: string[] = [],
   ): string {
     const declarations = [
+      ...userAttributes.map(name => `$${name}: String!`),
       ...attributes.map(
         ([name, property]) =>
           `$${name}: ${JSON_TO_GRAPHQL[property.type] ?? 'String'}!`,
@@ -1484,6 +1510,7 @@ export class InfrahubEntityProvider implements EntityProvider {
     ].join(', ');
 
     const fields = [
+      ...userAttributes.map(name => `      ${name}: { value: $${name} }`),
       ...attributes.map(([name]) => `      ${name}: { value: $${name} }`),
       // NO `status` HERE, and that is a fix rather than an omission.
       //

@@ -60,6 +60,8 @@ const SCHEMA: Record<string, any> = {
       // /api/schema/json_schema for a kind. Absent from the json_schema fixture
       // below for the same reason the real endpoint never gets that far.
       { name: 'ports', kind: 'List', optional: true },
+      // Mandatory, and filled from the session rather than asked for.
+      { name: 'requester', kind: 'Text', optional: false },
       { name: 'ssid', kind: 'Text', optional: false },
       { name: 'service_identifier', kind: 'Text', optional: false },
       {
@@ -124,6 +126,7 @@ const SCHEMA: Record<string, any> = {
     required: ['ssid', 'service_identifier'],
     properties: {
       service_identifier: { type: 'string' },
+      requester: { type: 'string' },
       ssid: { type: 'string' },
       security: {
         type: 'string',
@@ -187,6 +190,8 @@ const CHANGE = {
 };
 
 const DEFAULTS: CatalogConfig = {
+  // `requester` is filled from the signed-in user, not typed.
+  userFields: ['requester'],
   refreshMinutes: 1,
   owner: 'user:default/guest',
   system: 'infrahub-services',
@@ -457,6 +462,25 @@ describe('InfrahubEntityProvider', () => {
     );
     expect(step.input.query).toContain('CoreProposedChangeCreate');
     expect(step.input.query).not.toContain('tags');
+  });
+
+  it('fills the requester from the session instead of asking for it', async () => {
+    // Asking a person to type who they are is busywork AND unenforceable --
+    // anyone can type anyone. `user.entity` is the catalog User the sign-in
+    // resolver matched, so this is the identity that signed in.
+    const template = (await run())['Template:wireless-request'];
+    const [parameters] = template.spec!.parameters as any[];
+    const create = parameters.dependencies.mode.oneOf.find(
+      (branch: any) => branch.properties.mode.enum[0] === 'create',
+    );
+    expect(create.properties.requester).toBeUndefined();
+
+    const step = (template.spec!.steps as any[]).find(s => s.id === 'create');
+    // It is MANDATORY, so dropping it from the form without setting it here
+    // would fail the mutation rather than merely lose the value.
+    expect(step.input.query).toContain('$requester: String!');
+    expect(step.input.query).toContain('requester: { value: $requester }');
+    expect(step.input.variables.requester).toContain('user.entity.spec.profile.email');
   });
 
   it('offers a mandatory many-relationship, and sends it as a list', async () => {

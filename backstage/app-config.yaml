@@ -238,6 +238,10 @@ infrahub:
   # fields: each kind's own Infrahub schema decides what its entity says, so
   # adding an attribute in Infrahub needs no change here.
   catalog:
+    # Filled from the SIGNED-IN USER, never asked for. A request records who
+    # asked, and typing that is both busywork and unenforceable -- anyone could
+    # type anyone. Kept off every form and set from the Backstage identity.
+    userFields: [requester]
     system: infrahub-services
     kinds:
       - kind: LocationSite

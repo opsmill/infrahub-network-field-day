@@ -30,6 +30,14 @@ export type CatalogConfig = {
   refreshMinutes: number;
   owner: string;
   system?: string;
+  /**
+   * Attributes filled from the SIGNED-IN USER rather than asked for.
+   *
+   * A request carries who asked for it, and asking them to type that is both
+   * busywork and unenforceable -- anyone could type anyone. These are kept off
+   * the form and set from the Backstage identity at submit time.
+   */
+  userFields: string[];
   /** Kinds named directly in config. */
   kinds: KindMapping[];
   /** Generics whose descendants are ingested, resolved against the schema. */
@@ -65,6 +73,7 @@ export function slugFor(kind: string): string {
  */
 export function readCatalogConfig(config: RootConfigService): CatalogConfig {
   const root = config.getOptionalConfig('infrahub.catalog');
+  const userFields = root?.getOptionalStringArray('userFields') ?? [];
 
   const kinds = (root?.getOptionalConfigArray('kinds') ?? []).map(entry => {
     const kind = entry.getString('kind');
@@ -101,6 +110,7 @@ export function readCatalogConfig(config: RootConfigService): CatalogConfig {
     // No default: a plugin should not invent a System entity nobody asked
     // for. Name one and every ingested Component is grouped under it.
     system: root?.getOptionalString('system'),
+    userFields,
     kinds,
     discover,
   };
