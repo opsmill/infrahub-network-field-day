@@ -218,3 +218,109 @@ spec:
       node_kind: ServiceAppAccess
       mutation_action: "created"
       action: run-app-access-generator
+
+    # ...AND ON UPDATE, which is not symmetry for its own sake. `status` is how
+    # every service kind here is withdrawn, and for three cycles nothing watched
+    # it: setting `decommissioning` through the UI or the portal fired no
+    # generator, so the branch diff showed a status change and none of its
+    # consequences -- the exact failure the `created` rules above exist to
+    # prevent, arrived at from the other direction. Measured: withdrawing a
+    # grant required running `infrahubctl generator generate-app-access` by
+    # hand.
+    #
+    # SCOPED TO THE INPUTS, one rule per field, rather than a bare `updated`.
+    # The generator writes back to its own target -- `_set_status` and
+    # `_link_granted_rules` -- so an unscoped rule would fire on the
+    # generator's own output. `granted_rules` is deliberately absent below for
+    # that reason: it is what this generator PRODUCES, and watching it would
+    # feed every run straight back into another.
+    #
+    # The loop terminates even so, because both write-backs are guarded by an
+    # equality check: `_set_status` returns before saving when the status
+    # already matches, and `_link_granted_rules` saves only when the rule set
+    # actually changed. So a creation now costs two runs -- build, then one
+    # no-op -- and a withdrawal the same. That is the price of the diff being
+    # honest, and it is cheap.
+    - name: trigger-app-access-generator-update-status
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "updated"
+      action: run-app-access-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: status
+            value_match: any
+
+    # Which ports the grant asks for, when it names them rather than letting
+    # `advertised_service_ports` derive them from the application's manifests.
+    - name: trigger-app-access-generator-update-ports
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "updated"
+      action: run-app-access-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: ports
+            value_match: any
+
+    # The destination. Changing the application changes the VIP, the ports and
+    # -- through `ServiceFabricApp.vrf` -> `SecurityZone.vrf` -- the zone the
+    # rule is written into.
+    - name: trigger-app-access-generator-update-application
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "updated"
+      action: run-app-access-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: application
+            modification_type: updated
+
+    - name: trigger-app-access-generator-update-destination-vip
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "updated"
+      action: run-app-access-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: destination_vip
+            modification_type: updated
+
+    # The three ways a grant says where the session comes from. A grant naming
+    # only a site derives the other two, so all three are inputs.
+    - name: trigger-app-access-generator-update-source-site
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "updated"
+      action: run-app-access-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: source_site
+            modification_type: updated
+
+    - name: trigger-app-access-generator-update-source-zone
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "updated"
+      action: run-app-access-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: source_zone
+            modification_type: updated
+
+    - name: trigger-app-access-generator-update-source-address
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "updated"
+      action: run-app-access-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: source_address
+            modification_type: updated

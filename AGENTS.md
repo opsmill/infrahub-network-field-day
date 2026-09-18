@@ -578,6 +578,26 @@ That last part only works because `generate-app-access` asks for the artifact to
 **on its own branch**. Without that the proposed change shows new firewall objects against an
 unchanged configuration, which is worse than showing nothing.
 
+**`ServiceAppAccess` also fires on `updated`, and it is the only service kind that does.**
+`created` alone covers requesting a grant and not withdrawing one: `status` is how every kind
+in the table above is withdrawn, and nothing watched it, so setting `decommissioning` through
+the UI or the portal fired no generator and the branch diff showed a status change with none of
+its consequences — the same failure the `created` rules exist to prevent, reached from the other
+end. Withdrawing a grant used to require running `infrahubctl generator generate-app-access` by
+hand.
+
+**The rules are scoped to the INPUTS, one per field, rather than a bare `updated`.** The
+generator writes back to its own target through `_set_status` and `_link_granted_rules`, so an
+unscoped rule fires on the generator's own output. `granted_rules` is deliberately not watched
+for exactly that reason: it is what the generator *produces*.
+
+**It terminates because both write-backs are guarded, not because the trigger is clever.**
+`_set_status` returns before saving when the status already matches and `_link_granted_rules`
+saves only when the rule set changed, so the second run emits no event. Measured on a branch:
+setting `decommissioning` produced exactly two `action-run-generator` runs — the withdrawal,
+then one no-op — and stopped. Anything that removes either guard turns this into a loop, which
+is why they are load bearing rather than tidy.
+
 ## Deployment state, and the one rule about it
 
 `DeploymentState` and `DeploymentDiffFile` (`schemas/deployment.yml`) record whether each
