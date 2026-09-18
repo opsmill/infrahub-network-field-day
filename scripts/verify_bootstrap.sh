@@ -270,6 +270,28 @@ curl -s -H "Authorization: Bearer $T" --max-time 25 \
   | python3 -c "import json,sys; print(len(json.load(sys.stdin)))"' 2>/dev/null)
 check "${got_templates:-0}" "$want_templates" "request templates in the portal catalogue"
 
+# ... AND THAT ONE CAN ACTUALLY BE SUBMITTED.
+#
+# A template being ingested says nothing about whether the mutation inside it is
+# one Infrahub will accept, and every defect found in this path was of exactly
+# that shape: a status value the schema does not have, a List attribute dropped,
+# an hfid of the wrong length. All of them left the catalogue looking healthy.
+#
+# The mutation is taken OUT OF THE RENDERED TEMPLATE rather than written here --
+# a copy would pass while the portal shipped something else, which is the failure
+# being guarded against. It runs on a branch that is deleted afterwards, so a
+# verification run leaves no grant behind and never reaches a device.
+if docker exec "$DESK" sh -c '
+T=$(/tmp/portal_signin.sh)
+[ -n "$T" ] || exit 1
+curl -s -H "Authorization: Bearer $T" --max-time 25 \
+  "https://10.90.0.11:32001/api/catalog/entities/by-name/template/default/app-access-request"' \
+  2>/dev/null | uv run python scripts/lib/portal_request_check.py; then
+    pass "a request can be submitted through the portal's own create mutation"
+else
+    fail "the portal's create mutation is not one Infrahub accepts"
+fi
+
 elapsed=$(( $(date +%s) - started ))
 printf '\n=== [%s] COMPLETE in %sm%ss — %s failure(s) ===\n' \
     "$LABEL" "$((elapsed / 60))" "$((elapsed % 60))" "$FAILURES"
