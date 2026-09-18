@@ -89,11 +89,16 @@ have="$(docker exec "$NODE" ctr -n k8s.io images ls "name==docker.io/${IMAGE}" -
 if [ -n "$have" ] && docker exec "$NODE" ctr -n k8s.io images ls "name==docker.io/${IMAGE}" 2>/dev/null | grep -q "$(echo "$want" | cut -d: -f2 | head -c 12)"; then
     log "$IMAGE already on $NODE"
 else
+    # STREAMED, not staged. Writing the tar out and then `docker cp`ing it put
+    # two full copies of a ~200MB image through disk and page cache, on a host
+    # that is also running the lab -- and the deploy was killed for memory
+    # rather than failing, which reads as an infrastructure hiccup. `ctr import`
+    # reads a tar on stdin, so neither copy is needed.
+    #
+    # `set -o pipefail` is on via `set -euo`, so a failure in `docker save`
+    # still fails the script rather than being masked by a happy `ctr`.
     log "importing $IMAGE into $NODE"
-    docker save "$IMAGE" -o "$WORK/image.tar"
-    docker cp "$WORK/image.tar" "$NODE:/tmp/image.tar"
-    docker exec "$NODE" ctr -n k8s.io images import /tmp/image.tar >/dev/null
-    docker exec "$NODE" rm -f /tmp/image.tar
+    docker save "$IMAGE" | docker exec -i "$NODE" ctr -n k8s.io images import - >/dev/null
 fi
 
 # --------------------------------------------------------------------------
