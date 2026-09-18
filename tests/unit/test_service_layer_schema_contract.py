@@ -522,15 +522,24 @@ def test_app_access_names_every_object_needed_to_grant_and_revoke() -> None:
     access = _node(_load_yaml(ACCESS_SERVICES_SCHEMA), "Service", "AppAccess")
     relationships = _relationships(access)
 
+    # Mandatory: nothing can derive these.
     for name, peer in (
         ("application", "ServiceFabricApp"),
         ("source_zone", "SecurityZone"),
         ("source_address", "SecurityGenericAddress"),
-        ("destination_vip", "IpamIPAddress"),
     ):
         assert relationships[name]["peer"] == peer
         assert relationships[name]["cardinality"] == "one"
         assert relationships[name]["optional"] is False
+
+    # OPTIONAL, and empty is the normal case. Cilium assigns the VIP to a
+    # LoadBalancer service at runtime, so a requester cannot honestly know it;
+    # left empty the generator permits to the application's own `vip_block`,
+    # the set of addresses it can ever be advertised on. Naming one is how you
+    # ask for a single address instead.
+    assert relationships["destination_vip"]["peer"] == "IpamIPAddress"
+    assert relationships["destination_vip"]["cardinality"] == "one"
+    assert relationships["destination_vip"]["optional"] is True
 
     # What the grant caused to exist, so revocation is traceable.
     assert relationships["granted_rules"]["peer"] == "SecurityPolicyRule"

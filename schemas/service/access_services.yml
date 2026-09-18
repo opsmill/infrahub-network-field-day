@@ -101,7 +101,15 @@ nodes:
         label: Destination VIP
         kind: Attribute
         cardinality: one
-        optional: false
+        # OPTIONAL, and empty is the normal case. A requester cannot honestly
+        # know this: Cilium assigns the address to a LoadBalancer service at
+        # runtime. Left empty the generator permits to the application's own
+        # `vip_block` instead, which is exactly the set of addresses it can ever
+        # be advertised on -- narrower than `any`, and knowable at request time.
+        #
+        # Naming one still works, and is how you ask for a single address rather
+        # than the block.
+        optional: true
         # Must sit inside the range the border leaf re-advertises to the
         # source, or the grant is permitted by the firewall and still
         # unroutable. Because both sides are IPAM objects that containment is

@@ -74,6 +74,7 @@ class GenerateAppAccessQueryTargetEdgesNodeApplicationNode(BaseModel):
     policy_allow_ports: Optional[
         "GenerateAppAccessQueryTargetEdgesNodeApplicationNodePolicyAllowPorts"
     ]
+    vip_block: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock"
     vrf: "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf"
 
 
@@ -83,6 +84,21 @@ class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeName(BaseModel):
 
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNodePolicyAllowPorts(BaseModel):
     value: Optional[Any]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock(BaseModel):
+    node: Optional["GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlockNode"]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlockNode(BaseModel):
+    id: str
+    prefix: Optional[
+        "GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlockNodePrefix"
+    ]
+
+
+class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlockNodePrefix(BaseModel):
+    value: Optional[str]
 
 
 class GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf(BaseModel):
@@ -386,6 +402,7 @@ class GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefix(
     book_index: Optional[
         "GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefixBookIndex"
     ]
+    ip_prefix: "GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefixIpPrefix"
 
 
 class GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefixName(
@@ -398,6 +415,20 @@ class GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefixB
     BaseModel
 ):
     value: Optional[Any]
+
+
+class GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefixIpPrefix(
+    BaseModel
+):
+    node: Optional[
+        "GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefixIpPrefixNode"
+    ]
+
+
+class GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefixIpPrefixNode(
+    BaseModel
+):
+    id: str
 
 
 class GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAddress(BaseModel):
@@ -452,6 +483,8 @@ GenerateAppAccessQueryTargetEdges.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplication.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNode.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlock.model_rebuild()
+GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVipBlockNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrf.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeApplicationNodeVrfNode.model_rebuild()
 GenerateAppAccessQueryTargetEdgesNodeSourceZone.model_rebuild()
@@ -485,5 +518,6 @@ GenerateAppAccessQuerySecurityGenericAddressEdges.model_rebuild()
 GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPAddress.model_rebuild()
 GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPAddressIpAddress.model_rebuild()
 GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefix.model_rebuild()
+GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAMIPPrefixIpPrefix.model_rebuild()
 GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityIPAddress.model_rebuild()
 GenerateAppAccessQuerySecurityGenericAddressEdgesNodeSecurityPrefix.model_rebuild()

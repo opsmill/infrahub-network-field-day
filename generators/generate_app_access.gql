@@ -43,6 +43,17 @@ query GenerateAppAccessQuery($name: String!) {
             policy_allow_ports {
               value
             }
+            # The block its VIPs come from. A grant naming no `destination_vip`
+            # permits to this instead -- the set of addresses the application
+            # can ever be advertised on.
+            vip_block {
+              node {
+                id
+                prefix {
+                  value
+                }
+              }
+            }
             vrf {
               node {
                 id
@@ -229,6 +240,13 @@ query GenerateAppAccessQuery($name: String!) {
           }
           book_index {
             value
+          }
+          # The wrapped prefix, so an entry an earlier run created for a derived
+          # destination is FOUND rather than duplicated beside itself.
+          ip_prefix {
+            node {
+              id
+            }
           }
         }
         ... on SecurityPrefix {

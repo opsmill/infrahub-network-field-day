@@ -107,6 +107,7 @@ def _grant(
     advertising_device: str | None = BORDER_LEAF,
     device_hostvars: dict[str, Any] | None = None,
     app_ports: Any = _UNSET,
+    app_vip_block: str | None = "prefix-nfd41-demo-vips",
 ) -> dict[str, Any]:
     """One ServiceAppAccess as GraphQL returns it.
 
@@ -134,6 +135,12 @@ def _grant(
                     # What the application says it serves. A grant naming no
                     # ports takes these.
                     "policy_allow_ports": {"value": resolved_app_ports},
+                    # The block a grant naming no VIP permits to.
+                    "vip_block": (
+                        {"node": {"id": app_vip_block, "prefix": {"value": "10.112.240.0/28"}}}
+                        if app_vip_block
+                        else {"node": None}
+                    ),
                     "vrf": ({"node": {"id": app_vrf, "name": {"value": "K8S_PROD"}}} if app_vrf else {"node": None}),
                 }
             },
@@ -194,6 +201,8 @@ def _address_book(*, vip_entry_for: str | None = None, ours: bool = False) -> di
                 "id": f"addr-book-{index}",
                 "name": {"value": f"entry-{index}"},
                 "book_index": {"value": index},
+                # Hand-written entries wrap nothing this generator indexes.
+                "ip_prefix": {"node": None},
             }
         }
         for index in HAND_WRITTEN_BOOK_INDEXES
@@ -540,9 +549,28 @@ def test_validate_model_raises_when_the_grant_is_missing() -> None:
         validate_model(parsed)
 
 
-def test_validate_model_raises_when_the_destination_vip_is_gone() -> None:
+def test_a_grant_with_no_vip_permits_to_the_applications_block() -> None:
+    """A requester cannot honestly know the VIP: Cilium assigns it to a
+    LoadBalancer service at runtime. The application's `vip_block` is the set of
+    addresses it can ever be advertised on, and IS knowable at request time."""
+    context = validate_model(_query(vip_id=None))
+    assert context.vip_is_block
+    assert context.vip_id == "prefix-nfd41-demo-vips"
+    assert context.vip_address == "10.112.240.0/28"
+
+
+def test_a_named_vip_still_wins() -> None:
+    """Naming one is how you ask for a single address rather than the block."""
+    context = validate_model(_query())
+    assert not context.vip_is_block
+    assert context.vip_address == VIP_ADDRESS
+
+
+def test_no_vip_and_no_block_is_refused() -> None:
+    """There is no address to permit, and permitting `any` would be the worst
+    possible reading of an empty field."""
     with pytest.raises(ValueError, match="no destination_vip"):
-        validate_model(_query(vip_id=None))
+        validate_model(_query(vip_id=None, app_vip_block=None))
 
 
 # ---------------------------------------------------------------------------

@@ -317,6 +317,9 @@ class GrantContext:
     requester: str | None
     existing_vip_entry: Existing | None
     """An address-book entry already wrapping this VIP, if one exists."""
+    vip_is_block: bool = False
+    """True when the destination is the application's `vip_block` rather than a
+    single VIP the requester named. The address-book entry is then a prefix."""
     taken_book_indexes: frozenset[int] = field(default_factory=frozenset)
     services_by_port: dict[int, Existing] = field(default_factory=dict)
     """Existing TCP service objects, keyed by port. Referenced, never duplicated."""
@@ -550,9 +553,14 @@ def index_address_book(
         if book_index is not None:
             taken.add(int(book_index))
 
-        wrapped = _node_of(getattr(node, "ip_address", None))
-        if wrapped is not None:
-            by_address[wrapped.id] = Existing(id=node.id, name=_value(getattr(node, "name", None)))
+        # Both shapes: an entry wrapping a host address, and one wrapping a
+        # prefix. A derived destination is a `vip_block`, so indexing only
+        # `ip_address` would miss the entry an earlier run created and write a
+        # second one beside it every time.
+        for field_name in ("ip_address", "ip_prefix"):
+            wrapped = _node_of(getattr(node, field_name, None))
+            if wrapped is not None:
+                by_address[wrapped.id] = Existing(id=node.id, name=_value(getattr(node, "name", None)))
 
     return by_address, frozenset(taken)
 
@@ -607,15 +615,30 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
     # query returned a grant whose peer was deleted out from under it.
     source_zone = _node_of(grant.source_zone)
     source_address = _node_of(grant.source_address)
-    vip = _node_of(grant.destination_vip)
     for label, node in (
         ("source_zone", source_zone),
         ("source_address", source_address),
-        ("destination_vip", vip),
     ):
         if node is None:
             msg = f"grant {name!r} has no {label}; the rule cannot be built"
             raise ValueError(msg)
+
+    # THE DESTINATION, named or derived. A requester cannot honestly know the
+    # VIP -- Cilium assigns it to a LoadBalancer service at runtime -- so a
+    # grant naming none permits to the application's own `vip_block`, the set of
+    # addresses it can ever be advertised on.
+    application_node = _node_of(grant.application)
+    vip = _node_of(grant.destination_vip)
+    vip_is_block = False
+    if vip is None:
+        vip = _node_of(getattr(application_node, "vip_block", None)) if application_node else None
+        vip_is_block = vip is not None
+    if vip is None:
+        msg = (
+            f"grant {name!r} names no destination_vip and its application has no "
+            "vip_block; there is no address to permit"
+        )
+        raise ValueError(msg)
 
     # V8. A grant whose source and destination resolve to the same zone is an
     # intrazone policy, which this firewall's model does not express.
@@ -627,7 +650,6 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
         raise ValueError(msg)
 
     entries_by_address, taken = index_address_book(parsed)
-    application = _node_of(grant.application)
 
     return GrantContext(
         grant=grant,
@@ -638,10 +660,11 @@ def validate_model(parsed: GenerateAppAccessQuery) -> GrantContext:
         source_zone_id=source_zone.id,
         source_address_id=source_address.id,
         vip_id=vip.id,
-        vip_address=_value(vip.address),
+        vip_address=_value(vip.prefix) if vip_is_block else _value(vip.address),
+        vip_is_block=vip_is_block,
         firewall_id=derive_firewall(parsed),
         tcp_protocol_id=derive_tcp_protocol(parsed, name),
-        application_name=_value(application.name) if application else None,
+        application_name=_value(application_node.name) if application_node else None,
         requester=_value(grant.requester),
         existing_vip_entry=entries_by_address.get(vip.id),
         taken_book_indexes=taken,
@@ -700,12 +723,20 @@ class AppAccessGenerator(InfrahubGenerator):
             self.logger.info("Referencing the existing address-book entry for the destination VIP")
             return existing.id
 
+        # A DERIVED destination is the application's `vip_block`, which is a
+        # prefix rather than a host -- so it needs the prefix-shaped address
+        # kind and the prefix-shaped field. Wrapping a prefix id in
+        # `SecurityIPAMIPAddress.ip_address` is refused by the schema.
+        kind = "SecurityIPAMIPPrefix" if context.vip_is_block else "SecurityIPAMIPAddress"
+        peer_field = "ip_prefix" if context.vip_is_block else "ip_address"
+        described = "VIP block" if context.vip_is_block else "VIP"
+
         entry = await self.client.create(
-            kind="SecurityIPAMIPAddress",
+            kind=kind,
             data={
                 "name": context.vip_entry_name,
-                "description": (f"{context.application_name} VIP, granted to {context.requester}"),
-                "ip_address": context.vip_id,
+                "description": (f"{context.application_name} {described}, granted to {context.requester}"),
+                peer_field: context.vip_id,
                 # Without this the entry is referenced by the rule and never
                 # declared in the book, and the configuration does not load.
                 "book_index": context.book_index,
