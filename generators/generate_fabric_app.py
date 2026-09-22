@@ -188,6 +188,15 @@ class FabricAppGenerator(InfrahubGenerator):
 
         if not wants_a_block(app):
             await self._withdraw(app)
+            # `decommissioned` ONLY when it is actually being withdrawn.
+            # `wants_a_block` is also false for an application that is simply not
+            # exposed, and that one is built and working -- marking it
+            # decommissioned would report a healthy cluster-internal application
+            # as gone.
+            if _value(app.status) in WITHDRAWN_STATUSES:
+                await self._set_status(app.id, "decommissioned")
+            else:
+                await self._set_status(app.id, "active")
             return
 
         # A block that already exists is kept, whoever put it there. This is the
@@ -199,10 +208,19 @@ class FabricAppGenerator(InfrahubGenerator):
                 _value(app.name),
                 _value(_node_of(app.vip_block).prefix),
             )
+            await self._set_status(app.id, "active")
             return
 
-        context = validate_model(parsed)
-        await self._allocate(context)
+        try:
+            context = validate_model(parsed)
+            await self._allocate(context)
+        except Exception:
+            # `error` rather than leaving it `provisioning`: both mean no block,
+            # and "tried and failed" is otherwise indistinguishable from "not
+            # built yet" -- the same distinction `generate-app-access` draws.
+            await self._set_status(app.id, "error")
+            raise
+        await self._set_status(app.id, "active")
 
     async def _allocate(self, context: AppContext) -> None:
         """Take the next free block and record that it is ours.
@@ -232,6 +250,27 @@ class FabricAppGenerator(InfrahubGenerator):
 
         self.logger.info("Allocated %s to application %r", allocated, context.name)
         await self._rerender(context.app.id)
+
+    async def _set_status(self, app_id: str, status: str) -> None:
+        """Record the outcome on the application.
+
+        WITHOUT THIS A REQUESTED APPLICATION READS `provisioning` FOREVER, beside
+        a seeded one reading `active` -- in the proposed change a reviewer is
+        about to approve, the thing being requested looks unfinished and the
+        thing already working looks done. The status is the service layer's own
+        answer to "did this get built", and nothing was answering it.
+
+        Guarded on the current value, like the grant generator's, so a run that
+        changes nothing emits no event: `triggers.yml` watches this kind's
+        `created` only, but an unguarded save would still churn the branch diff
+        on every pass.
+        """
+        app = await self.client.get(kind="ServiceFabricApp", id=app_id)
+        if _value(app.status) == status:  # type: ignore[attr-defined]
+            return
+        app.status.value = status  # type: ignore[union-attr]
+        await app.save(update_group_context=False)
+        self.logger.info("Application status set to %s", status)
 
     async def _withdraw(self, app: AppNode) -> None:
         """Take back a block this generator allocated, and only that.

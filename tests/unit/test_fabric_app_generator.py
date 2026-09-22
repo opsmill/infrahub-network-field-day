@@ -196,6 +196,10 @@ class _RecordingNode:
         self.saves: list[dict[str, Any]] = []
         self.vip_block: Any = "unset"
         self.vip_block_managed = _RecordingAttribute(False)
+        # The generator records the outcome on the service, so the double needs
+        # the attribute it writes. Overridden by a `status=` kwarg below, which
+        # is how a test says what the service already carried.
+        self.status = _RecordingAttribute("provisioning")
         self.artifacts: list[str] = []
         for key, value in attributes.items():
             setattr(self, key, _RecordingAttribute(value))
@@ -203,7 +207,14 @@ class _RecordingNode:
     async def save(self, **kwargs: Any) -> None:
         # Recorded as a snapshot, so a test can tell what was true AT each save
         # rather than only at the end.
-        self.saves.append({**kwargs, "vip_block": self.vip_block, "managed": self.vip_block_managed.value})
+        self.saves.append(
+            {
+                **kwargs,
+                "vip_block": self.vip_block,
+                "managed": self.vip_block_managed.value,
+                "status": self.status.value,
+            }
+        )
 
     async def artifact_generate(self, name: str) -> None:
         self.artifacts.append(name)
@@ -215,9 +226,14 @@ class _RecordingClient:
     deleted: list[tuple[str, str]] = field(default_factory=list)
     nodes: dict[str, _RecordingNode] = field(default_factory=dict)
     allocated_prefix: str = "10.112.240.16/28"
+    # What a fetched service already carries. The generator reads its own target
+    # back to record an outcome and skips the save when it already matches, so a
+    # double that always answers `provisioning` would make every no-op look like
+    # a write.
+    node_status: str = "provisioning"
 
     async def get(self, kind: str, id: str) -> Any:  # noqa: A002
-        return self.nodes.setdefault(id, _RecordingNode(id))
+        return self.nodes.setdefault(id, _RecordingNode(id, status=self.node_status))
 
     async def delete(self, kind: str, id: str) -> None:  # noqa: A002
         self.deleted.append((kind, id))
@@ -257,14 +273,20 @@ async def test_the_allocation_is_keyed_on_the_id_so_a_rename_keeps_its_block() -
 async def test_the_ownership_flag_is_written_with_the_block_not_after_it() -> None:
     """Two saves would leave a window in which the block exists and nothing
     records who owns it -- and a withdrawal landing in that window would decline
-    to remove a block this generator had in fact allocated, leaking it."""
+    to remove a block this generator had in fact allocated, leaking it.
+
+    The invariant is about the FIRST save, not about there being only one: the
+    status write-back that follows is a separate fact recorded afterwards, and
+    it cannot open that window because the flag is already true when it runs.
+    """
     client = _RecordingClient()
     await _generator(client).generate(_query(app=_app()).model_dump(by_alias=True))
 
     service = client.nodes["app-1"]
-    assert len(service.saves) == 1
     assert service.saves[0]["vip_block"] == "new-block"
     assert service.saves[0]["managed"] is True
+    # Never the block without the flag, in any save.
+    assert not [save for save in service.saves if save["vip_block"] == "new-block" and save["managed"] is not True]
 
 
 @pytest.mark.asyncio
@@ -274,14 +296,17 @@ async def test_an_application_that_already_has_a_block_keeps_it() -> None:
     otternet-demo names 10.112.240.0/28, declared in objects/ and delivered into a
     live cluster. Reallocating it would move a manifest that is already applied.
     """
-    client = _RecordingClient()
+    client = _RecordingClient(node_status="active")
     parsed = _query(app=_app(block=(SEEDED_BLOCK_ID, SEEDED_BLOCK)))
 
     await _generator(client).generate(parsed.model_dump(by_alias=True))
 
     assert client.allocations == []
     assert client.deleted == []
-    assert client.nodes == {}
+    # NOTHING WRITTEN, which is the claim -- rather than nothing read. The
+    # generator now reads the service back to record its status, and a status
+    # that already matches is not saved, so `saves` is the honest measure.
+    assert [save for node in client.nodes.values() for save in node.saves] == []
 
 
 @pytest.mark.asyncio
@@ -311,6 +336,46 @@ async def test_withdrawal_clears_the_reference_before_deleting_the_prefix() -> N
 
 
 @pytest.mark.asyncio
+async def test_an_allocated_application_is_marked_active() -> None:
+    """Otherwise a requested application reads `provisioning` for ever.
+
+    In the proposed change a reviewer is about to approve, the thing being
+    requested would look unfinished beside a seeded one reading `active` -- on
+    the one workflow whose whole point is that merging is the approval.
+    """
+    client = _RecordingClient()
+    await _generator(client).generate(_query(app=_app(status="provisioning")).model_dump(by_alias=True))
+
+    assert client.nodes["app-1"].status.value == "active"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_allocation_is_marked_error_not_left_provisioning() -> None:
+    """`error` and `provisioning` both mean no block, and only one of them says
+    the generator tried. The grant generator draws the same distinction."""
+    client = _RecordingClient()
+    # No cluster, so validate_model refuses: the VIP pool is resolved THROUGH the
+    # cluster and there is nothing to resolve it from.
+    parsed = _query(app=_app(cluster=False, status="provisioning"))
+
+    with pytest.raises(ValueError, match="cluster"):
+        await _generator(client).generate(parsed.model_dump(by_alias=True))
+
+    assert client.nodes["app-1"].status.value == "error"
+
+
+@pytest.mark.asyncio
+async def test_an_unexposed_application_is_active_not_decommissioned() -> None:
+    """`wants_a_block` is false for an unexposed application too, and that one is
+    built and working -- marking it decommissioned would report a healthy
+    cluster-internal application as gone."""
+    client = _RecordingClient()
+    await _generator(client).generate(_query(app=_app(exposed=False, status="provisioning")).model_dump(by_alias=True))
+
+    assert client.nodes["app-1"].status.value == "active"
+
+
+@pytest.mark.asyncio
 async def test_a_hand_written_block_survives_decommissioning() -> None:
     """THE REASON `vip_block_managed` EXISTS.
 
@@ -318,13 +383,13 @@ async def test_a_hand_written_block_survives_decommissioning() -> None:
     Deleting it would remove an object the seed data owns and break the next
     `invoke load`.
     """
-    client = _RecordingClient()
+    client = _RecordingClient(node_status="decommissioned")
     parsed = _query(app=_app(status="decommissioned", block=(SEEDED_BLOCK_ID, SEEDED_BLOCK), managed=False))
 
     await _generator(client).generate(parsed.model_dump(by_alias=True))
 
     assert client.deleted == []
-    assert client.nodes == {}
+    assert [save for node in client.nodes.values() for save in node.saves] == []
 
 
 @pytest.mark.asyncio

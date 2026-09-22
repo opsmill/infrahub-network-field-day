@@ -157,6 +157,27 @@ spec:
             then references the very object named here, so the advertised port
             and the permitted port are one object rather than two numbers that
             have to agree.
+        service_selector:
+          title: Which Services get the VIP
+          type: array
+          minItems: 1
+          default:
+            - otternet.lab/advertise=true
+          items:
+            type: string
+          # MANDATORY IN PRACTICE, AND THE SCHEMA DOES NOT SAY SO. The Crossplane
+          # XRD requires `expose.serviceSelector` whenever an application is
+          # exposed, so without it the manifest is delivered and REFUSED:
+          #   FabricApp "x" is invalid: spec.expose.serviceSelector: Required value
+          # The sync still reports Succeeded and the VidraResource carries the
+          # error, so a request looks complete and the application never exists.
+          #
+          # A Service is not exposed to the fabric merely by being of type
+          # LoadBalancer -- it has to be selected -- so the default matches the
+          # label the lab's own chart values put on a Service.
+          description: >-
+            Label selectors choosing which Services in the namespace get a VIP
+            and are advertised into the fabric.
         vip_block_size:
           title: VIP block size
           type: integer
@@ -167,10 +188,34 @@ spec:
         values_file_content:
           title: Chart values
           type: string
+          # PREFILLED, AND THE EXPOSURE BLOCK IS WHY. An application can be
+          # `exposed`, hold a VIP block, carry a firewall rule permitting it, and
+          # still answer nothing -- because a chart's Service is ClusterIP by
+          # default. Measured: a request that left this empty deployed cleanly,
+          # went Ready, and produced a ClusterIP Service with no VIP, with every
+          # object in Infrahub saying the application was reachable.
+          #
+          # Two things make it reachable and BOTH are needed: the Service has to
+          # be a LoadBalancer, and it has to carry the label named in
+          # `service_selector` above -- a Service is never advertised merely by
+          # being of that type. The default below is the seeded application's
+          # own exposure block, so a requester who changes nothing gets a working
+          # application, and one deploying a different chart edits the keys their
+          # chart uses.
+          default: |
+            replicaCount: 1
+
+            service:
+              type: LoadBalancer
+              ports:
+                http: 80
+
+            commonLabels:
+              otternet.lab/advertise: "true"
           description: >-
-            Optional YAML. Values can only arrive as a file: `chart_values` is
-            a JSON attribute and the form builder cannot type one into a
-            mutation. Left empty, nothing is attached.
+            Helm values. The Service must be a LoadBalancer AND carry the label
+            named above, or the application deploys, reports healthy, and is
+            reachable by nothing.
           ui:widget: textarea
           ui:options:
             rows: 16
@@ -258,6 +303,7 @@ spec:
             $chart_version: String!
             $vip_block_size: BigInt!
             $exposed: Boolean!
+            $service_selector: GenericScalar!
             $cluster: String!
             $vrf: String!
             $owner: String!
@@ -274,6 +320,7 @@ spec:
                 chart_version: { value: $chart_version }
                 vip_block_size: { value: $vip_block_size }
                 exposed: { value: $exposed }
+                service_selector: { value: $service_selector }
                 cluster: { hfid: [$cluster] }
                 vrf: { hfid: [$vrf] }
                 owner: { hfid: [$owner] }
@@ -297,6 +344,7 @@ spec:
           chart_version: ${{ parameters.chart_version }}
           vip_block_size: ${{ parameters.vip_block_size }}
           exposed: true
+          service_selector: ${{ parameters.service_selector }}
           cluster: ${{ parameters.cluster }}
           vrf: ${{ parameters.vrf }}
           owner: ${{ parameters.owner }}
