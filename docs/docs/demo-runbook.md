@@ -100,6 +100,19 @@ else stays green. Nothing renders wrong, which is the point.
 | Merge to the resource existing in Kubernetes | under a minute |
 | Merge to the firewall carrying the rule | next reconcile cycle |
 | Whole-fabric AVD regeneration (7 switches) | ~21s |
+| Revocation, merge to the rule leaving the device | next reconcile cycle |
+
+Measured on this lab: a granted VIP answered `HTTP 200` from the branch desktop,
+the seeded application's VIP and an unpermitted port on the granted one were both
+refused, and after revoking, the same VIP stopped answering once the reconciler
+pushed — two devices on one cycle, the firewall and the border leaf.
+
+## What is already there
+
+`otter-bakery` is deployed and **not** reachable from the branch: an application
+with no grant. It is a ready-made target if you would rather demonstrate granting
+access to something that already exists than create an application first — the
+generated **Request application access** item does that in one step.
 
 ## Recovery
 
