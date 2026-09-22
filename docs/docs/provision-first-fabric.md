@@ -56,7 +56,19 @@ Infrahub queues the generator and shows progress. The fabric generator itself ta
 
 ## Step 3 — Watch the chain run
 
-You don't need to manually trigger the pod, rack, and AVD generators — they are chained via event triggers. In the UI:
+You don't need to manually trigger the pod and rack generators — they are chained
+via event triggers.
+
+:::note The AVD stage is not chained from the rack generator
+`generate-avd-device-hostvar` has no trigger rule at all. It runs when something
+asks: `invoke avd`, the portal's request templates, or a proposed change (it is
+`execute_in_proposed_change: true`, which is what makes a service request show
+its fabric consequence). `generate-avd-device-structured-config` follows it, both
+through its own trigger on `avd_hostvars_ready` and in the proposed-change
+pipeline.
+:::
+
+In the UI:
 
 1. Open **Actions → Tasks** (or watch the running-task indicator in the navbar).
 2. Tasks appear in this order:

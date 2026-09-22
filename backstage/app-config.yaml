@@ -355,6 +355,13 @@ catalog:
       rules:
         - allow: [Template]
 
+    # The second act: withdrawing a grant. Its own item rather than a mode of the
+    # request form, because the two have nothing in common but the kind.
+    - type: file
+      target: ../../catalog/revoke-access.yaml
+      rules:
+        - allow: [Template]
+
     # Local example data, file locations are relative to the backend process, typically `packages/backend`
     - type: file
       target: ../../examples/entities.yaml

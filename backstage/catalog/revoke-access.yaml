@@ -1,0 +1,211 @@
+---
+# Revoke an access grant: the second act.
+#
+# WHY IT IS ITS OWN ITEM. Withdrawal is what justifies half the service layer --
+# `status`, `granted_rules`, `granted_source_prefixes`, `managed_by_service` --
+# and none of it was reachable from either portal. Revoking meant editing a field
+# in the Infrahub UI by hand, which is not a workflow anyone would claim.
+#
+# IT SETS `status` AND NOTHING ELSE. `generate-app-access` does the work:
+# `decommissioning` counts as gone rather than going, so the generator deletes
+# the rule it created, the service objects it declared and the address-book entry
+# it added, removes the source prefixes IT recorded from the application's own
+# policy, and re-renders the firewall. Every one of those is keyed on
+# provenance -- `managed_by_service` on rules, `granted_source_prefixes` on the
+# sources -- so a hand-written rule in the same zone pair and a source another
+# live grant still needs are both left alone.
+#
+# `ServiceAppAccess` is the only kind with an `updated` trigger, and this is why:
+# without it, setting the status through a portal or the UI fired no generator
+# and the branch showed a status change with none of its consequences.
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: revoke-access-request
+  title: Revoke access
+  description: >-
+    Withdraw an access grant. Creates a branch, marks the grant decommissioning,
+    lets its generator remove the firewall rule and the source it opened, and
+    opens one proposed change carrying the removal.
+  tags:
+    - infrahub
+    - service-request
+    - curated
+spec:
+  type: revoke-access-request
+  owner: user:default/guest
+
+  parameters:
+    - title: Which grant
+      required:
+        - grant
+        - request_reference
+      properties:
+        grant:
+          title: Grant to revoke
+          type: string
+          # A PICKER, because grants are ingested into the catalogue as
+          # Components by the Infrahub provider -- unlike the identity fields on
+          # the request form, whose kinds are not. The entity's name is the
+          # service's own name, which is its hfid.
+          ui:field: EntityPicker
+          ui:options:
+            catalogFilter:
+              kind: Component
+              spec.type: serviceappaccess
+          description: The grant to withdraw. Its rule and source are removed on merge.
+        reason:
+          title: Why
+          type: string
+          description: Recorded on the proposed change for the reviewer.
+          ui:widget: textarea
+          ui:options:
+            rows: 3
+        request_reference:
+          title: Request reference
+          type: string
+          description: >-
+            Lower case, digits and dashes. Makes the branch name unique, so a run
+            that fails half way can be resubmitted -- `BranchCreate` is not
+            idempotent.
+          pattern: '^[a-z0-9][a-z0-9-]*$'
+
+  steps:
+    - id: branch
+      name: Create the branch
+      action: infrahub:graphql:execute
+      input:
+        query: |
+          mutation ($name: String!) {
+            BranchCreate(data: { name: $name, sync_with_git: false }) {
+              ok
+            }
+          }
+        variables:
+          name: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+
+    - id: revoke
+      name: Mark the grant decommissioning
+      action: infrahub:graphql:execute
+      # `decommissioning`, not `decommissioned`: the first is the request to
+      # withdraw and the generator moves it to the second once it has. Setting
+      # the terminal state by hand would claim the work was done before it was.
+      input:
+        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        query: |
+          mutation ($infrahub_context_account: String!, $name: String!) {
+            ServiceAppAccessUpdate(
+              context: { account: { id: $infrahub_context_account } }
+              data: { hfid: [$name], status: { value: "decommissioning" } }
+            ) {
+              ok
+              object {
+                id
+              }
+            }
+          }
+        variables:
+          infrahub_context_account: ${{ user.entity.metadata.name }}
+          name: ${{ parameters.grant }}
+
+    - id: await_revoke
+      name: Wait for the firewall objects to be removed
+      action: infrahub:generators:await
+      input:
+        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        node: ${{ steps.revoke.output.data.ServiceAppAccessUpdate.object.id }}
+
+    # The fabric follows, for the same reason the request path regenerates it:
+    # withdrawal removes the `permit <vip>` sequence from the border leaf's
+    # `avd_custom_hostvars`, and nothing else turns that into a rendered config.
+    - id: lookup_avd
+      name: Find the AVD generators
+      action: infrahub:graphql:execute
+      input:
+        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        query: |
+          query {
+            hostvar: CoreGeneratorDefinition(name__value: "generate-avd-device-hostvar") {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+            structured: CoreGeneratorDefinition(name__value: "generate-avd-device-structured-config") {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+          }
+
+    - id: run_avd_hostvars
+      name: Regenerate the host vars for every switch
+      action: infrahub:graphql:execute
+      input:
+        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        query: |
+          mutation ($id: String!) {
+            CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
+              ok
+            }
+          }
+        variables:
+          id: ${{ steps.lookup_avd.output.data.hostvar.edges[0].node.id }}
+
+    - id: run_avd_structured_config
+      name: Regenerate the structured configs
+      action: infrahub:graphql:execute
+      input:
+        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        query: |
+          mutation ($id: String!) {
+            CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
+              ok
+            }
+          }
+        variables:
+          id: ${{ steps.lookup_avd.output.data.structured.edges[0].node.id }}
+
+    - id: proposed_change
+      name: Open the proposed change
+      action: infrahub:graphql:execute
+      input:
+        query: |
+          mutation ($name: String!, $source_branch: String!, $description: String!) {
+            CoreProposedChangeCreate(
+              data: {
+                name: { value: $name }
+                description: { value: $description }
+                source_branch: { value: $source_branch }
+                destination_branch: { value: "main" }
+              }
+            ) {
+              ok
+              object {
+                id
+              }
+            }
+          }
+        variables:
+          name: ${{ "Revoke " + parameters.grant }}
+          source_branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+          description: >-
+            ${{ "Revocation requested through the service portal by " +
+            (user.entity.spec.profile.displayName if user.entity.spec.profile.displayName else user.ref) +
+            " (" + (user.entity.spec.profile.email if user.entity.spec.profile.email else user.ref) + "). " +
+            (parameters.reason if parameters.reason else "No reason given.") +
+            " The firewall rule, the address-book entry and the source prefix this grant opened are removed on this branch; a rule written by hand in the same zone pair, and a source another live grant still needs, are left alone." }}
+
+    - id: catalog
+      name: Refresh the catalogue
+      action: infrahub:catalog:refresh
+
+  output:
+    links:
+      - title: Review the revocation
+        url: ${{ steps.revoke.output.address }}/proposed-changes/${{ steps.proposed_change.output.data.CoreProposedChangeCreate.object.id }}
+      - title: The grant in Infrahub
+        url: ${{ steps.revoke.output.address }}/objects/ServiceAppAccess/${{ steps.revoke.output.data.ServiceAppAccessUpdate.object.id }}

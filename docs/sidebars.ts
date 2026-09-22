@@ -4,6 +4,8 @@ const sidebars: SidebarsConfig = {
   aristaAvdSidebar: [
     'home',
     'quick-start',
+    'service-portal',
+    'demo-runbook',
     'provision-first-fabric',
     'viewing-artifacts',
     'cloudvision',

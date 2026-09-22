@@ -53,7 +53,21 @@ Review and merge as usual.
 ## When to regenerate a fabric
 
 - After manually editing IP pools, fabric settings, or device templates that affect code paths in the generators.
-- After a failed partial run where some generators didn't complete. Re-running is idempotent — existing devices and objects are upserted, not duplicated.
+- After a failed partial run where some generators didn't complete — but **read
+  the warning below first**: only the two AVD stages are idempotent.
+
+:::danger The topology generators are destructive on a fabric that already has cabling
+`generate-fabric`, `generate-pod` and `generate-rack` are **not** idempotent.
+`generate-pod` takes each spine from nine interfaces to four, deleting the
+leaf-role ports racks 1 and 2 are cabled to, and `generate-rack` then fails on
+rack 3 with an `IndexError` because its slice of spine ports is empty. That is
+why `invoke avd` keeps them behind `--topology` rather than in its default path.
+
+`generate-avd-device-hostvar` and `generate-avd-device-structured-config` *are*
+idempotent and run on every `invoke avd`. Re-run those freely; build a topology
+on a fresh branch.
+:::
+
 - After upgrading the PyAVD version, if the structured config output format has changed.
 
 ## Inspecting without regenerating
