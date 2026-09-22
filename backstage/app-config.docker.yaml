@@ -11,6 +11,35 @@ app:
   # one reached on localhost are different origins, and OIDC notices.
   baseUrl: ${BACKSTAGE_BASE_URL}
 
+  # THE LINKS ON THE PORTAL'S FIRST SCREEN, corrected for the only audience that
+  # reaches it. The dev config points them at localhost, which for a branch user
+  # is their own machine, so "review the change you just requested" fails with
+  # connection refused. Semaphore is dropped rather than re-pointed: the firewall
+  # permits the branch 32001, 32556 and 8000 and nothing else, so its port 3000
+  # can never work from there.
+  #
+  # The whole `tools` list is restated because Backstage config merge REPLACES
+  # arrays rather than merging them. It lives INSIDE this `app` block and not in
+  # one of its own: a second top-level `app:` key parses fine in Python, which is
+  # why yamllint passed, and Backstage's YAML library refuses duplicate keys
+  # outright -- the backend crash-looped with a parse error naming no key.
+  extensions:
+    - home-page-widget:home/toolkit:
+        config:
+          tools:
+            - url: ${INFRAHUB_EXTERNAL_ADDRESS}
+              label: Infrahub
+              icon: kind:component
+            - url: ${INFRAHUB_EXTERNAL_ADDRESS}/proposed-changes
+              label: Proposed changes
+              icon: kind:api
+            - url: /racks
+              label: Racks
+              icon: kind:resource
+            - url: /create
+              label: Request a service
+              icon: docs
+
 backend:
   baseUrl: ${BACKSTAGE_BASE_URL}
   listen: ':7007'
@@ -58,33 +87,6 @@ infrahub:
   # Both happen to be `10.90.0.1:8000`; `localhost` was right only while the
   # portal ran on the same host as Infrahub.
   externalAddress: ${INFRAHUB_EXTERNAL_ADDRESS}
-
-app:
-  # THE LINKS ON THE PORTAL'S FIRST SCREEN, corrected for the only audience that
-  # reaches it. The dev config points them at localhost, which for a branch user
-  # is their own machine, so "review the change you just requested" fails with
-  # connection refused. Semaphore is dropped entirely rather than re-pointed: the
-  # firewall permits the branch 32001, 32556 and 8000 and nothing else, so its
-  # port 3000 can never work from there.
-  #
-  # The whole `tools` list is restated because Backstage config merge REPLACES
-  # arrays rather than merging them.
-  extensions:
-    - home-page-widget:home/toolkit:
-        config:
-          tools:
-            - url: ${INFRAHUB_EXTERNAL_ADDRESS}
-              label: Infrahub
-              icon: kind:component
-            - url: ${INFRAHUB_EXTERNAL_ADDRESS}/proposed-changes
-              label: Proposed changes
-              icon: kind:api
-            - url: /racks
-              label: Racks
-              icon: kind:resource
-            - url: /create
-              label: Request a service
-              icon: docs
 
 catalog:
   # Replaces the dev locations: paths there are relative to packages/backend,
