@@ -1381,6 +1381,16 @@ def tooling(ctx: Context) -> None:
         raise Exit("scripts/deploy_tooling.sh is missing")
     ctx.run("scripts/deploy_tooling.sh", pty=True)
 
+    # EVERY PORTAL USER NEEDS AN INFRAHUB ACCOUNT BEFORE THEIR FIRST REQUEST.
+    # The portal writes as the signed-in user through the mutation `context`,
+    # and that account exists only once the person has signed in to Infrahub at
+    # least once -- so without this a first request dies at the create step,
+    # after its branch has already been created, naming an account rather than
+    # the thing to do about it. Idempotent, and best effort: a portal with no
+    # accounts provisioned still works for anyone who signs in by hand.
+    print(" - Provisioning an Infrahub account for each portal user")
+    ctx.run("python scripts/provision_portal_accounts.py", pty=True, warn=True)
+
 
 # `bootstrap` takes a --cluster flag, which shadows the task of the same name
 # inside its body. Alias it here so the call site stays readable.
@@ -1465,6 +1475,14 @@ def bootstrap(
     if cluster:
         print("\n=== Bringing up Kubernetes ===")
         _cluster_task(ctx, lab_dir=lab_dir)
+
+    # THE LOOP, not just the one-off convergence above. Without it a merge
+    # reaches no device, and the deployment view keeps reporting the green it
+    # recorded during the bootstrap -- a state that looks identical whether the
+    # loop is running or was never started. `verify_bootstrap.sh` asserts the
+    # container is up for exactly that reason.
+    print("\n=== Starting the deployment reconciler ===")
+    ctx.run(f"{compose_cmd()} --profile reconcile up -d deployment-reconciler", pty=True, warn=True)
 
     print("\n=== Bootstrap complete ===")
     print("   The lab is running and every device matches Infrahub.")

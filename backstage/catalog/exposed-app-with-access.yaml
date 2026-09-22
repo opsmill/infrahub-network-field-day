@@ -1,0 +1,567 @@
+---
+# Exposed application + access grant, as one request on one branch.
+#
+# WHY THIS IS HAND-WRITTEN AND THE OTHERS ARE GENERATED. `provider.ts` emits one
+# template per service kind from the Infrahub schema, and nothing in that path
+# can emit a two-kind template. The two generated templates remain the way to
+# change an existing application and the way to grant access to one that already
+# exists; this is the two-for-one, and it is curated rather than derived.
+#
+# THE ORDER OF THE STEPS IS THE WHOLE DESIGN. `generate-app-access` reads the
+# application's `vip_block`, `vrf` and `advertised_services`, and
+# `generate-fabric-app` is what allocates the block. Both generators fire on
+# `created` through independent rules in triggers.yml and nothing sequences them,
+# so a grant created beside its application races the allocation. Losing that
+# race is not a retry: `validate_model` raises, `_set_status` stamps the grant
+# `error`, and nothing ever runs it again. `infrahub:generators:await` is the
+# sequencing primitive -- it triggers the application's generators and blocks
+# until they are quiet -- so the grant is created against an application that
+# already has its block.
+#
+# EVERY INPUT THE GRANT'S GENERATOR READS IS IN ITS CREATE MUTATION, never in a
+# follow-up update step. The generator fires on creation, so a source set
+# afterwards arrives after the run that needed it.
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: exposed-app-with-access-request
+  title: Exposed application, with access
+  description: >-
+    Deploy an application and open the way to it in one request. Creates a
+    branch, the application, and the access grant that lets a site reach it,
+    then opens one proposed change carrying all of it.
+  tags:
+    - infrahub
+    - service-request
+    - curated
+spec:
+  type: exposed-app-request
+  # Matches `infrahub.catalog.owner`, whose default is this.
+  owner: user:default/guest
+
+  parameters:
+    - title: The application
+      required:
+        - app_name
+        - description
+        - namespace_name
+        - cluster
+        - vrf
+        - owner
+        - chart_repository
+        - chart_name
+        - chart_version
+        - advertised_services
+      properties:
+        app_name:
+          title: Application name
+          type: string
+          description: >-
+            Lower case, digits and dashes. It is the service's name in Infrahub,
+            the stem of the branch name, and the stem of the grant's name.
+          pattern: '^[a-z0-9][a-z0-9-]*$'
+          ui:autofocus: true
+        description:
+          title: What it is
+          type: string
+          description: Shown on the catalogue entity, so write it for a stranger.
+        namespace_name:
+          title: Kubernetes namespace
+          type: string
+          description: >-
+            The namespace the chart is installed into. Called namespace_name
+            because `namespace` is a schema-level key in Infrahub.
+        cluster:
+          title: Cluster
+          type: string
+          default: otternet
+          # ENUMERATED RATHER THAN TYPED. These five fields are hfids, resolved by
+          # Infrahub at mutation time, and a wrong one fails AFTER BranchCreate has
+          # succeeded -- a red run, no hint of the right value, and an orphan branch
+          # to clean up. The sets are small and stable, so the form can carry them.
+          # They are not EntityPickers because these kinds are not ingested into the
+          # Backstage catalogue; if they ever are, swap these for ui:field pickers.
+          enum:
+            - otternet
+          description: >-
+            The VIP pool is resolved THROUGH the cluster: only its own
+            `vip_pools` supernets are permitted by the leaves' inbound route
+            policy, so a block from anywhere else is advertised and refused.
+        vrf:
+          title: VRF
+          type: string
+          default: K8S_PROD
+          # Only VRFs that exactly one SecurityZone hands off to. CUST_ACME and
+          # CUST_GLOBEX are deliberately absent: no zone names them, so the grant's
+          # destination zone could not be derived and the generator would refuse.
+          enum:
+            - K8S_PROD
+            - APP_PROD
+            - TENANT_ACME
+            - TENANT_GLOBEX
+            - WAN
+            - BRANCH
+          description: >-
+            Also decides the grant's destination zone, which is derived by
+            matching this against `SecurityZone.vrf`. Exactly one zone must
+            match, or the grant's generator refuses the request as ambiguous.
+        owner:
+          title: Owning organisation
+          type: string
+          default: acme
+          enum:
+            - acme
+            - globex
+            - branch
+            - Arista
+            - Juniper
+            - FRRouting
+            - Generic
+            - OTTERNET-ISP
+            - OTTERNET-Internet
+          description: The organisation this is ordered for. Used for both objects.
+        chart_repository:
+          title: Chart repository
+          type: string
+          description: Helm repository URL.
+        chart_name:
+          title: Chart name
+          type: string
+        chart_version:
+          title: Chart version
+          type: string
+          description: >-
+            Repository, name and version are mandatory together -- the
+            Crossplane XRD requires all three, so a two-of-three chart is a
+            resource the cluster rejects.
+        advertised_services:
+          title: Ports to advertise
+          type: array
+          minItems: 1
+          uniqueItems: true
+          default:
+            - junos-http
+          items:
+            type: string
+            enum:
+              - junos-http
+              - junos-https
+              - infrahub-api
+              - tooling-portal
+              - tooling-oidc
+          description: >-
+            Named `SecurityService` objects, for example junos-http. REQUIRED
+            here although the schema makes it optional: the grant derives its
+            permitted ports from this relationship and REFUSES rather than
+            guessing when an application advertises nothing. The firewall rule
+            then references the very object named here, so the advertised port
+            and the permitted port are one object rather than two numbers that
+            have to agree.
+        vip_block_size:
+          title: VIP block size
+          type: integer
+          default: 28
+          minimum: 24
+          maximum: 30
+          description: Prefix length allocated from the cluster's pool.
+        values_file_content:
+          title: Chart values
+          type: string
+          description: >-
+            Optional YAML. Values can only arrive as a file: `chart_values` is
+            a JSON attribute and the form builder cannot type one into a
+            mutation. Left empty, nothing is attached.
+          ui:widget: textarea
+          ui:options:
+            rows: 16
+
+    - title: Who may reach it
+      required:
+        - source_site
+        - request_reference
+      properties:
+        source_site:
+          title: Source site
+          type: string
+          default: branch-office
+          # The four sites that carry BOTH a security_zone and a
+          # security_source_address. internet-edge and provider-edge are valid site
+          # names that the generator then refuses, which is precisely the trap a
+          # free-text field cannot signal.
+          enum:
+            - branch-office
+            - acme-hq
+            - acme-dr
+            - globex-hq
+          description: >-
+            The site whose users need to reach it. Its own
+            `security_zone` and `security_source_address` supply the rule's
+            source, which is why naming a site is enough. A site carrying
+            neither cannot be used -- internet-edge and provider-edge are
+            infrastructure with nobody sitting at them.
+        justification:
+          title: Why
+          type: string
+          description: Recorded on the grant for the reviewer.
+          ui:widget: textarea
+          ui:options:
+            rows: 4
+        request_reference:
+          title: Request reference
+          type: string
+          description: >-
+            Lower case, digits and dashes. It makes the branch name unique, so
+            a run that fails half way can be corrected and resubmitted --
+            `BranchCreate` is not idempotent and a fixed name would make every
+            retry die on the branch step.
+          pattern: '^[a-z0-9][a-z0-9-]*$'
+
+  steps:
+    # ------------------------------------------------------------------ branch
+    - id: branch
+      name: Create the branch
+      action: infrahub:graphql:execute
+      input:
+        # No `branch` input: the branch does not exist yet, so this runs on main.
+        query: |
+          mutation ($name: String!) {
+            BranchCreate(data: { name: $name, sync_with_git: false }) {
+              ok
+            }
+          }
+        variables:
+          name: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+
+    # ------------------------------------------------------------- application
+    - id: create_app
+      name: Create the application
+      action: infrahub:graphql:execute
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        # `exposed` is pinned true rather than asked. An application that is not
+        # exposed never gets a VIP block, and a grant to an application with no
+        # block is exactly the failure this template exists to prevent. Somebody
+        # who wants a cluster-internal application wants the generated
+        # single-kind template, not this one.
+        #
+        # `status` is deliberately absent so the schema's own default
+        # (`provisioning`) applies -- sending any literal hardcodes another
+        # schema's vocabulary into this one.
+        query: |
+          mutation (
+            $infrahub_context_account: String!
+            $name: String!
+            $description: String!
+            $namespace_name: String!
+            $chart_repository: String!
+            $chart_name: String!
+            $chart_version: String!
+            $vip_block_size: BigInt!
+            $exposed: Boolean!
+            $cluster: String!
+            $vrf: String!
+            $owner: String!
+            $advertised_services: [RelatedNodeInput]
+          ) {
+            ServiceFabricAppCreate(
+              context: { account: { id: $infrahub_context_account } }
+              data: {
+                name: { value: $name }
+                description: { value: $description }
+                namespace_name: { value: $namespace_name }
+                chart_repository: { value: $chart_repository }
+                chart_name: { value: $chart_name }
+                chart_version: { value: $chart_version }
+                vip_block_size: { value: $vip_block_size }
+                exposed: { value: $exposed }
+                cluster: { hfid: [$cluster] }
+                vrf: { hfid: [$vrf] }
+                owner: { hfid: [$owner] }
+                advertised_services: $advertised_services
+                member_of_groups: [{ hfid: ["service_fabric_apps"] }]
+              }
+            ) {
+              ok
+              object {
+                id
+              }
+            }
+          }
+        variables:
+          infrahub_context_account: ${{ user.entity.metadata.name }}
+          name: ${{ parameters.app_name }}
+          description: ${{ parameters.description }}
+          namespace_name: ${{ parameters.namespace_name }}
+          chart_repository: ${{ parameters.chart_repository }}
+          chart_name: ${{ parameters.chart_name }}
+          chart_version: ${{ parameters.chart_version }}
+          vip_block_size: ${{ parameters.vip_block_size }}
+          exposed: true
+          cluster: ${{ parameters.cluster }}
+          vrf: ${{ parameters.vrf }}
+          owner: ${{ parameters.owner }}
+          advertised_services: ${{ parameters.advertised_services }}
+        # The form collects plain hfids; a cardinality-many relationship needs
+        # them as [{ hfid: [value] }] and the scaffolder cannot build objects.
+        relatedNodeLists:
+          - advertised_services
+
+    - id: values
+      name: Attach the chart values
+      if: ${{ parameters.values_file_content }}
+      action: infrahub:file:upload
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        kind: ServiceFabricAppValuesFile
+        parentField: app
+        parentId: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
+        content: ${{ parameters.values_file_content }}
+        fileName: values.yaml
+
+    # ------------------------------------------------------------- the barrier
+    - id: await_app
+      name: Wait for the VIP block to be allocated
+      action: infrahub:generators:await
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        node: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
+
+    - id: read_app
+      name: Read the allocated block
+      action: infrahub:graphql:execute
+      input:
+        # The branch matters on a read too: without it this queries main, where
+        # the application does not exist, and the assertion below would fail for
+        # the wrong reason.
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        query: |
+          query ($id: ID!) {
+            ServiceFabricApp(ids: [$id]) {
+              edges {
+                node {
+                  vip_block {
+                    node {
+                      id
+                      prefix {
+                        value
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        variables:
+          id: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
+
+    - id: assert_vip
+      name: Prove the block exists before granting access to it
+      action: infrahub:graphql:execute
+      # THIS STEP EXISTS BECAUSE THE WAIT CAN SUCCEED HAVING WAITED FOR NOTHING.
+      # `infrahub:generators:await` stamps its quiet period the first time it
+      # sees no active task, and an empty task list is empty at t=0 -- so a run
+      # whose generator has not yet enqueued returns {waited: true, tasks: 0}.
+      #
+      # A scaffolder step can only fail on a GraphQL error, never on a value, so
+      # the assertion is made with a REQUIRED variable: when `vip_block` is null
+      # the expression below resolves to nothing, `$vip` is not provided, and
+      # Infrahub rejects the query. The run stops here, before a grant is
+      # created against an application that has no block for it to permit.
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        query: |
+          query ($vip: ID!) {
+            IpamPrefix(ids: [$vip]) {
+              count
+            }
+          }
+        variables:
+          vip: ${{ steps.read_app.output.data.ServiceFabricApp.edges[0].node.vip_block.node.id }}
+
+    # ------------------------------------------------------------------- grant
+    - id: create_grant
+      name: Create the access grant
+      action: infrahub:graphql:execute
+      # EVERY INPUT THE GENERATOR READS IS HERE. `generate-app-access` fires on
+      # `created`, so a source or a justification set by a later update step
+      # arrives after the run that needed it -- the grant would be stamped
+      # `error` and never retried.
+      #
+      # `application` binds by the id the create returned rather than by name:
+      # exact, and it cannot be confused by a name that resolves to something
+      # else on this branch.
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        query: |
+          mutation (
+            $infrahub_context_account: String!
+            $name: String!
+            $requester: String!
+            $justification: String!
+            $application: String!
+            $source_site: String!
+            $owner: String!
+          ) {
+            ServiceAppAccessCreate(
+              context: { account: { id: $infrahub_context_account } }
+              data: {
+                name: { value: $name }
+                requester: { value: $requester }
+                justification: { value: $justification }
+                application: { id: $application }
+                source_site: { hfid: [$source_site] }
+                owner: { hfid: [$owner] }
+                member_of_groups: [{ hfid: ["service_app_accesses"] }]
+              }
+            ) {
+              ok
+              object {
+                id
+              }
+            }
+          }
+        variables:
+          infrahub_context_account: ${{ user.entity.metadata.name }}
+          name: ${{ parameters.app_name + "-access" }}
+          # Who asked, from the Backstage session rather than typed: anyone
+          # could type anyone.
+          requester: ${{ user.entity.spec.profile.email if user.entity.spec.profile.email else user.ref }}
+          justification: ${{ parameters.justification if parameters.justification else "Requested with the application." }}
+          application: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
+          source_site: ${{ parameters.source_site }}
+          owner: ${{ parameters.owner }}
+
+    - id: await_grant
+      name: Wait for the firewall objects
+      action: infrahub:generators:await
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        node: ${{ steps.create_grant.output.data.ServiceAppAccessCreate.object.id }}
+
+    # --------------------------------------------------------------- the fabric
+    # THE GRANT CHANGES THE FABRIC, AND NOTHING ELSE REGENERATES IT.
+    # `generate-app-access` writes a `permit <vip>/32` into the border leaf's
+    # `avd_custom_hostvars`, so the branch carries fabric intent. But
+    # `generate-avd-device-hostvar` runs on no trigger, with
+    # `execute_in_proposed_change: false` and `execute_after_merge: false`, so
+    # without these steps the proposed change shows a changed JSON blob and no
+    # configuration -- a reviewer approving a consequence they cannot see.
+    #
+    # `infrahub:generators:await` cannot do this: it resolves definitions from
+    # the node's OWN groups, and a service object is not in `avd_devices`.
+    # Pointing it at the fabric instead would be worse than useless -- the
+    # `fabrics` group is also targeted by `generate-pod` and `generate-rack`,
+    # which are destructive against a fabric that already has cabling.
+    - id: lookup_avd
+      name: Find the AVD generators
+      action: infrahub:graphql:execute
+      # Definition ids are generated per instance, so nothing may be hardcoded.
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        query: |
+          query {
+            hostvar: CoreGeneratorDefinition(name__value: "generate-avd-device-hostvar") {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+            structured: CoreGeneratorDefinition(name__value: "generate-avd-device-structured-config") {
+              edges {
+                node {
+                  id
+                }
+              }
+            }
+          }
+
+    - id: run_avd_hostvars
+      name: Regenerate the host vars for every switch
+      action: infrahub:graphql:execute
+      # `nodes` OMITTED runs the definition across its whole target group --
+      # all seven switches -- rather than one node. `wait_until_completion`
+      # blocks until those runs finish: measured at 15s for this fabric, well
+      # inside the client's 60s ceiling.
+      #
+      # `$id: String!` is required on purpose: if the lookup found nothing the
+      # variable is absent, Infrahub refuses the query and the run stops here
+      # rather than opening a proposed change over a fabric nobody regenerated.
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        query: |
+          mutation ($id: String!) {
+            CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
+              ok
+            }
+          }
+        variables:
+          id: ${{ steps.lookup_avd.output.data.hostvar.edges[0].node.id }}
+
+    - id: run_avd_structured_config
+      name: Regenerate the structured configs
+      action: infrahub:graphql:execute
+      # Explicit and blocking, although the hostvar pass also cascades into this
+      # one: the hostvar generator flips `avd_hostvars_ready`, triggers.yml
+      # fires this generator, and THAT run is not covered by the wait above --
+      # measured still running when the hostvar call returned. Running it
+      # explicitly afterwards is what makes "finished" true rather than likely.
+      #
+      # It targets `fabrics` rather than `avd_devices`, and it reads the STORED
+      # hostvar files, which is why it must run after the pass above and not
+      # beside it.
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        query: |
+          mutation ($id: String!) {
+            CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
+              ok
+            }
+          }
+        variables:
+          id: ${{ steps.lookup_avd.output.data.structured.edges[0].node.id }}
+
+    # --------------------------------------------------------- proposed change
+    - id: proposed_change
+      name: Open the proposed change
+      action: infrahub:graphql:execute
+      # No `branch`: a proposed change is an object on main that names the
+      # branch, so this runs on main like the generated templates' own.
+      input:
+        query: |
+          mutation ($name: String!, $source_branch: String!, $description: String!) {
+            CoreProposedChangeCreate(
+              data: {
+                name: { value: $name }
+                description: { value: $description }
+                source_branch: { value: $source_branch }
+                destination_branch: { value: "main" }
+              }
+            ) {
+              ok
+              object {
+                id
+              }
+            }
+          }
+        variables:
+          name: ${{ "Deploy " + parameters.app_name + " and open access from " + parameters.source_site }}
+          source_branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+          description: >-
+            ${{ "Requested through the service portal by " +
+            (user.entity.spec.profile.displayName if user.entity.spec.profile.displayName else user.ref) +
+            " (" + (user.entity.spec.profile.email if user.entity.spec.profile.email else user.ref) +
+            "). The application and the access to it are on one branch, so the rule, the address-book entry and the re-rendered firewall configuration are all in this change." }}
+
+    - id: catalog
+      name: Refresh the catalogue
+      action: infrahub:catalog:refresh
+
+  output:
+    links:
+      - title: Review the proposed change
+        url: ${{ steps.create_app.output.address }}/proposed-changes/${{ steps.proposed_change.output.data.CoreProposedChangeCreate.object.id }}
+      - title: The application in Infrahub
+        url: ${{ steps.create_app.output.address }}/objects/ServiceFabricApp/${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
+      - title: The access grant in Infrahub
+        url: ${{ steps.create_app.output.address }}/objects/ServiceAppAccess/${{ steps.create_grant.output.data.ServiceAppAccessCreate.object.id }}

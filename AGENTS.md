@@ -134,6 +134,96 @@ Four things about it are deliberate and each looks like an oversight:
   https://localhost:7007/api/catalog/entities/by-name/User/default/alice failed`, which names the
   catalog and never mentions TLS.
 
+**One catalogue item creates two service objects, and it is the only hand-written one.**
+`backstage/catalog/exposed-app-with-access.yaml` requests an exposed application *and*
+the grant that opens the way to it, on one branch under one proposed change. The
+generated templates are one per kind and nothing in that path can emit a two-kind
+template, so this one is curated — and `tests/unit/test_combined_app_template_contract.py`
+holds it against the schema it was written from, because a hand-written template does not
+re-derive its fields and the failure would land on a branch user mid-request.
+
+**The two creates are separated by a barrier, and that is the whole design.**
+`generate-app-access` reads the application's `vip_block`, `vrf` and `advertised_services`;
+`generate-fabric-app` is what allocates the block. Both fire on `created` through
+independent rules and **nothing sequences them**, so a grant created beside its application
+races the allocation — and losing is permanent rather than slow: `validate_model` raises,
+`_set_status` stamps the grant `error`, and nothing ever runs it again.
+`infrahub:generators:await` triggers the application's generators and blocks until they are
+quiet, so the grant is created against an application that already has its block. Two
+further consequences:
+
+- **Everything the grant's generator reads is in its create mutation**, never a follow-up
+  update step. The generator fires on creation, so a `source_site` set one step later
+  arrives after the run that needed it.
+- **The wait can succeed having waited for nothing.** It stamps its quiet period the first
+  time it sees no active task, and an empty task list is empty at t=0. A scaffolder step can
+  only fail on a GraphQL error, never on a value, so the block is asserted by binding it to a
+  **required** variable: no block, no variable, refused query, run stops before the grant exists.
+
+**The request changes the FABRIC too, and the template regenerates it before opening the
+proposed change.** `generate-app-access` writes a `permit <vip>` sequence into the border
+leaf's `avd_custom_hostvars` (`PL-DC-ADVERTISED-BRANCH`, floored at sequence 1000), so a grant
+from the `branch` or `wan` zone is fabric intent as well as firewall intent. Nothing
+regenerates that on its own: `generate-avd-device-hostvar` runs on **no trigger**, with
+`execute_in_proposed_change: false` and `execute_after_merge: false`. Without the two extra
+steps the proposed change shows a changed JSON blob and no configuration — a reviewer
+approving a consequence they cannot see, on the one workflow where merging *is* the approval.
+
+The steps are plain `infrahub:graphql:execute`, and three details are load bearing:
+
+- **`nodes` omitted runs the definition across its whole target group.** It is optional on
+  `GeneratorDefinitionRequestRunInput`, and omitting it covers all seven switches;
+  `wait_until_completion: true` blocks until they finish — measured 15s for the hostvars and
+  6s for the structured configs. Omitting `id` instead does *not* run everything, it returns
+  500.
+- **Hostvars, then structured config, and both explicitly.** The structured-config generator
+  reads the **stored** hostvar files rather than the switch attribute, so it must follow. The
+  hostvar pass also cascades into it through `avd_hostvars_ready`, but that cascaded run is
+  *not* covered by the first call's wait — measured still running when it returned. Running it
+  explicitly afterwards is what makes "finished" true rather than likely.
+- **`infrahub:generators:await` cannot do this, and pointing it at the fabric is dangerous.**
+  It resolves definitions from the node's own groups and a service object is not in
+  `avd_devices`. The `fabrics` group is also targeted by `generate-pod` and `generate-rack`,
+  which are destructive against a fabric that already has cabling.
+
+**The artifacts then re-render as part of the proposed change's own checks**, not as part of
+the template: there is no GraphQL mutation for artifact generation — `POST
+/api/artifact/generate/{id}?branch=X` is the only way to ask, and a scaffolder step can only
+execute GraphQL. Creating the proposed change *after* the regeneration is what makes its
+`Check artifact creation` validator render from current data. Measured end to end: the branch's
+rendered EOS config for `leaf-otternet-pod1-3-1` gained exactly one line,
+`seq 556382 permit 10.112.240.48/28`, and the other six switches stayed byte-identical.
+
+**The cost is real and worth stating**: about 21 seconds added to every request, and a stable
+14-node bookkeeping diff on the branch — seven `AvdArtifact` `member_of_groups` and seven
+`CoreGeneratorAwareGroup` `members` updates with no attribute changes — which appears in the
+proposed change whether or not the fabric changed.
+
+**`generate-avd-device-hostvar` is `execute_in_proposed_change: true`, which is
+what makes every OTHER request path show its fabric consequence.** The curated
+template runs the AVD pass itself, but the nine generated templates, both
+Streamlit portals, the Infrahub UI and `infrahubctl` all stop at the service's
+own generator. With the flag false the hostvar generator ran on no trigger and in
+no pipeline, so those paths produced a proposed change with changed JSON and no
+configuration — and because `generate-avd-device-structured-config` reads the
+files this one writes, that one was a no-op in the pipeline too.
+
+Measured on a control branch: an application and a grant created directly, with a
+proposed change opened and no AVD steps, left **zero** hostvars, structured
+configs and EOS artifacts differing from main. The same request through the
+curated template changed exactly one of each, on the border leaf.
+
+**Registering a hand-written catalogue item is three edits.** The file, `catalog.locations`
+in *both* app-configs — `app-config.docker.yaml` REPLACES the dev list and is the one the
+lab runs with — and a `COPY` in `packages/backend/Dockerfile`, which copies only named
+paths. Miss either of the last two and the template works locally and is absent in the lab,
+with nothing logged anywhere.
+
+Measured end to end: one submission produced the application with an allocated
+`10.112.240.16/28`, the grant `active`, `svc-otter-shop-access` permitting `branch → k8s-prod`
+on `junos-http`, the source prefix added to the application's own policy, and the firewall
+artifact re-rendered on the branch with a checksum that had moved off main's.
+
 **A file payload is pasted into the form and attached by its own step.** A relationship whose
 peer inherits `CoreFileObject` — `ServiceFabricApp.values_file`, and `manifests_file` until cycle
 033 withdrew it — is offered as a `<name>_content` textarea rather than as an identifier, and
@@ -189,6 +279,19 @@ permitted nothing because the services are on NodePorts. The **return path** is 
 is easy to miss: `lab/scripts/tooling-bridge.sh` routes the branch LAN back via `10.90.0.254`,
 because without it the host answers a branch user out its default route and the request appears to
 vanish with nothing logged anywhere.
+
+**Every portal user needs an Infrahub account before their first request, and
+`invoke tooling` now creates one.** The account is provisioned by an SSO login, so
+it exists only once that person has signed in to Infrahub at least once —
+before that their first request fails with `Unable to set context for account
+that doesn't exist`, at the create step, *after* `BranchCreate` has already
+succeeded: a red run and an orphan branch. `scripts/provision_portal_accounts.py`
+drives the flow once per Dex static user and is idempotent.
+
+This was invisible to the one script meant to catch it: `verify_bootstrap.sh`'s
+sign-in check *creates* the account it then uses, so it proved alice could sign
+in while being structurally unable to notice that bob had no account at all. The
+script now also asserts that every Dex user has one.
 
 **The portal writes to Infrahub AS THE SIGNED-IN USER, through the mutation `context`.** Every
 mutation takes an optional `context: { account: { id } }`; the id resolves by UUID **or by name**,
@@ -827,6 +930,23 @@ That runs `start` → `load` → `avd` (on a branch, then merged) → `lab` →
 Since cycle 033 it also builds the portal image and runs `tooling` before `cluster`, so a
 finished bootstrap has a branch user able to sign in and ask for something.
 
+**The bootstrap ends by starting the reconciler LOOP**, not just by converging
+once. Without it a merge reaches no device and `DeploymentState` keeps reporting
+the green it recorded during the build — a reading identical whether the loop is
+running or was never started, which is the worst kind of wrong. Measured before
+this was added: every device `in_sync`, `last_checked_at` nine hours old, no
+container. `scripts/verify_bootstrap.sh` now asserts the container is up.
+
+`OTTERNET_RECONCILE_FIREWALL_EVERY` makes the firewall's cadence tunable. The
+default of one cycle in four is a steady-state economy — its comparison takes an
+exclusive lock on the vSRX — and a demo wants `1`, because the firewall is the
+payoff and nobody else is on the box.
+
+**A rename means `invoke build`.** The reconciler runs the image's installed copy
+of `solution_arista_avd`, not the bind-mounted source, so after the rename it
+looked for `clab-nfd41-*` containers and reported `failed=7` against a healthy
+lab. The bind mount cannot stand in for the install.
+
 **The device step is the reconciler, not `invoke provision`.** Cycle 030 swapped
 it so the bootstrap exercises the same code path that keeps the fabric correct
 afterwards, which also means `scripts/verify_bootstrap.sh` validates that path
@@ -870,6 +990,25 @@ every checksum to **move** would be exact and would never terminate — an artif
 genuinely did not change never moves, which is most of them on most merges.
 
 `invoke avd --branch X --merge` does the same thing outside a bootstrap.
+
+### Showing a check catch something
+
+```bash
+scripts/demo_break_isolation.sh            # break it, open the proposed change
+scripts/demo_break_isolation.sh --revert   # delete the branch and the change
+```
+
+Every validator is green on every proposed change this lab produces, so the
+review step reads as decoration. This adds one tenant's circuit to another
+tenant's `ServiceL3vpn` on a branch — the routing domain, not a label, so it
+joins two tenants directly across the provider edge — and lets
+`wan-service-consistency` say so. Nothing renders wrong; the check is what
+notices. It never merges, and `--revert` removes the branch and the change.
+
+**It re-runs the checks, and that is not belt-and-braces.** Creating a proposed
+change starts its validators immediately, and that first pass raced the edit:
+measured 62 checks, all green, over data that was already wrong. Asking again
+gave 67 checks with one red.
 
 ### Verifying a bootstrap
 

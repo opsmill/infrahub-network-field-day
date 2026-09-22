@@ -38,9 +38,6 @@ app:
             - url: http://localhost:8000/proposed-changes
               label: Proposed changes
               icon: kind:api
-            - url: http://localhost:3000
-              label: Semaphore
-              icon: kind:system
             - url: /racks
               label: Racks
               icon: kind:resource
@@ -294,17 +291,15 @@ infrahub:
       - kind: ServiceAppAccess
         entity: Component
         groups: [service_app_accesses]
-        # `approved` is a second gate, deliberately not on the request form:
-        # the point is that asking and approving are different acts by
-        # different people. `approved_at` and `approved_by` are the record of
-        # that second act and belong to whoever performs it, not to the person
-        # asking. granted_rules is the generator's output. `checksum` is excluded
-        # globally, for every kind, in provider.ts.
+        # `granted_rules` is the generator's output, not a request input.
+        # `checksum` is excluded globally, for every kind, in provider.ts.
         #
-        # The two approval fields were not noticed until this kind HAD a form: it
-        # carries a List attribute, so Infrahub's json_schema endpoint 500s for
-        # it and the whole kind used to be dropped from the catalogue.
-        formExclude: [approved, approved_at, approved_by, granted_rules]
+        # This list used to name `approved`, `approved_at` and `approved_by`
+        # as well. Those fields no longer exist -- the grant is gated by its
+        # branch and nothing else -- and `offForm` only ever SUBTRACTS names, so
+        # naming absent fields subtracted nothing and quietly implied a gate the
+        # schema had dropped.
+        formExclude: [granted_rules]
       - kind: ServiceTenantOnboarding
         entity: Component
         groups: [service_tenant_onboardings]
@@ -351,6 +346,15 @@ catalog:
     # service kind that has no hand-written one.
     - allow: [Component, System, API, Resource, Location, Template]
   locations:
+    # The curated two-for-one: an exposed application and the access to it, in
+    # one request. Hand-written because nothing in the generated path can emit a
+    # two-kind template. Registered in app-config.docker.yaml too -- that file
+    # REPLACES this list, and it is the one the lab runs with.
+    - type: file
+      target: ../../catalog/exposed-app-with-access.yaml
+      rules:
+        - allow: [Template]
+
     # Local example data, file locations are relative to the backend process, typically `packages/backend`
     - type: file
       target: ../../examples/entities.yaml

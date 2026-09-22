@@ -59,6 +59,33 @@ infrahub:
   # portal ran on the same host as Infrahub.
   externalAddress: ${INFRAHUB_EXTERNAL_ADDRESS}
 
+app:
+  # THE LINKS ON THE PORTAL'S FIRST SCREEN, corrected for the only audience that
+  # reaches it. The dev config points them at localhost, which for a branch user
+  # is their own machine, so "review the change you just requested" fails with
+  # connection refused. Semaphore is dropped entirely rather than re-pointed: the
+  # firewall permits the branch 32001, 32556 and 8000 and nothing else, so its
+  # port 3000 can never work from there.
+  #
+  # The whole `tools` list is restated because Backstage config merge REPLACES
+  # arrays rather than merging them.
+  extensions:
+    - home-page-widget:home/toolkit:
+        config:
+          tools:
+            - url: ${INFRAHUB_EXTERNAL_ADDRESS}
+              label: Infrahub
+              icon: kind:component
+            - url: ${INFRAHUB_EXTERNAL_ADDRESS}/proposed-changes
+              label: Proposed changes
+              icon: kind:api
+            - url: /racks
+              label: Racks
+              icon: kind:resource
+            - url: /create
+              label: Request a service
+              icon: docs
+
 catalog:
   # Replaces the dev locations: paths there are relative to packages/backend,
   # the backend runs from /app here, and the scaffolded sample entities are
@@ -68,6 +95,15 @@ catalog:
       target: ./examples/org.yaml
       rules:
         - allow: [User, Group]
+
+    # The curated two-for-one. Relative to /app here, and the directory only
+    # exists in the image because the Dockerfile COPYs it -- a new directory is
+    # silently absent otherwise, which reads as "the template does not appear in
+    # the portal" with nothing logged.
+    - type: file
+      target: ./catalog/exposed-app-with-access.yaml
+      rules:
+        - allow: [Template]
 
 # The upstream example enables guest sign-in here with
 # `dangerouslyAllowOutsideDevelopment`, because the image runs NODE_ENV=production

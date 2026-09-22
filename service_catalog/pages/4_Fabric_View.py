@@ -645,7 +645,26 @@ def _render_tenants(data: dict[str, Any]) -> None:
 
 
 def _render_generate_action(client: InfrahubClient, fabric_name: str, current_branch: str) -> None:
-    """Render the Generate AVD Configs action button."""
+    """Render the Generate AVD Configs action button.
+
+    GUARDED, because this button is destructive against a fabric that already
+    has cabling. `generate-fabric` cascades into `generate-pod`, which takes each
+    spine from nine interfaces to four and deletes the leaf-role ports racks 1
+    and 2 are cabled to; `generate-rack` then fails on rack 3 with an IndexError
+    because its slice of spine ports is empty. That is why `invoke avd` keeps the
+    topology stages behind `--topology` rather than in its default path, and why
+    one click here would cost a demo its fabric.
+    """
+    if client.fabric_is_built(current_branch):
+        st.markdown("**Generate Fabric**")
+        st.info(
+            f"`{fabric_name}` is already built on `{current_branch}`, so generation is not offered. "
+            "The topology generators are not idempotent: re-running them against a cabled fabric "
+            "deletes the spine ports the leaves are cabled to. Build a fabric on a fresh branch with "
+            "`invoke avd --branch <name> --topology` if you need to."
+        )
+        return
+
     col1, col2, col3 = st.columns([2, 1, 1])
 
     with col1:

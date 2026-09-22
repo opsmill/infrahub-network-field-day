@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -57,8 +58,13 @@ MINIMUM_INTERVAL = 60
 takes locks and leaves state on devices; a tight loop turns that into a denial
 of service against the fabric's own control plane."""
 
-FIREWALL_EVERY = 4
-"""Cycles between firewall comparisons. Its comparison takes an exclusive lock."""
+FIREWALL_EVERY = int(os.getenv("OTTERNET_RECONCILE_FIREWALL_EVERY", "4"))
+"""Cycles between firewall comparisons. Its comparison takes an exclusive lock.
+
+Tunable because the default is a steady-state economy, not a correctness bound:
+one in four keeps the vSRX's exclusive lock out of the way of anybody using the
+box. During a demo nobody else is using it and the firewall is the payoff, so
+`OTTERNET_RECONCILE_FIREWALL_EVERY=1` compares it every cycle."""
 
 
 class ConfigurationError(ValueError):

@@ -131,7 +131,27 @@ generator_definitions:
       name: name__value
     class_name: GenerateAVDDeviceHostvar
     convert_query_response: false
-    execute_in_proposed_change: false
+    # TRUE SO THAT A PROPOSED CHANGE SHOWS ITS OWN FABRIC CONSEQUENCE.
+    #
+    # Several service generators write fabric intent: `generate-app-access`
+    # appends a `permit <vip>` sequence to a border leaf's
+    # `avd_custom_hostvars`, `generate-network-segment` creates an `EvpnSvi`
+    # whose `avd_tags` decide which switches render it at all. None of that
+    # reaches a rendered configuration until this generator runs, and with this
+    # false it ran on no trigger and in no pipeline -- so every request path
+    # except one produced a proposed change showing changed JSON and no
+    # configuration, which is a reviewer approving a consequence they cannot
+    # see. `generate-avd-device-structured-config` is already true, and it reads
+    # the files this one writes, so leaving this false made that one a no-op in
+    # the pipeline as well.
+    #
+    # The cost is a whole-fabric pass per proposed change -- about 15s for seven
+    # switches -- plus a stable bookkeeping diff of AvdArtifact group
+    # membership. Cheaper than an invisible change.
+    execute_in_proposed_change: true
+    # STILL FALSE. After a merge the reconciler is what reaches devices, and it
+    # renders from artifacts; a second whole-fabric pass on every merge would
+    # duplicate the work the proposed change already did.
     execute_after_merge: false
   - name: generate-fabric
     file_path: "./generators/generate_fabric.py"

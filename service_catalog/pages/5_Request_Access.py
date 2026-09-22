@@ -1,14 +1,15 @@
 """Infrahub Service Catalog - Request Application Access.
 
 Creates ONE object: a `ServiceAppAccess`. The firewall address-book entry, the
-service objects and the permit rule are built by `generate-app-access` — but
-only once the request is **approved**, which is a deliberate second gate on top
-of the proposed change.
+service objects and the permit rule are built by `generate-app-access` on the
+request's own branch, as soon as it is created.
 
-**A request submitted here materialises nothing**, and that is the design rather
-than a limitation. `approved` is the first thing the generator checks, so a
-merged-but-unapproved grant creates no rule. Approving it is a separate act, in
-Infrahub, by someone who is not the requester.
+**THE BRANCH IS THE GATE, and it is the only one.** The kind used to carry an
+`approved` Boolean and the generator composed nothing while it was false; that
+was a second gate in front of one the workflow already has, and two gates can
+only disagree. The field is gone. A request reaches no device until its proposed
+change is merged, and the reviewer sees the rule, the address-book entry and the
+re-rendered firewall configuration in that change. Merging is the approval.
 
 The form makes two mistakes hard, both of which `zone-advertisement` would
 otherwise report only after the fact:
@@ -46,7 +47,9 @@ def main() -> None:
     st.title("Request Application Access")
     st.markdown(
         "Ask to reach an application from a network outside the cluster. "
-        "**Nothing is permitted until the request is approved** — merging alone creates no rule."
+        "**The grant is built on its own branch as soon as it is requested** — the rule, "
+        "the service objects and the address-book entry are in the proposed change, and "
+        "merging it is the approval."
     )
 
     try:
@@ -88,7 +91,7 @@ def main() -> None:
             )
             justification = st.text_area(
                 "Justification",
-                placeholder="Why this access is needed — the approver reads this",
+                placeholder="Why this access is needed — the reviewer reads this",
                 height=100,
             )
         with col2:
@@ -163,7 +166,7 @@ def main() -> None:
             st.error("At least one port is required — an empty list is not read as 'all ports'.")
             return
         if not justification.strip():
-            st.error("A justification is required; the approver has nothing to go on without one.")
+            st.error("A justification is required; the reviewer has nothing to go on without one.")
             return
 
         app_name = app_options[application_id]
@@ -195,7 +198,7 @@ def main() -> None:
                         "destination_vip": destination_vip_id,
                     },
                 )
-            st.info("Request submitted, unapproved")
+            st.info("Request submitted")
 
             with st.spinner("Creating proposed change..."):
                 pc = client.create_proposed_change(
@@ -206,15 +209,15 @@ def main() -> None:
                         f"{zone_options[source_zone_id]} to reach {app_name} at "
                         f"{vip_options[destination_vip_id]} on tcp/{', '.join(str(p) for p in ports)}.\n\n"
                         f"Justification: {justification.strip()}\n\n"
-                        "APPROVAL IS SEPARATE. Merging this creates no firewall rule; set `approved` "
-                        "on the grant and the generator builds it."
+                        "The grant is built on this branch already: the rule, the service objects "
+                        "and the address-book entry are in this change. Merging it is the approval."
                     ),
                 )
 
             display_success(f"Access request '{grant_name}' submitted.")
-            st.warning(
-                "This grant is **not approved**, so it permits nothing yet. An approver sets "
-                "`approved` on it in Infrahub, and only then does the firewall rule appear."
+            st.info(
+                "The firewall rule, the service objects and the address-book entry are on this "
+                "branch now. They reach the device when the proposed change is merged."
             )
             st.link_button("View Proposed Change", client.get_proposed_change_url(pc["id"]))
 

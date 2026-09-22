@@ -320,6 +320,26 @@ class InfrahubClient:
         result = self.execute_graphql(query, branch=branch)
         return [e["node"] for e in result.get("LocationRack", {}).get("edges", [])]
 
+    def fabric_is_built(self, branch: str = "main") -> bool:
+        """Whether any rack has already been generated on this branch.
+
+        The topology generators are NOT idempotent: `generate-pod` takes each
+        spine from nine interfaces to four, deleting the leaf-role ports racks 1
+        and 2 are cabled to, and `generate-rack` then fails on rack 3 with an
+        IndexError because its slice of spine ports is empty. So re-running the
+        chain against a fabric that already has cabling destroys it.
+
+        `generation_complete` on a rack is what `tasks.py::_rack_generation`
+        reads for the same decision, which is why this asks the same question
+        rather than counting devices.
+        """
+        query = """
+        query { LocationRack { edges { node { generation_complete { value } } } } }
+        """
+        result = self.execute_graphql(query, branch=branch)
+        edges = result.get("LocationRack", {}).get("edges", [])
+        return any((e["node"].get("generation_complete") or {}).get("value") for e in edges)
+
     def get_object_templates(self, branch: str = "main") -> list[dict[str, Any]]:
         """Fetch CoreObjectTemplate objects.
 

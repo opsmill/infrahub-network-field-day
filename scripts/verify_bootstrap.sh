@@ -244,6 +244,22 @@ curl -s -b "$J" -c "$J" --max-time 20 "http://10.90.0.1:8000/api/oidc/provider1/
 ' 2>/dev/null | grep -c access_token)
 check "$signin" "1" "alice signs in to Infrahub through Dex, from the branch desktop"
 
+# EVERY portal user, not just the one the check above happens to create.
+#
+# That check is a sign-in, and a sign-in PROVISIONS the account -- so it proved
+# alice could sign in while creating the very account it then relied on, and was
+# structurally unable to notice that nobody else had one. A user with no account
+# gets a red run and an orphan branch on their first request.
+missing_accounts=$(uv run python scripts/provision_portal_accounts.py --check >/dev/null 2>&1 && echo 0 || echo 1)
+check "$missing_accounts" "0" "every portal user has an Infrahub account"
+
+# THE RECONCILER LOOP, not the one-off convergence the bootstrap already did.
+# Without it a merge reaches no device, and DeploymentState keeps reporting the
+# green it recorded during the bootstrap -- a reading that is identical whether
+# the loop is running or was never started.
+check "$(docker compose ps --format '{{.Name}}' 2>/dev/null | grep -c deployment-reconciler)" "1" \
+    "the deployment reconciler is running"
+
 # WHAT THE PORTAL ACTUALLY OFFERS, not merely that it answers.
 #
 # Every check above passes against a portal whose catalogue is EMPTY: it serves
