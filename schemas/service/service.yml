@@ -108,33 +108,6 @@ generics:
         on_delete: no-action
         description: "The organization that ordered this service"
         order_weight: 900
-      # WHO ASKED, as opposed to which organization they asked for.
-      #
-      # `owner` is an OrganizationGeneric -- a billing and responsibility
-      # boundary, not a person -- and until the lab had an identity provider
-      # there was no person to point at. `ServiceAppAccess.requester` was free
-      # TEXT that the portal asked the user to type about themselves, which is
-      # a record of what someone claimed rather than of who they were.
-      #
-      # Now that SSO creates a real CoreAccount per person, this records the
-      # authenticated identity instead. Optional because a service seeded from
-      # `objects/` is ordered by nobody: the lab's own data is not a request.
-      #
-      # IT IS NOT AN AUDIT TRAIL, and should not be read as one. Infrahub
-      # attributes the mutation to whatever credential made it, and the portal
-      # still writes with its service token -- see auth/README.md for why a
-      # per-user token is not obtainable. This says who the portal verified was
-      # asking; Infrahub's own log says which credential wrote it.
-      - name: requested_by
-        peer: CoreGenericAccount
-        label: Requested By
-        kind: Generic
-        cardinality: one
-        optional: true
-        on_delete: no-action
-        description: "The authenticated account that asked for this service"
-        identifier: service__requested_by
-        order_weight: 905
 
   # ------------------------------------------------------------------------
   # Binding generics. A service kind opts into these when it is scoped to

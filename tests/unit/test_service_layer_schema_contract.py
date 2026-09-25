@@ -173,6 +173,32 @@ def test_service_generic_owner_is_mandatory_and_singular() -> None:
     assert owner["on_delete"] == "no-action"
 
 
+def test_service_generic_carries_no_requested_by() -> None:
+    """Withdrawn, and asserted rather than assumed.
+
+    `requested_by` pointed at a CoreGenericAccount and was meant to record the
+    authenticated identity behind a request. Nothing ever wrote it: the
+    generated Backstage forms drop every relationship whose peer starts with
+    `Core`, and neither the curated template nor the Streamlit pages set it
+    either, so it read null on every service object including the ones a real
+    portal request created.
+
+    What survives it is the record that is actually filled. Attribution for the
+    WRITE is `InfrahubEvent.account_id`, which the portal's mutation `context`
+    populates with the signed-in user; who asked in prose is
+    `ServiceAppAccess.requester` and the proposed change's description. An empty
+    relationship beside those three is a field a reviewer can only misread.
+
+    Re-adding it means committing to a writer for it, so the absence is a test.
+    """
+    service = _generic(_load_yaml(SERVICE_SCHEMA), "Service", "Generic")
+
+    assert "requested_by" not in _relationships(service), (
+        "requested_by is back; it needs a writer in the Backstage templates and the "
+        "Streamlit pages, or it reads null on every service object"
+    )
+
+
 def test_service_generic_constrains_name_uniqueness() -> None:
     service = _generic(_load_yaml(SERVICE_SCHEMA), "Service", "Generic")
 

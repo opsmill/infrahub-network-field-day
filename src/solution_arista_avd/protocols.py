@@ -77,7 +77,6 @@ class ServiceGeneric(CoreNode):
     name: String
     status: Dropdown
     owner: RelationshipAttribute[OrganizationGeneric]
-    requested_by: RelationshipAttribute[CoreGenericAccount]
 
 class SecurityGenericAddress(CoreNode):
     name: String
