@@ -327,7 +327,7 @@ async def test_every_routed_port_states_its_ip_mtu(device: str) -> None:
 
 @pytest.mark.parametrize("device", DEVICES)
 async def test_every_router_carries_the_management_lifeline(device: str) -> None:
-    """A push replaces /interface and /network-instance: without these, mgmt0 is deleted."""
+    """A push replaces the WHOLE configuration: without these, mgmt0 is deleted."""
     rendered = await _render(device)
 
     assert "set / interface mgmt0 subinterface 0 ipv4 dhcp-client" in rendered
@@ -415,3 +415,79 @@ def test_the_statically_attached_ce_has_no_template_target() -> None:
     """cust-acme-dr-ce shares the customer_edge role but runs no protocol, which
     is why the target group lists its members explicitly."""
     assert not (FIXTURES / "cust-acme-dr-ce.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# A FULL configuration: everything the router needs, nothing secret
+# ---------------------------------------------------------------------------
+
+LAB_HASH_SOURCE = REPO_ROOT / "objects" / "22_otternet_management.yml"
+
+
+@pytest.mark.parametrize("device", DEVICES)
+async def test_the_artifact_is_a_full_replace_and_passes_the_reconcilers_lifeline(device: str) -> None:
+    """`delete /` opens it, so applying it anywhere -- boot or push -- leaves exactly this file."""
+    from solution_arista_avd.deployment.devices import Target, assert_srl_lifeline
+
+    rendered = await _render(device)
+    commands = [line for line in rendered.splitlines() if line.strip() and not line.startswith("#")]
+
+    assert commands[0] == "delete /"
+    assert_srl_lifeline(Target(device, "SR Linux Configuration", "x", "Ready", None), rendered)
+    assert "set / system grpc-server mgmt default-tls-profile true" in rendered
+    assert "set / system management openconfig admin-state enable" in rendered, "the OpenConfig gNMI paths need it"
+    assert sum(line.startswith("set / acl acl-filter cpm ") for line in commands) > 500
+
+
+@pytest.mark.parametrize("device", DEVICES)
+async def test_no_key_material_and_no_device_encrypted_value_is_rendered(device: str) -> None:
+    """The TLS key and SNMP community ContainerLab writes are `$aes1$`-encrypted per device."""
+    rendered = await _render(device)
+
+    for forbidden in ("$aes1$", "BEGIN CERTIFICATE", "PRIVATE KEY", "ssh-key", "tls profile", "snmp"):
+        assert forbidden not in rendered, forbidden
+
+
+async def test_the_admin_hash_is_the_one_the_whole_lab_shares() -> None:
+    """NetworkLocalUser `admin` -- the fabric's -- and the lab model's copy are one hash.
+
+    Measured on a router: with it set, admin logs in with the lab password and
+    the image default is refused.
+    """
+    import yaml
+
+    seeded = next(
+        u["password"]
+        for doc in yaml.safe_load_all(LAB_HASH_SOURCE.read_text(encoding="utf-8"))
+        if doc and doc["spec"]["kind"] == "NetworkLocalUser"
+        for u in doc["spec"]["data"]
+        if u["name"] == "admin"
+    )
+    lab = yaml.safe_load((LAB_WAN / "tenants.yml").read_text(encoding="utf-8"))["admin_password_hash"]
+    rendered = await _render("isp-pe1")
+
+    assert seeded == lab
+    assert seeded.startswith("$6$")
+    assert f"set / system aaa authentication admin-user password {seeded}" in rendered
+
+
+@pytest.mark.parametrize(
+    ("password_type", "password", "match"),
+    [
+        (None, None, "no NetworkLocalUser"),
+        ("sha512", "admin", "no sha512-crypt hash"),
+        ("cleartext", "admin", "no sha512-crypt hash"),
+    ],
+)
+async def test_a_missing_or_cleartext_admin_password_is_refused(
+    password_type: str | None, password: str | None, match: str
+) -> None:
+    fixture = _fixture("isp-pe1")
+    if password_type is None:
+        fixture["NetworkLocalUser"]["edges"] = []
+    else:
+        node = fixture["NetworkLocalUser"]["edges"][0]["node"]
+        node["password_type"] = {"value": password_type}
+        node["password"] = {"value": password}
+    with pytest.raises(SrlConfigError, match=match):
+        await _transform().transform(fixture)

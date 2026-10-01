@@ -34,7 +34,7 @@
 # each other. Two sites of one tenant share a VRF, so hq and dr have a route to one
 # another the moment both are up. Site-to-site connectivity is a consequence of
 # the tenant model, not a feature bolted onto it.
-{% include "_management.srl.j2" %}
+{% include "_system.srl.j2" %}
 {% include "_interfaces.srl.j2" %}
 {% for t in tenants %}
 {% for site in t.sites if site.kind == 'static' %}
@@ -192,3 +192,4 @@ set / network-instance {{ t.vrf }} protocols bgp neighbor {{ site.ce.wan_address
 set / network-instance {{ t.vrf }} protocols bgp neighbor {{ site.ce.wan_address | replace('/30','') }} export-policy [ EXPORT-BGP-TABLE ]
 {% endfor %}
 {% endfor %}
+{% include "_cpm_acl.srl.j2" %}

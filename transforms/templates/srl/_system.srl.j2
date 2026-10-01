@@ -1,0 +1,82 @@
+#
+# ---- the whole box: this file IS the configuration ---------------------------
+# A push replaces the ENTIRE running configuration with this file, the way an
+# EOS push does with `rollback clean-config`: the candidate is emptied with
+# `delete /` and rebuilt from these lines, so anything not stated here is
+# deleted. The same line opens the file, so booting from it under ContainerLab
+# is a full replace as well, and a freshly booted router already matches.
+#
+# That makes this section the lifeline. The reconciler refuses an artifact that
+# lacks the management interface, the management network instance, the gNMI
+# server and the admin password, because a replace without them would cut the
+# router off the network it is managed and watched over.
+#
+# Three things ContainerLab puts on a booted router are deliberately NOT here:
+#   * its TLS profile, whose private key is encrypted with a per-device key and
+#     so cannot be rendered. gNMI uses `default-tls-profile`, a certificate the
+#     router generates for itself, and JSON-RPC listens on HTTP only, because
+#     its HTTPS listener has no such option and would need a keyed profile.
+#   * the SSH public keys of whichever host deployed the lab. Password login
+#     works; nothing here should know which laptop ran ContainerLab.
+#   * SNMP (its community is device-encrypted too, and gNMI replaced it), DNS,
+#     the EDA gRPC servers and the welcome banner -- unused here.
+#
+# The admin password is the same sha512-crypt hash of the lab password the
+# fabric switches render, from NetworkLocalUser `admin`. Verified on a router:
+# admin with the lab password logs in, the image default no longer does.
+delete /
+set / system name host-name {{ node }}
+set / system management openconfig admin-state enable
+set / system lldp admin-state enable
+set / system ndk-server admin-state enable
+set / system control-plane-traffic input acl acl-filter cpm type ipv4
+set / system control-plane-traffic input acl acl-filter cpm type ipv6
+set / system aaa authentication idle-timeout 7200
+set / system aaa authentication authentication-method [ local ]
+set / system aaa authentication admin-user password {{ admin_password_hash }}
+set / system aaa server-group local type local
+set / system ssh-server mgmt admin-state enable
+set / system ssh-server mgmt network-instance mgmt
+set / system ssh-server mgmt use-credentialz true
+set / system ssh-server mgmt-netconf admin-state enable
+set / system ssh-server mgmt-netconf network-instance mgmt
+set / system ssh-server mgmt-netconf port 830
+set / system ssh-server mgmt-netconf disable-shell true
+set / system netconf-server mgmt admin-state enable
+set / system netconf-server mgmt ssh-server mgmt-netconf
+set / system json-rpc-server admin-state enable
+set / system json-rpc-server network-instance mgmt http admin-state enable
+set / system grpc-server mgmt admin-state enable
+set / system grpc-server mgmt rate-limit 65000
+set / system grpc-server mgmt default-tls-profile true
+set / system grpc-server mgmt network-instance mgmt
+set / system grpc-server mgmt trace-options [ request response common ]
+set / system grpc-server mgmt services [ gnmi gnoi gnsi gribi p4rt ]
+set / system grpc-server mgmt unix-socket admin-state enable
+set / system logging buffer messages rotate 3
+set / system logging buffer messages size 10000000
+set / system logging buffer messages facility local6 priority match-above informational
+{% for facility in ["auth", "cron", "daemon", "ftp", "kern", "lpr", "mail", "news", "syslog", "user", "uucp", "local0", "local1", "local2", "local3", "local4", "local5", "local7"] %}
+set / system logging buffer system facility {{ facility }} priority match-above warning
+{% endfor %}
+set / system logging file messages rotate 3
+set / system logging file messages size 10000000
+set / system logging file messages facility local6 priority match-above warning
+#
+# ---- management interface and network instance --------------------------------
+# Exactly as the ContainerLab boot configuration writes them. mgmt0 stays a DHCP
+# client even with a static `mgmt-ipv4`: it leases the address ContainerLab
+# assigned, measured on a router deployed that way.
+set / interface mgmt0 admin-state enable
+set / interface mgmt0 subinterface 0 admin-state enable
+set / interface mgmt0 subinterface 0 ipv4 admin-state enable
+set / interface mgmt0 subinterface 0 ipv4 dhcp-client
+set / interface mgmt0 subinterface 0 ipv6 admin-state enable
+set / interface mgmt0 subinterface 0 ipv6 dhcp-client
+set / network-instance mgmt type ip-vrf
+set / network-instance mgmt admin-state enable
+set / network-instance mgmt description "Management network instance"
+set / network-instance mgmt interface mgmt0.0
+set / network-instance mgmt protocols linux import-routes true
+set / network-instance mgmt protocols linux export-routes true
+set / network-instance mgmt protocols linux export-neighbors true

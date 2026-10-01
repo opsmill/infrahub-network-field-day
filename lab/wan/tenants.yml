@@ -289,6 +289,13 @@ branch:
       address: 10.70.0.31/24
       gateway: 10.70.0.1
 
+# The routers' admin password, as a sha512-crypt hash -- never cleartext. The
+# SAME hash objects/22_otternet_management.yml gives NetworkLocalUser `admin`,
+# which is what Infrahub renders onto the SR Linux routers and the fabric
+# switches alike, so the whole lab shares one lab credential (`admin`).
+# tests/unit/test_srl_config.py holds the two copies equal.
+admin_password_hash: "$6$OtternetLab$9OUIc8rD9Tz1nLCqGCVqkB2Jc0hRbMwY0oFA4E4hmrcIUFo7/5n79zdOiNhJDnTnsmVg4t3MAZCcmlrYu6iln1"
+
 # MTU for every WAN interface. Matches what AVD configures on the border leaf;
 # containerlab creates these veths at 9500 and the mismatch is silent and
 # expensive -- ping works, sessions establish, bulk transfers stall forever.

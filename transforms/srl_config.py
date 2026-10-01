@@ -9,14 +9,19 @@ The templates are copies of ``lab/wan/templates/*.srl.j2`` with one line changed
 else, comments included, is identical, and ``tests/unit/test_srl_config.py``
 holds the output to the lab's rendered ``config.cli`` line for line.
 
-THE OUTPUT IS FLAT ``set`` COMMANDS, one file per router, and it is three things
-at once: what ContainerLab applies at boot (a ``.cli`` startup configuration is
-run on top of the image defaults), what the reconciler loads into a candidate to
-compare, and what it commits to push. A push first deletes ``/interface``,
-``/network-instance`` and ``/routing-policy`` in the same candidate, so the file
-is a REPLACE of those three subtrees and a removed tenant is removed from the
-router. ``/system`` is never touched: it holds the credentials and the gNMI and
-JSON-RPC servers, none of which is modelled.
+THE OUTPUT IS THE ROUTER'S WHOLE CONFIGURATION, as flat ``set`` commands
+opening with ``delete /``, and it is three things at once: what ContainerLab
+applies at boot, what the reconciler loads into a candidate to compare, and what
+it commits. Every one of those is a FULL replace, the way an EOS push is with
+``rollback clean-config``: anything the file does not state is deleted. So the
+file carries ``/system`` too -- the management interface and VRF, the gNMI, SSH
+and JSON-RPC servers, AAA with the admin password hash, logging, LLDP and the
+image's control-plane ACL -- and the reconciler refuses one that lacks what keeps
+the router reachable.
+
+Nothing secret is rendered: the admin password is the sha512-crypt hash the
+fabric switches already render from ``NetworkLocalUser`` ``admin``, and gNMI uses
+the certificate the router generates for itself rather than a keyed profile.
 
 WHERE THE SERVICE LAYER BECOMES VISIBLE. ``isp-pe1``'s per-tenant import policy
 is assembled from ordered intent rather than from device facts:
@@ -75,6 +80,10 @@ TENANT_ORDER = ("acme", "globex")
 # the alternative is a window where the intent is withdrawn and the router is
 # not.
 DECOMMISSIONED_STATUSES = frozenset({"decommissioning", "decommissioned"})
+
+# The one account SR Linux has a fixed place for, and the NetworkLocalUser it
+# is rendered from. The fabric switches render the same object.
+ADMIN_USER = "admin"
 
 # The branch LAN's mac-vrf. Infrahub models the ports and the IRB that routes
 # them; the bridge itself has no object, so its name is fixed here and in
@@ -193,7 +202,29 @@ class SrlConfig(InfrahubTransform):
 
         tenants = context["tenants"] if target.role.value == "isp_edge" else []
         context.update(self._interfaces(target, tenants))
+        context["admin_password_hash"] = self._admin_password_hash(result, target.name.value)
         return context
+
+    @staticmethod
+    def _admin_password_hash(result: SrlConfigQuery, node: str) -> str:
+        """The admin hash, or a refusal -- a full replace without it locks the router.
+
+        Only a sha512-crypt hash is accepted, the form SR Linux takes verbatim
+        (measured: the lab password then logs in, the image default does not).
+        Anything else would either put a cleartext secret in an artifact or hand
+        the router a value it cannot verify a login against.
+        """
+        user = _first(result.network_local_user.edges)
+        if user is None:
+            raise SrlConfigError(f"{node}: no NetworkLocalUser {ADMIN_USER!r}; a full replace would leave no login")
+        kind = user.password_type.value if user.password_type else None
+        value = user.password.value if user.password else None
+        if kind != "sha512" or not value or not str(value).startswith("$6$"):
+            raise SrlConfigError(
+                f"{node}: NetworkLocalUser {ADMIN_USER!r} has no sha512-crypt hash; refusing to render a password "
+                "that is cleartext or that the router cannot check a login against"
+            )
+        return str(value)
 
     # -- interfaces -----------------------------------------------------------
 

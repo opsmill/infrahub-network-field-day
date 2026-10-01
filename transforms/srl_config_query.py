@@ -16,6 +16,9 @@ class SrlConfigQuery(BaseModel):
     service_internet_access: "SrlConfigQueryServiceInternetAccess" = Field(
         alias="ServiceInternetAccess"
     )
+    network_local_user: "SrlConfigQueryNetworkLocalUser" = Field(
+        alias="NetworkLocalUser"
+    )
     wan_internet_peering: "SrlConfigQueryWanInternetPeering" = Field(
         alias="WanInternetPeering"
     )
@@ -613,6 +616,32 @@ class SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNodeName(BaseMo
     value: Optional[str]
 
 
+class SrlConfigQueryNetworkLocalUser(BaseModel):
+    edges: list["SrlConfigQueryNetworkLocalUserEdges"]
+
+
+class SrlConfigQueryNetworkLocalUserEdges(BaseModel):
+    node: Optional["SrlConfigQueryNetworkLocalUserEdgesNode"]
+
+
+class SrlConfigQueryNetworkLocalUserEdgesNode(BaseModel):
+    name: Optional["SrlConfigQueryNetworkLocalUserEdgesNodeName"]
+    password_type: Optional["SrlConfigQueryNetworkLocalUserEdgesNodePasswordType"]
+    password: Optional["SrlConfigQueryNetworkLocalUserEdgesNodePassword"]
+
+
+class SrlConfigQueryNetworkLocalUserEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class SrlConfigQueryNetworkLocalUserEdgesNodePasswordType(BaseModel):
+    value: Optional[str]
+
+
+class SrlConfigQueryNetworkLocalUserEdgesNodePassword(BaseModel):
+    value: Optional[str]
+
+
 class SrlConfigQueryWanInternetPeering(BaseModel):
     edges: list["SrlConfigQueryWanInternetPeeringEdges"]
 
@@ -870,6 +899,9 @@ SrlConfigQueryServiceInternetAccessEdgesNodeL3Vpn.model_rebuild()
 SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNode.model_rebuild()
 SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenant.model_rebuild()
 SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNode.model_rebuild()
+SrlConfigQueryNetworkLocalUser.model_rebuild()
+SrlConfigQueryNetworkLocalUserEdges.model_rebuild()
+SrlConfigQueryNetworkLocalUserEdgesNode.model_rebuild()
 SrlConfigQueryWanInternetPeering.model_rebuild()
 SrlConfigQueryWanInternetPeeringEdges.model_rebuild()
 SrlConfigQueryWanInternetPeeringEdgesNode.model_rebuild()

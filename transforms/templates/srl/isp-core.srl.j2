@@ -7,7 +7,7 @@
 # one hop of the provider carries customer traffic without per-customer
 # separation, which is honest for a lab and would not be acceptable in a real
 # carrier core. See docs/design.md, The WAN.
-{% include "_management.srl.j2" %}
+{% include "_system.srl.j2" %}
 {% include "_interfaces.srl.j2" %}
 #
 # ---- what we accept from the datacentre --------------------------------
@@ -114,3 +114,4 @@ set / network-instance default protocols bgp neighbor {{ isp.internet.peering.pe
 set / network-instance default protocols bgp neighbor {{ isp.internet.peering.peer }} import-policy [ RM-INTERNET-IN ]
 set / network-instance default protocols bgp neighbor {{ isp.internet.peering.peer }} export-policy [ RM-INTERNET-OUT ]
 {% endif %}
+{% include "_cpm_acl.srl.j2" %}

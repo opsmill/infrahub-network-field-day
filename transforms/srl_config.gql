@@ -135,6 +135,20 @@ query SrlConfigQuery($device: String!) {
     }
   }
 
+  # The admin account the whole lab shares. The artifact is a FULL replace, so
+  # the router's own login has to be in it; this is the same object -- and the
+  # same sha512-crypt hash -- the fabric switches render through AVD. Only a hash
+  # is ever stored or rendered; srl_config refuses any other password_type.
+  NetworkLocalUser(name__value: "admin") {
+    edges {
+      node {
+        name { value }
+        password_type { value }
+        password { value }
+      }
+    }
+  }
+
   WanInternetPeering {
     edges {
       node {

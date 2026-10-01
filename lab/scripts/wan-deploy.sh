@@ -2,9 +2,9 @@
 # Push the rendered WAN configs onto the running ISP / customer / branch routers.
 #
 # The WAN's equivalent of `make avd-deploy`: wan/render.py produces the intended
-# config, this makes the devices match it. A candidate REPLACE rather than a
-# restart, so a customer being added does not bounce the BGP sessions of the
-# customers that were already there -- the commit applies only the net change.
+# config, this makes the devices match it. A full-configuration REPLACE rather
+# than a restart, so a customer being added does not bounce the BGP sessions of
+# the customers that were already there -- the commit applies only the net change.
 #
 # This is the lab's own push, for working on the lab without Infrahub. Once
 # Infrahub runs the lab, its reconciler pushes the identical file the same way
@@ -47,10 +47,14 @@ for dir in "$RENDERED"/*/; do
         continue
     fi
 
-    # SR Linux: delete the three subtrees the file owns and re-set them from it,
-    # in ONE private candidate, then commit. That is a replace -- a tenant removed
-    # from tenants.yml is removed from the router -- and only the net difference
-    # is applied. /system (credentials, gNMI, TLS) is never touched.
+    # SR Linux: a FULL replace. `delete /` empties one private candidate, the
+    # file -- the router's whole configuration, /system included -- rebuilds it,
+    # and `commit confirmed` makes it live for 120s. The commit applies only the
+    # net difference, so sessions the file did not change stay up. Confirmation
+    # waits until gNMI (57400) and SSH (22) are listening again in the management
+    # namespace; if they are not, the commit is rejected and rolled back, and if
+    # this script dies first SR Linux rolls it back by itself. The same flow as
+    # the reconciler's push_srl.
     #
     # sr_cli stops at the first error and commits nothing, but leaves its named
     # candidate behind; it is cleared on failure so ten bad runs cannot use up
@@ -58,12 +62,19 @@ for dir in "$RENDERED"/*/; do
     candidate="wan-deploy-$$"
     if out=$({
             echo "enter candidate private name $candidate"
-            echo "delete / interface *"
-            echo "delete / network-instance *"
-            echo "delete / routing-policy"
+            echo "delete /"
             cat "$dir/config.cli"
-            echo "commit now"
-        } | docker exec -i "$container" sr_cli 2>&1) && grep -q "All changes have been committed" <<<"$out"; then
+            echo "commit confirmed timeout 120"
+        } | docker exec -i "$container" sr_cli 2>&1) && grep -q "Commit confirmed" <<<"$out"; then
+        listening=$(docker exec "$container" ip netns exec srbase-mgmt ss -ltnH 2>/dev/null)
+        if grep -q ":57400 " <<<"$listening" && grep -q ":22 " <<<"$listening"; then
+            docker exec "$container" sr_cli -d "tools system configuration confirmed-accept" >/dev/null
+        else
+            docker exec "$container" sr_cli -d "tools system configuration confirmed-reject" >/dev/null 2>&1 || true
+            warn "$node: management did not come back -- the commit was rolled back"
+            failed=$((failed + 1))
+            continue
+        fi
         ok "$node"
         pushed=$((pushed + 1))
     else

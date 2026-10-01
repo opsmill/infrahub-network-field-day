@@ -15,12 +15,12 @@ quiet:
   the commands were sent**.
 * ``_assert_eos_lifeline`` -- a replace that drops the management path commits
   successfully and takes the device off the network with it.
-* ``_assert_srl_lifeline`` -- an SR Linux push deletes ``/interface``,
-  ``/network-instance`` and ``/routing-policy`` and re-sets them from the
-  artifact, so an artifact without the management interface and VRF commits
-  successfully and **takes the router off the management network**.
-* ``_assert_srl_scope`` -- a line outside those three subtrees would reach
-  ``/system``, where the credentials live.
+* ``_assert_srl_lifeline`` -- an SR Linux push is a FULL replace (``delete /``
+  then the artifact), so an artifact without the management interface and VRF,
+  the gNMI and SSH servers and the admin password commits successfully and
+  **leaves the router unreachable or with no login**.
+* ``push_srl``'s commit-confirm -- a commit that passes the lifeline and still
+  breaks management is rejected at once, and one nobody confirms rolls back.
 * ``_assert_junos_scope`` -- a ``system`` stanza in the artifact would make the
   push overwrite the firewall's credentials with whatever the model holds.
 * ``_junos_replace_tagged`` -- without the ``replace:`` tags the load stops being
@@ -39,9 +39,9 @@ from solution_arista_avd.deployment.devices import (
     _assert_eos_lifeline,  # noqa: PLC2701 - these guards are the point of this file
     _assert_junos_scope,  # noqa: PLC2701
     _assert_srl_lifeline,  # noqa: PLC2701
-    _assert_srl_scope,  # noqa: PLC2701
     _eos_config_lines,  # noqa: PLC2701
     _junos_replace_tagged,  # noqa: PLC2701
+    push_srl,
     srl_candidate_script,
 )
 
@@ -107,6 +107,12 @@ class TestEosLifeline:
 
 
 SRL_LIFELINE = (
+    "delete /\n"
+    "set / system aaa authentication admin-user password $6$OtternetLab$hash\n"
+    "set / system ssh-server mgmt admin-state enable\n"
+    "set / system ssh-server mgmt network-instance mgmt\n"
+    "set / system grpc-server mgmt admin-state enable\n"
+    "set / system grpc-server mgmt network-instance mgmt\n"
     "set / interface mgmt0 admin-state enable\n"
     "set / interface mgmt0 subinterface 0 ipv4 dhcp-client\n"
     "set / network-instance mgmt type ip-vrf\n"
@@ -115,11 +121,11 @@ SRL_LIFELINE = (
 
 
 class TestSrlLifeline:
-    """The SR Linux equivalent of the EOS guard, and of the FRR one before it.
+    """What must survive a FULL replace for the router to stay reachable and manageable.
 
-    The push replaces the three subtrees it owns, so an EMPTY artifact -- one
-    that exists, reports `Ready` and has not rendered yet -- would delete every
-    interface the router has, the management interface included.
+    An EMPTY artifact -- one that exists, reports `Ready` and has not rendered
+    yet -- would otherwise delete the router's whole configuration, management
+    and login included.
     """
 
     def test_a_real_configuration_passes(self) -> None:
@@ -128,57 +134,108 @@ class TestSrlLifeline:
     def test_an_empty_artifact_is_refused(self) -> None:
         with pytest.raises(ProvisionError) as error:
             _assert_srl_lifeline(_target("branch-rtr"), "")
-        assert "management interface" in str(error.value)
+        assert "unreachable" in str(error.value)
 
-    @pytest.mark.parametrize("dropped", ["set / interface mgmt0 ", "set / network-instance mgmt "])
-    def test_each_missing_half_is_refused(self, dropped: str) -> None:
+    @pytest.mark.parametrize(
+        "dropped",
+        [
+            "set / interface mgmt0 ",
+            "set / network-instance mgmt ",
+            "set / system grpc-server mgmt ",
+            "set / system ssh-server mgmt ",
+            "set / system aaa authentication admin-user password",
+        ],
+    )
+    def test_each_missing_element_is_refused(self, dropped: str) -> None:
         config = "\n".join(line for line in SRL_LIFELINE.splitlines() if not line.startswith(dropped))
         with pytest.raises(ProvisionError) as error:
             _assert_srl_lifeline(_target("isp-pe1"), config)
         assert "isp-pe1" in str(error.value)
 
     def test_a_comment_naming_mgmt0_does_not_satisfy_it(self) -> None:
-        """The needle is a `set` command, so prose about the lifeline is not the lifeline."""
+        """The needles are whole commands, so prose about the lifeline is not the lifeline."""
+        commented = "\n".join(f"# {line}" for line in SRL_LIFELINE.splitlines())
         with pytest.raises(ProvisionError):
-            _assert_srl_lifeline(_target(), "# interface mgmt0 and network-instance mgmt are the lifeline\n")
+            _assert_srl_lifeline(_target(), commented)
 
-
-class TestSrlScope:
-    def test_the_rendered_shape_passes(self) -> None:
-        _assert_srl_scope(
-            _target(),
-            "# a comment\n\nset / system name host-name isp-pe1\n"
-            + SRL_LIFELINE
-            + "set / routing-policy policy X default-action policy-result reject\n",
-        )
-
-    @pytest.mark.parametrize(
-        "line",
-        [
-            "set / system aaa authentication admin-user password x",
-            "delete / interface ethernet-1/1",
-            "set / system gnmi-server admin-state disable",
-            "commit now",
-        ],
-    )
-    def test_anything_outside_the_owned_subtrees_is_refused(self, line: str) -> None:
-        with pytest.raises(ProvisionError, match="reaches outside"):
-            _assert_srl_scope(_target(), SRL_LIFELINE + line + "\n")
+    def test_a_cleartext_password_does_not_satisfy_it(self) -> None:
+        """The needle ends in `$`: the admin password must be a crypt hash."""
+        config = SRL_LIFELINE.replace("password $6$OtternetLab$hash", "password admin")
+        with pytest.raises(ProvisionError, match="admin-user password"):
+            _assert_srl_lifeline(_target(), config)
 
 
 class TestSrlCandidateScript:
-    def test_the_owned_subtrees_are_deleted_before_the_artifact_is_set(self) -> None:
-        """Delete-then-set in ONE candidate is what makes it a replace without churn."""
+    def test_the_whole_tree_is_deleted_before_the_artifact_is_set(self) -> None:
+        """`delete /` then the artifact, in ONE candidate: EOS's `rollback clean-config`."""
         script = srl_candidate_script("infrahub-test-1", SRL_LIFELINE, commit=False).splitlines()
 
         assert script[0] == "enter candidate private name infrahub-test-1"
-        assert script[1:4] == ["delete / interface *", "delete / network-instance *", "delete / routing-policy"]
-        assert script.index("set / interface mgmt0 admin-state enable") > 3
+        assert script[1] == "delete /"
+        assert script.index("set / interface mgmt0 admin-state enable") > 1
         assert script[-2:] == ["diff flat", "discard now"]
 
-    def test_a_push_commits_and_a_comparison_does_not(self) -> None:
-        assert srl_candidate_script("n", SRL_LIFELINE, commit=True).splitlines()[-1] == "commit now"
-        assert "commit now" not in srl_candidate_script("n", SRL_LIFELINE, commit=False)
+    def test_a_push_commits_confirmed_and_a_comparison_does_not_commit(self) -> None:
+        push = srl_candidate_script("n", SRL_LIFELINE, commit=True).splitlines()
+        assert push[-1].startswith("commit confirmed timeout ")
+        assert "commit" not in srl_candidate_script("n", SRL_LIFELINE, commit=False)
+
+
+class _Docker:
+    """Stands in for `docker`: records each argv, answers like a router would."""
+
+    def __init__(self, *, commit_out: str, listening: str) -> None:
+        self.calls: list[list[str]] = []
+        self.commit_out = commit_out
+        self.listening = listening
+
+    def __call__(self, argv: list[str], **_: object) -> object:
+        import subprocess  # noqa: S404 - only CompletedProcess, to fake a docker answer
+
+        self.calls.append(argv)
+        if argv[:2] == ["docker", "inspect"]:
+            return subprocess.CompletedProcess(argv, 0, "true\n", "")
+        if argv[-1] == "sr_cli":
+            return subprocess.CompletedProcess(argv, 0, self.commit_out, "")
+        if "addr" in argv:
+            return subprocess.CompletedProcess(argv, 0, "3: mgmt0.0    inet 172.20.41.61/24 brd x\n", "")
+        if "ss" in argv:
+            return subprocess.CompletedProcess(argv, 0, self.listening, "")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    def tools(self) -> list[str]:
+        return [argv[-1] for argv in self.calls if "-d" in argv]
+
+
+COMMITTED = (
+    "Commit confirmed (automatic rollback in 2 minutes)\nAll changes have been committed. Leaving candidate mode.\n"
+)
+
+
+class TestSrlCommitConfirm:
+    def test_a_healthy_commit_is_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        docker = _Docker(commit_out=COMMITTED, listening="*:57400 *:80 0.0.0.0:22 \n")
+        monkeypatch.setattr("subprocess.run", docker)
+
+        assert "confirmed" in push_srl(_target("isp-pe1"), SRL_LIFELINE)
+        assert docker.tools() == ["tools system configuration confirmed-accept"]
+
+    def test_a_commit_that_breaks_gnmi_is_rejected_not_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Measured on the prototype: gNMI moved off 57400, rejected, rolled back."""
+        docker = _Docker(commit_out=COMMITTED, listening="*:57999 0.0.0.0:22 \n")
+        monkeypatch.setattr("subprocess.run", docker)
+
+        with pytest.raises(ProvisionError, match="rolled back"):
+            push_srl(_target("isp-pe1"), SRL_LIFELINE)
+        assert docker.tools() == ["tools system configuration confirmed-reject"]
+
+    def test_the_lifeline_runs_before_anything_is_sent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        docker = _Docker(commit_out=COMMITTED, listening="")
+        monkeypatch.setattr("subprocess.run", docker)
+
+        with pytest.raises(ProvisionError):
+            push_srl(_target("isp-pe1"), "delete /\n")
+        assert docker.calls == []
 
 
 class TestJunosScope:

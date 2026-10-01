@@ -187,8 +187,8 @@ def test_credentials_are_references_and_tags_come_from_the_graph() -> None:
     assert conf["inputs"]["snmp"][0]["agents"] == ["udp://172.20.41.31:161"]
     routers = {b["tags"]["device"]: b for b in conf["inputs"]["gnmi"] if b["tags"]["kind"] == "DcimDevice"}
     assert routers["isp-pe1"]["addresses"] == ["172.20.41.61:57400"]
-    assert routers["isp-pe1"]["username"] == "${SRL_GNMI_USERNAME}"
-    assert routers["isp-pe1"]["password"] == "${SRL_GNMI_PASSWORD}"  # noqa: S105 -- a reference, not a password
+    assert routers["isp-pe1"]["username"] == "${GNMI_USERNAME}"
+    assert routers["isp-pe1"]["password"] == "${GNMI_PASSWORD}"  # noqa: S105 -- a reference, not a password
     assert routers["isp-pe1"]["tls_enable"] is True
     assert "tls_enable" not in switch, "EOS gNMI is plaintext on 6030; only SR Linux's server is TLS"
     assert not any(b["tags"]["kind"] == "DcimDevice" for b in conf["inputs"].get("prometheus", []))

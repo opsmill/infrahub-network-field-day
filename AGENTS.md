@@ -431,8 +431,9 @@ Three measured facts about the device side:
   SAME OpenConfig paths as the switches, so the series arrive under the same names and labels
   (`bgp_neighbor_session_state_code{neighbor_address,name}`, `interface_counters_*`, `cpu_*`,
   `memory_*`) and every fabric panel covers the WAN with no second query. Port 57400, TLS with
-  ContainerLab's per-lab self-signed `clab-profile`, so `insecure_skip_verify`; credentials are
-  `${SRL_GNMI_USERNAME}`/`${SRL_GNMI_PASSWORD}` from the same Secret. FRR 10.2-10.5 shipped no
+  `default-tls-profile` — a certificate each router generates for itself — so
+  `insecure_skip_verify`; credentials are the switches' own `${GNMI_USERNAME}`/`${GNMI_PASSWORD}`,
+  because the routers render the same `NetworkLocalUser` `admin` hash. FRR 10.2-10.5 shipped no
   SNMP and no gNMI module, which is why the `frr_exporter` sidecars existed; they are gone.
 - **The return-type generator mistypes a fragment on a generic.** `... on DcimInterface` becomes a
   literal `__typename: "DcimInterface"` that no node reports, so every endpoint parsed as the
@@ -700,13 +701,21 @@ the WAN reachability matrix. It replaced `frr_config`. Things to know before cha
 - Its templates are copies of `lab/wan/templates/*.srl.j2` with exactly one line changed, the
   provenance header, and `test_the_templates_are_the_labs_with_one_line_changed` holds every
   line. Every comment is deliberate; they are most of the teaching value of those configs.
-- **The output is flat `set` commands, and it is three things at once**: the ContainerLab
-  startup configuration (a `.cli` file applied on top of the image defaults), what the
-  reconciler loads to compare, and what it commits. It owns `/interface`, `/network-instance`
-  and `/routing-policy` — a push deletes all three and re-sets them in ONE candidate, so it is a
-  replace that applies only the net change — and never `/system`, where the credentials and the
-  gNMI server live. So the management interface and VRF are IN the artifact, and the lifeline
-  refuses one without them.
+- **The output is the router's WHOLE configuration, and every use of it is a full replace.**
+  Flat `set` commands opening with `delete /`: the ContainerLab startup configuration (so a
+  booted router already matches), what the reconciler loads to compare, and what it commits —
+  EOS's `rollback clean-config`, in SR Linux terms. So `/system` is in it too: management
+  interface and VRF, gNMI/SSH/NETCONF/JSON-RPC servers, AAA, logging, LLDP, and the image's
+  control-plane ACL (`_cpm_acl.srl.j2`, 537 lines captured verbatim from 26.7.2 — re-capture it
+  when the image moves, or a push strips the control plane of its own protection).
+- **Nothing secret is rendered, and two things ContainerLab writes CANNOT be.** The admin
+  password is the `$6$` hash of `NetworkLocalUser` `admin` — the fabric's — which SR Linux takes
+  verbatim (measured: the lab password then logs in, the image default is refused). The TLS
+  profile's private key and the SNMP community are `$aes1$`-encrypted with a per-device key, so
+  gNMI uses `default-tls-profile` (a self-generated certificate, survives a full replace) and
+  JSON-RPC is HTTP only — its HTTPS listener has no such option. The deploying host's SSH keys
+  and the EDA servers are dropped too; a first push after a plain ContainerLab boot removes
+  them, which is why the artifact opens with `delete /` and boots in sync instead.
 - **No quote characters in a comment, ever.** sr_cli tokenises quotes before it recognises `#`,
   so one apostrophe swallows every line up to the next quote and those lines are never applied
   — measured: a router booted with no management interface, no addresses and half its policy,
@@ -1045,18 +1054,27 @@ Three things worth knowing before debugging it:
   named candidate survives the session and SR Linux holds ten. The pusher and comparator clear
   it on failure and `sweep_srl` clears any `infrahub-*` leftovers each cycle. An aborted
   comparison prints NO diff, so a non-zero exit raises rather than reading as in sync.
-- **An empty SR Linux artifact is an instruction to erase the router**, because the push deletes
-  the three owned subtrees before setting the file — management interface included. Artifact
+- **An empty SR Linux artifact is an instruction to erase the router**, because the push
+  runs `delete /` before setting the file — management and the admin login included. Artifact
   generation is asynchronous and an unrendered artifact exists, reports `Ready`, and is empty.
-  `_assert_srl_lifeline` refuses any artifact lacking a `set / interface mgmt0` and a
-  `set / network-instance mgmt` command, the same shape as `_assert_eos_lifeline`; `_assert_srl_scope`
-  refuses any line outside the three subtrees (the host name excepted), so a renderer bug
-  cannot reach `/system`.
-- **The routers are pushed with `docker exec sr_cli`, not gNMI Set or JSON-RPC**: only sr_cli
-  takes the artifact exactly as rendered, and it needs no credential and no address, which
-  keeps `mgmt_ip` meaning eAPI and the collector's `telemetry_address` out of the reconciler.
-  Nothing is saved to startup; a restarted router boots its ContainerLab startup file and the
-  next cycle converges it, as FRR did.
+  `_assert_srl_lifeline` refuses, before anything is sent, an artifact lacking any of: mgmt0
+  and its DHCP client, the `mgmt` network instance holding `mgmt0.0`, the gNMI and SSH servers
+  in it, and an admin password that is a crypt hash. Whole commands, so a comment never
+  satisfies it.
+- **Every push is `commit confirmed timeout 120`, and the reconciler confirms only what it can
+  see survived.** After the commit it checks inside the container's `srbase-mgmt` namespace
+  that `mgmt0.0` has an address and 57400 and 22 are listening, then `confirmed-accept`; else
+  `confirmed-reject`. Measured: a lifeline-passing artifact that moved gNMI to another port was
+  rejected and running went back to the artifact; a confirmed commit nobody accepted rolled
+  itself back at its timeout. Unchanged and changed full replaces left every BGP session's
+  uptime running — the commit applies only the net difference.
+- **The routers are pushed with `docker exec sr_cli`, not a gNMI Set Replace on `/`**: both
+  replace the whole tree atomically, but only sr_cli takes the artifact exactly as rendered and
+  has commit-confirm, and it needs no credential and no address, which keeps `mgmt_ip` meaning
+  eAPI and the collector's `telemetry_address` out of the reconciler. Nothing is saved to
+  startup. A `docker restart`ed router came back in sync in 16s **but without its data-plane
+  links** — a plain restart drops a container's veths and only `containerlab deploy` restores
+  them.
 - **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load replace` does
   nothing, and `show | compare` comes back empty — which reads exactly like "in sync."
 
@@ -1298,7 +1316,7 @@ three routes in, because the lab gives them three different front doors:
 | Kind | Artifact | Route | Mechanism |
 | --- | --- | --- | --- |
 | `DcimFabricSwitch` | AVD EOS Configuration | `mgmt_ip`, eAPI | config session + `rollback clean-config` |
-| `DcimDevice` | SR Linux Configuration | container name | `sr_cli` candidate: delete owned subtrees, set, commit |
+| `DcimDevice` | SR Linux Configuration | container name | `sr_cli` candidate: `delete /`, set, `commit confirmed`, check, accept |
 | `SecurityFirewall` | Junos Configuration | container name | `load replace` + `commit confirmed` |
 
 **The switches are reached by address and the rest by name, deliberately.**

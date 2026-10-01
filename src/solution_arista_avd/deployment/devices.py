@@ -309,93 +309,80 @@ def _assert_eos_lifeline(target: Target, config: str) -> None:
         )
 
 
-# The SR Linux equivalent, and the gap it closes is the same one FRR had.
+# The SR Linux equivalent, and a FULL replace like EOS's `rollback clean-config`.
 #
-# A push deletes /interface, /network-instance and /routing-policy in the
-# candidate and re-sets them from the artifact, so an EMPTY artifact is not a
-# no-op: it is an instruction to delete every interface, every VRF and every
-# policy -- the management interface and the management VRF included, which is
-# how the reconciler's own gNMI collector and every operator reach the box.
+# A push empties the candidate with `delete /` and rebuilds it from the artifact,
+# so the artifact is the router's whole configuration and anything it omits is
+# deleted -- /system included. An EMPTY artifact is therefore an instruction to
+# delete everything, the management interface and the admin login with it.
 # Artifact generation is asynchronous and an artifact that has not rendered yet
 # exists, reports `Ready`, and is empty.
 #
-# So the lifeline names the management interface and the management VRF, like
-# EOS_LIFELINE does, rather than something every artifact happens to contain.
-# An artifact carrying both cannot strand the router; one missing either
-# would, and is refused before anything is sent.
+# So the lifeline names everything that keeps the router reachable and
+# manageable after a replace: the management interface and the management
+# network instance it sits in, the gNMI server in that instance (how it is
+# watched, and the network path a human would use), SSH, and an admin password
+# hash. Each is matched as a whole command, not a substring, so a comment that
+# mentions mgmt0 does not satisfy it.
 SRL_LIFELINE = (
-    "set / interface mgmt0 ",
-    "set / network-instance mgmt ",
+    "set / interface mgmt0 admin-state enable",
+    "set / interface mgmt0 subinterface 0 ipv4 dhcp-client",
+    "set / network-instance mgmt type ip-vrf",
+    "set / network-instance mgmt interface mgmt0.0",
+    "set / system grpc-server mgmt admin-state enable",
+    "set / system grpc-server mgmt network-instance mgmt",
+    "set / system ssh-server mgmt admin-state enable",
+    "set / system ssh-server mgmt network-instance mgmt",
+    "set / system aaa authentication admin-user password $",
 )
 
-# The three subtrees a push owns. Everything else -- /system above all, where
-# the credentials, the TLS profile and the gNMI and JSON-RPC servers live -- is
-# never deleted and never set.
-SRL_OWNED_SUBTREES = (
-    "delete / interface *",
-    "delete / network-instance *",
-    "delete / routing-policy",
-)
+# How long a pushed configuration has to prove itself before SR Linux rolls it
+# back on its own. Long enough for the management checks below, short enough
+# that a reconciler that dies between commit and accept costs two minutes.
+SRL_CONFIRM_TIMEOUT = 120
 
-# Lines in an artifact that would reach outside those three subtrees. The one
-# exception is the host name, which is identity rather than configuration the
-# replace owns: setting it is a merge, never a delete.
-_SRL_ALLOWED_OUTSIDE = ("set / system name host-name ",)
-_SRL_OWNED_PREFIXES = ("set / interface ", "set / network-instance ", "set / routing-policy ")
+# What "still manageable" means after a commit, checked from inside the
+# container -- the reconciler reaches the router with docker exec, never by
+# address, so this is what it can see: an address on mgmt0.0, and the gNMI and
+# SSH servers listening in the management namespace. Measured after a full
+# replace on the prototype: all three present, and gNMI answering TLS with a
+# certificate the router generated for itself.
+SRL_MGMT_NAMESPACE = "srbase-mgmt"
+SRL_MGMT_PORTS = (57400, 22)
 
 SRL_CANDIDATE_PREFIX = "infrahub-"
 
 
 def _assert_srl_lifeline(target: Target, config: str) -> None:
-    missing = [needle.strip() for needle in SRL_LIFELINE if needle not in config]
+    commands = [line.strip() for line in config.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    missing = [needle for needle in SRL_LIFELINE if not any(line.startswith(needle) for line in commands)]
     if missing:
         raise ProvisionError(
             f"{target.device}: refusing to replace the configuration -- the artifact is missing "
-            f"{', '.join(repr(m) for m in missing)}, so the commit would delete the management "
-            "interface the router is reached by"
-        )
-
-
-def _assert_srl_scope(target: Target, config: str) -> None:
-    """Every command must stay inside the subtrees the replace owns.
-
-    A `delete` in the artifact, or a `set / system ...` beyond the host name,
-    would act outside what the push is entitled to change -- the credentials
-    live under /system. The renderer emits neither; this makes it impossible
-    for a renderer bug to start doing so quietly.
-    """
-    for number, line in enumerate(config.splitlines(), start=1):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.startswith(_SRL_OWNED_PREFIXES) or stripped.startswith(_SRL_ALLOWED_OUTSIDE):
-            continue
-        raise ProvisionError(
-            f"{target.device}: refusing to push -- line {number} reaches outside "
-            f"/interface, /network-instance and /routing-policy: {stripped[:120]}"
+            f"{', '.join(repr(m) for m in missing)}, so the commit would leave the router "
+            "unreachable or unmanageable"
         )
 
 
 def srl_candidate_script(name: str, config: str, *, commit: bool) -> str:
-    """The sr_cli script that loads the artifact as a REPLACE, then diffs.
+    """The sr_cli script that loads the artifact as a FULL replace, then diffs.
 
-    One private, named candidate: the three owned subtrees are deleted, the
-    artifact re-sets them, and `diff flat` is the router's own comparison of the
-    result against running. `commit now` makes it so; `discard now` leaves the
-    router exactly as it was.
+    One private, named candidate: `delete /` empties it, the artifact rebuilds
+    it, and `diff flat` is the router's own comparison of the result against
+    running. A push ends `commit confirmed`, so a commit that cut the router
+    off rolls itself back; a comparison ends `discard now`.
 
-    Deleting and re-setting in one candidate is what makes this a replace
-    without churn: the commit applies only the NET difference, so an unchanged
-    tenant's BGP session is not touched. Measured on the prototype -- a
-    description change committed this way left every session's uptime running.
+    The commit applies only the NET difference, so a session the artifact did
+    not change is not touched -- measured on the prototype: a full replace that
+    changed one description left every BGP session's uptime running.
     """
     return "\n".join(
         [
             f"enter candidate private name {name}",
-            *SRL_OWNED_SUBTREES,
+            "delete /",
             config.rstrip("\n"),
             "diff flat",
-            "commit now" if commit else "discard now",
+            f"commit confirmed timeout {SRL_CONFIRM_TIMEOUT}" if commit else "discard now",
             "",
         ]
     )
@@ -408,7 +395,17 @@ def srl_run(target: Target, script: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         check=False,
-        timeout=180,
+        timeout=300,
+    )
+
+
+def _srl_tool(target: Target, command: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603
+        ["docker", "exec", target.container, "sr_cli", "-d", command],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
     )
 
 
@@ -420,50 +417,64 @@ def srl_clear_candidate(target: Target, name: str) -> None:
     survives the session. SR Linux holds at most ten; a comparator that fails
     often enough would otherwise remove the ability to configure the router.
     """
-    subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "docker",
-            "exec",
-            target.container,
-            "sr_cli",
-            "-d",
-            f"tools system configuration candidate {name} clear",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
-    )
+    _srl_tool(target, f"tools system configuration candidate {name} clear")
 
 
 def srl_candidate_name(purpose: str) -> str:
     return f"{SRL_CANDIDATE_PREFIX}{purpose}-{int(time.time() * 1000)}"
 
 
-def push_srl(target: Target, config: str) -> str:
-    """Replace an SR Linux router's owned subtrees with the rendered configuration.
+def srl_management_failures(target: Target) -> list[str]:
+    """What is wrong with the router's management plane, or nothing."""
+    failures: list[str] = []
 
-    **`docker exec sr_cli`, not gNMI Set or JSON-RPC, deliberately.** All three
-    can replace; only sr_cli takes the artifact exactly as rendered -- the same
-    flat `set` commands ContainerLab boots from -- so what is pushed is what the
-    proposed change showed, with no translation layer to drift. It also needs
-    no credential and no address: the FRR routers were reached by container
-    name, and so are these, which keeps `mgmt_ip` meaning "push over eAPI"
-    (AGENTS.md, cycle 027) and keeps the collector's address out of the reconciler
-    (tests/unit/test_deployment_inventory_targets.py).
+    def netns(*argv: str) -> str:
+        result = subprocess.run(  # noqa: S603
+            ["docker", "exec", target.container, "ip", "netns", "exec", SRL_MGMT_NAMESPACE, *argv],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        return result.stdout or ""
+
+    if "inet " not in netns("ip", "-4", "-o", "addr", "show", "dev", "mgmt0.0"):
+        failures.append("mgmt0.0 has no IPv4 address")
+    listening = netns("ss", "-ltnH")
+    failures.extend(f"nothing listening on {port}" for port in SRL_MGMT_PORTS if f":{port} " not in listening)
+    return failures
+
+
+def push_srl(target: Target, config: str) -> str:
+    """Replace an SR Linux router's ENTIRE configuration with the rendered one.
+
+    **`docker exec sr_cli`, a private candidate, `delete /`, `commit confirmed`.**
+    That is EOS's `rollback clean-config` with a safety net EOS's push lacks:
+    SR Linux rolls an unconfirmed commit back by itself (measured: an unaccepted
+    commit was gone at the timeout, its record marked `failed`). The reconciler
+    confirms only after checking from inside the container that the management
+    plane survived; if it did not, it rejects at once, and if the reconciler dies
+    in between the router rolls back on its own.
+
+    Why sr_cli rather than a gNMI Set Replace on `/`: both replace the whole
+    tree atomically, but only sr_cli takes the artifact exactly as rendered --
+    the same file ContainerLab boots from -- and it needs no credential and no
+    address, which keeps `mgmt_ip` meaning eAPI and keeps the collector's
+    address out of the reconciler. gNMI Set also has no confirm step.
 
     **sr_cli aborts at the first error and commits nothing.** A malformed line
-    or a commit SR Linux refuses (a policy naming a prefix-set that is gone)
-    leaves running untouched and the process exiting 1 -- measured both ways.
-    Both are reported as failures, and the candidate the abort strands is
-    cleared.
+    or a commit SR Linux refuses leaves running untouched and the process
+    exiting 1 -- measured both ways. Both are failures, and the candidate the
+    abort strands is cleared.
 
-    Nothing is saved to startup. The durable copy of this configuration is the
-    artifact, exactly as it was for FRR; a restarted container boots its
-    ContainerLab startup configuration and the next cycle converges it.
+    The commit is not saved to startup, as FRR's was not: the durable copy is
+    the artifact. A restarted container boots its ContainerLab startup file --
+    the same artifact -- and was measured back in sync 16s after a `docker
+    restart`. Its data-plane links were NOT back: a plain restart drops the
+    container's veths and only `containerlab deploy` re-creates them, which is a
+    property of ContainerLab rather than of this push.
     """
     _assert_srl_lifeline(target, config)
-    _assert_srl_scope(target, config)
 
     if not _container_running(target.container):
         raise ProvisionError(f"{target.device}: container {target.container} is not running")
@@ -471,13 +482,25 @@ def push_srl(target: Target, config: str) -> str:
     name = srl_candidate_name("push")
     result = srl_run(target, srl_candidate_script(name, config, commit=True))
     output = (result.stdout or "") + (result.stderr or "")
-    if result.returncode != 0 or "All changes have been committed" not in output:
+    if result.returncode != 0 or "Commit confirmed" not in output:
         srl_clear_candidate(target, name)
         detail = [line for line in output.strip().splitlines() if line.strip()]
         tail = " / ".join(detail[-3:]) if detail else "no output"
         raise ProvisionError(f"{target.device}: sr_cli refused the configuration: {tail}")
 
-    return f"committed in {target.container}"
+    failures = srl_management_failures(target)
+    if failures:
+        _srl_tool(target, "tools system configuration confirmed-reject")
+        raise ProvisionError(
+            f"{target.device}: the commit broke management ({'; '.join(failures)}) and was rolled back"
+        )
+    accepted = _srl_tool(target, "tools system configuration confirmed-accept")
+    if accepted.returncode != 0:
+        raise ProvisionError(
+            f"{target.device}: could not confirm the commit; SR Linux rolls it back in "
+            f"{SRL_CONFIRM_TIMEOUT}s: {(accepted.stderr or accepted.stdout).strip()[:200]}"
+        )
+    return f"committed and confirmed in {target.container}"
 
 
 def push_junos(target: Target, config: str) -> str:
@@ -796,7 +819,6 @@ def provision(targets: list[Target], branch: str, dry_run: bool) -> int:
 eos_config_lines = _eos_config_lines
 assert_eos_lifeline = _assert_eos_lifeline
 assert_srl_lifeline = _assert_srl_lifeline
-assert_srl_scope = _assert_srl_scope
 assert_junos_scope = _assert_junos_scope
 junos_replace_tagged = _junos_replace_tagged
 container_running = _container_running

@@ -6,7 +6,7 @@
 # in the path at all. That is why it gets its own VRF on the border leaf and
 # its own firewall zone: it is a different trust level from a WAN customer, and
 # the policy on the firewall is what expresses that.
-{% include "_management.srl.j2" %}
+{% include "_system.srl.j2" %}
 {% include "_interfaces.srl.j2" %}
 #
 set / routing-policy prefix-set PL-OUR-LAN prefix {{ branch.lan }} mask-length-range exact
@@ -23,3 +23,4 @@ set / network-instance default protocols bgp group dc peer-as {{ branch.router.d
 set / network-instance default protocols bgp neighbor {{ branch.router.dc_peer }} peer-group dc
 set / network-instance default protocols bgp neighbor {{ branch.router.dc_peer }} description "border-leaf1 (VRF BRANCH)"
 set / network-instance default protocols bgp neighbor {{ branch.router.dc_peer }} export-policy [ RM-TO-DC ]
+{% include "_cpm_acl.srl.j2" %}

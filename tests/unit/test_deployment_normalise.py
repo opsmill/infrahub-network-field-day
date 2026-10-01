@@ -22,10 +22,11 @@ moved to SR Linux -- so a reconciler reading raw output replaces the firewall's
 configuration on every cycle, forever, logging success throughout.
 
 The SR Linux fixtures (`srl_*`) come from a throwaway six-router prototype, not
-the lab, which still ran FRR when they were captured: `_clean_<router>` is each
-router's own `diff flat` straight after booting its rendered artifact,
-`srl_drifted` is isp-pe1 after a hand edit, and `srl_changed` is the artifact
-moving while the device stands still.
+the lab, which still ran FRR when they were captured. Each is the router's own
+`diff flat` of the WHOLE artifact loaded as a FULL replace (`delete /` first):
+`_clean_<router>` straight after booting from it, `srl_drifted` branch-rtr after
+hand edits inside /system and outside it, and `srl_changed` the artifact moving
+while isp-pe1 stands still.
 """
 
 from __future__ import annotations
@@ -95,23 +96,26 @@ class TestRealChangesSurvive:
         assert result
         assert any("probe-marker" in line for line in result)
 
-    def test_srl_drift_on_the_device_survives(self) -> None:
-        """A static added and a description changed by hand, the artifact unchanged.
+    def test_srl_drift_on_the_device_survives_inside_system_too(self) -> None:
+        """Three hand edits on branch-rtr, two of them in /system, the artifact unchanged.
 
-        The diff is what a push would do to undo it: delete the route, put the
-        description back.
+        The full replace is what makes the /system ones visible at all: the old
+        subtree replace never compared /system. The diff is what a push would do
+        to undo them -- put the logging rotation and the NETCONF port back, drop
+        the description.
         """
         assert normalise_srl(_fixture("srl_drifted.txt")) == [
-            "delete / network-instance CUST_ACME static-routes route 10.60.99.0/24",
-            'insert / network-instance default protocols bgp neighbor 10.50.255.2 description "isp-pe2 (core)"',
+            "delete / interface ethernet-1/1 description",
+            "insert / system ssh-server mgmt-netconf port 830",
+            "insert / system logging buffer messages rotate 3",
         ]
 
     def test_srl_a_moved_artifact_survives(self) -> None:
-        """Intent changed: four ip-mtu values, a route, a description and a deleted prefix-set."""
-        result = normalise_srl(_fixture("srl_changed.txt"))
-        assert len(result) == 7
-        assert "delete / routing-policy prefix-set PL-GLOBEX-HQ-IN" in result
-        assert "insert / interface ethernet-1/1 subinterface 0 ip-mtu 9000" in result
+        """Intent changed by a route and a description; exactly those two lines, out of ~900."""
+        assert normalise_srl(_fixture("srl_changed.txt")) == [
+            "insert / network-instance CUST_ACME static-routes route 10.60.99.0/24 next-hop-group acme-dr",
+            'insert / network-instance default protocols bgp neighbor 10.50.255.2 description "isp-pe2 (core link)"',
+        ]
 
     def test_junos_control_line_survives(self) -> None:
         """The control injects a real static route, NOT a comment.
@@ -133,11 +137,11 @@ class TestFailNoisy:
         raw = "Warning: something unforeseen\nAll changes have been discarded. Leaving candidate mode.\n"
         assert normalise_srl(raw) == ["Warning: something unforeseen"]
 
-    def test_the_commit_status_line_is_not_a_difference(self) -> None:
-        """The push prints its diff and then this; only the diff is configuration."""
-        assert normalise_srl(_fixture("srl_commit_ok.txt")) == [
-            "insert / network-instance CUST_ACME static-routes route 10.60.99.0/24 next-hop-group acme-dr",
-            'insert / network-instance default protocols bgp neighbor 10.50.255.2 description "isp-pe2 (core link)"',
+    def test_a_commit_line_in_a_comparison_counts(self) -> None:
+        """Only the discard line is status. A comparison never commits, so anything
+        saying it did is unrecognised -- and counts, rather than being explained away."""
+        assert normalise_srl("Commit confirmed (automatic rollback in 2 minutes)\n") == [
+            "Commit confirmed (automatic rollback in 2 minutes)"
         ]
 
     def test_an_unknown_junos_line_is_not_suppressed(self) -> None:

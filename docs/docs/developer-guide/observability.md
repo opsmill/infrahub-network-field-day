@@ -99,9 +99,11 @@ renderer is pinned against:
   said otherwise.
 - **Junos**: a top-level `snmp` stanza from `SecurityFirewall.snmp_community` and `snmp_clients`.
   gNMI/JTI would live under `system`, which the push path refuses by design.
-- **SR Linux**: nothing in the artifact. ContainerLab enables the gNMI server and OpenConfig in
-  `/system`, which the push never touches. The `frr_exporter` sidecars the FRR routers needed
-  are gone with them.
+- **SR Linux**: the artifact renders the gNMI server (`grpc-server mgmt`, port 57400, with
+  `default-tls-profile`) and `system management openconfig`. Both are part of the full
+  configuration a push replaces, and the push's lifeline refuses an artifact without the gNMI
+  server. The login is the fabric's `admin`, so one Telegraf credential serves both families.
+  The `frr_exporter` sidecars the FRR routers needed are gone with them.
 
 **The SNMP community is the one credential-like value in an artifact.** The device must receive it
 in its configuration whatever the model does. It is read-only, bound to `mgmt_junos` (fxp0's

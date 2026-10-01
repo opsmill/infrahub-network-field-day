@@ -262,12 +262,19 @@ changed, the provenance header. `tests/unit/test_srl_config.py` holds the output
 against `lab/wan/rendered/*/config.cli` — the files a six-router prototype booted from and
 passed the WAN reachability matrix with.
 
-**The output is flat `set` commands, and it is a replace.** The same file is the ContainerLab
-startup configuration, what the reconciler loads to compare, and what it commits. The push
-deletes `/interface`, `/network-instance` and `/routing-policy` and re-sets them in one
-candidate, so the router applies only the net difference and a removed tenant is removed.
-`/system` — credentials, the gNMI server — is never touched, which is why the management
-interface and VRF are stated in the artifact: a replace without them would delete them.
+**The output is the router's whole configuration, and every use of it is a full replace.**
+Flat `set` commands opening with `delete /`, so the same file is the ContainerLab startup
+configuration, what the reconciler loads to compare, and what it commits — the SR Linux
+equivalent of EOS's `rollback clean-config`. It therefore carries `/system` too: the
+management interface and VRF, the gNMI, SSH, NETCONF and JSON-RPC servers, AAA, logging,
+LLDP, and the image's control-plane ACL (`_cpm_acl.srl.j2`, captured verbatim from 26.7.2).
+
+**Nothing secret is rendered.** The admin password is the sha512-crypt hash of
+`NetworkLocalUser` `admin`, the object the fabric switches render: SR Linux takes it
+verbatim, and the lab password then logs in while the image default does not. ContainerLab's
+TLS profile is left out because its private key is `$aes1$`-encrypted per device. gNMI uses
+`default-tls-profile` (a certificate the router generates), and JSON-RPC listens on HTTP only,
+because its HTTPS listener has no such option.
 
 **It reads the service layer.** Cycle 010's layering rule says renderers read technical
 objects, and the provider edge is the documented exception, because its per-tenant import

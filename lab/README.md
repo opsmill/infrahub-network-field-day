@@ -907,14 +907,26 @@ with `device or resource busy` -- so `wan/render.py` overwrites in place and
 never `rmtree`s its output, which would leave every running host mounted on a
 file that no longer exists.
 
-**A push is a replace, done in one candidate.** `wan-deploy` opens a private
-named candidate, deletes `/interface *`, `/network-instance *` and
-`/routing-policy`, sets the rendered file, and commits. The commit applies only
-the net difference, so an unchanged tenant's session is not bounced, and a
-tenant removed from `tenants.yml` is removed from the router. `/system` is
-never touched: the credentials, the TLS profile and the gNMI server live there.
-The file therefore restates `mgmt0` and the `mgmt` network instance exactly as
-ContainerLab writes them; without them the commit would delete management.
+**A push replaces the whole configuration, in one candidate.** The rendered
+file is the router's complete configuration -- `/system` included -- and opens
+with `delete /`. `wan-deploy` loads it into a private named candidate (after its
+own `delete /`) and commits with `commit confirmed timeout 120`. It accepts only
+once gNMI (57400) and SSH (22) are listening again in the management namespace;
+otherwise it rejects, and SR Linux rolls back by itself if nothing answers. The
+commit applies only the net difference, so an unchanged tenant's session is not
+bounced, and anything removed from `tenants.yml` is removed from the router.
+
+Three things on a ContainerLab-booted router are deliberately left out of the
+file, and a first push removes them:
+
+- the TLS profile, whose private key is `$aes1$`-encrypted per device. gNMI uses
+  `default-tls-profile` instead, a certificate the router generates for itself,
+  and JSON-RPC listens on HTTP only.
+- the deploying host's SSH keys.
+- SNMP, DNS, the EDA servers and the banner.
+
+The admin password is the sha512-crypt hash of the lab password (`admin`) that
+the fabric switches also use (`tenants.yml` `admin_password_hash`).
 
 **sr_cli tokenises quotes before it recognises a comment.** One apostrophe in a
 `#` line swallows every following line up to the next quote, and those lines

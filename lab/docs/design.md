@@ -368,15 +368,15 @@ read as a diff is a change you can refuse.
 
 Two details worth knowing:
 
-- **`make wan-deploy` replaces, it does not restart.** For each router it
-  opens one private, named candidate, deletes `/interface *`,
-  `/network-instance *` and `/routing-policy`, sets the rendered
-  `config.cli`, and commits. The commit applies only the net difference, so
-  onboarding a customer does not bounce the BGP sessions of the customers who
-  were already there, and a customer deleted from the model loses its VRF and
-  its session -- which a merge would have left in place. `/system` is never
-  touched, so the file restates the management interface and VRF exactly as
-  ContainerLab writes them.
+- **`make wan-deploy` replaces the whole configuration, it does not restart.**
+  `config.cli` is the router's complete configuration, `/system` included,
+  opening with `delete /`. For each router the script loads it into one private,
+  named candidate and commits with `commit confirmed`. It accepts once gNMI and
+  SSH are listening again; otherwise SR Linux rolls the commit back. The commit
+  applies only the net difference, so onboarding a customer does not bounce
+  the BGP sessions of the customers who were already there, and a customer
+  deleted from the model loses its VRF and its session -- which a merge would
+  have left in place.
 - **The routers read `config.cli` once, at boot**, as a ContainerLab startup
   configuration. After that only a push changes them. The hosts still
   bind-mount their `init.sh`, which is why the renderer overwrites in place and

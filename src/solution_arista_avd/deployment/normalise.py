@@ -42,25 +42,25 @@ import re
 # SR Linux
 # --------------------------------------------------------------------------
 
-# The two lines sr_cli prints when it leaves candidate mode. Status, never
-# configuration. Everything else the comparison prints is a `diff flat` line --
-# `insert / ...`, `delete / ...` -- and counts.
-_SRL_STATUS = (
-    re.compile(r"^All changes have been discarded\. Leaving candidate mode\.\s*$"),
-    re.compile(r"^All changes have been committed\. Leaving candidate mode\.\s*$"),
-)
+# The one line sr_cli prints when a comparison leaves candidate mode. Status,
+# never configuration. A comparison never commits, so the "committed" variant is
+# deliberately NOT here: seen in a comparison it means something went wrong,
+# and it counts. Everything else printed is a `diff flat` line and counts.
+_SRL_STATUS = (re.compile(r"^All changes have been discarded\. Leaving candidate mode\.\s*$"),)
 
 
 def normalise_srl(raw: str) -> list[str]:
-    """Significant lines from the candidate's `diff flat`.
+    """Significant lines from the candidate's `diff flat` of a FULL replace.
 
     **No suppression at all**, like EOS and unlike the FRR it replaced. The
-    comparison deletes the three owned subtrees and re-sets them from the
-    artifact inside one candidate, so the router compares intent against
-    running itself: an in-sync router prints nothing but the status line.
-    Measured on all six prototype routers straight after boot, and then the
-    other way -- a hand edit on the device shows as exactly the lines that undo
-    it (tests/unit/fixtures/deployment/srl/).
+    comparison empties a candidate with `delete /`, rebuilds it from the whole
+    artifact -- /system included -- and asks the router for `diff flat`, so the
+    router compares intent against its entire running configuration itself.
+    Measured on all six prototype routers straight after booting the full
+    artifact: nothing but the status line. And the other way: hand edits inside
+    /system and outside it show as exactly the lines that undo them, and a moved
+    artifact as exactly its two changed lines out of roughly nine hundred
+    (tests/unit/fixtures/deployment/srl_*).
 
     A value change is printed as a single `insert` of the new value, not a
     delete-and-insert pair, so the line count of a diff is not a count of

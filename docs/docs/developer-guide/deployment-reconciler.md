@@ -70,10 +70,19 @@ someone edited a switch by hand.
 | Family | Mechanism | Leaves behind |
 | --- | --- | --- |
 | `DcimFabricSwitch` | `configure session` + `show session-config … diffs` | session aborted |
-| `DcimDevice` (SR Linux) | private candidate: delete owned subtrees, set the artifact, `diff flat`, `discard now` | candidate discarded; one stranded by an abort is cleared |
+| `DcimDevice` (SR Linux) | private candidate: `delete /`, set the whole artifact, `diff flat`, `discard now` | candidate discarded; one stranded by an abort is cleared |
 | `SecurityFirewall` | `load replace` + `show \| compare` | candidate rolled back |
 
 Nothing in the comparison path commits.
+
+**An SR Linux push is a full replace with commit-confirm.** The same candidate ends `commit
+confirmed timeout 120` instead of `discard now`. The reconciler then checks from inside the
+container that `mgmt0.0` has an address and that gNMI (57400) and SSH (22) are listening. If
+they are, it accepts the commit; if not, it rejects it, and SR Linux rolls back by itself if the
+reconciler dies first. All three paths were measured on a prototype, alongside a lifeline that
+refuses, before anything is sent, an artifact lacking the management interface and VRF, the gNMI
+and SSH servers or an admin password hash. Unchanged and changed pushes left every BGP session
+up, because the commit applies only the net difference.
 
 The firewall is compared on **one cycle in four, and last**, because its comparison takes an
 exclusive configuration lock — at the default interval a per-cycle check would take that lock

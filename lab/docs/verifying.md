@@ -210,7 +210,7 @@ eBGP session and the new route-maps before anything is pushed. Then:
 make wan-deploy
 ```
 
-That commits a replace in one candidate rather than restarting anything, so
+That commits a full-configuration replace in one confirmed candidate rather than restarting anything, so
 the customers who were already connected keep their sessions. Confirm with the uptime column in
 `make wan-bgp` — the existing sessions should not have reset.
 

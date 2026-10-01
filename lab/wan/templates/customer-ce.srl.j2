@@ -12,7 +12,7 @@
 # Note it does not know about its own sibling site either. The other sites of
 # {{ tenant.name }} appear here as ordinary routes learned from the provider, because they
 # share a VRF on the PE.
-{% include "_management.srl.j2" %}
+{% include "_system.srl.j2" %}
 {% include "_interfaces.srl.j2" %}
 #
 # Announce only our own LAN, so a fat-fingered export here cannot leak
@@ -32,3 +32,4 @@ set / network-instance default protocols bgp group provider peer-as {{ isp.asn }
 set / network-instance default protocols bgp neighbor {{ site.pe.address | replace('/30','') }} peer-group provider
 set / network-instance default protocols bgp neighbor {{ site.pe.address | replace('/30','') }} description "{{ isp.edge.node }} (provider)"
 set / network-instance default protocols bgp neighbor {{ site.pe.address | replace('/30','') }} export-policy [ RM-TO-ISP ]
+{% include "_cpm_acl.srl.j2" %}

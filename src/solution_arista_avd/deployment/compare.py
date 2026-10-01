@@ -134,10 +134,10 @@ def _dexec(target: dv.Target, argv: list[str], stdin: str | None = None) -> subp
 
 
 def compare_srl(target: dv.Target, config: str) -> str:
-    """The router's own `diff flat` of the artifact, loaded as a replace, against running.
+    """The router's own `diff flat` of the artifact, loaded as a FULL replace, against running.
 
     The same candidate script the push runs, ending in `discard now` instead of
-    `commit now`, so the comparison measures exactly what a push would do.
+    `commit confirmed`, so the comparison measures exactly what a push would do.
 
     **A non-zero exit is never "in sync".** sr_cli stops at the first error and
     prints nothing more -- no diff -- so an artifact SR Linux cannot parse
@@ -147,7 +147,6 @@ def compare_srl(target: dv.Target, config: str) -> str:
     if not dv.container_running(target.container):
         raise dv.ProvisionError(f"{target.device}: container {target.container} is not running")
     dv.assert_srl_lifeline(target, config)
-    dv.assert_srl_scope(target, config)
 
     name = dv.srl_candidate_name("reconcile")
     result = dv.srl_run(target, dv.srl_candidate_script(name, config, commit=False))

@@ -32,10 +32,10 @@ Two things this refuses rather than renders:
   device visibly not watched.
 
 No credential is rendered except the firewall's SNMP community, which the device
-itself receives in its configuration. gNMI's usernames and passwords are
-``${GNMI_USERNAME}``/``${GNMI_PASSWORD}`` for the EOS switches and
-``${SRL_GNMI_USERNAME}``/``${SRL_GNMI_PASSWORD}`` for the SR Linux routers,
-substituted by Telegraf from the Secret ``invoke cluster`` creates.
+itself receives in its configuration. gNMI's username and password are
+``${GNMI_USERNAME}`` and ``${GNMI_PASSWORD}``, substituted by Telegraf from the
+Secret ``invoke cluster`` creates. One pair serves both gNMI families: the SR
+Linux routers render the same ``NetworkLocalUser`` ``admin`` hash as the switches.
 
 **The WAN routers and the fabric switches are subscribed through the same
 OpenConfig paths**, so their series arrive under the same names --
@@ -71,10 +71,10 @@ KINDS = (SWITCH, ROUTER, FIREWALL, SERVER)
 GNMI_KINDS = (SWITCH, ROUTER)
 
 GNMI_PORT = 6030
-# SR Linux's gNMI server in the management network instance, as ContainerLab
-# configures it: TLS with the per-lab `clab-profile` certificate, which is
-# self-signed and regenerated on every deploy -- so it is encrypted and not
-# verified, rather than pinned to a certificate that will not survive a redeploy.
+# SR Linux's gNMI server in the management network instance, as srl_config
+# renders it: TLS with `default-tls-profile`, a certificate the router generates
+# for itself -- so it is encrypted and not verified, rather than pinned to a
+# certificate that does not survive a redeploy.
 SRL_GNMI_PORT = 57400
 NODE_EXPORTER_PORT = 9100
 SNMP_PORT = 161
@@ -498,8 +498,8 @@ class TelemetryCollectorConfig(InfrahubTransform):
             else:
                 target = {
                     "addresses": [f"{device.address}:{SRL_GNMI_PORT}"],
-                    "username": "${SRL_GNMI_USERNAME}",
-                    "password": "${SRL_GNMI_PASSWORD}",
+                    "username": "${GNMI_USERNAME}",
+                    "password": "${GNMI_PASSWORD}",
                     "tls_enable": True,
                     "insecure_skip_verify": True,
                 }

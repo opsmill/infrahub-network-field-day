@@ -1455,6 +1455,23 @@
       }
     ]
   },
+  "NetworkLocalUser": {
+    "edges": [
+      {
+        "node": {
+          "name": {
+            "value": "admin"
+          },
+          "password": {
+            "value": "$6$OtternetLab$9OUIc8rD9Tz1nLCqGCVqkB2Jc0hRbMwY0oFA4E4hmrcIUFo7/5n79zdOiNhJDnTnsmVg4t3MAZCcmlrYu6iln1"
+          },
+          "password_type": {
+            "value": "sha512"
+          }
+        }
+      }
+    ]
+  },
   "ServiceInternetAccess": {
     "edges": [
       {

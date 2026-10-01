@@ -1163,7 +1163,8 @@ def _observability_secrets(ctx: Context, kubeconfig: Path) -> None:
         print("   WARNING: namespace otternet-metrics never appeared; Grafana will wait for its Secrets")
 
     if _wait_for_namespace(ctx, kubeconfig, "otternet-telemetry"):
-        # The same local account the reconciler pushes EOS configuration as.
+        # The same local account the reconciler pushes EOS configuration as --
+        # and the SR Linux routers' login too, rendered from the same hash.
         _apply_secret(
             ctx,
             kubeconfig,
@@ -1172,12 +1173,6 @@ def _observability_secrets(ctx: Context, kubeconfig: Path) -> None:
             {
                 "GNMI_USERNAME": os.getenv("OTTERNET_EOS_USERNAME", "admin"),
                 "GNMI_PASSWORD": os.getenv("OTTERNET_EOS_PASSWORD", "admin"),
-                # The SR Linux routers' gNMI account: the image's own admin,
-                # which ContainerLab leaves in place. A second pair rather than
-                # one shared login, because the two families ship different
-                # defaults and neither configuration models credentials.
-                "SRL_GNMI_USERNAME": os.getenv("OTTERNET_SRL_USERNAME", "admin"),
-                "SRL_GNMI_PASSWORD": os.getenv("OTTERNET_SRL_PASSWORD", "NokiaSrl1!"),
             },
         )
         print("   otternet-telemetry: telemetry-credentials")

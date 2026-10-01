@@ -38,6 +38,9 @@ MODEL = WAN_DIR / "tenants.yml"
 TEMPLATES = WAN_DIR / "templates"
 OUT = WAN_DIR / "rendered"
 
+# Set from tenants.yml in main(); a sha512-crypt hash, never cleartext.
+ADMIN_PASSWORD_HASH = ""
+
 
 def env() -> Environment:
     # StrictUndefined: a typo in the data model must fail the render, not
@@ -91,9 +94,11 @@ def render_router(
 ) -> None:
     """One SR Linux router: a single file of flat `set` commands.
 
-    The file is both the ContainerLab startup configuration (a `.cli` file is
-    applied on top of the image's defaults at boot) and exactly what Infrahub's
-    `srl_config` transform renders, so the lab and the artifact cannot drift.
+    The file is the router's WHOLE configuration, opening with `delete /`. It is
+    both the ContainerLab startup configuration (a `.cli` file applied at boot,
+    where that first line makes it a full replace of the image defaults) and
+    exactly what Infrahub's `srl_config` transform renders, so the lab and the
+    artifact cannot drift.
     There is no init script any more: SR Linux owns its interfaces and VRFs,
     which FRR could not.
     """
@@ -113,6 +118,7 @@ def render_router(
         loopback=loopback,
         mtu=mtu,
         bridges=bridges or [],
+        admin_password_hash=ADMIN_PASSWORD_HASH,
         **ctx,
     )
     # sr_cli tokenises quotes BEFORE it recognises a `#` comment, so a single
@@ -169,6 +175,8 @@ def render_static_ce(e: Environment, tenant: dict, site: dict, mtu: int) -> None
 def main() -> int:  # noqa: C901 - one linear pass per node family
     model = yaml.safe_load(MODEL.read_text())
     isp, tenants, branch = model["isp"], model["tenants"], model["branch"]
+    global ADMIN_PASSWORD_HASH  # noqa: PLW0603 - one model value every router renders
+    ADMIN_PASSWORD_HASH = model["admin_password_hash"]
     mtu = model["mtu"]
     e = env()
 
