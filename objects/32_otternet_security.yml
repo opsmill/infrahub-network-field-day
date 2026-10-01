@@ -92,7 +92,9 @@ spec:
     # replaces everything the artifact names and deletes everything it does not,
     # so leaving fxp0 out meant every push deleted the firewall's management
     # interface and relied on vrnetlab restoring it as root before the
-    # `commit confirmed` had to be confirmed.
+    # `commit confirmed` had to be confirmed. Since the push became a full
+    # `load override` (cycle 035) it is also part of the push's lifeline: an
+    # artifact without an fxp0 address is refused before it reaches the device.
     #
     # The consequence of modelling it is that the model is now AUTHORITATIVE for
     # that address. If these values ever drift from what vrnetlab assigns, a

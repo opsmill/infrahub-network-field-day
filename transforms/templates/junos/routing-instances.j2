@@ -1,0 +1,33 @@
+{# The management routing instance vrnetlab's init.conf creates, rendered
+   because a full `load override` deletes whatever the artifact omits.
+
+   `management-instance` in `system` puts fxp0 in `mgmt_junos`, and these two
+   defaults are how anything off fxp0's own subnet gets an answer: SNMP polls
+   arrive from 172.20.41.x with their source intact, so without the route the
+   agent receives them and its replies have nowhere to go. SSH survives
+   without it -- QEMU's user network presents every forwarded connection as
+   coming from the gateway itself, which is on-link -- so its absence would
+   be quiet.
+
+   The next hops are vrnetlab's QEMU user-network gateways, not lab choices.
+   The transform checks each one lies on a subnet fxp0 is on, because a
+   static route whose next hop is unreachable commits cleanly and never
+   installs. #}
+{% if management %}
+routing-instances {
+    mgmt_junos {
+        routing-options {
+{% if management.gateway6 %}
+            rib mgmt_junos.inet6.0 {
+                static {
+                    route ::/0 next-hop {{ management.gateway6 }};
+                }
+            }
+{% endif %}
+            static {
+                route 0.0.0.0/0 next-hop {{ management.gateway }};
+            }
+        }
+    }
+}
+{% endif %}

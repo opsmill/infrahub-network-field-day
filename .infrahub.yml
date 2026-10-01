@@ -488,13 +488,14 @@ artifact_definitions:
     targets: "service_fabric_apps"
     transformation: "crossplane_fabric_app"
 
-  # The perimeter firewall. 656 of junos.conf's 741 lines, complete as of cycle
-  # 026. The 85 it omits are two different things: the `system` stanza (13
-  # lines) is configuration deliberately never modelled -- two credential
-  # hashes -- and the file header (72 lines) is lab documentation about the
-  # file rather than configuration, replaced by the artifact's provenance line.
-  # The one thing the model cannot reproduce is the SEQUENCE of the eleven
-  # zone-pair blocks; every pair is present and byte-for-byte identical.
+  # The perimeter firewall's WHOLE configuration (cycle 035): the reconciler
+  # pushes it with `load override`, so anything it omits is deleted. Every line
+  # of junos.conf except its 72 lines of top-level commentary -- `system` and
+  # the lab's two existing password hashes included, a recorded exception --
+  # plus what vrnetlab's init.conf injects at boot: fxp0, host-name, services,
+  # management-instance and the mgmt_junos routing instance. The one thing the
+  # model cannot reproduce is the SEQUENCE of the zone-pair blocks; every pair
+  # is present and byte-for-byte identical.
   - name: "junos_config"
     artifact_name: "Junos Configuration"
     parameters:

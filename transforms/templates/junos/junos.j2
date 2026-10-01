@@ -6,8 +6,15 @@
    templates use `#` too, and carry a trap of their own: no quote characters
    in a comment, because sr_cli tokenises quotes first. #}
 # Rendered by Infrahub for {{ node }} -- do not edit.
+{# THE WHOLE CONFIGURATION. The firewall is pushed with `load override`, which
+   replaces the running configuration with this file and deletes anything it
+   does not contain -- the Junos equivalent of EOS's `rollback clean-config`.
+   So every hierarchy the device needs is here, including the management path
+   vrnetlab's init.conf used to supply: `system`, fxp0 and `mgmt_junos`. #}
+{% include "system.j2" %}
 {% include "interfaces.j2" %}
 {% include "routing-options.j2" %}
+{% include "routing-instances.j2" %}
 security {
 {% if tcp_mss %}
     /*

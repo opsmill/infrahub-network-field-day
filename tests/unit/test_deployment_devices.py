@@ -21,29 +21,35 @@ quiet:
   **leaves the router unreachable or with no login**.
 * ``push_srl``'s commit-confirm -- a commit that passes the lifeline and still
   breaks management is rejected at once, and one nobody confirms rolls back.
-* ``_assert_junos_scope`` -- a ``system`` stanza in the artifact would make the
-  push overwrite the firewall's credentials with whatever the model holds.
-* ``_junos_replace_tagged`` -- without the ``replace:`` tags the load stops being
-  confined to the modelled hierarchies, and ``load override``/``load update``
-  were both measured deleting ``system`` including the ssh service this code
-  arrives on.
+* ``_assert_junos_lifeline`` -- the firewall push is a full ``load override``,
+  so an artifact missing fxp0, the ssh/netconf services or the login this code
+  authenticates as would commit a firewall nothing can reach.
+* ``push_junos``'s confirmation -- ``commit confirmed`` is only worth anything
+  if the confirming ``commit`` waits for proof that management survived.
 """
 
 from __future__ import annotations
 
+import subprocess  # noqa: S404 - only to build CompletedProcess fakes; nothing is executed
+from typing import TYPE_CHECKING
+
 import pytest
 
+from solution_arista_avd.deployment import devices
 from solution_arista_avd.deployment.devices import (
     ProvisionError,
     Target,
     _assert_eos_lifeline,  # noqa: PLC2701 - these guards are the point of this file
-    _assert_junos_scope,  # noqa: PLC2701
+    _assert_junos_lifeline,  # noqa: PLC2701
     _assert_srl_lifeline,  # noqa: PLC2701
     _eos_config_lines,  # noqa: PLC2701
-    _junos_replace_tagged,  # noqa: PLC2701
+    _junos_override_payload,  # noqa: PLC2701
     push_srl,
     srl_candidate_script,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 LIFELINE = "interface Management0\nmanagement api http-commands\nvrf MGMT\n"
 
@@ -238,90 +244,223 @@ class TestSrlCommitConfirm:
         assert docker.calls == []
 
 
-class TestJunosScope:
-    def test_the_current_artifact_shape_passes(self) -> None:
-        _assert_junos_scope(_target("fw1"), "interfaces {\n}\nsecurity {\n}\n")
+LAB_HASH = "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71"
 
-    @pytest.mark.parametrize("stanza", ["system {", "system {\n    host-name fw1;\n}"])
-    def test_a_system_stanza_is_refused(self, stanza: str) -> None:
+# The smallest artifact a full replace can survive: every lifeline statement
+# and nothing else. Built from the real artifact's own lines.
+JUNOS_LIFELINE = f"""# Rendered by Infrahub for fw1 -- do not edit.
+system {{
+    host-name fw1;
+    root-authentication {{
+        encrypted-password "{LAB_HASH}";
+    }}
+    login {{
+        user admin {{
+            class super-user;
+            authentication {{
+                encrypted-password "{LAB_HASH}";
+            }}
+        }}
+    }}
+    services {{
+        ssh {{
+            root-login allow;
+        }}
+        netconf {{
+            ssh;
+        }}
+    }}
+    management-instance;
+}}
+interfaces {{
+    fxp0 {{
+        unit 0 {{
+            family inet {{
+                address 10.0.0.15/24;
+            }}
+        }}
+    }}
+}}
+"""
+
+
+class TestJunosLifeline:
+    """Replaces the old scope guard, and inverts it.
+
+    `_assert_junos_scope` refused a `system` stanza, because `load replace` on
+    tagged hierarchies would have overwritten credentials the model did not
+    hold. Under `load override` the danger is the opposite: an artifact WITHOUT
+    `system` deletes the logins and the services this push arrives on.
+    """
+
+    def test_the_minimal_management_artifact_passes(self) -> None:
+        _assert_junos_lifeline(_target("fw1"), JUNOS_LIFELINE)
+
+    def test_an_empty_artifact_is_refused(self) -> None:
+        """An empty override is an instruction to erase the firewall."""
         with pytest.raises(ProvisionError) as error:
-            _assert_junos_scope(_target("fw1"), f"interfaces {{\n}}\n{stanza}\n")
-        assert "credentials" in str(error.value)
+            _assert_junos_lifeline(_target("fw1"), "")
+        assert "fw1" in str(error.value)
+        assert "load override" in str(error.value)
 
-    def test_an_indented_system_keyword_is_not_a_top_level_stanza(self) -> None:
-        """`system-services` inside a zone is not the `system` hierarchy. Refusing
-        it would block a legitimate artifact."""
-        _assert_junos_scope(_target("fw1"), "security {\n    zones {\n        system-services;\n    }\n}\n")
+    @pytest.mark.parametrize(
+        ("remove", "named"),
+        [
+            ("                address 10.0.0.15/24;\n", "fxp0"),
+            ("        ssh {\n            root-login allow;\n        }\n", "services ssh"),
+            ("        netconf {\n            ssh;\n        }\n", "netconf"),
+            ("            class super-user;\n", "super-user"),
+            ("    root-authentication {\n", "root-authentication"),
+        ],
+    )
+    def test_each_missing_lifeline_statement_is_refused(self, remove: str, named: str) -> None:
+        config = JUNOS_LIFELINE.replace(remove, "", 1)
+        assert config != JUNOS_LIFELINE
+        with pytest.raises(ProvisionError) as error:
+            _assert_junos_lifeline(_target("fw1"), config)
+        assert named in str(error.value)
+
+    def test_a_login_for_another_user_does_not_count(self) -> None:
+        """The reconciler authenticates as VSRX_USERNAME; a different account
+        keeps the device reachable for someone, and not for this push."""
+        config = JUNOS_LIFELINE.replace("user admin {", "user operator {")
+        with pytest.raises(ProvisionError, match="login for 'admin'"):
+            _assert_junos_lifeline(_target("fw1"), config)
+
+    def test_an_inactive_fxp0_is_no_fxp0(self) -> None:
+        config = JUNOS_LIFELINE.replace("    fxp0 {", "    inactive: fxp0 {")
+        with pytest.raises(ProvisionError, match="fxp0"):
+            _assert_junos_lifeline(_target("fw1"), config)
+
+    def test_a_mention_in_a_comment_does_not_count(self) -> None:
+        """Statements, not substrings: a comment naming `ssh` is not a service."""
+        config = JUNOS_LIFELINE.replace(
+            "        ssh {\n            root-login allow;\n        }\n",
+            "        /* ssh {\n            root-login allow;\n        } */\n",
+        )
+        with pytest.raises(ProvisionError, match="services ssh"):
+            _assert_junos_lifeline(_target("fw1"), config)
+
+    def test_cleartext_is_refused(self) -> None:
+        config = JUNOS_LIFELINE.replace(
+            "            class super-user;\n",
+            '            class super-user;\n            authentication {\n                plain-text-password-value "x";\n            }\n',
+        )
+        with pytest.raises(ProvisionError, match="plain-text-password-value"):
+            _assert_junos_lifeline(_target("fw1"), config)
 
 
-class TestJunosReplaceTagged:
-    def test_every_top_level_stanza_gets_a_replace_tag(self) -> None:
-        """Two rendered stanzas, plus the empty `applications` appended so an
-        omitted model-owned hierarchy is deleted rather than left behind."""
-        out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\n")
-        assert out.count("replace:") == 3
-        assert out.startswith("replace:\ninterfaces {")
-
-    def test_interfaces_is_replaced_wholesale_and_that_needs_fxp0_modelled(self) -> None:
-        """Replacing the hierarchy deletes everything the artifact omits.
-
-        That is the point -- it is what makes removing an interface from the
-        model remove it from the device. It is also why `fxp0` must be in the
-        artifact: while it was not, every push deleted the firewall's management
-        interface and vrnetlab restored it as root before the commit had to be
-        confirmed.
-        """
-        out = _junos_replace_tagged("interfaces {\n    fxp0 {\n    }\n    ge-0/0/0 {\n    }\n}\n")
-        assert out.startswith("replace:\ninterfaces {")
-        assert "fxp0" in out, "the artifact must carry the management interface"
-        assert "    replace:" not in out, "interfaces are not tagged individually"
-
-    def test_nested_stanzas_do_not_get_tagged(self) -> None:
-        """A tag on a nested hierarchy would replace only part of a stanza, which
-        is not what `load replace` is being asked to do."""
-        out = _junos_replace_tagged("security {\n    zones {\n    }\n}\n")
-        # One for `security`, one for the appended empty `applications`. The
-        # nested `zones` gets none, which is what this asserts.
-        assert out.count("replace:") == 2
-        assert "    replace:" not in out
+class TestJunosOverridePayload:
+    def test_the_artifact_is_sent_as_is(self) -> None:
+        """No `replace:` tags: `override` replaces everything, so there is
+        nothing to confine -- and no empty `applications` is appended, because
+        an omitted hierarchy is deleted by the verb itself."""
+        out = _junos_override_payload(JUNOS_LIFELINE)
+        assert out == JUNOS_LIFELINE
+        assert "replace:" not in out
+        assert "applications {" not in out
 
     def test_bang_comment_lines_are_dropped(self) -> None:
         """A compatibility fallback, not the fix: a stored artifact predating the
         `#` provenance header would otherwise fail at line 1, and Junos error
-        recovery then skips ahead and still reports 'load complete'."""
-        out = _junos_replace_tagged("! Rendered by Infrahub\nsecurity {\n}\n")
+        recovery then skips ahead and still reports 'load complete' -- which
+        under `override` is a partial firewall."""
+        out = _junos_override_payload("! Rendered by Infrahub\nsecurity {\n}\n")
         assert "! Rendered" not in out
-        assert "replace:\nsecurity {" in out
+        assert out.startswith("security {")
 
     def test_a_hash_comment_is_kept_because_junos_understands_it(self) -> None:
-        out = _junos_replace_tagged("# Rendered by Infrahub\ninterfaces {\n}\n")
-        assert "# Rendered by Infrahub" in out
+        assert "# Rendered by Infrahub" in _junos_override_payload("# Rendered by Infrahub\ninterfaces {\n}\n")
 
 
-def test_an_omitted_applications_stanza_is_emitted_empty_and_replaced() -> None:
-    """Removing the last generated service must remove it from the device.
-
-    `load replace` acts only on hierarchies the payload tags, so a stanza the
-    artifact stops rendering is simply left alone. Measured: revoking an access
-    grant removed its policy and left `applications` behind, declaring a service
-    nothing referenced -- and the next grant would have added another.
-    """
-    out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\n")
-    assert "replace:\napplications {\n}" in out
+def _completed(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr="")
 
 
-def test_a_rendered_applications_stanza_is_not_duplicated() -> None:
-    """When the artifact does render one, it is tagged like any other stanza and
-    no empty stanza is appended after it."""
-    out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\napplications {\n    application svc-x {\n    }\n}\n")
-    assert out.count("applications {") == 1
-    assert "    application svc-x {" in out
+class _FakeVsrx:
+    """Records every CLI script the push sends, and answers from a script."""
+
+    def __init__(self, reachable: bool, commit_output: str = "commit complete\n") -> None:
+        self.reachable = reachable
+        self.commit_output = commit_output
+        self.cli: list[str] = []
+
+    def vsrx_cli(self, _target: Target, script: str) -> subprocess.CompletedProcess[str]:
+        self.cli.append(script)
+        if "load override" in script:
+            return _completed(f"load complete\n{self.commit_output}")
+        if script.startswith("show version"):
+            return _completed("Hostname: fw1\n") if self.reachable else _completed("", 255)
+        return _completed("commit complete\n")
+
+    def vsrx(self, _target: Target, argv: list[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+        if "netconf" in argv:
+            return _completed("<hello xmlns=...>") if self.reachable else _completed("", 255)
+        return _completed()
 
 
-def test_routing_options_is_not_force_deleted() -> None:
-    """Deliberately excluded. Its absence means "no static routes in the model",
-    and making the model authoritative for that is a separate decision from
-    stopping generated objects accumulating.
-    """
-    out = _junos_replace_tagged("interfaces {\n}\nsecurity {\n}\n")
-    assert "routing-options {" not in out
+@pytest.fixture
+def fake_vsrx(monkeypatch: pytest.MonkeyPatch) -> Callable[..., _FakeVsrx]:
+    def install(reachable: bool, commit_output: str = "commit complete\n") -> _FakeVsrx:
+        fake = _FakeVsrx(reachable, commit_output)
+        monkeypatch.setattr(devices, "_container_running", lambda _name: True)
+        monkeypatch.setattr(devices, "_wait_for_vsrx", lambda _target: None)
+        monkeypatch.setattr(devices, "_vsrx_cli", fake.vsrx_cli)
+        monkeypatch.setattr(devices, "_vsrx", fake.vsrx)
+        monkeypatch.setattr(devices.subprocess, "run", lambda *_a, **_k: _completed())
+        monkeypatch.setattr(devices, "_REACHABILITY_INTERVAL", 0)
+        return fake
+
+    return install
+
+
+class TestJunosPushConfirmsOnlyWhatItProved:
+    """The confirming commit is the dangerous line, so these pin when it is sent."""
+
+    def test_a_reachable_device_is_overridden_then_confirmed(self, fake_vsrx: Callable[..., _FakeVsrx]) -> None:
+        fake = fake_vsrx(reachable=True)
+        devices.push_junos(_target("fw1"), JUNOS_LIFELINE)
+        load = next(s for s in fake.cli if "load override" in s)
+        assert f"commit confirmed {devices.JUNOS_CONFIRM_MINUTES}" in load
+        assert "load replace" not in load
+        assert fake.cli[-1] == "configure exclusive\ncommit\nexit\nexit\n"
+        # The probe ran between the two commits, not before the first.
+        probe = next(i for i, s in enumerate(fake.cli) if s.startswith("show version"))
+        assert fake.cli.index(load) < probe < len(fake.cli) - 1
+
+    def test_an_unreachable_device_is_never_confirmed(self, fake_vsrx: Callable[..., _FakeVsrx]) -> None:
+        """Measured on the prototype: fxp0 moved off vrnetlab's address, the
+        probe failed, nothing confirmed, Junos rolled back by itself."""
+        fake = fake_vsrx(reachable=False)
+        with pytest.raises(ProvisionError, match="rolls it back"):
+            devices.push_junos(_target("fw1"), JUNOS_LIFELINE)
+        assert not [s for s in fake.cli if s == "configure exclusive\ncommit\nexit\nexit\n"]
+
+    def test_a_commit_that_did_not_report_completion_is_never_confirmed(
+        self, fake_vsrx: Callable[..., _FakeVsrx]
+    ) -> None:
+        """The committing session may die with the commit. Confirming then would
+        confirm blind -- possibly a candidate that was never committed."""
+        fake = fake_vsrx(reachable=True, commit_output="")
+        with pytest.raises(ProvisionError, match="not confirming"):
+            devices.push_junos(_target("fw1"), JUNOS_LIFELINE)
+        assert not [s for s in fake.cli if s.startswith("show version")]
+        assert not [s for s in fake.cli if s == "configure exclusive\ncommit\nexit\nexit\n"]
+
+    def test_a_refused_artifact_touches_nothing(self, fake_vsrx: Callable[..., _FakeVsrx]) -> None:
+        fake = fake_vsrx(reachable=True)
+        with pytest.raises(ProvisionError, match="fxp0"):
+            devices.push_junos(_target("fw1"), JUNOS_LIFELINE.replace("address 10.0.0.15/24;", ""))
+        assert fake.cli == []
+
+    def test_a_late_answer_is_not_confirmed(
+        self, fake_vsrx: Callable[..., _FakeVsrx], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A probe that succeeds near the rollback may be succeeding BECAUSE the
+        rollback ran; the confirm would then commit nothing and print success."""
+        fake = fake_vsrx(reachable=True)
+        clock = iter([0.0, devices.JUNOS_CONFIRM_MINUTES * 60.0])
+        monkeypatch.setattr(devices.time, "monotonic", lambda: next(clock))
+        with pytest.raises(ProvisionError, match="too close"):
+            devices.push_junos(_target("fw1"), JUNOS_LIFELINE)
+        assert not [s for s in fake.cli if s == "configure exclusive\ncommit\nexit\nexit\n"]

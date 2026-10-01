@@ -1,0 +1,17 @@
+ 
+[edit]
+- version 22.3R1.11;
+[edit system login user admin]
+-    uid 2000;
+[edit system]
+-   syslog {
+-       host 192.0.2.10 {
+-           any any;
+-       }
+-   }
+-   ntp {
+-       server 192.0.2.123;
+-   }
+
+[edit]
+admin@fw1# 

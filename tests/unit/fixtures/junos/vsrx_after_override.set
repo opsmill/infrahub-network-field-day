@@ -1,0 +1,202 @@
+set version 22.3R1.11
+set system host-name fw1
+set system root-authentication encrypted-password "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71"
+set system login user admin uid 2000
+set system login user admin class super-user
+set system login user admin authentication encrypted-password "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71"
+set system services ssh root-login allow
+set system services netconf ssh
+set system management-instance
+set security address-book global address k8s-nodes 10.110.0.0/24
+set security address-book global address k8s-pods 10.111.0.0/16
+set security address-book global address k8s-services 10.112.0.0/16
+set security address-book global address access-portal 10.112.240.33/32
+set security address-book global address app-hosts 10.210.0.0/24
+set security address-book global address fabric-infra 10.41.0.0/16
+set security address-book global address wan-customers 10.60.0.0/16
+set security address-book global address branch-users 10.70.0.0/24
+set security address-book global address acme-hq 10.60.10.0/24
+set security address-book global address acme-dr 10.60.11.0/24
+set security address-book global address acme-cloud 10.220.10.0/24
+set security address-book global address globex-hq 10.60.20.0/24
+set security address-book global address globex-cloud 10.220.20.0/24
+set security address-book global address tooling-services 10.90.0.0/24
+set security address-book global address-set acme-sites address acme-hq
+set security address-book global address-set acme-sites address acme-dr
+set security address-book global address-set globex-sites address globex-hq
+set security address-book global address-set k8s-all address k8s-nodes
+set security address-book global address-set k8s-all address k8s-pods
+set security address-book global address-set k8s-reachable address k8s-nodes
+set security address-book global address-set k8s-reachable address k8s-services
+set security flow tcp-mss all-tcp mss 9124
+set security policies from-zone acme-cloud to-zone wan policy acme-cloud-to-acme-sites match source-address acme-cloud
+set security policies from-zone acme-cloud to-zone wan policy acme-cloud-to-acme-sites match destination-address acme-sites
+set security policies from-zone acme-cloud to-zone wan policy acme-cloud-to-acme-sites match application any
+set security policies from-zone acme-cloud to-zone wan policy acme-cloud-to-acme-sites then permit
+set security policies from-zone acme-cloud to-zone wan policy acme-cloud-to-acme-sites then log session-init
+set security policies from-zone acme-cloud to-zone wan policy acme-cloud-to-acme-sites then log session-close
+set security policies from-zone app-prod to-zone k8s-prod policy deny-spoofed-infra match source-address fabric-infra
+set security policies from-zone app-prod to-zone k8s-prod policy deny-spoofed-infra match destination-address any
+set security policies from-zone app-prod to-zone k8s-prod policy deny-spoofed-infra match application any
+set security policies from-zone app-prod to-zone k8s-prod policy deny-spoofed-infra then deny
+set security policies from-zone app-prod to-zone k8s-prod policy deny-spoofed-infra then log session-init
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-services match source-address app-hosts
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-services match destination-address k8s-services
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-services match application junos-http
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-services match application junos-https
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-services then permit
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-services then log session-init
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-services then log session-close
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-icmp match source-address app-hosts
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-icmp match destination-address k8s-nodes
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-icmp match destination-address k8s-pods
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-icmp match destination-address k8s-services
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-icmp match application junos-ping
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-icmp then permit
+set security policies from-zone app-prod to-zone k8s-prod policy app-to-k8s-icmp then log session-init
+set security policies from-zone branch to-zone k8s-prod policy deny-spoofed-infra match source-address fabric-infra
+set security policies from-zone branch to-zone k8s-prod policy deny-spoofed-infra match destination-address any
+set security policies from-zone branch to-zone k8s-prod policy deny-spoofed-infra match application any
+set security policies from-zone branch to-zone k8s-prod policy deny-spoofed-infra then deny
+set security policies from-zone branch to-zone k8s-prod policy deny-spoofed-infra then log session-init
+set security policies from-zone branch to-zone k8s-prod policy branch-to-access-portal match source-address branch-users
+set security policies from-zone branch to-zone k8s-prod policy branch-to-access-portal match destination-address access-portal
+set security policies from-zone branch to-zone k8s-prod policy branch-to-access-portal match application junos-http
+set security policies from-zone branch to-zone k8s-prod policy branch-to-access-portal match application junos-https
+set security policies from-zone branch to-zone k8s-prod policy branch-to-access-portal then permit
+set security policies from-zone branch to-zone k8s-prod policy branch-to-access-portal then log session-init
+set security policies from-zone branch to-zone k8s-prod policy branch-to-access-portal then log session-close
+set security policies from-zone branch to-zone k8s-prod policy branch-to-k8s-icmp match source-address branch-users
+set security policies from-zone branch to-zone k8s-prod policy branch-to-k8s-icmp match destination-address k8s-reachable
+set security policies from-zone branch to-zone k8s-prod policy branch-to-k8s-icmp match application junos-ping
+set security policies from-zone branch to-zone k8s-prod policy branch-to-k8s-icmp then permit
+set security policies from-zone branch to-zone k8s-prod policy branch-to-k8s-icmp then log session-init
+set security policies from-zone branch to-zone tooling policy deny-spoofed-infra match source-address fabric-infra
+set security policies from-zone branch to-zone tooling policy deny-spoofed-infra match destination-address any
+set security policies from-zone branch to-zone tooling policy deny-spoofed-infra match application any
+set security policies from-zone branch to-zone tooling policy deny-spoofed-infra then deny
+set security policies from-zone branch to-zone tooling policy deny-spoofed-infra then log session-init
+set security policies from-zone branch to-zone tooling policy branch-to-tooling-portal match source-address branch-users
+set security policies from-zone branch to-zone tooling policy branch-to-tooling-portal match destination-address tooling-services
+set security policies from-zone branch to-zone tooling policy branch-to-tooling-portal match application tooling-portal
+set security policies from-zone branch to-zone tooling policy branch-to-tooling-portal match application tooling-oidc
+set security policies from-zone branch to-zone tooling policy branch-to-tooling-portal match application infrahub-api
+set security policies from-zone branch to-zone tooling policy branch-to-tooling-portal then permit
+set security policies from-zone branch to-zone tooling policy branch-to-tooling-portal then log session-init
+set security policies from-zone branch to-zone tooling policy branch-to-tooling-portal then log session-close
+set security policies from-zone branch to-zone wan policy deny-branch-to-wan match source-address any
+set security policies from-zone branch to-zone wan policy deny-branch-to-wan match destination-address any
+set security policies from-zone branch to-zone wan policy deny-branch-to-wan match application any
+set security policies from-zone branch to-zone wan policy deny-branch-to-wan then deny
+set security policies from-zone branch to-zone wan policy deny-branch-to-wan then log session-init
+set security policies from-zone globex-cloud to-zone wan policy globex-cloud-to-globex-sites match source-address globex-cloud
+set security policies from-zone globex-cloud to-zone wan policy globex-cloud-to-globex-sites match destination-address globex-sites
+set security policies from-zone globex-cloud to-zone wan policy globex-cloud-to-globex-sites match application any
+set security policies from-zone globex-cloud to-zone wan policy globex-cloud-to-globex-sites then permit
+set security policies from-zone globex-cloud to-zone wan policy globex-cloud-to-globex-sites then log session-init
+set security policies from-zone globex-cloud to-zone wan policy globex-cloud-to-globex-sites then log session-close
+set security policies from-zone k8s-prod to-zone app-prod policy deny-spoofed-infra match source-address fabric-infra
+set security policies from-zone k8s-prod to-zone app-prod policy deny-spoofed-infra match destination-address any
+set security policies from-zone k8s-prod to-zone app-prod policy deny-spoofed-infra match application any
+set security policies from-zone k8s-prod to-zone app-prod policy deny-spoofed-infra then deny
+set security policies from-zone k8s-prod to-zone app-prod policy deny-spoofed-infra then log session-init
+set security policies from-zone k8s-prod to-zone app-prod policy k8s-to-app match source-address k8s-all
+set security policies from-zone k8s-prod to-zone app-prod policy k8s-to-app match destination-address app-hosts
+set security policies from-zone k8s-prod to-zone app-prod policy k8s-to-app match application any
+set security policies from-zone k8s-prod to-zone app-prod policy k8s-to-app then permit
+set security policies from-zone k8s-prod to-zone app-prod policy k8s-to-app then log session-init
+set security policies from-zone k8s-prod to-zone app-prod policy k8s-to-app then log session-close
+set security policies from-zone wan to-zone acme-cloud policy deny-spoofed-infra match source-address fabric-infra
+set security policies from-zone wan to-zone acme-cloud policy deny-spoofed-infra match destination-address any
+set security policies from-zone wan to-zone acme-cloud policy deny-spoofed-infra match application any
+set security policies from-zone wan to-zone acme-cloud policy deny-spoofed-infra then deny
+set security policies from-zone wan to-zone acme-cloud policy deny-spoofed-infra then log session-init
+set security policies from-zone wan to-zone acme-cloud policy acme-sites-to-acme-cloud match source-address acme-sites
+set security policies from-zone wan to-zone acme-cloud policy acme-sites-to-acme-cloud match destination-address acme-cloud
+set security policies from-zone wan to-zone acme-cloud policy acme-sites-to-acme-cloud match application any
+set security policies from-zone wan to-zone acme-cloud policy acme-sites-to-acme-cloud then permit
+set security policies from-zone wan to-zone acme-cloud policy acme-sites-to-acme-cloud then log session-init
+set security policies from-zone wan to-zone acme-cloud policy acme-sites-to-acme-cloud then log session-close
+set security policies from-zone wan to-zone app-prod policy deny-wan-to-app match source-address any
+set security policies from-zone wan to-zone app-prod policy deny-wan-to-app match destination-address any
+set security policies from-zone wan to-zone app-prod policy deny-wan-to-app match application any
+set security policies from-zone wan to-zone app-prod policy deny-wan-to-app then deny
+set security policies from-zone wan to-zone app-prod policy deny-wan-to-app then log session-init
+set security policies from-zone wan to-zone branch policy deny-wan-to-branch match source-address any
+set security policies from-zone wan to-zone branch policy deny-wan-to-branch match destination-address any
+set security policies from-zone wan to-zone branch policy deny-wan-to-branch match application any
+set security policies from-zone wan to-zone branch policy deny-wan-to-branch then deny
+set security policies from-zone wan to-zone branch policy deny-wan-to-branch then log session-init
+set security policies from-zone wan to-zone globex-cloud policy deny-spoofed-infra match source-address fabric-infra
+set security policies from-zone wan to-zone globex-cloud policy deny-spoofed-infra match destination-address any
+set security policies from-zone wan to-zone globex-cloud policy deny-spoofed-infra match application any
+set security policies from-zone wan to-zone globex-cloud policy deny-spoofed-infra then deny
+set security policies from-zone wan to-zone globex-cloud policy deny-spoofed-infra then log session-init
+set security policies from-zone wan to-zone globex-cloud policy globex-sites-to-globex-cloud match source-address globex-sites
+set security policies from-zone wan to-zone globex-cloud policy globex-sites-to-globex-cloud match destination-address globex-cloud
+set security policies from-zone wan to-zone globex-cloud policy globex-sites-to-globex-cloud match application any
+set security policies from-zone wan to-zone globex-cloud policy globex-sites-to-globex-cloud then permit
+set security policies from-zone wan to-zone globex-cloud policy globex-sites-to-globex-cloud then log session-init
+set security policies from-zone wan to-zone globex-cloud policy globex-sites-to-globex-cloud then log session-close
+set security policies from-zone wan to-zone k8s-prod policy deny-spoofed-infra match source-address fabric-infra
+set security policies from-zone wan to-zone k8s-prod policy deny-spoofed-infra match destination-address any
+set security policies from-zone wan to-zone k8s-prod policy deny-spoofed-infra match application any
+set security policies from-zone wan to-zone k8s-prod policy deny-spoofed-infra then deny
+set security policies from-zone wan to-zone k8s-prod policy deny-spoofed-infra then log session-init
+set security policies from-zone wan to-zone k8s-prod policy wan-to-k8s-services match source-address wan-customers
+set security policies from-zone wan to-zone k8s-prod policy wan-to-k8s-services match destination-address k8s-services
+set security policies from-zone wan to-zone k8s-prod policy wan-to-k8s-services match application junos-http
+set security policies from-zone wan to-zone k8s-prod policy wan-to-k8s-services match application junos-https
+set security policies from-zone wan to-zone k8s-prod policy wan-to-k8s-services then permit
+set security policies from-zone wan to-zone k8s-prod policy wan-to-k8s-services then log session-init
+set security policies from-zone wan to-zone k8s-prod policy wan-to-k8s-services then log session-close
+set security policies default-policy deny-all
+set security zones security-zone k8s-prod interfaces ge-0/0/0.0 host-inbound-traffic system-services ping
+set security zones security-zone app-prod interfaces ge-0/0/1.0 host-inbound-traffic system-services ping
+set security zones security-zone wan interfaces ge-0/0/2.0 host-inbound-traffic system-services ping
+set security zones security-zone branch interfaces ge-0/0/3.0 host-inbound-traffic system-services ping
+set security zones security-zone acme-cloud interfaces ge-0/0/4.0 host-inbound-traffic system-services ping
+set security zones security-zone globex-cloud interfaces ge-0/0/5.0 host-inbound-traffic system-services ping
+set security zones security-zone tooling interfaces ge-0/0/6.0 host-inbound-traffic system-services ping
+set interfaces ge-0/0/0 description "ZONE-K8S-PROD handoff - border-leaf1 Et10"
+set interfaces ge-0/0/0 mtu 9192
+set interfaces ge-0/0/0 unit 0 family inet address 10.250.110.2/30
+set interfaces ge-0/0/1 description "ZONE-APP-PROD handoff - border-leaf1 Et11"
+set interfaces ge-0/0/1 mtu 9192
+set interfaces ge-0/0/1 unit 0 family inet address 10.250.210.2/30
+set interfaces ge-0/0/2 description "ZONE-WAN handoff - ISP transit customers"
+set interfaces ge-0/0/2 mtu 9192
+set interfaces ge-0/0/2 unit 0 family inet address 10.250.150.2/30
+set interfaces ge-0/0/3 description "ZONE-BRANCH handoff - private circuit"
+set interfaces ge-0/0/3 mtu 9192
+set interfaces ge-0/0/3 unit 0 family inet address 10.250.170.2/30
+set interfaces ge-0/0/4 description "ZONE-ACME-CLOUD handoff - VRF TENANT_ACME"
+set interfaces ge-0/0/4 mtu 9192
+set interfaces ge-0/0/4 unit 0 family inet address 10.250.10.2/30
+set interfaces ge-0/0/5 description "ZONE-GLOBEX-CLOUD handoff - VRF TENANT_GLOBEX"
+set interfaces ge-0/0/5 mtu 9192
+set interfaces ge-0/0/5 unit 0 family inet address 10.250.20.2/30
+set interfaces ge-0/0/6 description "ZONE-TOOLING handoff - the tooling cluster bridge"
+set interfaces ge-0/0/6 mtu 9192
+set interfaces ge-0/0/6 unit 0 family inet address 10.90.0.254/24
+set interfaces fxp0 unit 0 family inet address 10.0.0.15/24
+set interfaces fxp0 unit 0 family inet6 address 2001:db8::2/64
+set snmp community otternet-ro authorization read-only
+set snmp community otternet-ro routing-instance mgmt_junos clients 172.20.41.0/24
+set snmp routing-instance-access
+set routing-instances mgmt_junos routing-options rib mgmt_junos.inet6.0 static route ::/0 next-hop 2001:db8::1
+set routing-instances mgmt_junos routing-options static route 0.0.0.0/0 next-hop 10.0.0.2
+set applications application infrahub-api protocol tcp
+set applications application infrahub-api destination-port 8000
+set applications application tooling-oidc protocol tcp
+set applications application tooling-oidc destination-port 32556
+set applications application tooling-portal protocol tcp
+set applications application tooling-portal destination-port 32001
+set routing-options static route 10.110.0.0/24 next-hop 10.250.110.1
+set routing-options static route 10.111.0.0/16 next-hop 10.250.110.1
+set routing-options static route 10.112.0.0/16 next-hop 10.250.110.1
+set routing-options static route 10.210.0.0/24 next-hop 10.250.210.1
+set routing-options static route 10.60.0.0/16 next-hop 10.250.150.1
+set routing-options static route 10.70.0.0/24 next-hop 10.250.170.1
+set routing-options static route 10.220.10.0/24 next-hop 10.250.10.1
+set routing-options static route 10.220.20.0/24 next-hop 10.250.20.1

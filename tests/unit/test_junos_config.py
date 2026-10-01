@@ -6,12 +6,20 @@ makes equality the right assertion: a substring check would pass on a policy
 stanza with a rule in the wrong position, and Junos evaluates first-match, so
 that is a different firewall which loads without complaint.
 
-The artifact covers 656 of the file's 741 lines. The excluded 85 are the
-`system` stanza (13 lines: two credential hashes, permanently out) and the
-file header (72 lines of lab documentation, which is not configuration).
-SC-010 makes that total an arithmetic criterion rather than a prose caveat,
-and `test_the_exclusions_add_up` derives all three figures from the file --
-so the numbers in this docstring are commentary and the test is the check.
+The artifact is the firewall's WHOLE configuration, because the push is a full
+`load override`: everything in the file except its top-level commentary
+(lab documentation, not configuration), plus what vrnetlab's init.conf adds at
+boot -- fxp0, `host-name`, `services`, `management-instance` and the
+`mgmt_junos` routing instance. The `system` stanza, with the lab's two
+existing password hashes, is in scope: a deliberate, user-approved exception
+recorded in AGENTS.md. `test_the_exclusions_add_up` derives every figure from
+the file, so numbers in prose are commentary and the test is the check.
+
+A second oracle sits beside the file: `fixtures/junos/vsrx_booted.conf`, the
+running configuration of a vSRX booted exactly as the lab boots fw1. It is
+the only committed record of what init.conf injects, and
+`test_the_artifact_states_everything_a_booted_vsrx_runs` holds the artifact
+against it statement by statement.
 """
 
 from __future__ import annotations
@@ -26,6 +34,7 @@ from typing import Any
 
 import pytest
 
+from solution_arista_avd.deployment import devices
 from transforms.junos_config import JunosConfig, JunosConfigError
 
 FIXTURE = Path("tests/unit/fixtures/junos/fw1.json")
@@ -122,17 +131,46 @@ def test_the_any_keyword_is_never_declared_in_the_address_book() -> None:
     assert not [line for line in book if re.match(r"^\s+address any ", line)]
 
 
-def test_no_credential_appears_anywhere_in_the_output() -> None:
-    """The `system` stanza is excluded permanently, not deferred.
+def _lab_hashes() -> set[str]:
+    return {m.group(1) for line in _conf() if (m := re.search(r'encrypted-password "([^"]+)"', line))}
 
-    The requirement is about the graph as much as the artifact: an artifact can
-    be diffed, and a credential that reaches the model has reached every branch
-    and every export of it.
+
+def test_the_only_credentials_are_the_labs_existing_hashes() -> None:
+    """The exception is exactly as wide as it was approved: two hashes, both
+    copied from the lab's own committed file, and nothing else.
+
+    Not cleartext (`plain-text-password-value` is what vrnetlab's init.conf
+    writes and Junos keeps verbatim), not an invented hash, not a key.
     """
     text = "\n".join(_rendered())
+    rendered = set(re.findall(r'encrypted-password "([^"]+)"', text))
 
-    for pattern in ("encrypted-password", "ssh-rsa", "ssh-ed25519", "PRIVATE KEY"):
+    assert rendered, "a full replace without the hashes would leave the firewall with no logins"
+    assert rendered <= _lab_hashes(), "every hash must be one the lab already commits"
+    assert text.count("encrypted-password") == 2
+    for pattern in ("plain-text-password", "ssh-rsa", "ssh-ed25519", "PRIVATE KEY", "admin@123"):
         assert pattern not in text
+
+
+def test_no_credential_reaches_the_graph() -> None:
+    """The hashes are template content, never data.
+
+    A credential in the model reaches every branch, every export, the GraphQL
+    API and the MCP server's read access; in the template it is where it already
+    was, in git. So the query asks for nothing credential-shaped and neither the
+    query's fixture nor the seed data holds the firewall's hashes. (The seeds
+    do hold the EOS switches' local-user hashes, an older and separate choice
+    this test does not judge.)
+    """
+    query = (REPO_ROOT / "transforms" / "junos_config.gql").read_text(encoding="utf-8")
+    fixture = FIXTURE.read_text(encoding="utf-8")
+    seeds = "\n".join(p.read_text(encoding="utf-8") for p in sorted((REPO_ROOT / "objects").glob("*.yml")))
+    for text in (query, fixture):
+        assert "password" not in text.lower()
+        assert "$6$" not in text
+    for lab_hash in _lab_hashes():
+        assert lab_hash not in seeds
+        assert lab_hash.split("$")[2] not in seeds, "the lab's salt must not appear in the graph"
 
 
 def test_braces_balance_and_never_go_negative() -> None:
@@ -305,20 +343,20 @@ def _top_level_stanza_of(lines: list[str]) -> list[str | None]:
     return tags
 
 
-# The management interface, which `junos.conf` does not contain and never has.
+# What vrnetlab's `init.conf` adds at boot, which `junos.conf` does not contain.
 #
-# vrnetlab generates it into `init.conf` INSIDE the container; that file is not
-# version-controlled in either repository, so unlike every other line this suite
-# checks, these ten have no committed source. They are reproduced here by hand
-# from the running device.
+# vrnetlab generates init.conf INSIDE the container and appends junos.conf to
+# it; init.conf is not version-controlled in either repository. These blocks
+# are reproduced by hand from the device, and since cycle 035 they are also
+# held against a captured booted configuration (fixtures/junos/vsrx_booted.conf)
+# by test_the_artifact_states_everything_a_booted_vsrx_runs.
 #
-# They are in scope because cycle 030 modelled fxp0 deliberately: `load replace`
-# on the `interfaces` hierarchy deletes everything the artifact does not name,
-# so leaving it out meant every push deleted the firewall's management
-# interface. The consequence is that the model is now authoritative for this
-# address, and this block is the only thing asserting it still matches the
-# device. If vrnetlab's addressing ever changes, this is what has to change with
-# it -- and the failure mode if it does not is an unreachable firewall.
+# They are in scope because the push is a full `load override`: anything the
+# artifact omits is deleted, and these are the management path. The model is
+# authoritative for fxp0's address (cycle 030); the rest is template content.
+# If vrnetlab's addressing ever changes, these have to change with it -- and
+# the failure mode if they do not is a push the lifeline accepts and the
+# post-commit check rolls back.
 FXP0_FROM_INIT_CONF = [
     "    fxp0 {",
     "        unit 0 {",
@@ -333,6 +371,49 @@ FXP0_FROM_INIT_CONF = [
 ]
 
 
+# init.conf's `system` statements beyond the two logins junos.conf restates:
+# the host name (rendered from the firewall's name), the services the reconciler
+# arrives on, and the instance fxp0 lives in.
+SYSTEM_HOST_NAME_FROM_INIT_CONF = ["    host-name fw1;"]
+SYSTEM_SERVICES_FROM_INIT_CONF = [
+    "    services {",
+    "        ssh {",
+    "            root-login allow;",
+    "        }",
+    "        netconf {",
+    "            ssh;",
+    "        }",
+    "    }",
+    "    management-instance;",
+]
+
+# init.conf's management routing instance, in the order Junos itself displays
+# it (rib before static) -- vrnetlab writes them the other way round.
+ROUTING_INSTANCES_FROM_INIT_CONF = [
+    "routing-instances {",
+    "    mgmt_junos {",
+    "        routing-options {",
+    "            rib mgmt_junos.inet6.0 {",
+    "                static {",
+    "                    route ::/0 next-hop 2001:db8::1;",
+    "                }",
+    "            }",
+    "            static {",
+    "                route 0.0.0.0/0 next-hop 10.0.0.2;",
+    "            }",
+    "        }",
+    "    }",
+    "}",
+]
+
+FROM_INIT_CONF = (
+    FXP0_FROM_INIT_CONF
+    + SYSTEM_HOST_NAME_FROM_INIT_CONF
+    + SYSTEM_SERVICES_FROM_INIT_CONF
+    + ROUTING_INSTANCES_FROM_INIT_CONF
+)
+
+
 def _with_fxp0(lines: list[str]) -> list[str]:
     """`junos.conf` lines with the management interface spliced in.
 
@@ -344,25 +425,43 @@ def _with_fxp0(lines: list[str]) -> list[str]:
     return out[:first_data_iface] + FXP0_FROM_INIT_CONF + out[first_data_iface:]
 
 
+def _with_init_conf(lines: list[str]) -> list[str]:
+    """`junos.conf`'s in-scope lines with everything init.conf adds spliced in.
+
+    host-name first in `system` and services last, as Junos displays them;
+    the routing instance straight after `routing-options`, where the template
+    renders it.
+    """
+    out = _with_fxp0(lines)
+    opener = out.index("system {")
+    out[opener + 1 : opener + 1] = SYSTEM_HOST_NAME_FROM_INIT_CONF
+    close = opener + len(_stanza(out[opener:], "system")) - 1
+    out[close:close] = SYSTEM_SERVICES_FROM_INIT_CONF
+    routing = out.index("routing-options {")
+    end = routing + len(_stanza(out[routing:], "routing-options"))
+    out[end:end] = ROUTING_INSTANCES_FROM_INIT_CONF
+    return out
+
+
 def _oracle_in_scope() -> list[str]:
-    """The device file minus the two regions the artifact deliberately omits.
+    """The device file minus its top-level commentary, plus init.conf.
 
-    `system` holds two `encrypted-password` hashes -- configuration this
-    project will never model. The 72-line header is 68 comments and 4 blanks
-    of lab documentation ABOUT the file, including how vrnetlab appends it to
-    init.conf; the artifact replaces it with its own provenance line, because
-    reproducing it would make a false claim about where the file came from.
+    The commentary is 68 comments and 4 blanks of lab documentation ABOUT the
+    file, including how vrnetlab appends it to init.conf; the artifact replaces
+    it with its own provenance line, because reproducing it would make a false
+    claim about where the file came from.
 
-    Two different reasons, which is why they are named separately rather than
-    lumped together as "excluded lines".
+    `system` is IN scope now. It was excluded while the push was `load replace`
+    on tagged hierarchies and the hashes were never rendered; a full override
+    deletes whatever the artifact omits, so the stanza -- hashes included, as
+    a recorded exception -- has to be there.
     """
     lines = _conf()
     tags = _top_level_stanza_of(lines)
-    in_scope = [line for line, tag in zip(lines, tags, strict=True) if tag not in (None, "system")]
-    # ... plus fxp0, which the artifact renders and this file does not carry.
+    in_scope = [line for line, tag in zip(lines, tags, strict=True) if tag is not None]
     # Spliced here rather than in each caller so every test that compares the
     # artifact against the device works from one definition of "in scope".
-    return _with_fxp0(in_scope)
+    return _with_init_conf(in_scope)
 
 
 def _rendered_body() -> list[str]:
@@ -458,16 +557,22 @@ def test_the_exclusions_add_up() -> None:
 
     header = sum(1 for tag in tags if tag is None)
     system = sum(1 for tag in tags if tag == "system")
-    rendered = len(lines) - header - system
+    rendered = len(lines) - header
 
-    assert header + system + rendered == len(lines)
+    assert header + rendered == len(lines)
+    # The `system` stanza is no longer an exclusion: it is rendered, and its
+    # thirteen lines are counted in `rendered`. Asserted so that a regression
+    # back to omitting it fails here by name rather than as a total.
+    assert system == 13
+    assert "system {" in _rendered_body()
 
-    # Three categories now, not two. The artifact reproduces everything in scope
-    # AND renders the management interface, which this file does not carry --
-    # cycle 030 modelled fxp0 because `load replace` was otherwise deleting it
-    # on every push. Adding rather than hiding it keeps this an assertion about
-    # the total rather than a caveat beside one.
-    assert rendered + len(FXP0_FROM_INIT_CONF) == len(_oracle_in_scope())
+    # Two categories, and one addition. The artifact reproduces everything in
+    # the file except its commentary, AND renders what vrnetlab's init.conf
+    # adds at boot -- fxp0, host-name, services, management-instance and the
+    # mgmt_junos instance -- because a full override deletes whatever the
+    # artifact omits. Adding rather than hiding them keeps this an assertion
+    # about the total rather than a caveat beside one.
+    assert rendered + len(FROM_INIT_CONF) == len(_oracle_in_scope())
 
     # Non-blank, because blank-line placement inside `policies` follows the
     # zone-pair sequence, which the model cannot reproduce -- see
@@ -499,7 +604,10 @@ def test_the_artifact_invents_no_configuration() -> None:
 
 
 def _route_lines(lines: list[str]) -> list[str]:
-    return [line for line in lines if line.strip().startswith("route ")]
+    """The default instance's routes -- not mgmt_junos's two defaults."""
+    if "routing-options {" not in lines:
+        return []
+    return [line for line in _stanza(lines, "routing-options") if line.strip().startswith("route ")]
 
 
 def test_every_route_line_puts_its_semicolon_at_column_fifty() -> None:
@@ -577,7 +685,9 @@ def test_a_firewall_with_no_routes_renders_no_routing_options_stanza() -> None:
     """C6. Not an empty `static { }` -- the device would hold no stanza."""
     rendered = _render_without("static_routes")
     assert not any(line.startswith("routing-options") for line in rendered)
-    assert not any("static {" in line for line in rendered)
+    # Only the management instance's own `static`, indented inside
+    # routing-instances, may remain.
+    assert not any(line == "    static {" for line in rendered)
 
 
 def test_a_firewall_with_no_clamp_renders_no_flow_stanza() -> None:
@@ -750,9 +860,109 @@ def test_a_community_without_clients_is_refused() -> None:
         _rendered_with_snmp({"value": "otternet-ro"}, {"node": None})
 
 
-def test_the_snmp_stanza_is_top_level_so_the_push_replaces_it() -> None:
-    """`_junos_replace_tagged` tags top-level stanzas `replace:`. Nested anywhere
-    else, removing SNMP from the model would never remove it from the device."""
+def test_the_snmp_stanza_is_top_level() -> None:
+    """`snmp` is a top-level Junos hierarchy. It mattered more while the push
+    tagged top-level stanzas `replace:`; under `load override` the whole
+    configuration is replaced, so removing SNMP from the model removes it from
+    the device wherever it sits -- but nested it would not load at all."""
     lines = _rendered()
     assert "snmp {" in lines
     assert not [line for line in lines if line.strip() == "snmp {" and line != "snmp {"]
+
+
+# ---------------------------------------------------------------------------
+# Cycle 035: the full replace. `system` and everything vrnetlab injects.
+# ---------------------------------------------------------------------------
+
+BOOTED = Path("tests/unit/fixtures/junos/vsrx_booted.conf")
+BOOTED_SET = Path("tests/unit/fixtures/junos/vsrx_booted.set")
+AFTER_OVERRIDE_SET = Path("tests/unit/fixtures/junos/vsrx_after_override.set")
+
+
+def test_the_system_stanza_matches_the_device() -> None:
+    """junos.conf's two logins, byte for byte, plus what init.conf adds."""
+    assert _stanza(_rendered(), "system") == _stanza(_oracle_in_scope(), "system")
+
+
+def test_the_management_routing_instance_matches_init_conf() -> None:
+    assert _stanza(_rendered(), "routing-instances") == ROUTING_INSTANCES_FROM_INIT_CONF
+
+
+def test_the_artifact_states_everything_a_booted_vsrx_runs() -> None:
+    """The decisive one for a full replace: nothing the device runs is lost.
+
+    `vsrx_booted.conf` is `show configuration` from a vSRX booted exactly as
+    the lab boots fw1 (vrnetlab's init.conf with junos.conf appended), captured
+    on a throwaway prototype whose `display set` form was line-for-line
+    identical to the live fw1's. Every statement in it must be in the artifact,
+    except three that are not the artifact's to state:
+
+    * `version` -- Junos stamps it on every commit from the running software.
+    * `uid 2000` -- Junos assigns it to a login that names none.
+    * `plain-text-password-value` -- init.conf's cleartext, which Junos keeps
+      verbatim. The override removing it is a feature of the full replace.
+
+    And nothing in the artifact is absent from the device, so the override
+    adds nothing a booted firewall did not already run. Compared as
+    statements (comments and `## SECRET-DATA` tails ignored), because the
+    braces form round-trips comments differently.
+    """
+    device = devices._junos_statements(BOOTED.read_text(encoding="utf-8"))
+    artifact = devices._junos_statements("\n".join(_rendered()))
+
+    lost = {s for s in device - artifact if not s[-1].startswith(("version ", "uid ", "plain-text-password-value "))}
+    assert not lost, f"a full replace would delete: {sorted(lost)}"
+    assert not artifact - device, f"the artifact adds what the device never ran: {sorted(artifact - device)}"
+
+
+def test_the_override_removed_only_the_cleartext() -> None:
+    """Captured on the prototype: `display set` before and after the first full
+    replace. Exactly two lines went -- init.conf's cleartext passwords -- and
+    none arrived. This is the cutover's whole expected effect on fw1."""
+
+    def lines(path: Path) -> set[str]:
+        return {line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("set ")}
+
+    before, after = lines(BOOTED_SET), lines(AFTER_OVERRIDE_SET)
+    assert before - after == {
+        'set system login user admin authentication plain-text-password-value "admin@123"',
+        'set system root-authentication plain-text-password-value "admin@123"',
+    }
+    assert after - before == set()
+
+
+def test_the_rendered_artifact_passes_the_push_lifeline() -> None:
+    """The renderer and the push's guard agree. A template change that drops
+    fxp0, a service or a login fails here rather than at the device."""
+    target = devices.Target("fw1", devices.ARTIFACT_JUNOS, "a" * 32, "Ready", None)
+    devices._assert_junos_lifeline(target, "\n".join(_rendered()))
+
+
+def test_a_firewall_without_fxp0_renders_no_management_instance() -> None:
+    data: dict[str, Any] = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    node = data["target"]["edges"][0]["node"]
+    node["interfaces"]["edges"] = [
+        e for e in node["interfaces"]["edges"] if e["node"].get("name", {}).get("value") != "fxp0"
+    ]
+    transform = JunosConfig.__new__(JunosConfig)
+    transform.root_directory = str(REPO_ROOT)
+    rendered = asyncio.run(transform.transform(data))
+    assert "routing-instances {" not in rendered
+    target = devices.Target("fw1", devices.ARTIFACT_JUNOS, "a" * 32, "Ready", None)
+    with pytest.raises(devices.ProvisionError, match="fxp0"):
+        devices._assert_junos_lifeline(target, rendered)
+
+
+def test_fxp0_off_vrnetlabs_subnet_is_refused() -> None:
+    """The mgmt_junos default route would commit and never install."""
+    data: dict[str, Any] = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    node = data["target"]["edges"][0]["node"]
+    for edge in node["interfaces"]["edges"]:
+        if edge["node"].get("name", {}).get("value") == "fxp0":
+            for address in edge["node"]["ip_addresses"]["edges"]:
+                if ":" not in address["node"]["address"]["value"]:
+                    address["node"]["address"]["value"] = "192.0.2.15/24"
+    transform = JunosConfig.__new__(JunosConfig)
+    transform.root_directory = str(REPO_ROOT)
+    with pytest.raises(JunosConfigError, match="vrnetlab"):
+        asyncio.run(transform.transform(data))

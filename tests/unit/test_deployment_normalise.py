@@ -31,15 +31,18 @@ while isp-pe1 stands still.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 from solution_arista_avd.deployment.normalise import (
+    junos_same_secret,
     normalise,
     normalise_eos,
     normalise_junos,
     normalise_srl,
+    sha_crypt,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "deployment"
@@ -65,9 +68,23 @@ class TestInSyncDevicesAreSilent:
         assert normalise_srl(raw) == []
 
     def test_junos_in_sync_normalises_to_empty(self) -> None:
-        """An in-sync firewall reports 55 changed lines. Also the point."""
+        """Captured right after a full `load override` push, comparing the same
+        artifact again. Not empty: Junos stamps `version` and assigns `uid` on
+        every commit, so the artifact (which states neither) always shows them
+        as deletions."""
         raw = _fixture("junos_clean.diff")
-        assert len(raw.splitlines()) > 40, "fixture should carry the real non-empty output"
+        assert "- version " in raw and "uid 2000;" in raw, "fixture should carry the real non-empty output"
+        assert normalise_junos(raw) == []
+
+    def test_a_freshly_booted_junos_normalises_to_empty(self) -> None:
+        """The state every lab deploy starts in, and the first comparison live
+        fw1 will see: booted from vrnetlab's init.conf plus junos.conf, never
+        pushed. Its raw diff is the noisiest one measured -- comment blocks
+        round-tripping, zone pairs moved, and BOTH password hashes re-salted:
+        the lab's `$6$otternetlab$...` shown as `$6$<random>$...`."""
+        raw = _fixture("junos_clean_boot.diff")
+        assert len(raw.splitlines()) > 150, "fixture should carry the real non-empty output"
+        assert raw.count("## SECRET-DATA") == 4
         assert normalise_junos(raw) == []
 
 
@@ -75,17 +92,19 @@ class TestTelemetryEnablementIsSilent:
     """Cycle 034 added device-side telemetry, and a line a device does not echo
     back verbatim would read as a permanent difference -- a push on every cycle.
 
-    Both captured live, from devices whose artifacts carry the new stanza: a leaf
-    with `management api gnmi`, and fw1 with its `snmp` stanza bound to
-    mgmt_junos. The capture script asserted the stanza was in the artifact it
-    compared against, so these are not empty for want of the stanza.
+    Captured from devices whose artifacts carry the new stanza: a leaf with
+    `management api gnmi`, and the firewall with its `snmp` stanza bound to
+    mgmt_junos -- the latter now under the full-override comparison, so it is
+    the same capture as the in-sync fixture, asserted to carry the stanza.
     """
 
     def test_eos_with_gnmi_normalises_to_empty(self) -> None:
         assert normalise_eos(_fixture("eos_clean_gnmi.diff")) == []
 
     def test_junos_with_snmp_normalises_to_empty(self) -> None:
-        assert normalise_junos(_fixture("junos_clean_snmp.diff")) == []
+        artifact = (Path(__file__).parent / "fixtures" / "junos" / "vsrx_after_override.set").read_text()
+        assert "set snmp community otternet-ro" in artifact, "the compared device must carry the stanza"
+        assert normalise_junos(_fixture("junos_clean.diff")) == []
 
 
 class TestRealChangesSurvive:
@@ -124,10 +143,77 @@ class TestRealChangesSurvive:
         because a comment is exactly what Junos does not round-trip and what the
         suppression rules are meant to drop. The first version of this fixture
         made that mistake and tested nothing.
+
+        Re-captured under `load override`: the route was added on the device by
+        hand, so the artifact's comparison shows it as a deletion.
         """
         result = normalise_junos(_fixture("junos_control.diff"))
-        assert result
-        assert any("10.255.255.0/24" in line for line in result)
+        assert result == ["-    route 10.255.255.0/24 next-hop 10.250.110.1;"]
+
+    def test_drift_inside_system_survives(self) -> None:
+        """The hierarchy the old `load replace` never compared at all.
+
+        A syslog host and an NTP server committed by hand on the prototype --
+        configuration nothing in the model states, so a full replace deletes it
+        and the comparison has to say so.
+        """
+        result = normalise_junos(_fixture("junos_system_drift.diff"))
+        assert "-   syslog {" in result
+        assert "-       server 192.0.2.123;" in result
+        assert not [line for line in result if "version" in line or "uid" in line]
+
+    def test_a_changed_password_survives(self) -> None:
+        """Root's hash replaced on the device with one of a DIFFERENT password.
+        No known password explains it, so it is drift -- and the push restores
+        the lab's."""
+        result = normalise_junos(_fixture("junos_changed_password.diff"))
+        assert len(result) == 2
+        assert all("encrypted-password" in line for line in result)
+
+
+class TestReSaltedSecrets:
+    """Junos re-salts `## SECRET-DATA` on load; the same password under a new
+    salt is not drift, a different password is. Only proof suppresses."""
+
+    LAB_HASH = "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71"
+
+    def test_sha_crypt_reproduces_the_labs_hash(self) -> None:
+        """The lab file says it was made with `openssl passwd -6 -salt otternetlab`."""
+        assert sha_crypt("admin@123", self.LAB_HASH) == self.LAB_HASH
+
+    def test_sha_crypt_reproduces_a_hash_junos_generated(self) -> None:
+        """A salt Junos chose itself, taken from the boot capture."""
+        raw = _fixture("junos_clean_boot.diff")
+        generated = [h for h in re.findall(r'encrypted-password "([^"]+)"', raw) if h != self.LAB_HASH]
+        assert generated
+        for value in generated:
+            assert sha_crypt("admin@123", value) == value
+
+    def test_sha256_crypt_and_custom_rounds(self) -> None:
+        """Both checked against `openssl passwd -5` / `-6` with the same settings."""
+        assert sha_crypt("Hello world!", "$5$saltstring") == "$5$saltstring$5B8vYYiY.CVt1RlTTf8KbXBH3hsxY/GNooZaBBGWEc5"
+        assert sha_crypt("Hello world!", "$6$rounds=10000$saltstringsaltstring") == (
+            "$6$rounds=10000$saltstringsaltst$OW1/O6BYHV6BcXZu8QVeXbDWra3Oeqh0sbHbbMCVNSnCM/UrjmM0Dp8vOuZeHBy/YTBmSK6H9qs/y3RnOaw5v."
+        )
+
+    def test_an_unknown_scheme_is_never_proven(self) -> None:
+        assert sha_crypt("admin@123", "$1$abcdefgh$") is None
+        assert not junos_same_secret("$1$a$b", "$1$c$d", ("admin@123",))
+
+    def test_the_same_password_resalted_on_the_device_is_not_drift(self) -> None:
+        """Captured: the admin hash set by hand to `openssl passwd -6 -salt
+        resalted 'admin@123'` -- same password, new salt."""
+        assert normalise_junos(_fixture("junos_resalted_same_password.diff")) == []
+
+    def test_proof_needs_the_password(self) -> None:
+        """With no known password nothing is proven, so the same capture differs.
+        Fail noisy: an unexplained hash is a changed one."""
+        result = normalise_junos(_fixture("junos_resalted_same_password.diff"), passwords=())
+        assert len(result) == 2
+
+    def test_an_unpaired_secret_is_never_suppressed(self) -> None:
+        raw = f'[edit system root-authentication]\n+   encrypted-password "{self.LAB_HASH}"; ## SECRET-DATA\n'
+        assert normalise_junos(raw) == [f'+   encrypted-password "{self.LAB_HASH}"; ## SECRET-DATA']
 
 
 class TestFailNoisy:
@@ -160,6 +246,15 @@ class TestFailNoisy:
 class TestSuppressionReasons:
     """Each suppression is here for a stated reason. These pin the reasons."""
 
+    def test_junos_commit_stamps_are_suppressed_only_where_measured(self) -> None:
+        """`version` at `[edit]` and `uid` under a login, as deletions only.
+        The same text anywhere else, or as an addition, is a difference."""
+        assert normalise_junos("[edit]\n- version 22.3R1.11;\n") == []
+        assert normalise_junos("[edit system login user admin]\n-    uid 2000;\n") == []
+        assert normalise_junos("[edit system login user admin]\n+    uid 2001;\n")
+        assert normalise_junos("[edit system]\n-   version 22.3R1.11;\n")
+        assert normalise_junos("[edit interfaces]\n-    uid 2000;\n")
+
     def test_junos_zone_pair_reordering_is_suppressed(self) -> None:
         raw = "[edit security policies]\n!    from-zone wan to-zone branch { ... }\n"
         assert normalise_junos(raw) == []
@@ -170,13 +265,9 @@ class TestSuppressionReasons:
         `load replace` on the whole `interfaces` hierarchy deleted the vSRX's
         management interface on every push; vrnetlab restored it as root, so an
         in-sync firewall reported `- fxp0 {...}` forever and this module
-        suppressed it. `_junos_replace_tagged` now tags each modelled interface
-        instead of the stanza, so the candidate leaves fxp0 alone and the diff
-        no longer mentions it.
-
-        If it ever appears again, the tagging has regressed and the firewall's
-        management path is being deleted on every push. That must be reported,
-        not hidden.
+        suppressed it. fxp0 is modelled now, and under `load override` an fxp0
+        deletion means the artifact lost it -- which the push's lifeline refuses.
+        That must be reported, not hidden.
         """
         raw = (
             "[edit interfaces]\n"

@@ -1,0 +1,193 @@
+ 
+[edit]
+- version 22.3R1.11;
+- /*
+-  * OTTERNET lab firewall - vSRX profile
+-  *
+-  * The one firewall in this lab. Four zones, and every tenant, customer and
+-  * site reaches every other one by being routed out of the border leaf into a
+-  * zone here and back in -- so there is no path between any two of those
+-  * networks that does not cross this policy.
+-  *
+-  *   ge-0/0/0  10.250.110.2/30  <-> border-leaf1 Et10 (10.250.110.1)  zone k8s-prod
+-  *   ge-0/0/1  10.250.210.2/30  <-> border-leaf1 Et11 (10.250.210.1)  zone app-prod
+-  *   ge-0/0/2  10.250.150.2/30  <-> border-leaf1 Et14 (10.250.150.1)  zone wan
+-  *   ge-0/0/3  10.250.170.2/30  <-> border-leaf1 Et15 (10.250.170.1)  zone branch
+-  *   ge-0/0/4  10.250.10.2/30   <-> border-leaf1 Et16 (10.250.10.1)   zone acme-cloud
+-  *   ge-0/0/5  10.250.20.2/30   <-> border-leaf1 Et17 (10.250.20.1)   zone globex-cloud
+-  *   fxp0                           containerlab management            (vrnetlab)
+-  *
+-  * The last two are per-TENANT rather than per-function, and that is the point:
+-  * each WAN tenant's cloud instances live in their own VRF in the fabric, so
+-  * each needs its own handoff and its own zone. A tenant reaches its own cloud
+-  * and no other, and the rule that says so names two zones rather than
+-  * enumerating addresses.
+-  *
+-  * Interface naming matters: for the juniper_vsrx kind containerlab wires
+-  * fw1:eth1 to ge-0/0/0, because fxp0 takes eth0 as management. A policy written
+-  * against the wrong interface commits cleanly and never matches a packet.
+-  *
+-  * THIS FILE IS APPENDED TO vrnetlab's init.conf, not loaded instead of it.
+-  * launch.py does `cat init.conf $STARTUP_CONFIG_FILE >> juniper.conf`, so
+-  * everything in init.conf -- the admin user, fxp0, the mgmt_junos routing
+-  * instance, ssh and netconf -- is already present and must NOT be repeated
+-  * here. Redefining `system` or `routing-instances` fights with it.
+-  *
+-  * There is no policy budget to manage here. Junos licenses throughput and
+-  * feature bundles (IPS, AppSecure, Content Security), not object counts, so the
+-  * rules below are written one-per-intent rather than merged to fit under a
+-  * ceiling, and the anti-spoofing deny is repeated as the first policy of each
+-  * zone pair instead of being a single global rule.
+-  */
+- /*
+-  * The admin password, set properly.
+-  *
+-  * vrnetlab's init.conf writes it as `plain-text-password-value "admin@123"`,
+-  * and Junos does NOT hash that when the file is the boot configuration -- it
+-  * stores the leaf verbatim, `show configuration system login` shows
+-  * plain-text-password-value rather than the encrypted-password you would
+-  * normally see after a commit, and the account has no usable credential. The
+-  * commit succeeds, every other part of the config applies, and the only symptom
+-  * is "Login incorrect" on a box that otherwise looks perfectly healthy.
+-  *
+-  * Repeating the `system` stanza here is therefore deliberate, and it is the one
+-  * thing in this file that intentionally overlaps init.conf. The hash below is
+-  * SHA-512 of the same password vrnetlab and containerlab already use, so
+-  * `make fw-console`, clab's own tooling and the access controller all keep
+-  * working with one credential:
+-  *
+-  *     openssl passwd -6 -salt otternetlab 'admin@123'
+-  */
++ # Rendered by Infrahub for fw1 -- do not edit.
+   system { ... }
+[edit system root-authentication]
+-   encrypted-password "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71"; ## SECRET-DATA
++   encrypted-password "$6$1g..hNyJ$w/pfadpLjAOwqVQMhSlbuP69NqLMykFrpyMbpSMqO/EYN.hgp.X//JFihzE1QadpuvSibDsF82BLeqgxL70RT."; ## SECRET-DATA
+[edit system login user admin]
+-    uid 2000;
+[edit system login user admin authentication]
+-     encrypted-password "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71"; ## SECRET-DATA
++     encrypted-password "$6$.6tUFPah$lkC1/afOS2XMtemnzYFy1YSUQLsWVDvoph9H4A6IkdB42O5A4kPNQ1m7SMjmCPWOrOABCVtij9vkhu9buRktw."; ## SECRET-DATA
+[edit security policies]
+!    from-zone acme-cloud to-zone wan { ... }
+[edit security policies]
+    from-zone app-prod to-zone k8s-prod { ... }
+!    from-zone branch to-zone k8s-prod { ... }
+!    from-zone branch to-zone tooling { ... }
+!    from-zone branch to-zone wan { ... }
+!    from-zone globex-cloud to-zone wan { ... }
+[edit security policies]
+    from-zone k8s-prod to-zone app-prod { ... }
+!    from-zone wan to-zone acme-cloud { ... }
+!    from-zone wan to-zone app-prod { ... }
+!    from-zone wan to-zone branch { ... }
+!    from-zone wan to-zone globex-cloud { ... }
+[edit security policies]
+-    /*
+-     * The return direction, for sessions the cloud instance starts itself
+-     * -- a backup pushing to the tenant's site, say. Stateful return
+-     * traffic for sessions opened from the site needs no rule; this is
+-     * only for the cloud initiating.
+-     *
+-     * Deliberately NOT a permit to `any`: acme's cloud may reach acme's
+-     * sites and nothing else, so a compromised instance cannot use the
+-     * provider handoff to reach another tenant or the internet.
+-     */
++    /*
++     * Junos evaluates the policies of the matching from-zone/to-zone pair
++     * in order, then falls through to the default policy. Global policies
++     * are consulted AFTER zone-pair policies, not before -- so the
++     * anti-spoofing deny cannot be one global rule at the top. It is
++     * repeated as the first policy of each pair instead, which costs
++     * nothing because Junos does not cap policy count.
++     */
++    /*
++     * The return direction, for sessions the cloud instance starts itself
++     * -- a backup pushing to the tenant's site, say. Stateful return
++     * traffic for sessions opened from the site needs no rule; this is
++     * only for the cloud initiating.
++     *
++     * Deliberately NOT a permit to `any`: acme's cloud may reach acme's
++     * sites and nothing else, so a compromised instance cannot use the
++     * provider handoff to reach another tenant or the internet.
++     */
+     from-zone acme-cloud to-zone wan { ... }
+[edit security policies]
+-    /*
+-     * Junos evaluates the policies of the matching from-zone/to-zone pair
+-     * in order, then falls through to the default policy. Global policies
+-     * are consulted AFTER zone-pair policies, not before -- so the
+-     * anti-spoofing deny cannot be one global rule at the top. It is
+-     * repeated as the first policy of each pair instead, which costs
+-     * nothing because Junos does not cap policy count.
+-     */
+     from-zone app-prod to-zone k8s-prod { ... }
+[edit interfaces]
+-   /*
+-    * MTU, and the one place this profile cannot match the rest of the lab.
+-    *
+-    * The fabric runs an IP MTU of 9214. Junos counts MTU including the 14-byte
+-    * Ethernet header, so matching it would need 9228 -- and vSRX rejects that:
+-    *
+-    *   Value 9228 is not within range (256..9192)
+-    *
+-    * 9192 is the platform maximum, which is an IP MTU of 9178: 36 bytes short
+-    * of the fabric. A full-size 9214-byte packet from a host therefore does
+-    * not fit through the firewall, and the symptom is the expensive one this
+-    * lab warns about everywhere else -- ping works, sessions establish, bulk
+-    * transfers stall with data stuck in Send-Q.
+-    *
+-    * `security flow tcp-mss` below is what makes that safe rather than
+-    * theoretical: the firewall rewrites the MSS in every TCP handshake it
+-    * forwards, so endpoints never build a segment too large for the path
+-    * instead of relying on PMTUD and ICMP getting back to them through a
+-    * default-deny firewall.
+-    */
+    ge-0/0/0 { ... }
+[edit interfaces]
++   /*
++    * MTU, and the one place this profile cannot match the rest of the lab.
++    *
++    * The fabric runs an IP MTU of 9214. Junos counts MTU including the 14-byte
++    * Ethernet header, so matching it would need 9228 -- and vSRX rejects that:
++    *
++    *   Value 9228 is not within range (256..9192)
++    *
++    * 9192 is the platform maximum, which is an IP MTU of 9178: 36 bytes short
++    * of the fabric. A full-size 9214-byte packet from a host therefore does
++    * not fit through the firewall, and the symptom is the expensive one this
++    * lab warns about everywhere else -- ping works, sessions establish, bulk
++    * transfers stall with data stuck in Send-Q.
++    *
++    * `security flow tcp-mss` below is what makes that safe rather than
++    * theoretical: the firewall rewrites the MSS in every TCP handshake it
++    * forwards, so endpoints never build a segment too large for the path
++    * instead of relying on PMTUD and ICMP getting back to them through a
++    * default-deny firewall.
++    */
+    fxp0 { ... }
+[edit applications]
++   /* Infrahub, on the host's tooling-bridge address */
+    application infrahub-api { ... }
+[edit applications]
++   /* Dex, the tooling cluster's identity provider */
+    application tooling-oidc { ... }
+[edit applications]
++   /* The Backstage request portal, on its NodePort */
+    application tooling-portal { ... }
+[edit]
+-  /*
+-   * Static, deliberately. The border leaf points a default route in each tenant
+-   * VRF at this firewall, and the firewall points the tenant prefixes back at the
+-   * leaf. Running BGP here instead would be more realistic and would also hide
+-   * the service-insertion path behind a protocol -- the static routes make it
+-   * obvious that traffic leaves the fabric and comes back.
+-   *
+-   * These live in the default routing instance. fxp0 is in mgmt_junos (init.conf
+-   * sets `management-instance`), so the management default route cannot leak into
+-   * the transit table and steal tenant traffic.
+-   */
+   routing-options { ... }
+
+[edit]
+admin@fw1# 
