@@ -302,8 +302,11 @@ def test_dex_merges_the_sign_in_block_under_grafana() -> None:
     assert oauth["api_url"] == f"{DEX_BACK_CHANNEL}/userinfo"
     assert oauth["client_id"] == "grafana"
     # Everybody Viewer, nobody Admin through sign-in, and no password form.
-    assert oauth["role_attribute_path"] == "'Viewer'"
-    assert oauth["role_attribute_strict"] is True
+    # The role is the org default, not a JMESPath literal: Grafana's ini parser
+    # strips the quotes off `'Viewer'` and strict mode then refused every login.
+    assert ini["users"]["auto_assign_org_role"] == "Viewer"
+    assert "role_attribute_path" not in oauth
+    assert oauth["role_attribute_strict"] is False
     assert oauth["allow_assign_grafana_admin"] is False
     assert ini["auth"]["disable_login_form"] is True
     # root_url is derived from the pinned address, because the redirect URI

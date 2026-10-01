@@ -229,6 +229,10 @@ def _grafana_sign_in(address: str) -> dict[str, Any]:
             # The redirect URI Dex has registered is <root_url>login/generic_oauth.
             "server": {"root_url": f"http://{address}/"},
             "auth": {"disable_login_form": True},
+            # Everyone who signs in lands in the main org as a Viewer. Dex's
+            # static users carry no role or groups claim, so there is nothing
+            # for Grafana to map -- the role comes from this default instead.
+            "users": {"auto_assign_org_role": "Viewer"},
             "auth.generic_oauth": {
                 "enabled": True,
                 "name": "Dex",
@@ -239,11 +243,15 @@ def _grafana_sign_in(address: str) -> dict[str, Any]:
                 "api_url": f"{DEX_BACK_CHANNEL}/userinfo",
                 "login_attribute_path": "email",
                 "email_attribute_path": "email",
-                # A JMESPath literal: every signed-in person is a Viewer. Strict,
-                # so an unmapped role is refused rather than defaulted, and the
-                # login path can never make anyone a server admin.
-                "role_attribute_path": "'Viewer'",
-                "role_attribute_strict": True,
+                # NO role_attribute_path, and NOT strict. A JMESPath literal
+                # (`'Viewer'`) was the first attempt and it locked everyone out:
+                # Grafana's ini parser strips the quotes, the expression becomes
+                # a lookup of a field called `Viewer`, finds nothing, and strict
+                # mode refuses the login -- measured, with "idP did not return a
+                # role attribute". With no path the role is
+                # `auto_assign_org_role` above, and the sign-in path still can
+                # never make anyone a server admin.
+                "role_attribute_strict": False,
                 "allow_assign_grafana_admin": False,
                 "skip_org_role_sync": False,
                 "allow_sign_up": True,

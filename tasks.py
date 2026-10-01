@@ -833,6 +833,34 @@ def _fabric_mgmt_addresses() -> list[str]:
     return addresses
 
 
+def _ensure_socket_directories(lab_path: Path, topology: Path) -> list[Path]:
+    """Create every `wan/run/<router>` bind source the topology names.
+
+    Each FRR router shares its daemon sockets with an frr_exporter sidecar
+    through a bind of `wan/run/<router>`. ContainerLab verifies every bind path
+    before it starts any node, and refuses the whole topology over one that is
+    missing -- `Failed to verify bind path: stat .../wan/run/branch-rtr: no such
+    file or directory` -- where plain Docker would have created it. The lab
+    commits the directories, so this matters only for a checkout that lost them,
+    and it costs nothing.
+    """
+    import yaml
+
+    created: list[Path] = []
+    nodes = (yaml.safe_load(topology.read_text(encoding="utf-8")) or {}).get("topology", {}).get("nodes", {})
+    for node in nodes.values():
+        for bind in (node or {}).get("binds", []) or []:
+            source = str(bind).split(":", 1)[0]
+            if source.startswith("wan/run/"):
+                path = lab_path / source
+                if not path.is_dir():
+                    path.mkdir(parents=True, exist_ok=True)
+                    created.append(path)
+    if created:
+        print(f" - Created {len(created)} FRR socket director{'y' if len(created) == 1 else 'ies'} the sidecars bind")
+    return created
+
+
 @task(
     help={
         "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
@@ -885,6 +913,8 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     if bridge.is_file():
         print(" - Ensuring the tooling bridge exists")
         ctx.run(shlex.quote(str(bridge)), pty=True)
+
+    _ensure_socket_directories(lab_path, topology)
 
     print(f" - Deploying {topology.name} (cEOS takes a few minutes to boot)")
     ctx.run(f"{clab} deploy -t {shlex.quote(str(topology))} --reconfigure", pty=True)
@@ -1428,7 +1458,34 @@ def _force_resync(ctx: Context, kubeconfig: Path) -> None:
     syncs = MAIN_DIRECTORY_PATH / "vidra/infrahub-syncs.yaml"
     print(" - Resetting the syncs so Vidra re-delivers (an unchanged checksum would skip the apply)")
     ctx.run(f"{kube} delete -f {shlex.quote(str(syncs))} --ignore-not-found --timeout=120s", pty=True, warn=True)
+    # DELETING A SYNC TEARS DOWN WHAT IT DELIVERED, and that includes the
+    # applications only Infrahub declares -- `otternet-metrics` and
+    # `otternet-telemetry`, which Vidra delivered before the handover ran.
+    # Re-applying at once recreated their claims while the first namespaces were
+    # still Terminating, and left TWO composed Namespace objects per app: the
+    # orphan, stuck deleting with `deletionPolicy: Delete`, kept deleting the
+    # namespace the live one kept recreating. Measured on the first bootstrap
+    # with them: namespaces aged in seconds for 25 minutes, taking the Secrets
+    # and Telegraf's ConfigMap with them every time. So wait for them to go.
+    _wait_for_namespaces_gone(ctx, kubeconfig, [name for kind, name in INFRAHUB_ONLY_RESOURCES if kind == "fabricapp"])
     ctx.run(f"{kube} apply -f {shlex.quote(str(syncs))}", pty=True, warn=True)
+
+
+def _wait_for_namespaces_gone(ctx: Context, kubeconfig: Path, namespaces: list[str], timeout: int = 600) -> None:
+    """Block until every named namespace has finished terminating."""
+    kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
+    deadline = time.time() + timeout
+    remaining = list(namespaces)
+    while remaining and time.time() < deadline:
+        remaining = [
+            ns for ns in remaining if (ctx.run(f"{kube} get ns {ns} --no-headers", hide=True, warn=True) or MISSING).ok
+        ]
+        if remaining:
+            sleep(10)
+    if remaining:
+        print(f"   WARNING: {', '.join(remaining)} still terminating after {timeout}s; re-applying the syncs anyway")
+    else:
+        print("   observability namespaces torn down; re-applying the syncs")
 
 
 def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:

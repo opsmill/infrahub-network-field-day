@@ -29,6 +29,8 @@ grafana:
       root_url: http://<VIP>/                      # derived from the app's pinned LB address
     auth:
       disable_login_form: true
+    users:
+      auto_assign_org_role: Viewer   # changed at implementation: a `'Viewer'` JMESPath literal lost its quotes in grafana.ini and strict mode refused every login
     auth.generic_oauth:
       enabled: true
       name: Dex
@@ -39,8 +41,7 @@ grafana:
       api_url:   http://172.20.41.101:32556/dex/userinfo
       login_attribute_path: email
       email_attribute_path: email
-      role_attribute_path: "'Viewer'"
-      role_attribute_strict: true
+      role_attribute_strict: false     # no role_attribute_path; see [users] below
       allow_assign_grafana_admin: false
       skip_org_role_sync: false
       allow_sign_up: true

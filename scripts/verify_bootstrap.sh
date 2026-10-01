@@ -111,8 +111,9 @@ check "$empty" "0" "configuration artifacts with content"
 
 stage "lab and devices"
 # 31 since the tooling cluster: `tool-node1` is a lab node like any other,
-# even though nothing in the fabric reaches it.
-check "$(docker ps -q --filter name=clab-otternet | wc -l)" "31" "lab nodes running"
+# even though nothing in the fabric reaches it. 37 since cycle 034: six
+# frr_exporter sidecars, one per FRR router, are lab nodes too.
+check "$(docker ps -q --filter name=clab-otternet | wc -l)" "37" "lab nodes running"
 # Cycle 030 made the bootstrap's device step `invoke reconcile --converge`
 # rather than `invoke provision`, so the string this used to grep for is gone.
 grep -q "Every device is confirmed to match its rendered configuration" "$LOG/bootstrap.log" \
@@ -330,10 +331,14 @@ stage "observability"
 # Grafana, Prometheus and Telegraf, delivered from Infrahub (cycle 034). Every
 # check is about state a person would see, not about a step having run.
 km() { kubectl -n otternet-metrics "$@" 2>/dev/null; }
-prom_pod=$(km get pod -l app.kubernetes.io/name=prometheus -o name | head -1)
+# THROUGH A PORT-FORWARD, NOT `kubectl exec`. The Prometheus image carries no
+# wget or curl, so an exec'd query fails before it is sent -- and every check
+# below then read -1 against a Prometheus that was answering fine.
+km port-forward svc/prometheus-operated 19090:9090 >/dev/null 2>&1 &
+prom_pf=$!
+for _ in $(seq 1 20); do curl -s -o /dev/null http://127.0.0.1:19090/-/ready && break; sleep 3; done
 promql() {
-    km exec "$prom_pod" -c prometheus -- wget -qO- \
-        "http://localhost:9090/api/v1/query?query=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1")" \
+    curl -s --get --max-time 20 http://127.0.0.1:19090/api/v1/query --data-urlencode "query=$1" \
     | python3 -c 'import json,sys
 r = json.load(sys.stdin)["data"]["result"]
 print(int(float(r[0]["value"][1])) if r else 0)' 2>/dev/null || echo -1
@@ -396,6 +401,8 @@ for family in "DcimFabricSwitch 7" "DcimDevice 6" "SecurityFirewall 1" "ComputeP
     check "$(promql "count(count by (device) ({job=\"telemetry\",kind=\"$1\"}))")" "$2" \
         "telemetry reported by every modelled $1"
 done
+
+kill "$prom_pf" 2>/dev/null
 
 elapsed=$(( $(date +%s) - started ))
 printf '\n=== [%s] COMPLETE in %sm%ss — %s failure(s) ===\n' \
