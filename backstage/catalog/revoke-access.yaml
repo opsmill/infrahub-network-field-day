@@ -33,7 +33,7 @@ metadata:
     - curated
 spec:
   type: revoke-access-request
-  owner: user:default/guest
+  owner: group:default/network-team
 
   parameters:
     - title: Which grant
@@ -46,8 +46,13 @@ spec:
           type: string
           # A PICKER, because grants are ingested into the catalogue as
           # Components by the Infrahub provider -- unlike the identity fields on
-          # the request form, whose kinds are not. The entity's name is the
-          # service's own name, which is its hfid.
+          # the request form, whose kinds are not.
+          #
+          # ITS VALUE IS AN ENTITY REF, `component:default/<name>`, NOT THE
+          # GRANT'S NAME. Used directly it put `:` and `/` into the branch name
+          # and an hfid no grant has. The `fetch` step resolves it, and the
+          # update goes by the Infrahub id the provider annotates -- entity names
+          # are lowercased, so even the name part is not reliably the hfid.
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
@@ -71,6 +76,12 @@ spec:
           pattern: '^[a-z0-9][a-z0-9-]*$'
 
   steps:
+    - id: fetch
+      name: Read the grant
+      action: catalog:fetch
+      input:
+        entityRef: ${{ parameters.grant }}
+
     - id: branch
       name: Create the branch
       action: infrahub:graphql:execute
@@ -82,7 +93,7 @@ spec:
             }
           }
         variables:
-          name: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+          name: ${{ "revoke_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.request_reference }}
 
     - id: revoke
       name: Mark the grant decommissioning
@@ -91,12 +102,12 @@ spec:
       # withdraw and the generator moves it to the second once it has. Setting
       # the terminal state by hand would claim the work was done before it was.
       input:
-        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        branch: ${{ "revoke_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.request_reference }}
         query: |
-          mutation ($infrahub_context_account: String!, $name: String!) {
+          mutation ($infrahub_context_account: String!, $id: String!) {
             ServiceAppAccessUpdate(
               context: { account: { id: $infrahub_context_account } }
-              data: { hfid: [$name], status: { value: "decommissioning" } }
+              data: { id: $id, status: { value: "decommissioning" } }
             ) {
               ok
               object {
@@ -106,13 +117,13 @@ spec:
           }
         variables:
           infrahub_context_account: ${{ user.entity.metadata.name }}
-          name: ${{ parameters.grant }}
+          id: ${{ steps.fetch.output.entity.metadata.annotations["infrahub.opsmill.com/id"] }}
 
     - id: await_revoke
       name: Wait for the firewall objects to be removed
       action: infrahub:generators:await
       input:
-        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        branch: ${{ "revoke_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.request_reference }}
         node: ${{ steps.revoke.output.data.ServiceAppAccessUpdate.object.id }}
 
     # The fabric follows, for the same reason the request path regenerates it:
@@ -122,7 +133,7 @@ spec:
       name: Find the AVD generators
       action: infrahub:graphql:execute
       input:
-        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        branch: ${{ "revoke_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.request_reference }}
         query: |
           query {
             hostvar: CoreGeneratorDefinition(name__value: "generate-avd-device-hostvar") {
@@ -145,7 +156,7 @@ spec:
       name: Regenerate the host vars for every switch
       action: infrahub:graphql:execute
       input:
-        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        branch: ${{ "revoke_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.request_reference }}
         query: |
           mutation ($id: String!) {
             CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
@@ -159,7 +170,7 @@ spec:
       name: Regenerate the structured configs
       action: infrahub:graphql:execute
       input:
-        branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+        branch: ${{ "revoke_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.request_reference }}
         query: |
           mutation ($id: String!) {
             CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
@@ -190,8 +201,8 @@ spec:
             }
           }
         variables:
-          name: ${{ "Revoke " + parameters.grant }}
-          source_branch: ${{ "revoke_" + (parameters.grant | lower) + "_" + parameters.request_reference }}
+          name: ${{ "Revoke " + steps.fetch.output.entity.metadata.title }}
+          source_branch: ${{ "revoke_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.request_reference }}
           description: >-
             ${{ "Revocation requested through the service portal by " +
             (user.entity.spec.profile.displayName if user.entity.spec.profile.displayName else user.ref) +

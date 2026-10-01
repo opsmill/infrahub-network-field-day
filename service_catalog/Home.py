@@ -22,6 +22,8 @@ service_catalog_pages = [
     st.Page("pages/1_Create_Segment.py", title="Add Network Segment", icon=":material/lan:"),
     st.Page("pages/2_Add_Server.py", title="Add Server", icon=":material/dns:"),
     st.Page("pages/3_Create_Tenant.py", title="Create Tenant", icon=":material/group:"),
+    st.Page("pages/5_Request_Access.py", title="Request Access", icon=":material/vpn_key:"),
+    st.Page("pages/6_Deploy_Application.py", title="Deploy Application", icon=":material/deployed_code:"),
 ]
 
 visibility_pages = [
