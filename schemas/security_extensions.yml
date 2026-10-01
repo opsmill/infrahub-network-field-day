@@ -233,7 +233,7 @@ extensions:
           kind: Attribute
           cardinality: one
           optional: true
-          description: "The source prefix permitted to poll this firewall over SNMP"
+          description: "The source prefix permitted to poll this firewall over SNMP, inside mgmt_junos"
           identifier: "security_firewall__snmp_clients"
           order_weight: 1710
 

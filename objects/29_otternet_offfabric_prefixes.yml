@@ -54,17 +54,6 @@ spec:
       status: active
       description: "VIP block for the otternet-metrics application (Grafana)"
 
-    # ---- the firewall's internal management network (cycle 034) -----------
-    # Inside the vSRX VM, not on any wire: vrnetlab's user-mode NAT forwards the
-    # container's ports to fxp0 at 10.0.0.15, so a poll from the telemetry
-    # collector reaches the agent with a source in this subnet. That is what the
-    # SNMP community's `clients` names, and why it is not the collector's own
-    # address.
-    - prefix: 10.0.0.0/24
-      role: management
-      status: active
-      description: "vrnetlab's NAT network inside fw1; the source fw1's SNMP agent sees"
-
     # ---- the classic application tier ------------------------------------
     - prefix: 10.210.0.0/24
       role: tenant_host
