@@ -62,4 +62,7 @@ COPY --chown=node:node catalog ./catalog
 COPY --chown=node:node packages/backend/dist/bundle.tar.gz app-config*.yaml ./
 RUN tar xzf bundle.tar.gz && rm bundle.tar.gz
 
-CMD ["node", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.production.yaml"]
+# app-config.docker.yaml, not .production.yaml: the production file brings back
+# the guest provider and Postgres and drops the curated templates. The tooling
+# Deployment passes these same arguments; the default must agree with it.
+CMD ["node", "packages/backend", "--config", "app-config.yaml", "--config", "app-config.docker.yaml"]

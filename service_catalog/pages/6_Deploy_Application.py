@@ -82,8 +82,26 @@ def main() -> None:
             )
             owner_options = {o["id"]: o["display_label"] for o in organizations}
             owner_id = st.selectbox(
-                "Requested by", options=list(owner_options.keys()), format_func=lambda x: owner_options[x]
+                "Owning organisation", options=list(owner_options.keys()), format_func=lambda x: owner_options[x]
             )
+
+        # A CHART IS THE WHOLE WORKLOAD SOURCE (cycle 033), and all three
+        # fields are mandatory together -- without them the create is refused
+        # after the branch already exists.
+        st.subheader("The chart")
+        col_r, col_n, col_v = st.columns([3, 2, 1])
+        with col_r:
+            chart_repository = st.text_input("Chart repository", placeholder="e.g. https://charts.bitnami.com/bitnami")
+        with col_n:
+            chart_name = st.text_input("Chart name", placeholder="e.g. nginx")
+        with col_v:
+            chart_version = st.text_input("Version", placeholder="e.g. 18.2.4")
+        sso_provider = st.selectbox(
+            "Single sign-on",
+            options=["none", "dex"],
+            format_func=lambda x: {"none": "None", "dex": "Dex (the lab's identity provider)"}[x],
+            help="Dex wires the chart's OIDC settings to the lab's one issuer; the chart must support OIDC",
+        )
 
         st.subheader("Exposure")
         exposed = st.checkbox("Expose this application outside the cluster", value=False)
@@ -125,12 +143,19 @@ def main() -> None:
         if not app_name:
             st.error("Application name is required.")
             return
+        if not (chart_repository and chart_name and chart_version):
+            st.error("The chart repository, name and version are all required.")
+            return
 
         branch_name = f"deploy-{app_name.lower().replace(' ', '-')}"
         fields: dict[str, object] = {
             "name": app_name,
             "description": description or f"{app_name} on {cluster_options[cluster_id]}",
             "namespace_name": namespace_name or app_name,
+            "chart_repository": chart_repository.strip(),
+            "chart_name": chart_name.strip(),
+            "chart_version": chart_version.strip(),
+            "sso_provider": sso_provider,
             "exposed": exposed,
             "policy_default_deny": default_deny,
             "policy_allow_dns": allow_dns,
