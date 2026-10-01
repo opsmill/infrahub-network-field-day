@@ -35,8 +35,9 @@ The project extends the base Infrahub image with `pyavd` and project code. Build
 uv run invoke build
 ```
 
-To build against a different Infrahub release, set `INFRAHUB_BASE_VERSION` first — the compose files
-default to `1.10.6`:
+To build against a different Infrahub release, set `INFRAHUB_BASE_VERSION` first. Without it, the
+version is the `ARG INFRAHUB_BASE_VERSION` default in the `Dockerfile`, which the compose files and
+`invoke` both follow:
 
 ```bash
 export INFRAHUB_BASE_VERSION=<infrahub-version>

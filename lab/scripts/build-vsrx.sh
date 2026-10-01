@@ -15,6 +15,9 @@ set -euo pipefail
 SRC="${1:-/images/junos-vsrx3-x86-64-22.3R1.11.qcow2}"
 WORKDIR="${OTTERNET_VRNETLAB_DIR:-$HOME/vrnetlab}"
 BASE_IMAGE="ghcr.io/srl-labs/vrnetlab-base:0.3.0"
+# vrnetlab publishes no releases, so it is pinned to the commit the lab's
+# firewall image was last built from rather than tracking master.
+VRNETLAB_REF="${OTTERNET_VRNETLAB_REF:-4baf0a6fc0b035775f9c6eda398f8867b7e83a65}"
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -34,12 +37,12 @@ VERSION="${VERSION%.qcow2}"
      vrnetlab expects the name Juniper ships: junos-vsrx3-x86-64-<version>.qcow2
      e.g. junos-vsrx3-x86-64-22.3R1.11.qcow2"
 
-say "Fetching vrnetlab into $WORKDIR"
-if [[ -d "$WORKDIR/.git" ]]; then
-    git -C "$WORKDIR" pull --ff-only --quiet || true
-else
-    git clone --depth 1 https://github.com/hellt/vrnetlab "$WORKDIR"
+say "Fetching vrnetlab $VRNETLAB_REF into $WORKDIR"
+if [[ ! -d "$WORKDIR/.git" ]]; then
+    git clone --quiet https://github.com/hellt/vrnetlab "$WORKDIR"
 fi
+git -C "$WORKDIR" fetch --quiet origin
+git -C "$WORKDIR" checkout --quiet --detach "$VRNETLAB_REF"
 
 VSRX_DIR="$WORKDIR/juniper/vsrx"
 [[ -d "$VSRX_DIR" ]] || die "$VSRX_DIR missing -- has vrnetlab moved the juniper directory?"
