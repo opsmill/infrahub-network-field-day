@@ -1,0 +1,46 @@
+#!/bin/sh
+# Rendered by wan/render.py for {{ node }} -- do not edit.
+#
+# {{ tenant.name }} / site {{ site.name }}: a statically routed customer edge.
+#
+# The contrast with {{ tenant.name }}'s other sites is the point. There is no routing
+# protocol on this box at all -- no FRR, no BGP, no adjacency with the
+# provider. It has an address on each side, IP forwarding on, and a default
+# route toward the PE. The provider holds a matching static route for
+# {{ site.lan }} pointing back here and redistributes it into the tenant's VRF,
+# which is what makes this site indistinguishable from an eBGP one to everybody
+# downstream: the DC, the internet, and {{ tenant.name }}'s other sites all learn it the
+# same way.
+#
+# This is how a large number of real small sites actually attach, and it is
+# worth having one in the lab so the tenant model is not quietly assuming every
+# edge speaks BGP.
+set -eu
+log() { echo "[wan-init:{{ node }}] $*"; }
+
+for i in {{ site.ce.wan_interface }} {{ site.ce.lan_interface }}; do
+    waited=0
+    while [ ! -e "/sys/class/net/$i" ]; do
+        waited=$((waited + 1))
+        [ "$waited" -gt 240 ] && { log "FATAL: $i never appeared"; exit 1; }
+        sleep 0.5
+    done
+done
+
+sysctl -qw net.ipv4.ip_forward=1
+sysctl -qw net.ipv4.conf.all.rp_filter=0
+
+ip link set {{ site.ce.wan_interface }} mtu {{ mtu }}
+ip addr replace {{ site.ce.wan_address }} dev {{ site.ce.wan_interface }}
+ip link set {{ site.ce.wan_interface }} up
+
+ip link set {{ site.ce.lan_interface }} mtu {{ mtu }}
+ip addr replace {{ site.ce.lan_address }} dev {{ site.ce.lan_interface }}
+ip link set {{ site.ce.lan_interface }} up
+
+# Everything that is not this site's own LAN goes to the provider. Note this
+# is a real default route, not a route to 10.0.0.0/8: this site's tenant buys
+# internet access, and a default is how it gets used.
+ip route replace default via {{ site.pe.address | replace('/30','') }} dev {{ site.ce.wan_interface }}
+
+log "{{ site.ce.wan_interface }} -> {{ site.ce.wan_address }}, {{ site.ce.lan_interface }} -> {{ site.ce.lan_address }}, default via {{ site.pe.address | replace('/30','') }}"

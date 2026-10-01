@@ -3,7 +3,7 @@
 #
 # Cycle 010 modelled the WAN's technical layer -- the circuits, the sites, the
 # internet peering, the VRFs and the firewall zones -- and deferred the services
-# on top. These are those services, transcribed from ../lab/wan/tenants.yml.
+# on top. These are those services, transcribed from lab/wan/tenants.yml.
 #
 # The asymmetry is the point and is not a transcription slip: acme has
 # `internet: true` in the lab file and globex has `internet: false`, so there is

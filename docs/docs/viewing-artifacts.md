@@ -102,7 +102,7 @@ This means the structured-config generator hasn't run for the fabric yet. See th
 
 The artifacts are also accessible via the Infrahub API and through Ansible playbooks orchestrated by Semaphore at `http://localhost:3000`. Two playbook trees exist, and they consume different artifacts:
 
-- `ansible/` at the repository root — the tree Semaphore runs. `inventory.yml` builds the inventory from Infrahub and `deploy.yml` fetches each device's **AVD EOS Configuration** with `opsmill.infrahub.artifact_fetch`. `deploy_clab.yml` fetches the **ContainerLab Topology** artifact plus every device's EOS config, stages them on a ContainerLab host, and deploys the lab; see the [ContainerLab page](./containerlab.md).
-- `lab/playbooks/` — the AVD-toolchain playbooks for the committed lab (`build.yml`, `deploy.yml`, `deploy-eapi.yml`, `test.yml`), driven from `lab/Makefile`.
+- `ansible/` at the repository root — the tree Semaphore runs. `inventory.yml` builds the inventory from Infrahub and `deploy.yml` fetches each device's **AVD EOS Configuration** with `opsmill.infrahub.artifact_fetch`.
+- `lab/avd/` — the lab's own AVD toolchain, driven from `lab/Makefile`. The lab is configured from Infrahub by `invoke provision`, not by these; see the [ContainerLab page](./containerlab.md).
 
 Both need the `opsmill.infrahub` collection: `ansible-galaxy collection install -r ansible/galaxy-requirements.yml`.

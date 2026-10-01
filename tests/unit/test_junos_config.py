@@ -1,6 +1,6 @@
 """Golden-file tests for the perimeter firewall's Junos render.
 
-The oracle is `../lab/configs/fw/vsrx/junos.conf` -- the configuration the
+The oracle is `lab/configs/fw/vsrx/junos.conf` -- the configuration the
 firewall actually runs, written by hand rather than by this repository. That
 makes equality the right assertion: a substring check would pass on a policy
 stanza with a rule in the wrong position, and Junos evaluates first-match, so
@@ -29,13 +29,13 @@ import pytest
 from transforms.junos_config import JunosConfig, JunosConfigError
 
 FIXTURE = Path("tests/unit/fixtures/junos/fw1.json")
-JUNOS_CONF = Path("../lab/configs/fw/vsrx/junos.conf")
+JUNOS_CONF = Path(__file__).resolve().parents[2] / "lab" / "configs/fw/vsrx/junos.conf"
 REPO_ROOT = Path(__file__).parents[2]
 
 
 def _conf() -> list[str]:
     if not JUNOS_CONF.is_file():
-        pytest.skip("lab repo not checked out alongside this one")
+        pytest.skip("the lab file this test reads is missing from lab/")
     return JUNOS_CONF.read_text(encoding="utf-8").splitlines()
 
 

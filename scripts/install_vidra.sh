@@ -25,7 +25,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LAB_KUBECONFIG="${LAB_KUBECONFIG:-$REPO_DIR/../lab/k8s/.kubeconfig/kubeconfig.yaml}"
+LAB_KUBECONFIG="${LAB_KUBECONFIG:-$REPO_DIR/lab/k8s/.kubeconfig/kubeconfig.yaml}"
 export KUBECONFIG="${KUBECONFIG:-$LAB_KUBECONFIG}"
 
 INFRAHUB_USERNAME="${INFRAHUB_USERNAME:-admin}"

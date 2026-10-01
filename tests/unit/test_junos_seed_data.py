@@ -1,7 +1,7 @@
 """Seed-parity tests for the perimeter firewall (objects/32).
 
 `objects/32_otternet_security.yml` is a hand transcription of
-`../lab/configs/fw/vsrx/junos.conf`, and cycle 023 found it was not a faithful
+`lab/configs/fw/vsrx/junos.conf`, and cycle 023 found it was not a faithful
 one: cycle 010 modelled the firewall's structure correctly and its values
 approximately. These tests are what stop that recurring.
 
@@ -29,7 +29,7 @@ import pytest
 import yaml
 
 OBJECT_FILE = Path("objects/32_otternet_security.yml")
-JUNOS_CONF = Path("../lab/configs/fw/vsrx/junos.conf")
+JUNOS_CONF = Path(__file__).resolve().parents[2] / "lab" / "configs/fw/vsrx/junos.conf"
 
 # Junos keywords, referenced by rules but never declared in the address book.
 KEYWORDS = {"any"}
@@ -48,7 +48,7 @@ def _data(kind: str) -> list[dict[str, Any]]:
 
 def _conf() -> list[str]:
     if not JUNOS_CONF.is_file():
-        pytest.skip("lab repo not checked out alongside this one")
+        pytest.skip("the lab file this test reads is missing from lab/")
     return JUNOS_CONF.read_text(encoding="utf-8").splitlines()
 
 
@@ -326,7 +326,7 @@ def test_the_tcp_mss_clamp_matches_the_device() -> None:
     cycle-026 task named the security file and was wrong about it.
     """
     if not JUNOS_CONF.is_file():
-        pytest.skip("lab repo not checked out alongside this one")
+        pytest.skip("the lab file this test reads is missing from lab/")
 
     device = re.search(r"^\s*mss (\d+);", JUNOS_CONF.read_text(encoding="utf-8"), re.MULTILINE)
     assert device, "no `mss` line in the device file"

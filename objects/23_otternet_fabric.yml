@@ -21,7 +21,7 @@
 #
 #   The cleartext they encode carries the lab's own name (`Otternet-Underlay`,
 #   `Otternet-Overlay`, `Otternet-Mlag`), and ciphertext is opaque to a rename.
-#   So renaming the lab means re-rendering the lab repository's AVD output --
+#   So renaming the lab means re-rendering the lab's AVD output --
 #   `make avd-build` -- and copying the new values here; a search-and-replace
 #   leaves these three strings encoding the previous name, and nothing fails
 #   until the golden configs are compared.

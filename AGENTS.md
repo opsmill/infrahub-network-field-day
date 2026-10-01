@@ -33,11 +33,13 @@ Key docs to read before larger changes:
 - `schemas/` - Infrahub schema definitions, split between base schemas and
   project/feature extensions.
 - `objects/` - seed data loaded in filename order. This repository models one
-  fabric, `OTTERNET_FABRIC`, which is the containerlab lab in the OTTERNET lab repo;
+  fabric, `OTTERNET_FABRIC`, which is the containerlab lab under `lab/`;
   the upstream reference design's example fabrics were removed.
 - `menus/` - Infrahub UI menu definitions.
 - `docs/` - Docusaurus documentation.
-- `lab/` - ContainerLab artifact/deployment helpers.
+- `lab/` - the OTTERNET lab: the committed ContainerLab topology, its WAN, firewall,
+  Kubernetes and Crossplane assets, and its own `README.md` and Makefile. It used to be a
+  sibling repository at `../lab`; it was moved in, and `invoke lab` resolves it here.
 - `queries/` - GraphQL queries with no Python consumer in this repository. Currently
   one: `artifact_ids.gql`, polled by the Vidra operator.
 - `vidra/` - deployment assets for the Vidra operator, which applies the Crossplane
@@ -583,7 +585,7 @@ the intent is withdrawn and the router still carries the route — which is the 
 exists to close.
 
 **The WAN half was safe to change precisely because it is pinned.** `frr_config` is held
-byte-for-byte against `../lab/wan/rendered/*/frr.conf`, and filtering a status nothing currently
+byte-for-byte against `lab/wan/rendered/*/frr.conf`, and filtering a status nothing currently
 carries is a no-op — so the existing assertions proved the change altered nothing, and a new test
 holds a decommissioned service's output against the *removal* of that service rather than merely
 asserting it changed.
@@ -690,7 +692,7 @@ Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `frr_config` renders the WAN's FRR configuration — the two ISP provider-edge routers, the
 internet router, the two customer edges and the branch router — as one `text/plain` artifact per
 device, targeting the `frr_routers` group. It is the half of the lab PyAVD does not cover, and
-it is held byte-for-byte against `../lab/wan/rendered/*/frr.conf` by
+it is held byte-for-byte against `lab/wan/rendered/*/frr.conf` by
 `tests/unit/test_frr_config.py`. Two things to know before changing it:
 
 - It reads the **service** layer as well as the technical one. A provider edge's per-tenant
@@ -698,7 +700,7 @@ it is held byte-for-byte against `../lab/wan/rendered/*/frr.conf` by
   `ServiceTenantCloud.prefix` and whether a `ServiceInternetAccess` exists. That is the
   documented exception to "renderers read technical objects" — the provider edge's policy *is*
   the service intent.
-- Its templates are ported from `../lab/wan/templates/` with exactly one line changed, the
+- Its templates are ported from `lab/wan/templates/` with exactly one line changed, the
   provenance header. Every comment is deliberate; they are most of the teaching value of those
   configs.
 
@@ -1194,20 +1196,23 @@ clone of it fails outright.
 
 ## Bringing the lab up from Infrahub
 
-Two tasks, in order. The topology belongs to the sibling OTTERNET lab repository;
-the configuration belongs here.
+Two tasks, in order. The topology belongs to the lab under `lab/`; the
+configuration belongs to Infrahub.
 
 ```bash
-uv run invoke lab          # deploy ../lab/otternet.clab.yml, wait for eAPI
+uv run invoke lab          # deploy lab/otternet.clab.yml, wait for eAPI
 uv run invoke provision    # push every rendered artifact onto the devices
 ```
 
-`invoke lab` deploys the lab repository's committed topology **as-is**. Nothing
+`invoke lab` deploys the lab's committed topology **as-is**. Nothing
 renders a topology from Infrahub. The fabric comes up unconfigured on purpose:
 the cEOS nodes are given no `startup-config`, only `CLAB_MGMT_VRF` and a
-management address, so they boot reachable and empty. `../lab` is resolved by
-walking up from this checkout, because a plain `../lab` is wrong from a git
-worktree; set `OTTERNET_LAB_DIR` to override.
+management address, so they boot reachable and empty. The lab resolves to
+`lab/` in the **main** checkout, even from a git worktree, because there is one
+lab and its runtime state (`clab-otternet/`, the kubeconfigs, the FRR socket
+directories) lives under its directory; set `OTTERNET_LAB_DIR` to override.
+It renders `lab/wan/render.py` first, because every FRR router bind-mounts that
+gitignored output and ContainerLab refuses a missing bind path.
 
 `invoke provision` then makes each device match its artifact. Three families,
 three routes in, because the lab gives them three different front doors:
@@ -1251,7 +1256,7 @@ uv run invoke cluster      # Cilium, then Vidra, then Crossplane, then the hando
 uv run invoke vidra        # the operator on its own, for a re-install
 ```
 
-`invoke cluster` runs the **lab repository's** installers for the CNI and
+`invoke cluster` runs the **lab's** installers for the CNI and
 Crossplane rather than reimplementing them — those are the lab's, the same way
 the topology is. Cilium has to be first and cannot be managed by Crossplane: it
 *is* the pod network, so a controller needing a pod network cannot be what
@@ -1294,8 +1299,8 @@ four** afterwards, and what happens next divides them:
 | --- | --- | --- |
 | `fabricpeering.otternet.lab/otternet` | **Infrahub**, via `ServiceFabricPeering` | re-delivered by Vidra |
 | `fabricapp.otternet.lab/otternet-demo` | **Infrahub**, via `ServiceFabricApp` | re-delivered by Vidra |
-| `fabricapp.otternet.lab/otternet-observability` | the lab repository | gone |
-| `fabricapp.otternet.lab/otternet-access` | the lab repository | gone |
+| `fabricapp.otternet.lab/otternet-observability` | the lab (`lab/`) | gone |
+| `fabricapp.otternet.lab/otternet-access` | the lab (`lab/`) | gone |
 
 **The bottom two are deleted because nothing models them.** A cluster carrying a
 workload no service object declares is state no proposed change can explain, which
@@ -1439,7 +1444,7 @@ uv run invoke avd --branch b --merge    # ... on a branch, merged when it succee
 uv run invoke bootstrap                 # the whole environment, one command
 uv run invoke bootstrap --fresh         # ... destroying the stack and the lab first
 scripts/verify_bootstrap.sh             # rebuild from nothing and assert the result
-uv run invoke lab                       # deploy ../lab's topology with management connectivity
+uv run invoke lab                       # deploy lab/'s topology with management connectivity
 uv run invoke lab --destroy             # tear it down
 uv run invoke provision                 # push every rendered artifact onto the running devices
 uv run invoke provision --dry-run       # ... showing what would be pushed, changing nothing

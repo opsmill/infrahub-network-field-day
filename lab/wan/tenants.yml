@@ -1,0 +1,294 @@
+---
+# ============================================================================
+# The WAN: the ISP, its tenants, the internet, and the branch office.
+#
+# This is the data model for everything outside the Arista fabric. AVD renders
+# the fabric from its own data model; this renders the ISP, CE and internet
+# routers from this one, with the same property: you change the model,
+# re-render, review the diff, then push.
+#
+#   make wan-build     render every FRR config offline -- no lab needed
+#   git diff wan/rendered/
+#   make wan-deploy    push and reload, without restarting anything
+#
+# ---------------------------------------------------------------------------
+# TENANT, NOT CUSTOMER
+#
+# The unit of isolation is the TENANT, and a tenant may have several SITES.
+# This matters because the two are routinely confused, and conflating them is
+# what makes multi-site customers painful later:
+#
+#   * a tenant gets one VRF on the PE, one identity, one policy
+#   * a site is one attachment circuit into that VRF
+#
+# So two sites of the same tenant reach each other automatically -- they are in
+# the same VRF, there is nothing to leak -- while two tenants cannot reach each
+# other at all. Sites of one tenant need not attach the same way: `kind: bgp`
+# runs eBGP with the PE, `kind: static` is a statically routed handoff with no
+# protocol at all, and the PE normalises both into the same L3VPN.
+#
+# TO ADD A SITE: add an entry under a tenant's `sites`, add its nodes and links
+# to otternet.clab.yml, then `make wan-build && make wan-deploy`.
+# TO ADD A TENANT: add a `tenants` entry, and give it a DC VRF in
+# avd/group_vars/OTTERNET_FABRIC/10-network-services.yml plus a firewall zone in
+# configs/fw/vsrx/junos.conf if it buys cloud resources.
+# ============================================================================
+
+isp:
+  asn: 65500
+  # What EVERY tenant may reach in the datacentre, regardless of what they buy.
+  # This is the shared half of the import policy: the DC's published service
+  # range, which is common infrastructure.
+  #
+  # It is applied as an import route-map into every tenant VRF, and together
+  # with the per-tenant additions below it is the reason tenant A cannot see
+  # tenant B. Every tenant's prefixes sit in the ISP's default table -- they
+  # have to, or the DC could not route back -- so if this were replaced by
+  # "import everything", the tenants would reach each other directly across the
+  # provider. It is the WAN's equivalent of the fabric's RM-CILIUM-IN.
+  dc_service_prefixes:
+    - 10.112.240.0/24        # the DC's LoadBalancer VIP range
+
+  # The internet, such as it is: one AS on the far side of the core PE with a
+  # web server behind it. Tenants with `internet: true` get a default route
+  # imported into their VRF and their prefixes announced outward; tenants
+  # without it get neither, and that difference is the whole point -- internet
+  # access is a product the tenant either buys or does not.
+  #
+  # NOTE: no NAT anywhere. Customer LANs are RFC1918 and the internet router
+  # simply holds a route back to them, which a real internet obviously does
+  # not. A production design either assigns the customer public space or NATs
+  # at the edge; neither is modelled here because the FRR image has no
+  # iptables or nft, and the routing-policy story -- who gets a default route
+  # and who does not -- is what this is meant to show.
+  internet:
+    asn: 64500
+    router: internet-rtr
+    # The aggregate the ISP announces to the internet on its customers' behalf.
+    customer_aggregate: 10.60.0.0/16
+    peering:
+      # `interface` is the PROVIDER's side of the wire and `router_interface`
+      # is the internet router's. Two names because they are two devices --
+      # conflating them is how the internet router ends up waiting forever for
+      # an interface that only exists on isp-pe2.
+      node: isp-pe2
+      interface: eth3
+      address: 10.52.0.1/30
+      router_interface: eth1
+      peer: 10.52.0.2
+    host:
+      node: internet-host
+      interface: eth1
+      address: 198.51.100.10/24
+      gateway: 198.51.100.1
+    lan: 198.51.100.0/24
+    lan_interface: eth2
+    lan_address: 198.51.100.1/24
+
+  # Customer-facing PE. Holds a VRF per customer.
+  edge:
+    node: isp-pe1
+    loopback: 10.50.0.1
+    core:
+      interface: eth1
+      address: 10.50.255.1/30
+      peer: 10.50.255.2
+
+  # DC-facing PE. Default VRF only -- plain transit.
+  core:
+    node: isp-pe2
+    loopback: 10.50.0.2
+    core:
+      interface: eth1
+      address: 10.50.255.2/30
+      peer: 10.50.255.1
+    # eBGP to border-leaf1 in VRF WAN.
+    dc:
+      interface: eth2
+      address: 10.250.50.2/30
+      peer: 10.250.50.1
+      peer_asn: 65103
+
+tenants:
+  # ==========================================================================
+  # acme -- the fleshed-out case: two sites attached two different ways, a
+  # private cloud subnet in the datacentre, and internet access.
+  # ==========================================================================
+  - name: acme
+    # `id` drives the addressing and the VRF table number, so it has to be
+    # unique. Everything below could be derived from it, and is written out
+    # instead because an addressing plan you have to compute in your head is
+    # one you cannot review.
+    id: 10
+    vrf: CUST_ACME
+    vrf_table: 1010
+    # Buys internet access: gets a default route imported into CUST_ACME and
+    # its prefixes announced to AS 64500. Compare globex below.
+    internet: true
+
+    # Isolated cloud resources in the datacentre. This is a VRF of its own in
+    # the fabric with no route to any other tenant, and the ONLY way in is out
+    # of the border leaf, through a vSRX zone policy, and back -- the same
+    # service-insertion path every other network in this lab takes. The
+    # firewall matches on source, so acme's sites reach acme's cloud and
+    # globex cannot.
+    #
+    # The fabric side of this lives in AVD (VRF TENANT_ACME, VLAN 1310) and
+    # the policy in configs/fw/vsrx/junos.conf (zone acme-cloud).
+    dc:
+      vrf: TENANT_ACME
+      zone: acme-cloud
+      subnet: 10.220.10.0/24
+      # Bare metal, or a VM -- from the fabric's point of view it is a host on
+      # an access port in VLAN 1310, which is exactly what a tenant's cloud
+      # instance is. Kubernetes resources are the other shape this takes, and
+      # a tenant gets those through the access portal rather than here.
+      hosts:
+        - node: acme-cloud1
+          interface: eth1
+          address: 10.220.10.10/24
+          gateway: 10.220.10.1
+
+    sites:
+      # ---- site 1: eBGP, the classic managed CE ---------------------------
+      - name: hq
+        kind: bgp
+        asn: 65010
+        lan: 10.60.10.0/24
+        pe:
+          node: isp-pe1
+          interface: eth2
+          address: 10.51.10.1/30
+        ce:
+          node: cust-acme-ce
+          wan_interface: eth1
+          wan_address: 10.51.10.2/30
+          lan_interface: eth2
+          lan_address: 10.60.10.1/24
+        host:
+          node: cust-acme-host
+          interface: eth1
+          address: 10.60.10.10/24
+          gateway: 10.60.10.1
+
+      # ---- site 2: statically routed, no protocol at all -------------------
+      # A different KIND of edge for the same tenant. There is no BGP session
+      # here: the PE holds a static route to the site LAN pointing at the CE
+      # and redistributes it into the VRF, and the CE holds a default route
+      # pointing back. Common for small sites, and the reason the tenant/site
+      # split matters -- hq and dr reach each other because they share a VRF,
+      # not because anything was leaked between them.
+      - name: dr
+        kind: static
+        lan: 10.60.11.0/24
+        pe:
+          node: isp-pe1
+          interface: eth4
+          address: 10.51.11.1/30
+        ce:
+          node: cust-acme-dr-ce
+          wan_interface: eth1
+          wan_address: 10.51.11.2/30
+          lan_interface: eth2
+          lan_address: 10.60.11.1/24
+        host:
+          node: cust-acme-dr-host
+          interface: eth1
+          address: 10.60.11.10/24
+          gateway: 10.60.11.1
+
+  # ==========================================================================
+  # globex -- the control. One site, its own cloud subnet, and NO internet
+  # product. Every "acme can, globex cannot" assertion in `make verify` leans
+  # on this tenant existing and being configured identically apart from what
+  # it bought.
+  # ==========================================================================
+  - name: globex
+    id: 20
+    vrf: CUST_GLOBEX
+    vrf_table: 1020
+    internet: false
+
+    dc:
+      vrf: TENANT_GLOBEX
+      zone: globex-cloud
+      subnet: 10.220.20.0/24
+      hosts:
+        - node: globex-cloud1
+          interface: eth1
+          address: 10.220.20.10/24
+          gateway: 10.220.20.1
+
+    sites:
+      - name: hq
+        kind: bgp
+        asn: 65020
+        lan: 10.60.20.0/24
+        pe:
+          node: isp-pe1
+          interface: eth3
+          address: 10.51.20.1/30
+        ce:
+          node: cust-globex-ce
+          wan_interface: eth1
+          wan_address: 10.51.20.2/30
+          lan_interface: eth2
+          lan_address: 10.60.20.1/24
+        host:
+          node: cust-globex-host
+          interface: eth1
+          address: 10.60.20.10/24
+          gateway: 10.60.20.1
+
+# The branch office is deliberately not a customer.
+#
+# It has a private circuit into border-leaf1 and never touches the ISP, so it
+# is a different trust level: its own VRF on the border leaf and its own
+# firewall zone, with a policy that can be more permissive than the WAN's
+# without loosening anything for the customers.
+branch:
+  name: branch
+  asn: 65030
+  loopback: 10.70.255.1
+  lan: 10.70.0.0/24
+  router:
+    node: branch-rtr
+    dc_interface: eth1
+    dc_address: 10.250.70.2/30
+    dc_peer: 10.250.70.1
+    dc_peer_asn: 65103
+    # The branch LAN is a switched segment, not a point-to-point link per host.
+    # Three devices share 10.70.0.0/24 and have to reach each other directly --
+    # guacd opens a VNC session to the desktop without that traffic ever leaving
+    # the site -- so the router's LAN ports are enslaved to a bridge it also
+    # addresses. This is what the switch built into a branch router does.
+    lan_bridge: br-branch
+    lan_address: 10.70.0.1/24
+    lan_interfaces:
+      - eth2      # branch-host       (the original multitool test host)
+      - eth3      # branch-desktop    (the XFCE workstation)
+      - eth4      # branch-guacd      (the VNC gateway Guacamole drives)
+  hosts:
+    - node: branch-host
+      interface: eth1
+      address: 10.70.0.10/24
+      gateway: 10.70.0.1
+    # The branch employee's workstation. Everything the access demo does is done
+    # from a browser on this desktop, reached through Guacamole.
+    - node: branch-desktop
+      interface: eth1
+      address: 10.70.0.20/24
+      gateway: 10.70.0.1
+    # guacd, which is the half of Guacamole that actually speaks VNC. It sits on
+    # the branch LAN so the remote-desktop session crosses the site network
+    # rather than the lab's management bridge; the web front end it serves does
+    # not need to be here and is not.
+    - node: branch-guacd
+      interface: eth1
+      address: 10.70.0.31/24
+      gateway: 10.70.0.1
+
+# MTU for every WAN interface. Matches what AVD configures on the border leaf;
+# containerlab creates these veths at 9500 and the mismatch is silent and
+# expensive -- ping works, sessions establish, bulk transfers stall forever.
+mtu: 9214

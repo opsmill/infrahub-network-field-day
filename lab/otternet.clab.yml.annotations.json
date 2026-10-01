@@ -1,0 +1,278 @@
+{
+  "freeTextAnnotations": [],
+  "freeShapeAnnotations": [],
+  "trafficRateAnnotations": [],
+  "groupStyleAnnotations": [],
+  "networkNodeAnnotations": [],
+  "nodeAnnotations": [
+    {
+      "id": "spine1",
+      "position": {
+        "x": 380,
+        "y": 100
+      },
+      "geoCoordinates": {
+        "lat": 48.775846,
+        "lng": 9.182932
+      }
+    },
+    {
+      "id": "spine2",
+      "position": {
+        "x": 580,
+        "y": 100
+      },
+      "geoCoordinates": {
+        "lat": 50.110924,
+        "lng": 8.682127
+      }
+    },
+    {
+      "id": "k8s-leaf1",
+      "position": {
+        "x": 180,
+        "y": 280
+      },
+      "geoCoordinates": {
+        "lat": 48.856613,
+        "lng": 2.352222
+      }
+    },
+    {
+      "id": "k8s-leaf2",
+      "position": {
+        "x": 340,
+        "y": 280
+      },
+      "geoCoordinates": {
+        "lat": 51.507351,
+        "lng": -0.127758
+      }
+    },
+    {
+      "id": "app-leaf1",
+      "position": {
+        "x": 640,
+        "y": 300
+      },
+      "geoCoordinates": {
+        "lat": 48.775846,
+        "lng": 11.982932
+      }
+    },
+    {
+      "id": "app-leaf2",
+      "position": {
+        "x": 760,
+        "y": 300
+      },
+      "geoCoordinates": {
+        "lat": 50.110924,
+        "lng": 11.482127
+      }
+    },
+    {
+      "id": "border-leaf1",
+      "position": {
+        "x": 960,
+        "y": 300
+      },
+      "geoCoordinates": {
+        "lat": 48.856613,
+        "lng": 5.152222
+      }
+    },
+    {
+      "id": "fw1",
+      "position": {
+        "x": 960,
+        "y": 440
+      },
+      "geoCoordinates": {
+        "lat": 51.507351,
+        "lng": 2.672242
+      }
+    },
+    {
+      "id": "k8s-node1",
+      "position": {
+        "x": 180,
+        "y": 420
+      },
+      "geoCoordinates": {
+        "lat": 50.755745,
+        "lng": 11.162831
+      }
+    },
+    {
+      "id": "k8s-node2",
+      "position": {
+        "x": 320,
+        "y": 420
+      },
+      "geoCoordinates": {
+        "lat": 52.090823,
+        "lng": 10.662026
+      }
+    },
+    {
+      "id": "k8s-node3",
+      "position": {
+        "x": 420,
+        "y": 420
+      },
+      "geoCoordinates": {
+        "lat": 50.836512,
+        "lng": 4.332121
+      }
+    },
+    {
+      "id": "host-a",
+      "position": {
+        "x": 640,
+        "y": 420
+      },
+      "geoCoordinates": {
+        "lat": 53.48725,
+        "lng": 1.852141
+      }
+    },
+    {
+      "id": "host-b",
+      "position": {
+        "x": 760,
+        "y": 420
+      },
+      "geoCoordinates": {
+        "lat": 51.575846,
+        "lng": 9.182932
+      }
+    },
+    {
+      "id": "branch-host",
+      "position": {
+        "x": 1300,
+        "y": 300
+      }
+    },
+    {
+      "id": "branch-rtr",
+      "position": {
+        "x": 1160,
+        "y": 300
+      }
+    },
+    {
+      "id": "cust-globex-host",
+      "position": {
+        "x": 1880,
+        "y": 180
+      }
+    },
+    {
+      "id": "cust-globex-ce",
+      "position": {
+        "x": 1740,
+        "y": 180
+      }
+    },
+    {
+      "id": "cust-acme-host",
+      "position": {
+        "x": 1540,
+        "y": -80
+      }
+    },
+    {
+      "id": "cust-acme-ce",
+      "position": {
+        "x": 1540,
+        "y": 20
+      }
+    },
+    {
+      "id": "isp-pe2",
+      "position": {
+        "x": 1340,
+        "y": 180
+      }
+    },
+    {
+      "id": "isp-pe1",
+      "position": {
+        "x": 1540,
+        "y": 180
+      }
+    },
+    {
+      "id": "branch-guac",
+      "position": {
+        "x": 1420,
+        "y": 440
+      }
+    },
+    {
+      "id": "branch-guacd",
+      "position": {
+        "x": 1120,
+        "y": 440
+      }
+    },
+    {
+      "id": "branch-desktop",
+      "position": {
+        "x": 1260,
+        "y": 440
+      }
+    },
+    {
+      "id": "globex-cloud1",
+      "position": {
+        "x": 840,
+        "y": 420
+      }
+    },
+    {
+      "id": "acme-cloud1",
+      "position": {
+        "x": 700,
+        "y": 420
+      }
+    },
+    {
+      "id": "internet-host",
+      "position": {
+        "x": 1740,
+        "y": 300
+      }
+    },
+    {
+      "id": "internet-rtr",
+      "position": {
+        "x": 1560,
+        "y": 300
+      }
+    },
+    {
+      "id": "cust-acme-dr-host",
+      "position": {
+        "x": 1880,
+        "y": 40
+      }
+    },
+    {
+      "id": "cust-acme-dr-ce",
+      "position": {
+        "x": 1700,
+        "y": 40
+      }
+    }
+  ],
+  "edgeAnnotations": [],
+  "aliasEndpointAnnotations": [],
+  "viewerSettings": {
+    "style": "default",
+    "linkLabelMode": "show-all",
+    "lastNonTelemetryLinkLabelMode": "show-all"
+  }
+}

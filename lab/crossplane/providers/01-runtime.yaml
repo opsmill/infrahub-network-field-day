@@ -1,0 +1,61 @@
+---
+# Pin each provider's ServiceAccount name.
+#
+# By default Crossplane names the provider's ServiceAccount after the *package
+# revision* -- provider-kubernetes-d1ed189e04fc -- so the name changes every
+# time the pinned version is bumped. Any ClusterRoleBinding written against it
+# then silently stops applying, and the provider starts failing with
+# "cannot get ...: forbidden" on a deploy that changed nothing but a version
+# tag. A DeploymentRuntimeConfig fixes the name so the RBAC below stays valid.
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: provider-kubernetes
+spec:
+  serviceAccountTemplate:
+    metadata:
+      name: provider-kubernetes
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        spec:
+          containers:
+            # The container Crossplane runs the provider binary in is always
+            # named package-runtime; this patches its args rather than replacing
+            # the container.
+            - name: package-runtime
+              args:
+                # Shorten the drift-detection interval from the default minute.
+                #
+                # Crossplane corrects drift when it next polls the resource, so
+                # with the default a hand-edited CiliumBGPClusterConfig stays
+                # wrong for up to a minute. That is fine in production and
+                # useless in a demo, where the whole point is to edit something
+                # by hand and watch it be reverted while you are still looking
+                # at the terminal. `make xp-drift` depends on this.
+                - --poll=20s
+                - --max-reconcile-rate=20
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: provider-helm
+spec:
+  serviceAccountTemplate:
+    metadata:
+      name: provider-helm
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        spec:
+          containers:
+            - name: package-runtime
+              args:
+                # Same reasoning as provider-kubernetes: on the default poll a
+                # chart-values change sits unapplied for up to a minute, which
+                # during a demo -- or while waiting for a fix to a crash-looping
+                # pod to take effect -- is long enough to look broken.
+                - --poll=20s
+                - --max-reconcile-rate=20

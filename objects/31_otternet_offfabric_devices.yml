@@ -22,7 +22,7 @@
 # references them, and the branch desktop and Guacamole containers are lab
 # plumbing for demonstrating access rather than modelled infrastructure.
 #
-# Sourced from ../lab/wan/tenants.yml and ../lab/configs/fw/vsrx/junos.conf.
+# Sourced from lab/wan/tenants.yml and lab/configs/fw/vsrx/junos.conf.
 # ============================================================================
 apiVersion: infrahub.app/v1
 kind: Object
@@ -41,7 +41,7 @@ spec:
       # VRF crosses the EVPN fabric as VXLAN, and at 9138 every full-size
       # segment was dropped there silently. Measured from the branch desktop:
       # MSS 9124 fetched Grafana's 41KB stylesheet in 9ms; MSS 9138 stalled at
-      # 3869 bytes. Transcribed into ../lab/configs/fw/vsrx/junos.conf.
+      # 3869 bytes. Transcribed into lab/configs/fw/vsrx/junos.conf.
       tcp_mss: 9124
       # SNMP for the telemetry collector (cycle 034). A read-only v2c community
       # -- configuration rather than a credential, and the one value of its

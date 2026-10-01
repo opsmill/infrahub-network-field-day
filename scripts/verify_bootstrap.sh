@@ -32,7 +32,7 @@
 # Usage:  scripts/verify_bootstrap.sh [run-label]
 # Env:    INFRAHUB_ADDRESS     default http://localhost:8000
 #         INFRAHUB_API_TOKEN   default matches docker-compose.override.yml
-#         OTTERNET_LAB_DIR        default: found beside this checkout
+#         OTTERNET_LAB_DIR        default: lab/ in this checkout
 #
 # Takes about twenty minutes. Exits non-zero with the number of failed checks.
 set -uo pipefail
@@ -40,19 +40,11 @@ set -uo pipefail
 LABEL="${1:-$(date +%H%M%S)}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Locate the sibling lab repository the same way tasks.py does: beside this
-# checkout, or beside one of its parents, because `../lab` is wrong from a git
-# worktree.
+# The lab lives in this repository, under lab/. OTTERNET_LAB_DIR overrides it,
+# the same way it does for tasks.py.
 find_lab() {
     if [[ -n "${OTTERNET_LAB_DIR:-}" ]]; then printf '%s' "$OTTERNET_LAB_DIR"; return; fi
-    local dir="$REPO"
-    while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/../lab/otternet.clab.yml" ]]; then
-            (cd "$dir/../lab" && pwd); return
-        fi
-        dir="$(dirname "$dir")"
-    done
-    printf '%s' "$REPO/../lab"
+    printf '%s' "$REPO/lab"
 }
 LAB="$(find_lab)"
 

@@ -1,0 +1,21 @@
+---
+# Push the intended configuration to the running lab over eAPI.
+- name: Deploy configuration to OTTERNET fabric
+  hosts: OTTERNET_FABRIC
+  gather_facts: false
+  connection: local
+  tasks:
+    # hostvars[inventory_hostname] is deliberate: `delegate_to` rewrites the
+    # variable context, so a bare `ansible_host` here resolves to the delegate
+    # (localhost) and every switch waits on localhost:443 until it times out.
+    - name: Wait for eAPI on every switch
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[inventory_hostname].ansible_host }}"
+        port: 443
+        timeout: 300
+        sleep: 5
+      delegate_to: localhost
+
+    - name: Replace running configuration with the AVD intended config
+      ansible.builtin.import_role:
+        name: arista.avd.eos_config_deploy_eapi

@@ -20,8 +20,8 @@
 #   peer_asn 65101        -> the k8s-leaf MLAG pair's shared BGP AS
 #   pod_cidr_communities  -> the community RM-CILIUM-IN adds on accept
 #
-# Sourced from ../lab/crossplane/platform/10-peering.yaml and
-# ../lab/k8s/helm/cilium-values.yaml.
+# Sourced from lab/crossplane/platform/10-peering.yaml and
+# lab/k8s/helm/cilium-values.yaml.
 # ============================================================================
 apiVersion: infrahub.app/v1
 kind: Object

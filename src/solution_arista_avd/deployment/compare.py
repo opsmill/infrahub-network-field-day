@@ -138,7 +138,7 @@ def compare_frr(target: dv.Target, config: str) -> str:
     """The router's own view of what applying the artifact would change.
 
     Staged into a directory this service owns rather than over
-    `/etc/frr/frr.conf`, which the lab repository bind-mounts read-only.
+    `/etc/frr/frr.conf`, which the lab bind-mounts read-only.
 
     The return code is deliberately ignored: `--test` exits 0 whether or not the
     configuration matches.

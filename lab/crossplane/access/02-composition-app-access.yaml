@@ -1,0 +1,184 @@
+---
+# How an approved request becomes a deployed, reachable, permitted application.
+#
+# Two composed resources at most, and both are provider-kubernetes Objects
+# wrapping something else -- a FabricApp for the workload, a FirewallAccess for
+# the perimeter. Wrapping rather than composing them directly is deliberate:
+# Object gives readiness derived from the wrapped object's own Ready condition,
+# so this XR only goes Ready once the app is actually running AND the firewall
+# has actually accepted the policy. A green AppAccess therefore means the user
+# can reach the app, not that Kubernetes accepted some YAML.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: appaccess-vsrx
+spec:
+  compositeTypeRef:
+    apiVersion: otternet.lab/v1alpha1
+    kind: AppAccess
+  mode: Pipeline
+  pipeline:
+    - step: render
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $spec := $xr.spec }}
+            {{- $name := $xr.metadata.name }}
+            {{- $app := $spec.app }}
+            {{- $source := $spec.source | default dict }}
+            {{- $cidr := $source.cidr | default "10.70.0.0/24" }}
+            {{- $vip := $spec.access.vip }}
+            {{- $ports := $spec.access.ports | default (list 80) }}
+            {{- $provision := $spec.provision }}
+            {{- $approved := $spec.approved | default false }}
+
+            {{- if and $approved $provision }}
+            ---
+            # The application, as a FabricApp -- the same API any other app in
+            # this lab is deployed through. Nothing about being requested from a
+            # portal makes it a second-class workload: it gets the namespace,
+            # the per-app VIP pool, the BGP advertisement and the default-deny
+            # policy exactly like otternet-demo does.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: fabricapp
+            spec:
+              providerConfigRef:
+                name: otternet
+              readiness:
+                policy: DeriveFromObject
+              forProvider:
+                manifest:
+                  apiVersion: otternet.lab/v1alpha1
+                  kind: FabricApp
+                  metadata:
+                    name: otternet-{{ $app }}
+                    labels:
+                      otternet.lab/requested-by: {{ $spec.requester | default "unknown" | quote }}
+                  spec:
+                    namespace: {{ $provision.namespace }}
+                    tenant: k8s-prod
+                    expose:
+                      vipBlock: {{ $provision.vipBlock }}
+                      serviceSelector:
+                        otternet.lab/advertise: "true"
+                    policy:
+                      defaultDeny: true
+                      allowDNS: true
+                      allowIntraNamespace: true
+                      # The third gate. The route exists and the firewall
+                      # permits the session; without this Cilium still drops it
+                      # at the pod, which is the demo working rather than a bug.
+                      allowFrom:
+                        - {{ $cidr }}
+                      allowFromPorts:
+                        - port: "{{ $provision.containerPort | default 8080 }}"
+                          protocol: TCP
+                      workloadSelector:
+                        app: {{ $app }}
+                    manifests:
+                      - apiVersion: apps/v1
+                        kind: Deployment
+                        metadata:
+                          name: {{ $app }}
+                        spec:
+                          replicas: {{ $provision.replicas | default 1 }}
+                          selector:
+                            matchLabels:
+                              app: {{ $app }}
+                          template:
+                            metadata:
+                              labels:
+                                app: {{ $app }}
+                            spec:
+                              containers:
+                                - name: {{ $app }}
+                                  image: {{ $provision.image }}
+                                  ports:
+                                    - containerPort: {{ $provision.containerPort | default 8080 }}
+                                  resources:
+                                    requests:
+                                      cpu: 25m
+                                      memory: 64Mi
+                                    limits:
+                                      memory: 512Mi
+                      # externalTrafficPolicy: Local for the same reason as
+                      # every other exposed service here -- it keeps the real
+                      # client address on the packet, which is what the
+                      # allowFrom rule above is written against.
+                      - apiVersion: v1
+                        kind: Service
+                        metadata:
+                          name: {{ $app }}
+                          labels:
+                            otternet.lab/advertise: "true"
+                          annotations:
+                            lbipam.cilium.io/ips: {{ $vip | quote }}
+                        spec:
+                          type: LoadBalancer
+                          externalTrafficPolicy: Local
+                          selector:
+                            app: {{ $app }}
+                          ports:
+                            {{- range $ports }}
+                            - port: {{ . }}
+                              targetPort: {{ $provision.containerPort | default 8080 }}
+                              protocol: TCP
+                            {{- end }}
+            {{- end }}
+
+            {{- if $approved }}
+            ---
+            # The hole in the perimeter. The fw-controller reconciles this onto
+            # the vSRX and reports back on the object's Ready condition, so
+            # "the firewall accepted it" is observable from Kubernetes rather
+            # than something you go and check by hand.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: firewall-access
+            spec:
+              providerConfigRef:
+                name: otternet
+              readiness:
+                policy: DeriveFromObject
+              forProvider:
+                manifest:
+                  apiVersion: otternet.lab/v1alpha1
+                  kind: FirewallAccess
+                  metadata:
+                    name: {{ $name }}
+                  spec:
+                    sourceZone: {{ $source.zone | default "branch" }}
+                    sourceAddress: {{ $source.address | default "branch-users" }}
+                    destinationZone: k8s-prod
+                    destination: {{ $vip }}
+                    ports:
+                      {{- range $ports }}
+                      - {{ . }}
+                      {{- end }}
+                    requester: {{ $spec.requester | default "unknown" | quote }}
+                    justification: {{ $spec.justification | default "" | quote }}
+            {{- end }}
+
+            ---
+            # Status back onto the XR, so `kubectl get appaccess` tells the
+            # story without anyone having to chase the composed resources.
+            apiVersion: otternet.lab/v1alpha1
+            kind: AppAccess
+            status:
+              phase: {{ if not $approved }}PendingApproval{{ else if $provision }}Provisioning{{ else }}Granted{{ end }}
+              vip: {{ $vip }}
+              provisioned: {{ if $provision }}true{{ else }}false{{ end }}
+    - step: ready
+      functionRef:
+        name: function-auto-ready

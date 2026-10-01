@@ -1423,7 +1423,7 @@ def test_no_grant_is_seeded() -> None:
     default data set permanently.
 
     tests/unit/test_junos_config.py holds the rendered artifact byte-for-byte
-    against ../lab/configs/fw/vsrx/junos.conf, and reads a captured fixture, so
+    against lab/configs/fw/vsrx/junos.conf, and reads a captured fixture, so
     it cannot notice a change made here. The device file has no such rule, so
     there would be nothing true to update it to.
 

@@ -1,0 +1,80 @@
+---
+type: l3leaf
+
+l3leaf:
+  defaults:
+    platform: cEOS-LAB
+    loopback_ipv4_pool: 10.41.0.0/24
+    loopback_ipv4_offset: 10
+    vtep_loopback_ipv4_pool: 10.41.1.0/24
+
+    # Every leaf takes eth1 to spine1 and eth2 to spine2.
+    uplink_switches: [spine1, spine2]
+    uplink_interfaces: [Ethernet1, Ethernet2]
+    uplink_ipv4_pool: 10.41.255.0/24
+
+    # eth3 + eth4 form the MLAG peer port-channel on the leaf pairs.
+    mlag_interfaces: [Ethernet3, Ethernet4]
+    mlag_peer_ipv4_pool: 10.41.254.0/24
+    mlag_peer_l3_ipv4_pool: 10.41.253.0/24
+    mlag_dual_primary_detection: true
+
+    virtual_router_mac_address: 00:1c:73:00:00:99
+    spanning_tree_mode: mstp
+    spanning_tree_priority: 4096
+
+    bgp_defaults:
+      - no bgp default ipv4-unicast
+      - distance bgp 20 200 200
+
+  node_groups:
+    # ---- Kubernetes pod: MLAG pair fronting the k3s cluster ----------------
+    - group: K8S_LEAFS
+      bgp_as: 65101
+      filter:
+        tags: [k8s]
+      nodes:
+        - name: k8s-leaf1
+          id: 1
+          mgmt_ip: 172.20.41.21/24
+          uplink_switch_interfaces: [Ethernet1, Ethernet1]
+        - name: k8s-leaf2
+          id: 2
+          mgmt_ip: 172.20.41.22/24
+          uplink_switch_interfaces: [Ethernet2, Ethernet2]
+
+    # ---- Classic app pod: MLAG pair fronting the bare-metal hosts ---------
+    - group: APP_LEAFS
+      bgp_as: 65102
+      filter:
+        # `cloud` as well as `app`: the app pod hosts both the classic
+        # bare-metal tier and the WAN tenants' isolated cloud instances. They
+        # are different tenants in the AVD model and different VRFs on the
+        # wire; they just happen to share the same pair of leaves. Without
+        # `cloud` here the SVIs are silently not generated and the tenant VRFs
+        # exist only on the border leaf, which presents as a cloud host with
+        # no gateway.
+        tags: [app, cloud]
+      nodes:
+        - name: app-leaf1
+          id: 3
+          mgmt_ip: 172.20.41.23/24
+          uplink_switch_interfaces: [Ethernet3, Ethernet3]
+        - name: app-leaf2
+          id: 4
+          mgmt_ip: 172.20.41.24/24
+          uplink_switch_interfaces: [Ethernet4, Ethernet4]
+
+    # ---- Border leaf: single node, holds both VRFs for the firewall handoff
+    # It has no SVIs of its own, so the VRFs have to be pulled in explicitly.
+    - group: BORDER_LEAFS
+      bgp_as: 65103
+      mlag: false
+      filter:
+        tags: [border]
+        always_include_vrfs_in_tenants: [TENANT_K8S, TENANT_APP]
+      nodes:
+        - name: border-leaf1
+          id: 5
+          mgmt_ip: 172.20.41.25/24
+          uplink_switch_interfaces: [Ethernet5, Ethernet5]

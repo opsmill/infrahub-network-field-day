@@ -1,6 +1,6 @@
 """Seed-data tests for the WAN's addressing (objects/31a, and the links in 33).
 
-The object files are a hand transcription of `../lab/wan/tenants.yml`, so the
+The object files are a hand transcription of `lab/wan/tenants.yml`, so the
 assertions worth having are the ones that catch a slip against it. They compare
 **both directions**: an address invented here fails as loudly as one omitted,
 which a one-directional check would miss entirely.
@@ -31,7 +31,7 @@ import yaml
 ADDRESSING_FILE = Path("objects/31a_otternet_wan_addressing.yml")
 WAN_FILE = Path("objects/33_otternet_wan.yml")
 SERVICES_FILE = Path("objects/37_otternet_wan_services.yml")
-LAB_TENANTS = Path("../lab/wan/tenants.yml")
+LAB_TENANTS = Path(__file__).resolve().parents[2] / "lab" / "wan/tenants.yml"
 
 IPV4 = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
 
@@ -54,7 +54,7 @@ def _data(path: Path, kind: str) -> list[dict[str, Any]]:
 
 def _lab() -> dict[str, Any]:
     if not LAB_TENANTS.is_file():
-        pytest.skip("lab repo not checked out alongside this one")
+        pytest.skip("the lab file this test reads is missing from lab/")
     return yaml.safe_load(LAB_TENANTS.read_text(encoding="utf-8"))
 
 

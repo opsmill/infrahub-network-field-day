@@ -1,0 +1,422 @@
+---
+# How a FabricApp becomes a running, reachable, policed application.
+#
+# The resource count varies with the claim -- one Object per raw manifest, one
+# CiliumNetworkPolicy per rule that was asked for, a pool and an advertisement
+# only if the app is exposed. That variability is the reason this is
+# go-templating and not patch-and-transform: patch-and-transform can only patch
+# a fixed list of resources declared up front, so a variable fan-out means
+# declaring a maximum and leaving the unused slots to be pruned.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: fabricapp-cilium-helm
+spec:
+  compositeTypeRef:
+    apiVersion: otternet.lab/v1alpha1
+    kind: FabricApp
+  mode: Pipeline
+  pipeline:
+    - step: render
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $spec := $xr.spec }}
+            {{- $app := $xr.metadata.name }}
+            {{- $ns := $spec.namespace }}
+            {{- $policy := $spec.policy | default dict }}
+            {{- /*
+                Scope the service selector to this app's namespace.
+
+                A CiliumLoadBalancerIPPool's serviceSelector matches services
+                CLUSTER-WIDE by label, and so does a CiliumBGPAdvertisement's.
+                Two FabricApps that both select `otternet.lab/advertise: "true"` --
+                which is the obvious label to use, and the one the lab already
+                documents -- therefore match each other's services: whichever
+                pool LB-IPAM happens to consider first hands out the address, so
+                an app silently gets a VIP from another app's block and is
+                advertised by another app's advertisement. Per-app blocks mean
+                nothing without this.
+
+                Cilium adds io.kubernetes.service.namespace to the labels it
+                matches against, so pinning it here makes the selector
+                namespace-local without the claim having to say so.
+            */}}
+            {{- $svcSelector := merge (dict "io.kubernetes.service.namespace" $ns) (default dict (dig "expose" "serviceSelector" dict $spec)) }}
+
+            ---
+            # The namespace, labelled with the tenant the fabric knows this app
+            # by. The label is not decoration: the tenant determines which VRF
+            # the leaves carry its traffic in.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: namespace
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: v1
+                  kind: Namespace
+                  metadata:
+                    name: {{ $ns }}
+                    labels:
+                      otternet.lab/tenant: {{ $spec.tenant }}
+                      otternet.lab/app: {{ $app }}
+
+            {{- if $spec.chart }}
+            ---
+            # The application, as an actual Helm release. provider-helm holds the
+            # release, so the chart version and its values are declared state:
+            # `helm upgrade` by hand is reverted, and a version bump is a diff on
+            # this XR rather than a command someone ran once.
+            apiVersion: helm.crossplane.io/v1beta1
+            kind: Release
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: release
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                namespace: {{ $ns }}
+                chart:
+                  repository: {{ $spec.chart.repository }}
+                  name: {{ $spec.chart.name }}
+                  version: {{ $spec.chart.version }}
+                # Let Helm create the namespace as well. Crossplane does not
+                # order composed resources, so requiring the Namespace Object to
+                # land first just means the release errors and retries until it
+                # does. Both converge on the same namespace and the Object owns
+                # the tenant labels.
+                skipCreateNamespace: false
+                wait: false
+                {{- if $spec.chart.values }}
+                values:
+                  {{- toYaml $spec.chart.values | nindent 18 }}
+                {{- end }}
+            {{- end }}
+
+            {{- range $i, $m := ($spec.manifests | default list) }}
+            ---
+            # Raw manifest {{ $i }}: {{ $m.kind }}/{{ $m.metadata.name }}
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: manifest-{{ $i }}-{{ $m.kind | lower }}-{{ $m.metadata.name }}
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  {{- $meta := merge (dict "namespace" $ns) $m.metadata }}
+                  {{- toYaml (merge (dict "metadata" $meta) (omit $m "metadata")) | nindent 18 }}
+            {{- end }}
+
+            {{- if $spec.expose }}
+            ---
+            # This app's own VIP pool. Per-app rather than one cluster-wide pool
+            # so that a claim cannot hand itself an address out of another app's
+            # range, and so the fabric-side prefix for each app is predictable.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: lb-pool
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumLoadBalancerIPPool
+                  metadata:
+                    name: {{ $app }}-vips
+                  spec:
+                    blocks:
+                      - cidr: {{ $spec.expose.vipBlock }}
+                    serviceSelector:
+                      matchLabels:
+                        {{- toYaml $svcSelector | nindent 24 }}
+
+            ---
+            # ...and the advertisement that puts it on the wire. It carries the
+            # FabricPeering's selector label, which is the whole mechanism by
+            # which a new app joins an existing BGP session without the peering
+            # being touched.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: bgp-advertisement
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumBGPAdvertisement
+                  metadata:
+                    name: {{ $app }}-vips
+                    labels:
+                      {{- toYaml $spec.expose.advertisementSelector | nindent 22 }}
+                  spec:
+                    advertisements:
+                      - advertisementType: Service
+                        service:
+                          addresses:
+                            - LoadBalancerIP
+                        selector:
+                          matchLabels:
+                            {{- toYaml $svcSelector | nindent 28 }}
+                        attributes:
+                          communities:
+                            standard:
+                              {{- toYaml $spec.expose.communities | nindent 30 }}
+            {{- end }}
+
+            {{- if $policy.defaultDeny }}
+            ---
+            # Default deny, the same posture the fabric ACLs and the firewall
+            # zones take, expressed one layer up. Everything this app is allowed
+            # to do has to be stated below.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cnp-default-deny
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumNetworkPolicy
+                  metadata:
+                    name: default-deny
+                    namespace: {{ $ns }}
+                  spec:
+                    endpointSelector: {}
+                    ingress:
+                      - {}
+                    egress:
+                      - {}
+            {{- end }}
+
+            {{- if $policy.allowDNS }}
+            ---
+            # DNS, restricted to the actual query rather than "port 53 anywhere".
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cnp-allow-dns
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumNetworkPolicy
+                  metadata:
+                    name: allow-dns
+                    namespace: {{ $ns }}
+                  spec:
+                    endpointSelector: {}
+                    egress:
+                      - toEndpoints:
+                          - matchLabels:
+                              io.kubernetes.pod.namespace: kube-system
+                              k8s-app: kube-dns
+                        toPorts:
+                          - ports:
+                              - port: "53"
+                                protocol: UDP
+                            rules:
+                              dns:
+                                - matchPattern: "*"
+            {{- end }}
+
+            {{- if $policy.allowIntraNamespace }}
+            ---
+            # East-west inside the namespace, both directions. default-deny
+            # blocks egress too, so a chart whose components talk to each other
+            # -- Grafana to Prometheus, Prometheus to kube-state-metrics -- needs
+            # this stated or it silently cannot start.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cnp-allow-intra-namespace
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumNetworkPolicy
+                  metadata:
+                    name: allow-intra-namespace
+                    namespace: {{ $ns }}
+                  spec:
+                    endpointSelector: {}
+                    ingress:
+                      - fromEndpoints:
+                          - matchLabels:
+                              io.kubernetes.pod.namespace: {{ $ns }}
+                      # kubelet probes and Cilium's own health checks arrive as
+                      # host/remote-node, not as a pod. Without this, readiness
+                      # probes fail and the whole release never goes ready.
+                      - fromEntities:
+                          - host
+                          - remote-node
+                          - health
+                    egress:
+                      - toEndpoints:
+                          - matchLabels:
+                              io.kubernetes.pod.namespace: {{ $ns }}
+            {{- end }}
+
+            {{- if $policy.allowEgressToAPIServer }}
+            ---
+            # Egress to the API server, and only there. Cilium resolves the
+            # kube-apiserver identity itself, which is why this does not have to
+            # name 10.112.0.1 -- the ClusterIP, the endpoint address and the
+            # node it lives on can all change without this rule going stale.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cnp-allow-apiserver
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumNetworkPolicy
+                  metadata:
+                    name: allow-egress-apiserver
+                    namespace: {{ $ns }}
+                  spec:
+                    endpointSelector: {}
+                    egress:
+                      - toEntities:
+                          - kube-apiserver
+            {{- end }}
+
+            {{- if $policy.allowEgressToInternet }}
+            ---
+            # Egress off-cluster. Note what this does *not* permit: 10.0.0.0/8
+            # is excluded, so an app that is allowed to reach a registry still
+            # cannot reach the other tenant, the nodes or the fabric. Those
+            # remain governed by the rules below and by the firewall.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cnp-allow-egress-world
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumNetworkPolicy
+                  metadata:
+                    name: allow-egress-world
+                    namespace: {{ $ns }}
+                  spec:
+                    endpointSelector: {}
+                    egress:
+                      - toCIDRSet:
+                          - cidr: 0.0.0.0/0
+                            except:
+                              - 10.0.0.0/8
+            {{- end }}
+
+            {{- if $policy.allowFrom }}
+            ---
+            # Ingress from outside the cluster.
+            #
+            # `fromEntities: [remote-node, host, health]` is load-bearing, not
+            # padding. When a request for a VIP lands on a node whose chosen
+            # backend is elsewhere, Cilium SNATs it to that node's address before
+            # delivery, and a policy written only against the client CIDR then
+            # fails for most requests while succeeding for the minority that
+            # happen to pick a local backend -- which reads as flakiness rather
+            # than a policy error. Services exposed this way should also set
+            # externalTrafficPolicy: Local to keep the client IP intact.
+            #
+            # No L7 `rules: http:` here either: on this datapath an L7 ingress
+            # redirect from an external CIDR gets a policy-verdict ALLOW and a
+            # to-proxy FORWARDED, and then Envoy never completes the handshake,
+            # so the client sees a timeout instead of a 403. L7 belongs on
+            # in-cluster paths, which an app can express through `manifests`.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cnp-allow-ingress
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumNetworkPolicy
+                  metadata:
+                    name: allow-ingress
+                    namespace: {{ $ns }}
+                  spec:
+                    endpointSelector:
+                      matchLabels:
+                        {{- toYaml ($policy.workloadSelector | default dict) | nindent 24 }}
+                    ingress:
+                      - fromCIDR:
+                          {{- range $policy.allowFrom }}
+                          - {{ . }}
+                          {{- end }}
+                        {{- if $policy.allowFromPorts }}
+                        toPorts:
+                          - ports:
+                              {{- range $policy.allowFromPorts }}
+                              - port: "{{ .port }}"
+                                protocol: {{ .protocol | default "TCP" }}
+                              {{- end }}
+                        {{- end }}
+                      - fromEntities:
+                          - remote-node
+                          - host
+                          - health
+                        {{- if $policy.allowFromPorts }}
+                        toPorts:
+                          - ports:
+                              {{- range $policy.allowFromPorts }}
+                              - port: "{{ .port }}"
+                                protocol: {{ .protocol | default "TCP" }}
+                              {{- end }}
+                        {{- end }}
+                      - fromEndpoints:
+                          - matchLabels:
+                              io.kubernetes.pod.namespace: {{ $ns }}
+            {{- end }}
+
+            ---
+            apiVersion: otternet.lab/v1alpha1
+            kind: FabricApp
+            status:
+              namespace: {{ $ns }}
+              exposed: {{ if $spec.expose }}true{{ else }}false{{ end }}
+    - step: ready
+      functionRef:
+        name: function-auto-ready

@@ -38,7 +38,7 @@ from typing import Any
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_LAB = REPO_ROOT.parent / "lab"
+DEFAULT_LAB = REPO_ROOT / "lab"
 GOLDEN_DIR = REPO_ROOT / "tests" / "integration" / "golden" / "otternet"
 
 POD_NAME = "otternet-pod1"

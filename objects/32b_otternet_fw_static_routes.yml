@@ -2,7 +2,7 @@
 # ============================================================================
 # OTTERNET -- the perimeter firewall's static routes.
 #
-# Eight routes, transcribed from ../lab/configs/fw/vsrx/junos.conf lines
+# Eight routes, transcribed from lab/configs/fw/vsrx/junos.conf lines
 # 163-170. The device holds them; this file is not a design.
 #
 # WHY THIS FILE EXISTS AT ALL. Cycle 023 rendered 573 of junos.conf's 677

@@ -51,7 +51,7 @@ LAB_NAME = os.getenv("OTTERNET_LAB", "otternet")
 EOS_USERNAME = os.getenv("OTTERNET_EOS_USERNAME", "admin")
 EOS_PASSWORD = os.getenv("OTTERNET_EOS_PASSWORD", "admin")
 
-# The vSRX's own credentials, matching `make fw-console` in the lab repository.
+# The vSRX's own credentials, matching `make fw-console` in the lab.
 VSRX_USERNAME = os.getenv("OTTERNET_VSRX_USERNAME", "admin")
 VSRX_PASSWORD = os.getenv("OTTERNET_VSRX_PASSWORD", "admin@123")
 
@@ -344,7 +344,7 @@ def push_frr(target: Target, config: str) -> str:
     removed tenant's VRF and session in place.
 
     The configuration is staged in a directory of our own rather than written
-    over /etc/frr/frr.conf, because the lab repository bind-mounts that file
+    over /etc/frr/frr.conf, because the lab bind-mounts that file
     read-only -- writing to it fails with "device or resource busy", and
     succeeding would mean this repository silently editing a sibling
     repository's working tree.
@@ -355,7 +355,7 @@ def push_frr(target: Target, config: str) -> str:
     reload having already succeeded, so the device is correct and the run reports
     failure. Naming the staging directory as the confdir makes the two paths
     equal, so the persistence step is skipped deliberately rather than attempted
-    and failed. Skipping it is right: /etc/frr belongs to the lab repository, and
+    and failed. Skipping it is right: /etc/frr belongs to the lab, and
     the durable copy of this configuration is the artifact in Infrahub.
     """
     _assert_frr_lifeline(target, config)

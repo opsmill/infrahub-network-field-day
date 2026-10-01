@@ -1,0 +1,226 @@
+---
+# The two-tier demo workload, as a FabricApp.
+#
+# This is the same workload that used to be applied by hand from
+# k8s/manifests/demo/ and k8s/manifests/netpol/ -- same images, same labels,
+# same ports, same VIP -- but now it is one object. The reason it uses
+# `manifests` rather than `chart` is simply that traefik/whoami has no upstream
+# chart worth depending on; the point of the escape hatch is that "no chart"
+# does not mean "not managed". Each Deployment, Service and policy below is its
+# own provider-kubernetes Object, reconciled continuously.
+#
+# What the composition generates on top: the namespace, the VIP pool, the BGP
+# advertisement, default-deny, DNS egress, and the cross-tenant ingress allow.
+apiVersion: otternet.lab/v1alpha1
+kind: FabricApp
+metadata:
+  name: otternet-demo
+spec:
+  namespace: otternet-demo
+  tenant: k8s-prod
+
+  expose:
+    # A /28 out of the block RM-CILIUM-IN already permits, so the advertisement
+    # is accepted without touching switch config.
+    vipBlock: 10.112.240.0/28
+    serviceSelector:
+      otternet.lab/advertise: "true"
+
+  policy:
+    defaultDeny: true
+    allowDNS: true
+    # From the app tenant, through the firewall, into the cluster. This has to
+    # agree with the firewall's app-to-k8s-services policy and the leaf ACL
+    # before a single packet arrives.
+    # Which networks outside the cluster may consume this app. This is the
+    # THIRD of three independent gates, and the only one owned by the
+    # application rather than by the network: the route has to exist, the
+    # firewall zone policy has to permit the session, and then this has to
+    # name the source. All three were needed to let the WAN and the branch
+    # reach the frontend -- the fabric and the firewall were already
+    # letting the packets through while Cilium was still dropping them, which
+    # is the demo working as intended rather than a misconfiguration.
+    allowFrom:
+      - 10.210.0.0/24     # the classic app tenant, across the firewall
+      - 10.60.0.0/16      # WAN customers, via the ISP and the border leaf
+      - 10.70.0.0/24      # the branch office, over its private circuit
+    allowFromPorts:
+      - port: "8080"
+        protocol: TCP
+    workloadSelector:
+      app: frontend
+
+  manifests:
+    # ---- frontend: three replicas, spread so pod-to-pod actually crosses the
+    # fabric rather than staying local to one node -----------------------------
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: frontend
+      spec:
+        replicas: 3
+        selector:
+          matchLabels:
+            app: frontend
+        template:
+          metadata:
+            labels:
+              app: frontend
+          spec:
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: kubernetes.io/hostname
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    app: frontend
+            containers:
+              - name: frontend
+                image: traefik/whoami:v1.10.4
+                args: ["--port=8080", "--name=frontend"]
+                ports:
+                  - containerPort: 8080
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 16Mi
+                  limits:
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  capabilities:
+                    drop: ["ALL"]
+                  seccompProfile:
+                    type: RuntimeDefault
+
+    # The service that reaches the fabric. The otternet.lab/advertise label is what
+    # opts it into this app's pool and advertisement; without it the service is
+    # a LoadBalancer with no address.
+    #
+    # externalTrafficPolicy: Local is load-bearing. With the default, a request
+    # landing on a node whose backend is elsewhere is SNATed to that node's
+    # address, so the pod -- and therefore CiliumNetworkPolicy -- sees
+    # 10.110.0.x instead of the real client, and the CIDR rule above fails for
+    # most requests while working for a minority. Local also pairs naturally
+    # with BGP: only nodes actually running a frontend pod advertise the VIP, so
+    # the fabric's ECMP set tracks where the workload really is.
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        name: frontend
+        labels:
+          otternet.lab/advertise: "true"
+      spec:
+        type: LoadBalancer
+        externalTrafficPolicy: Local
+        selector:
+          app: frontend
+        ports:
+          - port: 80
+            targetPort: 8080
+            protocol: TCP
+
+    # ---- backend: ClusterIP only, never advertised --------------------------
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: backend
+      spec:
+        replicas: 2
+        selector:
+          matchLabels:
+            app: backend
+        template:
+          metadata:
+            labels:
+              app: backend
+          spec:
+            topologySpreadConstraints:
+              - maxSkew: 1
+                topologyKey: kubernetes.io/hostname
+                whenUnsatisfiable: ScheduleAnyway
+                labelSelector:
+                  matchLabels:
+                    app: backend
+            containers:
+              - name: backend
+                image: traefik/whoami:v1.10.4
+                args: ["--port=8080", "--name=backend"]
+                ports:
+                  - containerPort: 8080
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 16Mi
+                  limits:
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  capabilities:
+                    drop: ["ALL"]
+                  seccompProfile:
+                    type: RuntimeDefault
+
+    # No advertise label: this one is reachable inside the cluster and is
+    # invisible to the fabric. That contrast is the negative test in
+    # `make verify` -- the app tenant can reach the frontend VIP and cannot
+    # reach this.
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        name: backend
+      spec:
+        type: ClusterIP
+        selector:
+          app: backend
+        ports:
+          - port: 8080
+            targetPort: 8080
+            protocol: TCP
+
+    # ---- L7, east-west ------------------------------------------------------
+    # The frontend may GET the backend's API path and nothing else. A shell in
+    # the frontend pod cannot POST. This is where L7 policy is demonstrated,
+    # because it works reliably on the in-cluster path where the external-CIDR
+    # ingress redirect does not.
+    - apiVersion: cilium.io/v2
+      kind: CiliumNetworkPolicy
+      metadata:
+        name: allow-frontend-to-backend
+      spec:
+        endpointSelector:
+          matchLabels:
+            app: frontend
+        egress:
+          - toEndpoints:
+              - matchLabels:
+                  app: backend
+            toPorts:
+              - ports:
+                  - port: "8080"
+                    protocol: TCP
+                rules:
+                  http:
+                    - method: GET
+                      path: "/api/.*"
+
+    - apiVersion: cilium.io/v2
+      kind: CiliumNetworkPolicy
+      metadata:
+        name: allow-backend-ingress
+      spec:
+        endpointSelector:
+          matchLabels:
+            app: backend
+        ingress:
+          - fromEndpoints:
+              - matchLabels:
+                  app: frontend
+            toPorts:
+              - ports:
+                  - port: "8080"
+                    protocol: TCP

@@ -1,0 +1,117 @@
+---
+# FirewallAccess -- one hole through the perimeter firewall, as an API object.
+#
+# This is a plain CRD rather than a Crossplane XR because something has to
+# actually talk to the firewall, and there is no Crossplane provider for Junos
+# worth depending on. The k8s/access/fw-controller Deployment is that something:
+# it reconciles these objects onto the vSRX over SSH and writes back what it
+# did.
+#
+# Nothing creates one of these by hand. The AppAccess composition emits it, so
+# the firewall rule and the application it protects are two halves of one
+# declaration -- delete the AppAccess and the rule goes with it, edit the box by
+# hand and the controller puts it back.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: firewallaccesses.otternet.lab
+spec:
+  group: otternet.lab
+  scope: Cluster
+  names:
+    kind: FirewallAccess
+    plural: firewallaccesses
+    singular: firewallaccess
+    shortNames: [fwaccess, fwa]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Source
+          type: string
+          jsonPath: .spec.sourceZone
+        - name: Destination
+          type: string
+          jsonPath: .spec.destination
+        - name: Ports
+          type: string
+          jsonPath: .status.portSummary
+        - name: Policy
+          type: string
+          jsonPath: .status.policyRef
+        - name: Applied
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                sourceZone:
+                  type: string
+                  description: >-
+                    Security zone the traffic arrives in. The zones exist
+                    already and are created by configs/fw/vsrx/junos.conf --
+                    this never invents one.
+                  default: branch
+                sourceAddress:
+                  type: string
+                  description: >-
+                    Name of an existing address-book entry to match as the
+                    source. Naming an object rather than a CIDR keeps the
+                    generated rules readable next to the hand-written ones.
+                  default: branch-users
+                destinationZone:
+                  type: string
+                  default: k8s-prod
+                destination:
+                  type: string
+                  description: >-
+                    Destination the grant opens, as an IP or CIDR. A bare
+                    address is treated as a /32.
+                ports:
+                  type: array
+                  description: TCP ports to permit. Empty is rejected, not treated as "all".
+                  items:
+                    type: integer
+                    minimum: 1
+                    maximum: 65535
+                  minItems: 1
+                requester:
+                  type: string
+                justification:
+                  type: string
+              required: [destination, ports]
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                policyRef:
+                  type: string
+                  description: >-
+                    Where the grant lives on the firewall, as a zone pair and
+                    policy name -- "branch->k8s-prod/aa-access-grafana". Enough
+                    to find it by hand in the Junos CLI.
+                portSummary:
+                  type: string
+                observedGeneration:
+                  type: integer
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type: {type: string}
+                      status: {type: string}
+                      reason: {type: string}
+                      message: {type: string}
+                      lastTransitionTime: {type: string}
+                    required: [type, status]

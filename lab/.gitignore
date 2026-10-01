@@ -1,6 +1,44 @@
-# Runtime artifacts fetched/rendered at deploy time
-/configs/*.cfg
+# AVD toolchain (rebuild with: make setup)
+.venv/
+.ansible/
 
-# ContainerLab runtime directories and state
-clab-*
-.clab.*
+# AVD generated output (rebuild with: make avd-build)
+avd/intended/
+avd/reports/
+avd/documentation/
+
+# Device running-configs AVD writes back at deploy time. Regenerated on every
+# `make avd-deploy`, so tracking them just produces a diff per deploy.
+avd/config_backup/
+
+# containerlab runtime artefacts
+clab-otternet/
+.clab.*.bak
+*.clab.yml.bak
+graph/
+
+# k3s writes the cluster kubeconfig here at deploy time
+k8s/.kubeconfig/*
+!k8s/.kubeconfig/.gitkeep
+
+# ... and the tooling cluster's here. It carries a client certificate and its
+# private key, so it is a credential, and this repository is public.
+k8s/.kubeconfig-tooling/*
+!k8s/.kubeconfig-tooling/.gitkeep
+
+# ANTA / validation output
+avd/anta*
+
+# python bytecode from the renderer and the access broker
+__pycache__/
+*.pyc
+
+# WAN generated output (rebuild with: make wan-build)
+wan/rendered/
+
+# FRR daemon sockets, shared between each router and its frr_exporter sidecar.
+# The directories themselves are committed (each holds a .gitkeep): ContainerLab
+# verifies every bind path before starting any node and refuses the topology if
+# one is missing, where plain Docker would have created it.
+wan/run/*/*
+!wan/run/*/.gitkeep

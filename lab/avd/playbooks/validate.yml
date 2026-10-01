@@ -1,0 +1,16 @@
+---
+# State validation via ANTA. AVD 6.x replaced the old eos_validate_state role
+# with anta_runner, which builds an ANTA catalogue from the intended design and
+# tests the fabric against it: BGP sessions, VXLAN, MLAG, routing and the
+# security policy we asked for.
+- name: Validate OTTERNET fabric state
+  hosts: OTTERNET_FABRIC
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Run ANTA against the fabric
+      ansible.builtin.import_role:
+        name: arista.avd.anta_runner
+      vars:
+        anta_runner_report_csv: true
+        anta_runner_report_md: true

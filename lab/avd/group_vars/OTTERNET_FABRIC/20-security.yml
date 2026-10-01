@@ -1,0 +1,275 @@
+---
+# ============================================================================
+# Fabric security policy
+#
+# Three layers, all rendered by AVD so they are reviewable as code:
+#   1. Data-plane ACLs on the workload SVIs and the firewall handoff.
+#   2. BGP route policy that bounds what a Kubernetes node may advertise.
+#   3. Control-plane protection on the switches themselves.
+#
+# NOTE ON KEY NAMES: eos_designs has `allow_other_keys: true`, so a key that
+# actually belongs to eos_cli_config_gen is silently *ignored* here rather than
+# rejected -- security config that looks present but renders nothing. Anything
+# below that is not a native eos_designs key therefore carries the
+# `custom_structured_configuration_` prefix on purpose. Verify with:
+#   make avd-build && grep -c 'route-map RM-CILIUM-IN' avd/intended/configs/*.cfg
+# ============================================================================
+
+# ---- data-plane ACLs (native eos_designs key, rendered when referenced) ----
+ipv4_acls:
+  # Source validation for the Kubernetes tenant: only the node subnet, the pod
+  # CIDR and the service CIDR may leave K8S_PROD toward the firewall. A pod or
+  # node forging any other source address is dropped and logged at the tenant
+  # boundary.
+  #
+  # This is applied OUTBOUND on border-leaf1 Ethernet10 rather than inbound on
+  # the Vlan110 SVI, because cEOS-LAB does not support `ip access-group` on a
+  # VLAN interface. On physical hardware, move it to the SVI (or the access
+  # ports) so spoofed traffic never crosses the fabric at all.
+  - name: ACL-K8S-ANTISPOOF
+    entries:
+      - sequence: 10
+        action: permit
+        protocol: ip
+        source: 10.110.0.0/24
+        destination: any
+      - sequence: 20
+        action: permit
+        protocol: ip
+        source: 10.111.0.0/16
+        destination: any
+      - sequence: 30
+        action: permit
+        protocol: ip
+        source: 10.112.0.0/16
+        destination: any
+      - sequence: 100
+        action: deny
+        protocol: ip
+        source: any
+        destination: any
+        log: true
+
+  # Source validation for the WAN. An ISP hands us packets from many
+  # customers; only the assigned customer supernet is a legitimate source.
+  # Anything else -- fabric addresses, DC tenant addresses, the branch's
+  # range -- is either a mistake or an attempt to arrive somewhere it should
+  # not, and the border leaf is the right place to say so.
+  - name: ACL-FROM-WAN
+    entries:
+      - sequence: 10
+        action: permit
+        protocol: ip
+        source: 10.60.0.0/16
+        destination: any
+      - sequence: 100
+        action: deny
+        protocol: ip
+        source: any
+        destination: any
+        log: true
+
+  # Same idea for the branch circuit, narrower because the branch has exactly
+  # one prefix.
+  - name: ACL-FROM-BRANCH
+    entries:
+      - sequence: 10
+        action: permit
+        protocol: ip
+        source: 10.70.0.0/24
+        destination: any
+      - sequence: 100
+        action: deny
+        protocol: ip
+        source: any
+        destination: any
+        log: true
+
+  # The firewall is trusted to police sessions, but it must never originate
+  # fabric infrastructure prefixes.
+  - name: ACL-FROM-FIREWALL
+    entries:
+      - sequence: 10
+        action: deny
+        protocol: ip
+        source: 10.41.0.0/16
+        destination: any
+        log: true
+      - sequence: 20
+        action: permit
+        protocol: ip
+        source: any
+        destination: any
+
+# ---- BGP policy toward the Kubernetes nodes -------------------------------
+# Cilium may advertise only the pod and service CIDRs it was assigned. Without
+# this, a compromised node could inject a default route or hijack the app tenant.
+custom_structured_configuration_prefix_lists:
+  - name: PL-CILIUM-PERMITTED
+    sequence_numbers:
+      - sequence: 10
+        action: permit 10.111.0.0/16 le 26
+      - sequence: 20
+        action: permit 10.112.0.0/16 le 32
+  - name: PL-FABRIC-TO-CILIUM
+    sequence_numbers:
+      - sequence: 10
+        action: permit 0.0.0.0/0
+      - sequence: 20
+        action: permit 10.110.0.0/24
+
+  # What the ISP may tell us: customer prefixes, and nothing else. In
+  # particular not a default route -- accepting one here would send DC egress
+  # to the provider and around the firewall.
+  - name: PL-WAN-PERMITTED
+    sequence_numbers:
+      - sequence: 10
+        action: permit 10.60.0.0/16 le 24
+
+  # The branch announces one LAN.
+  - name: PL-BRANCH-PERMITTED
+    sequence_numbers:
+      - sequence: 10
+        action: permit 10.70.0.0/24
+
+  # What we are willing to tell the outside world about the datacentre: the
+  # service VIP range only. Not the pod CIDR, not the node subnet, not the
+  # app tenant -- an external network has no business knowing the DC's
+  # internal topology, and anything it does not have a route to it cannot
+  # try to reach.
+  - name: PL-DC-ADVERTISED
+    sequence_numbers:
+      - sequence: 10
+        action: permit 10.112.240.0/24 le 32
+      # Each tenant's cloud subnet. Announcing both to the ISP is safe because
+      # isp-pe1 decides per tenant which of them to import -- see
+      # RM-<TENANT>-IMPORT in wan/templates/isp-edge.frr.conf.j2. The DC's job
+      # is to say where they live, not who may reach them.
+      - sequence: 20
+        action: permit 10.220.10.0/24 le 32
+      - sequence: 30
+        action: permit 10.220.20.0/24 le 32
+
+  # The branch gets one prefix more than a WAN customer: the k8s node subnet,
+  # so its own staff can actually troubleshoot -- traceroute and ping a node
+  # rather than only being able to open a TCP session to a VIP.
+  #
+  # This is the trust difference made real at the routing layer rather than
+  # only in firewall policy. The firewall permits branch ICMP to the nodes; if
+  # the branch were never told a route to them, that permission would be
+  # unreachable and the "our office is more privileged than a customer" claim
+  # would be decorative.
+  - name: PL-DC-ADVERTISED-BRANCH
+    sequence_numbers:
+      - sequence: 10
+        action: permit 10.112.240.0/24 le 32
+      - sequence: 20
+        action: permit 10.110.0.0/24
+
+custom_structured_configuration_route_maps:
+  # Inbound from Cilium: permit only the sanctioned CIDRs, tag them, deny rest.
+  - name: RM-CILIUM-IN
+    sequence_numbers:
+      - sequence: 10
+        type: permit
+        description: Accept only sanctioned pod and service CIDRs
+        match:
+          - ip address prefix-list PL-CILIUM-PERMITTED
+        set:
+          - community 65101:110 additive
+      - sequence: 99
+        type: deny
+        description: Explicit deny - anything else is a policy violation
+  # Inbound from the ISP: customer prefixes only, tagged so they are
+  # identifiable in the WAN VRF's table.
+  - name: RM-WAN-IN
+    sequence_numbers:
+      - sequence: 10
+        type: permit
+        description: Accept only assigned customer supernets
+        match:
+          - ip address prefix-list PL-WAN-PERMITTED
+        set:
+          - community 65103:50 additive
+      - sequence: 99
+        type: deny
+        description: Explicit deny - the provider announced something it should not
+
+  # Inbound from the branch circuit.
+  - name: RM-BRANCH-IN
+    sequence_numbers:
+      - sequence: 10
+        type: permit
+        description: Accept only the branch LAN
+        match:
+          - ip address prefix-list PL-BRANCH-PERMITTED
+        set:
+          - community 65103:70 additive
+      - sequence: 99
+        type: deny
+        description: Explicit deny
+
+  # Outbound to the branch: services plus the node subnet. See
+  # PL-DC-ADVERTISED-BRANCH for why the branch gets more than a customer.
+  - name: RM-DC-TO-BRANCH
+    sequence_numbers:
+      - sequence: 10
+        type: permit
+        description: Advertise DC services and the node subnet to our own office
+        match:
+          - ip address prefix-list PL-DC-ADVERTISED-BRANCH
+      - sequence: 99
+        type: deny
+        description: Explicit deny - still no pod CIDR, still no app tenant
+
+  # Outbound to a WAN customer: the service VIP range and nothing else.
+  - name: RM-DC-TO-EXTERNAL
+    sequence_numbers:
+      - sequence: 10
+        type: permit
+        description: Advertise the DC service VIP range only
+        match:
+          - ip address prefix-list PL-DC-ADVERTISED
+      - sequence: 99
+        type: deny
+        description: Explicit deny - do not leak DC internals to the outside
+
+  # Outbound to Cilium: the nodes need a default route and the node subnet,
+  # nothing more. They have no business learning fabric underlay prefixes.
+  - name: RM-FABRIC-TO-CILIUM
+    sequence_numbers:
+      - sequence: 10
+        type: permit
+        description: Default route and node subnet only
+        match:
+          - ip address prefix-list PL-FABRIC-TO-CILIUM
+      - sequence: 99
+        type: deny
+
+# ---- control-plane / management-plane hardening ---------------------------
+# NOTE: `management_security.password.minimum_length` is deliberately NOT set.
+# It looks like free hardening, but it rejects `username x secret 0 <short>` at
+# the CLI -- which is exactly the command you need when a password hash in the
+# data model turns out to be wrong and eAPI has locked you out. The lab keeps
+# in-band recovery possible instead. Set it on real kit, where you have console
+# access and a password manager.
+
+# ACL-MGMT-IN must be raw structured config, NOT an `ipv4_acls` entry. AVD only
+# renders the ipv4_acls catalogue on devices that reference an ACL from an
+# *interface* (ipv4_acl_in/out). A reference from ssh_settings.vrfs[].ipv4_acl is
+# just a name string, so putting this in ipv4_acls produced an SSH server on
+# every switch pointing at an access-list that was never defined anywhere.
+custom_structured_configuration_ip_access_lists:
+  - name: ACL-MGMT-IN
+    entries:
+      - sequence: 10
+        action: permit
+        protocol: ip
+        source: 172.20.41.0/24
+        destination: any
+      - sequence: 100
+        action: deny
+        protocol: ip
+        source: any
+        destination: any
+        log: true

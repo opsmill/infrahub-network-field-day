@@ -1,0 +1,48 @@
+{
+  "policies": {
+    "Homepage": {
+      "URL": "https://10.90.0.11:32001/",
+      "Locked": false,
+      "StartPage": "homepage"
+    },
+    "OverrideFirstRunPage": "https://10.90.0.11:32001/",
+    "DisableTelemetry": true,
+    "DisableFirefoxAccounts": true,
+    "DisableProfileImport": true,
+    "DontCheckDefaultBrowser": true,
+    "NoDefaultBookmarks": true,
+    "Bookmarks": [
+      {
+        "Title": "Service Portal",
+        "URL": "https://10.90.0.11:32001/",
+        "Placement": "toolbar"
+      },
+      {
+        "Title": "Infrahub",
+        "URL": "http://10.90.0.1:8000/",
+        "Placement": "toolbar"
+      },
+      {
+        "Title": "Access Portal (DC)",
+        "URL": "http://10.112.240.33/",
+        "Placement": "toolbar"
+      },
+      {
+        "Title": "Grafana (needs access)",
+        "URL": "http://10.112.240.81/",
+        "Placement": "toolbar"
+      },
+      {
+        "Title": "Demo frontend (needs access)",
+        "URL": "http://10.112.240.0/",
+        "Placement": "toolbar"
+      }
+    ],
+    "Preferences": {
+      "security.enterprise_roots.enabled": {
+        "Value": true,
+        "Status": "locked"
+      }
+    }
+  }
+}

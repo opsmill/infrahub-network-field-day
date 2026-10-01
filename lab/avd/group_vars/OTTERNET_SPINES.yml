@@ -1,0 +1,18 @@
+---
+type: spine
+
+spine:
+  defaults:
+    platform: cEOS-LAB
+    bgp_as: 65100
+    loopback_ipv4_pool: 10.41.0.0/24
+    bgp_defaults:
+      - no bgp default ipv4-unicast
+      - distance bgp 20 200 200
+  nodes:
+    - name: spine1
+      id: 1
+      mgmt_ip: 172.20.41.11/24
+    - name: spine2
+      id: 2
+      mgmt_ip: 172.20.41.12/24

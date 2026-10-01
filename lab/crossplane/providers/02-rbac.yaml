@@ -1,0 +1,44 @@
+---
+# What the providers are allowed to do in this cluster.
+#
+# cluster-admin, deliberately and with the reason written down rather than left
+# implied. These two providers are the mechanism by which the whole platform is
+# built: provider-kubernetes creates Namespaces, CiliumBGPClusterConfigs,
+# CiliumLoadBalancerIPPools and CiliumNetworkPolicies, and provider-helm
+# installs charts that ship their own CRDs, RBAC and webhooks
+# (kube-prometheus-stack defines around a dozen CRDs). Enumerating that
+# statically means a rule per Cilium CRD plus escalate/bind for every chart's
+# own RBAC, and it has to be widened again for the next chart -- which produces
+# a long list that is not meaningfully narrower than admin and goes stale
+# without anyone noticing.
+#
+# This is a lab, and the honest description is that Crossplane *is* the platform
+# operator here. On a real cluster this is where you would spend the effort:
+# split the two providers apart, give provider-kubernetes an explicit list of
+# the Cilium kinds and nothing else, and scope provider-helm to the namespaces
+# it is allowed to release into.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: crossplane-provider-kubernetes-admin
+subjects:
+  - kind: ServiceAccount
+    name: provider-kubernetes
+    namespace: crossplane-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: crossplane-provider-helm-admin
+subjects:
+  - kind: ServiceAccount
+    name: provider-helm
+    namespace: crossplane-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin

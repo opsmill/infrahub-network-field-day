@@ -16,7 +16,7 @@
 # first six zone pairs. A reconciling generator must delete rules with no
 # service behind them, so that flag is what keeps the baseline safe.
 #
-# Sourced field-for-field from ../lab/configs/fw/vsrx/junos.conf.
+# Sourced field-for-field from lab/configs/fw/vsrx/junos.conf.
 # ============================================================================
 apiVersion: infrahub.app/v1
 kind: Object
@@ -265,7 +265,7 @@ kind: Object
 spec:
   kind: SecurityIPAMIPAddress
   data:
-    # NOTHING ANSWERS ON THIS VIP ANY MORE. It belonged to the lab repository's
+    # NOTHING ANSWERS ON THIS VIP ANY MORE. It belonged to the lab's
     # `otternet-access` application, and `invoke cluster`'s handover now deletes
     # that along with `otternet-observability`: the cluster carries only what a
     # service object declares. The address and the rule that names it stay

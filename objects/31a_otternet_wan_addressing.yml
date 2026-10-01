@@ -22,7 +22,7 @@
 # between them. `31a` does; a rename that breaks that ordering breaks the load,
 # and tests/unit/test_wan_addressing_objects.py pins it.
 #
-# Sourced from ../lab/wan/tenants.yml. Every value here is transcribed, none is
+# Sourced from lab/wan/tenants.yml. Every value here is transcribed, none is
 # derived -- the test compares both directions, so an invented address fails as
 # loudly as a missing one.
 #

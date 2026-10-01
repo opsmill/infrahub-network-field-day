@@ -1,7 +1,7 @@
 """Seed-data tests for the WAN service layer (objects/37).
 
 The assertions worth having are the ones that catch a transcription slip
-against `../lab/wan/tenants.yml`, because the object file is a hand
+against `lab/wan/tenants.yml`, because the object file is a hand
 transcription of it and nothing else compares the two.
 
 The most important is the asymmetry: acme has internet, globex does not. A
@@ -19,7 +19,7 @@ import pytest
 import yaml
 
 OBJECT_FILE = Path("objects/37_otternet_wan_services.yml")
-LAB_TENANTS = Path("../lab/wan/tenants.yml")
+LAB_TENANTS = Path(__file__).resolve().parents[2] / "lab" / "wan/tenants.yml"
 
 
 def _docs() -> list[dict[str, Any]]:
@@ -35,7 +35,7 @@ def _data(kind: str) -> list[dict[str, Any]]:
 
 def _lab_tenants() -> list[dict[str, Any]]:
     if not LAB_TENANTS.is_file():
-        pytest.skip("lab repo not checked out alongside this one")
+        pytest.skip("the lab file this test reads is missing from lab/")
     return yaml.safe_load(LAB_TENANTS.read_text(encoding="utf-8"))["tenants"]
 
 

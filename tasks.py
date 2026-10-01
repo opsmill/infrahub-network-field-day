@@ -71,13 +71,10 @@ SEMAPHORE_URL = "http://localhost:3000"
 SEMAPHORE_ADMIN = "admin"
 SEMAPHORE_ADMIN_PASSWORD = "semaphore"  # noqa: S105
 SEMAPHORE_PLAYBOOK_PATH = "/opt/semaphore/playbooks"
-# Host path bind-mounted into the Semaphore container as the ContainerLab
-# staging directory, so files deploy_clab.yml pulls are reachable from the host.
-CLAB_STAGING_DIR = "lab/clab-staging"
 
-# The committed ContainerLab topology this project provisions, in the sibling
-# OTTERNET lab repository. That repository owns the topology -- which nodes exist
-# and how they are wired -- and this one owns their configuration.
+# The committed ContainerLab topology this project provisions, under lab/. The
+# lab owns the topology -- which nodes exist and how they are wired -- and
+# Infrahub owns their configuration.
 LAB_TOPOLOGY = "otternet.clab.yml"
 
 # Image variables the topology interpolates. ContainerLab runs under sudo, which
@@ -173,60 +170,9 @@ class _SemaphoreClient:
         return rid
 
 
-def ensure_clab_staging_dir() -> Path:
-    """Create the ContainerLab staging directory the Semaphore container writes to.
-
-    docker-compose.override.yml bind-mounts this into the container, so the files
-    deploy_clab.yml pulls land on the host instead of a container layer that is
-    discarded on recreate.
-
-    It must exist *before* the container is created, and must be writable by both
-    the container's uid and the host user's, which differ. Getting either wrong
-    fails without naming the cause:
-
-      - absent at container start: Docker creates it owned by root, and the
-        staging write fails with EACCES.
-      - mode 0755: the same EACCES, because the container's uid is not the owner.
-      - deleted while the container runs: the container keeps a stale mountpoint
-        and every path under it fails with ENOENT, which takes a container
-        recreate to fix - and that discards Semaphore's sqlite state.
-
-    Called from both `start` and `init-semaphore` so the ordering holds either
-    way. Staging inside the lab/ mount instead was tried and does not work: a
-    writable bind mount still obeys POSIX permissions, so the container cannot
-    mkdir inside a host directory it does not own.
-    """
-    staging_dir = Path(__file__).parent / CLAB_STAGING_DIR
-    staging_dir.mkdir(parents=True, exist_ok=True)
-    staging_dir.chmod(0o777)
-    print(f"Staging directory {CLAB_STAGING_DIR} ready (mode 0777, shared with the Semaphore container).")
-    return staging_dir
-
-
-def _semaphore_staging_host_path(context: Context, container_path: str) -> str:
-    """Host path backing the Semaphore container's staging directory.
-
-    Asks Docker for the real bind source rather than assuming it matches this
-    checkout. They diverge whenever the stack was started from a different
-    directory — a git worktree being the obvious case — and a wrong path here is
-    worse than none, because it sends people to an empty directory that looks
-    like a failed run.
-    """
-    fallback = str((Path(__file__).parent / CLAB_STAGING_DIR).resolve())
-    fmt = "{{range .Mounts}}{{if eq .Destination " + f'"{container_path}"' + "}}{{.Source}}{{end}}{{end}}"
-    result = context.run(
-        f"docker inspect $(docker ps -q --filter name=semaphore | head -1) --format '{fmt}'",
-        hide=True,
-        warn=True,
-    )
-    if result and result.ok and result.stdout.strip():
-        return str(result.stdout.strip())
-    return fallback
-
-
 @task(name="init-semaphore")
 def init_semaphore(
-    context: Context,
+    context: Context,  # noqa: ARG001 - invoke passes it to every task
     url: str = SEMAPHORE_URL,
     admin: str = SEMAPHORE_ADMIN,
     password: str = SEMAPHORE_ADMIN_PASSWORD,
@@ -238,7 +184,6 @@ def init_semaphore(
     Safe to run multiple times; existing resources are reused.
     """
     print("=== Semaphore Init ===")
-    ensure_clab_staging_dir()
 
     api = _SemaphoreClient(url)
     api.wait_until_ready()
@@ -310,84 +255,6 @@ def init_semaphore(
             "playbook": "deploy.yml",
             "type": "task",
             "app": "ansible",
-        },
-    )
-
-    print("ContainerLab inventory...")
-    # deploy_clab.yml targets localhost plus the `clab_hosts` group, not the
-    # Infrahub dynamic inventory of DcimDevice objects.
-    clab_inv_id = api.find_or_create(
-        f"/api/project/{project_id}/inventory",
-        f"/api/project/{project_id}/inventory",
-        "ContainerLab",
-        {
-            "name": "ContainerLab",
-            "project_id": project_id,
-            "inventory": "inventory_clab.yml",
-            "type": "file",
-            "ssh_key_id": key_id,
-        },
-    )
-
-    print("ContainerLab environment...")
-    clab_container_staging = f"{SEMAPHORE_PLAYBOOK_PATH.rsplit('/', 1)[0]}/clab-staging"
-    # The variables deploy_clab.yml needs must live in the environment, NOT in
-    # survey_vars. Verified against Semaphore v2.17.12: a declared survey var is
-    # recorded on the task's `params` but is never forwarded to ansible-playbook
-    # as an extra var, so the playbook fails with "fabric is undefined" — with or
-    # without an explicit `type` on the survey var. Only the environment's JSON
-    # reaches the playbook. Override per run in the task's Environment field.
-    #
-    # clab_staging_dir is deliberately not the playbook's /opt/containerlab
-    # default: with clab_hosts resolving to localhost, that localhost is this
-    # container, which cannot write to /opt. This path is owned by the semaphore
-    # user. A real deployment points clab_hosts at a ContainerLab host and
-    # overrides this.
-    clab_env_id = api.find_or_create(
-        f"/api/project/{project_id}/environment",
-        f"/api/project/{project_id}/environment",
-        "ContainerLab",
-        {
-            "name": "ContainerLab",
-            "project_id": project_id,
-            "json": json.dumps(
-                {
-                    "fabric": "OTTERNET_FABRIC",
-                    "clab_staging_dir": clab_container_staging,
-                    # Reported back by the playbook so a run tells you where the
-                    # files are on the Docker host, not just inside the container.
-                    "clab_staging_host_dir": _semaphore_staging_host_path(context, clab_container_staging),
-                }
-            ),
-            "env": "{}",
-        },
-    )
-
-    print("ContainerLab task template...")
-    # Runs with --skip-tags deploy, so Semaphore fetches the artifacts, stages
-    # every file the topology references, and validates them - but does not run
-    # `containerlab deploy`. That step cannot work from here: this container has
-    # no containerlab binary and no Docker socket, so an unskipped run always
-    # ends on the "containerlab is not on PATH" assertion.
-    #
-    # To deploy, point clab_hosts (ansible/inventory_clab.yml) at a ContainerLab
-    # host reachable over SSH and clear the arguments below, or run
-    # `make -C lab deploy-from-infrahub FABRIC=<name>` from a checkout.
-    api.find_or_create(
-        f"/api/project/{project_id}/templates",
-        f"/api/project/{project_id}/templates",
-        "Fetch ContainerLab Files",
-        {
-            "name": "Fetch ContainerLab Files",
-            "project_id": project_id,
-            "repository_id": repo_id,
-            "inventory_id": clab_inv_id,
-            "environment_id": clab_env_id,
-            "playbook": "deploy_clab.yml",
-            "type": "task",
-            "app": "ansible",
-            "arguments": json.dumps(["--skip-tags", "deploy"]),
-            "allow_override_args_in_task": True,
         },
     )
 
@@ -745,12 +612,14 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
 
 
 def find_lab_directory(explicit: str = "") -> Path:
-    """Locate the sibling OTTERNET lab repository.
+    """Locate the OTTERNET lab: `lab/` in the MAIN checkout.
 
-    `../lab` is right from a normal checkout and wrong from a git worktree, where
-    the repository root sits several levels deeper under `.emdash/worktrees/`.
-    Rather than hard-code either, walk up from this file looking for a directory
-    holding the topology. Set OTTERNET_LAB_DIR to override.
+    The main checkout rather than this one, for the reason `compose_root` gives:
+    there is one lab, and its runtime state -- ContainerLab's `clab-otternet/`,
+    the k3s kubeconfigs, the FRR socket directories -- lives under its directory.
+    A worktree resolving to its own copy would deploy a second set of bind paths
+    and read kubeconfigs that were never written. Set OTTERNET_LAB_DIR to
+    override.
     """
     if explicit:
         candidate = Path(explicit).expanduser().resolve()
@@ -761,15 +630,11 @@ def find_lab_directory(explicit: str = "") -> Path:
     if env_dir := os.getenv("OTTERNET_LAB_DIR"):
         return find_lab_directory(env_dir)
 
-    for parent in [MAIN_DIRECTORY_PATH.resolve(), *MAIN_DIRECTORY_PATH.resolve().parents]:
-        candidate = parent.parent / "lab"
-        if (candidate / LAB_TOPOLOGY).is_file():
-            return candidate.resolve()
+    candidate = compose_root() / "lab"
+    if (candidate / LAB_TOPOLOGY).is_file():
+        return candidate.resolve()
 
-    raise SystemExit(
-        f"Could not find the lab repository. Looked for a directory containing {LAB_TOPOLOGY} "
-        "beside this checkout and each of its parents. Set OTTERNET_LAB_DIR to point at it."
-    )
+    raise SystemExit(f"No {LAB_TOPOLOGY} in {candidate}. Set OTTERNET_LAB_DIR to point at the lab.")
 
 
 def _wait_for_eapi(ctx: Context, timeout: int = 600) -> None:
@@ -858,7 +723,7 @@ def _ensure_socket_directories(lab_path: Path, topology: Path) -> list[Path]:
 
 @task(
     help={
-        "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
+        "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
         "destroy": "Tear the lab down instead of deploying it.",
         "wait": "Block until every fabric switch answers eAPI before returning.",
     }
@@ -867,21 +732,21 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     """
     Bring up the ContainerLab topology with management connectivity.
 
-    Deploys the sibling lab repository's committed topology as-is. That
-    repository owns which nodes exist and how they are wired; this one owns their
-    configuration. Nothing here renders a topology.
+    Deploys the committed topology in lab/ as-is. The lab owns which nodes exist
+    and how they are wired; Infrahub owns their configuration. Nothing here
+    renders a topology.
 
     The fabric comes up **unconfigured on purpose**. The cEOS nodes are given no
     `startup-config` -- only `CLAB_MGMT_VRF` and a management address -- so they
     boot reachable and empty, which is exactly the state `invoke provision` then
-    fills from Infrahub. The firewall and the FRR routers boot from the lab
-    repository's own files and are re-provisioned from Infrahub the same way.
+    fills from Infrahub. The firewall and the FRR routers boot from the lab's
+    own files and are re-provisioned from Infrahub the same way.
 
     Run `invoke provision` next.
     """
     lab_path = find_lab_directory(lab_dir)
     topology = lab_path / LAB_TOPOLOGY
-    print(f" - Lab repository: {lab_path}")
+    print(f" - Lab: {lab_path}")
 
     # ContainerLab needs root for netns and bridge work; --preserve-env keeps the
     # image variables the topology interpolates.
@@ -910,6 +775,18 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
         ctx.run(shlex.quote(str(bridge)), pty=True)
 
     _ensure_socket_directories(lab_path, topology)
+
+    # THE WAN'S BOOT CONFIGURATION, RENDERED BEFORE THE DEPLOY. Every FRR router
+    # bind-mounts lab/wan/rendered/<node>/{frr.conf,daemons,init.sh}, which is
+    # gitignored generated output -- so on a fresh clone the topology is refused
+    # for a missing bind path before any node starts. The lab's own Makefile
+    # renders it in `make deploy`; this drives ContainerLab directly, so it has to
+    # as well. The renderer needs only Jinja and YAML, which this environment
+    # already has, and it is idempotent.
+    renderer = lab_path / "wan/render.py"
+    if renderer.is_file():
+        print(" - Rendering the WAN boot configuration")
+        ctx.run(f"{shlex.quote(sys.executable)} {shlex.quote(str(renderer))}", hide="out")
 
     print(f" - Deploying {topology.name} (cEOS takes a few minutes to boot)")
     ctx.run(f"{clab} deploy -t {shlex.quote(str(topology))} --reconfigure", pty=True)
@@ -1077,7 +954,7 @@ def _lab_kubeconfig(lab_dir: str = "") -> Path:
 
 @task(
     help={
-        "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
+        "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
         "handover": "Delete the lab's claims, so the cluster carries only what Infrahub declares.",
     }
 )
@@ -1085,7 +962,7 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
     """
     Bring up the Kubernetes half: Cilium, then Vidra, then Crossplane.
 
-    The installers for the CNI and Crossplane belong to the lab repository and
+    The installers for the CNI and Crossplane belong to the lab (lab/) and
     are run from here rather than reimplemented -- they are the lab's, the same
     way the topology is.
 
@@ -1128,7 +1005,7 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
     """
     lab_path = find_lab_directory(lab_dir)
     kubeconfig = _lab_kubeconfig(lab_dir)
-    print(f" - Lab repository: {lab_path}")
+    print(f" - Lab: {lab_path}")
 
     print(" - Installing Cilium (the CNI; nodes stay NotReady until it is ready)")
     ctx.run(f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-cilium.sh'))}", pty=True)
@@ -1182,7 +1059,7 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
 
 @task(
     help={
-        "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
+        "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
         "wait": "Block until both syncs report a terminal state.",
     }
 )
@@ -1690,7 +1567,7 @@ _cluster_task = cluster
 @task(
     help={
         "branch": "Branch the AVD chain runs on before being merged. Created if absent.",
-        "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
+        "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
         "cluster": "Also bring up Kubernetes: Cilium, Vidra, Crossplane and the handover.",
         "fresh": "Destroy the stack and the lab first, so the run starts from nothing.",
     }
@@ -1962,8 +1839,4 @@ def start(ctx: Context) -> None:
     """
     Start the services using docker-compose in detached mode.
     """
-    # Before compose creates the containers: a bind-mount source that does not
-    # exist yet is created by Docker as root, which the Semaphore container then
-    # cannot write to.
-    ensure_clab_staging_dir()
     ctx.run(f"{compose_cmd()} up -d", pty=True)
