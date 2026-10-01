@@ -75,7 +75,7 @@ You don't need to regenerate to look at a fabric. In the Infrahub UI, on any bra
 
 - The fabric's **Artifacts** include the fabric documentation and the cabling plan — every link between devices.
 - Each switch's **Artifacts** include its rendered EOS configuration and device documentation.
-- The fabric object itself carries the underlay and overlay settings, and its EVPN tenants and SVIs are under **EVPN Services** in the menu.
+- The fabric object itself carries the underlay and overlay settings, and its EVPN tenants and SVIs are under **Data Centre Fabric → EVPN** in the menu.
 
 See [Viewing Artifacts](../viewing-artifacts.md) for where each one lives.
 

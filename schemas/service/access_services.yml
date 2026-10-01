@@ -25,7 +25,7 @@ nodes:
     description: "A grant of access to one application from one source"
     label: Application Access Grant
     icon: mdi:key-chain
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget

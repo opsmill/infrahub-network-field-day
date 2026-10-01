@@ -161,6 +161,7 @@ nodes:
     description: "Globally-unique BGP autonomous-system number, allocated per fabric block"
     label: BGP ASN
     icon: mdi:numeric
+    include_in_menu: false
     human_friendly_id:
       - asn__value
     order_by:

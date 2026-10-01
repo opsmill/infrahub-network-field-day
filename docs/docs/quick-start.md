@@ -109,11 +109,11 @@ then the `OTTERNET_FABRIC` design (`20`–`28`): device types and templates, poo
 
 Open the Infrahub UI at **`http://localhost:8000`** and log in. You should see:
 
-- **Devices → Types & Models → Manufacturers**: `Arista`, `FRRouting`, `Juniper`, and `Generic`.
-- **Fabric Design → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
-- **Locations → Racks**: `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`.
-- **Devices → Fabric Switches**: the two spines and five leaves, with their pinned management addresses.
-- **IPAM → Prefixes**: the `10.41.0.0/16` fabric supernet and the prefixes its pools draw from.
+- **Fabric Design & AVD → Device Catalogue → Manufacturers**: `Arista`, `FRRouting`, `Juniper`, and `Generic`.
+- **Data Centre Fabric → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
+- **Data Centre Fabric → Racks**: `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`.
+- **Data Centre Fabric → Switches**: the two spines and five leaves, with their pinned management addresses.
+- **IP Addressing & VLANs → Prefixes**: the `10.41.0.0/16` fabric supernet and the prefixes its pools draw from.
 
 If you don't see these, re-run `uv run invoke load` or see [Common Issues](./troubleshooting.md).
 

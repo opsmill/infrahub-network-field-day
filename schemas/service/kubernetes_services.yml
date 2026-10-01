@@ -24,7 +24,7 @@ nodes:
     description: "A cluster's BGP contract with the EVPN fabric"
     label: Fabric Peering Service
     icon: mdi:handshake
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget
@@ -76,7 +76,7 @@ nodes:
     description: "An application that is a participant in the fabric"
     label: Fabric Application
     icon: mdi:apps
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget

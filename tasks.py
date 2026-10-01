@@ -1724,11 +1724,61 @@ def restart(ctx: Context, component: str = "") -> None:
     ctx.run(f"{compose_cmd()} restart", pty=True)
 
 
-@task
-def load_menu(ctx: Context) -> None:
-    """Load the menu into Infrahub using infrahubctl."""
+def _declared_menu_identifiers() -> set[str]:
+    """`namespace + name` of every entry in menus/*.yml, at any depth."""
+    import yaml
+
+    found: set[str] = set()
+
+    def walk(items: list[dict[str, Any]]) -> None:
+        for item in items:
+            found.add(f"{item['namespace']}{item['name']}")
+            walk((item.get("children") or {}).get("data") or [])
+
+    for path in sorted((MAIN_DIRECTORY_PATH / "menus").glob("*.yml")):
+        for doc in yaml.safe_load_all(path.read_text(encoding="utf-8")):
+            if isinstance(doc, dict) and doc.get("kind") == "Menu":
+                walk(doc["spec"]["data"])
+    return found
+
+
+def _prune_menu(branch: str = "") -> None:
+    """Delete menu items the repository no longer declares.
+
+    `infrahubctl menu load` and the repository import both UPSERT by
+    namespace + name and delete nothing, so an entry renamed or removed in
+    menus/menu.yml stays in the sidebar under its old name -- a duplicate, or
+    an empty section header. Infrahub's own items (namespace `Builtin`,
+    `protected`) are never touched.
+    """
+    declared = _declared_menu_identifiers()
+    if not declared:
+        print(" - No menu entries declared; refusing to prune everything.")
+        return
+    data = _graphql(
+        "{ CoreMenuItem { edges { node { id namespace { value } name { value } protected { value } } } } }",
+        branch,
+    )
+    stale = [
+        edge["node"]
+        for edge in (data.get("CoreMenuItem") or {}).get("edges", [])
+        if not edge["node"]["protected"]["value"]
+        and edge["node"]["namespace"]["value"] != "Builtin"
+        and f"{edge['node']['namespace']['value']}{edge['node']['name']['value']}" not in declared
+    ]
+    for node in stale:
+        _graphql(f'mutation {{ CoreMenuItemDelete(data: {{ id: "{node["id"]}" }}) {{ ok }} }}', branch)
+        print(f" - Pruned stale menu item {node['namespace']['value']}{node['name']['value']}")
+
+
+@task(help={"branch": "Branch to load onto (default main)", "prune": "Delete items menus/ no longer declares"})
+def load_menu(ctx: Context, branch: str = "", prune: bool = True) -> None:
+    """Load the menu into Infrahub using infrahubctl, then prune stale items."""
+    branch_arg = f" --branch {shlex.quote(branch)}" if branch else ""
     with ctx.cd(MAIN_DIRECTORY_PATH):
-        ctx.run("infrahubctl menu load menus/", pty=True)
+        ctx.run(f"infrahubctl menu load menus/{branch_arg}", pty=True)
+    if prune:
+        _prune_menu(branch)
 
 
 @task

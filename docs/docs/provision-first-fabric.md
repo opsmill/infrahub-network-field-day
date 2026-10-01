@@ -93,12 +93,12 @@ The full chain typically takes a few minutes depending on fabric size.
 
 ## Step 4 — Verify devices exist
 
-Once all tasks complete, open **Devices → Fabric Switches** in the menu. You should see seven switches:
+Once all tasks complete, open **Data Centre Fabric → Switches** in the menu. You should see seven switches:
 
 - `spine` — `spine-otternet-pod1-1` and `spine-otternet-pod1-2`
 - `leaf` — `leaf-otternet-pod1-1-1` and `-1-2` (`K8S_LEAFS`), `-2-1` and `-2-2` (`APP_LEAFS`), and `-3-1` (`BORDER_LEAFS`)
 
-Each switch keeps the BGP ASN, node ID, loopback and management address pinned in `objects/26_otternet_devices.yml`, and now has its uplink and MLAG peer interfaces cabled under **Devices → Connections**.
+Each switch keeps the BGP ASN, node ID, loopback and management address pinned in `objects/26_otternet_devices.yml`, and now has its uplink and MLAG peer interfaces cabled under **Data Centre Fabric → Connections**.
 
 ## Step 5 — Render the AVD artifacts
 

@@ -96,11 +96,11 @@ Open the Infrahub UI and check each of these lists is populated:
 
 | Menu | Expected |
 |------|----------|
-| Devices → Types & Models → Manufacturers | `Arista`, `FRRouting`, `Juniper`, `Generic` |
-| Devices → Types & Models → Device Types | `Arista cEOS-LAB`, plus the lab's FRR, vSRX, and Linux container types |
-| Fabric Design → Fabrics | `OTTERNET_FABRIC` |
-| Devices → Fabric Switches | the seven `spine-otternet-pod1-*` and `leaf-otternet-pod1-*` switches |
-| IPAM → Prefixes | the `10.41.0.0/16` fabric supernet, its loopback, VTEP, point-to-point and MLAG prefixes, and `172.20.41.0/24` for management |
+| Fabric Design & AVD → Device Catalogue → Manufacturers | `Arista`, `FRRouting`, `Juniper`, `Generic` |
+| Fabric Design & AVD → Device Catalogue → Device Types | `Arista cEOS-LAB`, plus the lab's FRR, vSRX, and Linux container types |
+| Data Centre Fabric → Fabrics | `OTTERNET_FABRIC` |
+| Data Centre Fabric → Switches | the seven `spine-otternet-pod1-*` and `leaf-otternet-pod1-*` switches |
+| IP Addressing & VLANs → Prefixes | the `10.41.0.0/16` fabric supernet, its loopback, VTEP, point-to-point and MLAG prefixes, and `172.20.41.0/24` for management |
 
 If any are empty, seed data did not load.
 

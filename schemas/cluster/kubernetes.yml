@@ -35,8 +35,7 @@ nodes:
     description: "A Kubernetes cluster that peers with the fabric"
     label: Kubernetes Cluster
     icon: mdi:kubernetes
-    include_in_menu: true
-    menu_placement: ClusterGeneric
+    include_in_menu: false
     inherit_from:
       - ClusterGeneric
       - ClusterGenericComputeUnitNodes

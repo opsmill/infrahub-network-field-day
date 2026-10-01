@@ -423,7 +423,7 @@ An EVPN domain owned by one `NetworkFabric`. Attributes: `name`, `domain_id`, an
 
 EVPN Multi-Domain Gateway intent shared by one or more Border Leaf devices in a selected Pod. Attributes include `resiliency_model` (only `all_active_multihoming`), EVPN L2/L3 enablement flags, D-PATH enablement, All-Active Multihoming enablement, and Ethernet Segment identifier/RT import values. Relationships: `local_domain` -> `EvpnDomain` (parent), `pod` -> `NetworkPod` (required non-owning context), `remote_domain` -> `EvpnDomain`, and `members` -> `DcimDevice`. The selected Pod must have `evpn_domain` set to the same object as `local_domain`, `remote_domain` must differ from `local_domain`, and group names are unique by `[local_domain, pod, name__value]`. Its schema-valid HFID uses the selected Pod and group name, while the display label and ordering include native `local_domain`, `pod`, `remote_domain`, and `name` fields. Reviewers distinguish the parent local domain from the EVPN Domain relationship view through `EvpnDomain.local_gateway_groups`; no computed or denormalized helper attribute is added solely for local-domain display.
 
-`NetworkFabric.evpn_domains`, `NetworkPod.evpn_domain`, `NetworkPod.evpn_gateway_groups`, and `DcimDevice.evpn_gateway_group` are additive relationships from `evpn/evpn_gateway.yml`. Both `EvpnDomain` and `EvpnGatewayGroup` set `include_in_menu: false` because the custom EVPN Services menu exposes one Domains item for `EvpnDomain`; gateway groups are reached from EVPN Domain relationship views.
+`NetworkFabric.evpn_domains`, `NetworkPod.evpn_domain`, `NetworkPod.evpn_gateway_groups`, and `DcimDevice.evpn_gateway_group` are additive relationships from `evpn/evpn_gateway.yml`. Both `EvpnDomain` and `EvpnGatewayGroup` set `include_in_menu: false` because the custom menu exposes one **Data Centre Fabric → EVPN → Domains** item for `EvpnDomain`; gateway groups are reached from EVPN Domain relationship views.
 
 ## Compute
 
@@ -453,7 +453,7 @@ AVD-specific fabric tag object. Attributes: `name`, `description`. Relationships
 
 ### `CloudvisionWorkspace` — `Cloudvision.Workspace`
 
-Tracks one CloudVision workspace created by the `cv-config-validation` check for a proposed change and fabric, defined in `cv/cv.yml`. Excluded from the UI menu (`include_in_menu: false`); identified by `workspace_id`.
+Tracks one CloudVision workspace created by the `cv-config-validation` check for a proposed change and fabric, defined in `cv/cv.yml`. Listed under **Deployment → CloudVision Workspaces** in the custom menu (`include_in_menu: false` on the schema, as for every kind the menu names); identified by `workspace_id`.
 
 - **Attributes**: `name` (display name), `workspace_id` (unique — the CloudVision workspace UUID), `proposed_change_id`, `workspace_url`, `thread_id` (the `CoreChangeThread` used for lifecycle comments), `change_control_id` and `change_control_url` (set when a change control exists), `last_submission_error`, `last_submission_attempt_at`, `submitted_at`, and `status`.
 - **Relationships**: `fabric` → `NetworkFabric` (cardinality one).
