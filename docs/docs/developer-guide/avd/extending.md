@@ -144,10 +144,10 @@ Scenario: you want PyAVD to receive an additional input field (for example, a pe
 
    This rewrites `generators/generate_avd_device_inputs_query.py` from the query and the refreshed schema.
 5. **Hostvars builder** — map the new attribute into the PyAVD hostvars dict in [`generators/generate_avd_device_hostvar.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_avd_device_hostvar.py):
-    - Device-level, role-independent field → add it in `_build_hostvars()` (where `type`, `fabric_name`, `bgp_as`, loopback/mgmt basics are assembled).
+    - Device-level, role-independent field → add it in the section builder that owns it: `_build_node_identity()` for node basics (`bgp_as`, loopback, management address), `_build_fabric_settings()` for fabric-wide top-level keys, or another `_build_*` section. `_build_hostvars()` merges the sections in a fixed order; the hostvars are checksummed, so a new key belongs at the end of its section rather than reordering existing ones.
     - Role-specific or multi-attribute field → add the logic in the appropriate role branch of the same file.
 6. **Validation** — PyAVD's `validate_inputs()` flags unknown fields as errors. Confirm the field is in the PyAVD input schema for the version pinned (see [overview](./overview.md#pyavd-version)). If it isn't a standard PyAVD field, look at using `custom_structured_configuration_prefix` or `structured_config` pass-through instead.
-7. **Tests** — add a case in [`tests/unit/test_hostvar_ordering.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tests/unit/test_hostvar_ordering.py) for any hostvars logic added to the generator. (`tests/unit/test_avd.py` covers only the role→type mapping in `src/solution_arista_avd/avd.py`.)
+7. **Tests** — add a case in [`tests/unit/test_hostvar_ordering.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tests/unit/test_hostvar_ordering.py) for any hostvars logic added to the generator, and in [`tests/unit/test_hostvar_section_builders.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tests/unit/test_hostvar_section_builders.py) for a change to a section builder or to key order. (`tests/unit/test_avd.py` covers only the role→type mapping in `src/solution_arista_avd/avd.py`.)
 8. **Docs** — update [Hostvars Reference](./hostvars.md) with the new field and its Infrahub source.
 
 ## Checklist: what to run before opening a PR
