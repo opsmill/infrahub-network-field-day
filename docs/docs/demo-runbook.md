@@ -126,6 +126,11 @@ Grafana redirects to the same Dex sign-in page the portal uses. `alice` signs in
 **6. Revoke.** Set the grant to `decommissioning` and merge. After the next reconcile the bookmark
 stops answering again, and anyone already signed in loses the page with it.
 
+A grant made **outside the portal** -- over the API or an SDK -- must also be added to the
+`service_app_accesses` group. The generator runs only for members of its target group: the event
+rule fires, and the run fails "Target … is not part of the group" with nothing visible on the
+grant. The portal adds the membership itself.
+
 ## If you want the review step to bite
 
 ```bash
@@ -169,6 +174,7 @@ decides.
 | Merge to the firewall carrying the rule | next reconcile cycle |
 | Whole-fabric AVD regeneration (7 switches) | ~21s |
 | Revocation, merge to the rule leaving the device | next reconcile cycle |
+| Grafana grant, merge to Grafana answering the branch | ~2.3 minutes, one reconcile cycle |
 
 Measured on this lab: a granted VIP answered `HTTP 200` from the branch desktop,
 the seeded application's VIP and an unpermitted port on the granted one were both

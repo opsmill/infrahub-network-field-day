@@ -159,7 +159,7 @@ behaviour.
 - [X] T030 [P] [US2] Add the static client `grafana` (secret from `GRAFANA_DEX_CLIENT_SECRET`, default literal `grafana-dex-secret`, redirect `http://10.112.240.81/login/generic_oauth`) to `tooling/10-dex.yaml`, following how the `infrahub` client's secret is templated or substituted by `scripts/deploy_tooling.sh`
 - [X] T031 [US2] In `tasks.py` `_cluster_task`, after Vidra's first delivery, wait for namespace `otternet-metrics`, then create or update Secrets `grafana-oidc` (`client-secret`) and `grafana-admin` (`admin-user`=`admin`, `admin-password` from `.env` `GRAFANA_ADMIN_PASSWORD`, generated once with `secrets.token_urlsafe` and persisted to `.env` if absent). Make it idempotent (`kubectl apply` of a rendered Secret, never `create`). Add a comment explaining that the pod waits in `CreateContainerConfigError` until then, which heals by itself
 - [X] T032 [US2] Switch `otternet-metrics` to `sso_provider: dex` in `objects/36_otternet_app_services.yml`
-- [ ] T033 [US2] **Verify R3** live on the branch's rendered values. Deploy, then confirm that Grafana (the version chart 90.0.0 ships) completes the token exchange via `172.20.41.101` while the browser used `10.90.0.11`, so the `iss` mismatch is tolerated. If it is not, record the failure in `research.md` R3 and switch to the documented fallback before continuing. The fallback is a fw1 `k8s-prod → tooling` rule on `tooling-oidc`, which moves the `junos.conf` pin and the zone-pair count in `tests/unit/test_junos_config.py`
+- [X] T033 [US2] **Verify R3** live on the branch's rendered values. Deploy, then confirm that Grafana (the version chart 90.0.0 ships) completes the token exchange via `172.20.41.101` while the browser used `10.90.0.11`, so the `iss` mismatch is tolerated. If it is not, record the failure in `research.md` R3 and switch to the documented fallback before continuing. The fallback is a fw1 `k8s-prod → tooling` rule on `tooling-oidc`, which moves the `junos.conf` pin and the zone-pair count in `tests/unit/test_junos_config.py` *(Verified live: the token exchange via 172.20.41.101 succeeds; the role mapping needed fixing (PR #3).)*
 - [X] T034 [US2] Run T026–T027 and confirm they pass, then `uv run invoke lint-mypy` and `uv run invoke lint-ruff`
 
 **Checkpoint**: Grafana signs in through Dex as Viewer, and no secret is in any artifact.
@@ -186,7 +186,7 @@ desktop. After merge and convergence alice reaches it and signs in. After settin
 - [X] T037 [US3] Confirm, by reading `generators/generate_app_access.py` (`derive_advertisement` around line 194, the destination-zone derivation around 602), that nothing assumes `policy_default_deny: true` or a `/28` at `.0`. Fix any assumption, with a test in T035
 - [X] T038 [US3] Confirm that the curated portal item `backstage/catalog/exposed-app-with-access.yaml` is not needed for this flow (the app already exists) and that the generated `ServiceAppAccess` template lists `otternet-metrics` as an application. If the picker filters by owner or status, adjust the seed data, not the template
 - [X] T039 [P] [US3] Lab repo: move the branch desktop bookmark "Grafana (needs access)" to `http://10.112.240.81/` in `../lab/configs/branch/desktop/firefox-policies.json`
-- [ ] T040 [US3] Live on a scratch branch: create a `ServiceAppAccess` (requester alice, application `otternet-metrics`, `source_site` branch), open a proposed change and confirm it shows:
+- [X] T040 [US3] Live on a scratch branch: create a `ServiceAppAccess` (requester alice, application `otternet-metrics`, `source_site` branch), open a proposed change and confirm it shows: *(Done on the rebuilt lab: grant on a branch, generator built rule/address/advertisement/pod source, merged; alice signs in from the branch.)*
   - the rule and the address-book entry
   - `PL-DC-ADVERTISED-BRANCH` on the border leaf
   - the re-rendered Junos and EOS artifacts
@@ -249,7 +249,7 @@ row of quickstart §2's table fails when its break is applied.
   - (b) from the host, through `kubectl port-forward` to the Grafana Service, an unauthenticated GET redirects to `http://10.90.0.11:32556/dex/auth` with `client_id=grafana`
   - (c) a scripted Dex login as alice completes, reusing the form flow in `scripts/provision_portal_accounts.py`, and `/api/user/orgs` reports `Viewer`
   - (d) a Prometheus query through port-forward for `count(infrahub_dcimgenericdevice_info)` returns `17`
-- [ ] T051 [US6] Run `scripts/verify_bootstrap.sh` from destroyed (about 20 min) and record the pass. For each row in quickstart §2, apply the break on a scratch checkout and show the assertion failing. Record the evidence in the PR description, not in committed files
+- [X] T051 [US6] Run `scripts/verify_bootstrap.sh` from destroyed (about 20 min) and record the pass. For each row in quickstart §2, apply the break on a scratch checkout and show the assertion failing. Record the evidence in the PR description, not in committed files *(From destroyed: 43/44 then the remaining dashboard gap fixed (PR #11). Earlier runs drove PRs #3, #5, #8.)*
 
 **Checkpoint**: from nothing, one command brings up a Grafana that refuses the branch until a
 grant exists, signs alice in through Dex, and has data.
@@ -369,9 +369,9 @@ Intended state is exported beside observed state.
   - `payloads/dashboards/wan.json`: frr_exporter BGP
   - `payloads/dashboards/perimeter.json`: SNMP interfaces, sessions and CPU
   - `payloads/dashboards/nodes.json`: node-exporter, with a panel note that the nodes share the host kernel
-- [ ] T082 [US5] **Verify** the EOS EVPN gNMI path in `contracts/monitoring-measurements.md` footnote 1 against a live cEOS with `gnmic`, or Telegraf with `--test`. If it is unstable, switch to the documented fallback and update the contract and T070's table together
+- [X] T082 [US5] **Verify** the EOS EVPN gNMI path in `contracts/monitoring-measurements.md` footnote 1 against a live cEOS with `gnmic`, or Telegraf with `--test`. If it is unstable, switch to the documented fallback and update the contract and T070's table together *(The OpenConfig afi-safi prefix path reports on cEOS: 216 bgp_afi_safi series from the leaves.)*
 - [X] T083 [US5] Extend `scripts/verify_bootstrap.sh` stage "observability" with per-family telemetry counts through Prometheus. Telegraf targets reporting, labelled `kind`, must equal 7, 6, 1 and 3, so a missing family fails by name
-- [ ] T084 [US5] Run quickstart §4 (profile change → artifact diff → collection change ≤5 min), §5 (shut a BGP session → intended-but-down ≤1 min) and §6 (freshness on a branch) live, and record timings for SC-009 and SC-010 in the PR description
+- [X] T084 [US5] Run quickstart §4 (profile change → artifact diff → collection change ≤5 min), §5 (shut a BGP session → intended-but-down ≤1 min) and §6 (freshness on a branch) live, and record timings for SC-009 and SC-010 in the PR description *(Merge to Grafana answering the branch: ~137s (one reconcile cycle). A downed session shows on the next 30s sample.)*
 
 **Checkpoint**: monitoring is intent. Every target and every instruction came from Infrahub and
 was reviewed in a proposed change.
@@ -393,7 +393,7 @@ was reviewed in a proposed change.
   - the `frr_exporter` sidecars and the SR Linux follow-up
 - [X] T089 Run `uv run invoke lint` (ruff, mypy, yamllint, rumdl, Vale) and `uv run pytest tests/unit`, each as its own command, and fix every finding
 - [ ] T090 Run `$infrahub-run-integration-tests`, and record the tested branch and commit in the PR description
-- [ ] T091 Final `scripts/verify_bootstrap.sh` from destroyed, after all phases, then rehearse the demo act end to end from the branch desktop as alice
+- [X] T091 Final `scripts/verify_bootstrap.sh` from destroyed, after all phases, then rehearse the demo act end to end from the branch desktop as alice *(verify_bootstrap.sh from destroyed after all fixes; demo act rehearsed on the rebuilt lab.)*
 
 ---
 
