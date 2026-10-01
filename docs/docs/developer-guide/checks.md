@@ -197,6 +197,50 @@ time purely because nobody had run `invoke avd` — which would teach people to 
 Unit coverage is in
 [`tests/unit/test_zone_advertisement_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tests/unit/test_zone_advertisement_check.py).
 
+## `allocation-consistency`
+
+**Class**: `AllocationConsistencyCheck`
+**Source**: [`checks/allocation_consistency_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/checks/allocation_consistency_check.py)
+**Query**: [`checks/allocation_consistency_check.gql`](https://github.com/opsmill/infrahub-arista-avd/blob/main/checks/allocation_consistency_check.gql) (registered as `allocation_consistency_check`)
+**Target**: none — **global**. "Two objects claim one number" has no natural group to iterate.
+
+`generate-network-segment` and `generate-fabric-app` take resources from pools, next to VLAN IDs,
+subnets and VIP blocks that people enter by hand. Nothing compared the two sets. Each rule below
+covers a domain that no schema uniqueness constraint covers, and a collision in any of them loads
+and merges without an error:
+
+1. **VLAN IDs are unique per fabric, not per `IpamL2Domain`.** `IpamVLAN` already has the
+   uniqueness constraint `[vlan_id, l2domain]`, and a duplicate inside one domain is refused when
+   it is written (`Violates uniqueness constraint 'vlan_id-l2domain'`). AVD does not render that
+   ID, though. It renders `EvpnSvi.svi_id` and `EvpnL2Vlan.vlan_id`, for every `EvpnTenant` that
+   names the fabric, and those are constrained only per VRF and per tenant. The check reports:
+   - two network-service VLANs on one fabric with the same ID whose tag sets intersect, so some
+     switch has to carry both;
+   - two with the same VNI on one fabric (`vni_override`, else `mac_vrf_vni_base + id`), which
+     collides across the whole fabric whatever the tags say;
+   - an SVI or L2 VLAN whose ID differs from the `IpamVLAN` it names.
+
+   The same ID with disjoint tags in different tenants is legitimate and passes.
+2. **Tenant subnets do not overlap within a VRF.** The candidates are every segment's recorded
+   subnet plus every `tenant_host` and `tenant_cloud` prefix. Pool resources are excluded, because
+   `10.230.0.0/16` contains every allocation by design. Segment subnets have no `vrf` of their own,
+   so the check takes the VRF from the segment, then from the prefix's own `vrf`, then from the SVI
+   whose gateway lies inside the prefix. A prefix whose VRF cannot be found is compared against
+   every VRF. One subnet recorded by two segments is also reported, because withdrawing either
+   segment would delete the other's subnet.
+3. **A VIP block sits inside its cluster's `vip_pools` and overlaps no other application's.** The
+   pools are the only supernets the leaves' inbound route policy accepts. A block outside them is
+   advertised by the cluster and refused by the fabric, and nothing reports it. Two overlapping
+   blocks can give the same address to two LoadBalancers.
+
+The check does not look at `status`. A decommissioning service keeps its allocation until its
+generator returns it, and a block declared by hand is never returned. This follows the same rule as
+`wan-service-consistency`.
+
+Unit coverage is in
+[`tests/unit/test_allocation_consistency_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tests/unit/test_allocation_consistency_check.py).
+It has a clean case beside every failing one.
+
 ## Schema
 
 `schemas/cv/cv.yml` defines `CloudvisionWorkspace` — `Cloudvision.Workspace` — the node the check
