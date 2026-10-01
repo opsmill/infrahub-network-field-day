@@ -76,6 +76,23 @@ class TestInSyncDevicesAreSilent:
         assert normalise_junos(raw) == []
 
 
+class TestTelemetryEnablementIsSilent:
+    """Cycle 034 added device-side telemetry, and a line a device does not echo
+    back verbatim would read as a permanent difference -- a push on every cycle.
+
+    Both captured live, from devices whose artifacts carry the new stanza: a leaf
+    with `management api gnmi`, and fw1 with its `snmp` stanza bound to
+    mgmt_junos. The capture script asserted the stanza was in the artifact it
+    compared against, so these are not empty for want of the stanza.
+    """
+
+    def test_eos_with_gnmi_normalises_to_empty(self) -> None:
+        assert normalise_eos(_fixture("eos_clean_gnmi.diff")) == []
+
+    def test_junos_with_snmp_normalises_to_empty(self) -> None:
+        assert normalise_junos(_fixture("junos_clean_snmp.diff")) == []
+
+
 class TestRealChangesSurvive:
     """Without these, a normaliser that suppressed everything would pass."""
 

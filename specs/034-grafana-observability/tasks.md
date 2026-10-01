@@ -311,7 +311,7 @@ Intended state is exported beside observed state.
 
 - [X] T061 [P] [US5] EOS gNMI: add `custom_structured_configuration_management_api_gnmi: {transport: {grpc: [{name: default, vrf: MGMT}]}, provider: eos-native}` to the fabric's `avd_custom_hostvars` in `objects/23_otternet_fabric.yml`, with a comment that provisioning's `rollback clean-config` removed the boot-time gNMI (R7)
 - [X] T062 [P] [US5] Lab repo: add the same `management_api_gnmi` to the fabric `group_vars` in `../lab/avd/` so the golden files derive identically. Then run `uv run python scripts/regenerate_otternet_golden.py` and commit the updated `tests/integration/golden/otternet/*.cfg` in this repository
-- [ ] T063 [P] [US5] Normaliser: capture real `show running-config` from one switch with gNMI enabled (in-sync case) and with it removed (changed case). Add both fixtures and assertions to `tests/unit/test_deployment_normalise.py`. Add a rule to `src/solution_arista_avd/deployment/normalise.py` **only** if the in-sync capture reports a difference
+- [X] T063 [P] [US5] Normaliser: capture real `show running-config` from one switch with gNMI enabled (in-sync case) and with it removed (changed case). Add both fixtures and assertions to `tests/unit/test_deployment_normalise.py`. Add a rule to `src/solution_arista_avd/deployment/normalise.py` **only** if the in-sync capture reports a difference *(Captured live from a leaf whose artifact carries management api gnmi: the session diff is empty; pinned as eos_clean_gnmi.diff.)*
 - [X] T064 [P] [US5] Junos SNMP test first: in `tests/unit/test_junos_config.py`, assert that:
   - with `snmp_community` unset the render is byte-identical to today
   - with it set, a top-level `snmp` stanza appears in the position the updated `../lab/configs/fw/vsrx/junos.conf` has it
@@ -324,7 +324,7 @@ Intended state is exported beside observed state.
   Record the result in `research.md` R7
 - [X] T066 [US5] Implement the `snmp` stanza in `transforms/junos_config.py`, and add `snmp_community`, `snmp_clients` to `transforms/junos_config.gql`, then regenerate `transforms/junos_config_query.py`. Render nothing when the community is unset
 - [X] T067 [US5] Lab repo: add the identical `snmp` stanza to `../lab/configs/fw/vsrx/junos.conf`, and set `snmp_community` (read-only value, documented as configuration in a comment) and `snmp_clients` on fw1 in `objects/32_otternet_security.yml`. Update `tests/unit/fixtures/junos/fw1.json` to match. Then run T064 and confirm it passes
-- [ ] T068 [P] [US5] Normaliser for Junos: capture `show | compare` after a push that includes the `snmp` stanza (in-sync case) and the changed case, and add both to `tests/unit/test_deployment_normalise.py`. Add a rule only if needed
+- [X] T068 [P] [US5] Normaliser for Junos: capture `show | compare` after a push that includes the `snmp` stanza (in-sync case) and the changed case, and add both to `tests/unit/test_deployment_normalise.py`. Add a rule only if needed *(Captured live from fw1 with the mgmt_junos-bound snmp stanza: normalises to empty; pinned as junos_clean_snmp.diff.)*
 - [X] T069 [P] [US5] Lab repo: add six `frr_exporter` sidecar nodes (`tynany/frr_exporter:v1.12.0`, `kind: linux`, `network-mode: container:<router>`) to `../lab/otternet.clab.yml`. Bind each router's `/var/run/frr` to a host directory under the lab dir, mounted into both the router and its sidecar, and pass `--frr.socket.dir-path`. Confirm that `invoke lab` still deploys and that `curl <router mgmt>:9342/metrics` answers for all six
 
 ### Collector artifact (tests first)
