@@ -169,6 +169,23 @@ spec:
             entries:
               - {sequence: 10, action: deny, protocol: ip, source: 10.41.0.0/16, destination: any, log: true}
               - {sequence: 20, action: permit, protocol: ip, source: any, destination: any}
+        # gNMI, for the telemetry collector (cycle 034). ContainerLab's cEOS boot
+        # template enables it, and provisioning's `rollback clean-config`
+        # replaced the boot configuration with this artifact -- which said
+        # nothing about gNMI -- so it was OFF on every switch, measured: "no
+        # transports enabled", 6030 refused. pyavd 6.4's eos_designs has no key
+        # for it, so it passes through as structured config like the ACLs below.
+        #
+        # VRF MGMT, port 6030: the built-in control-plane ACL already permits
+        # 6030 on the management VRF. It authenticates against the same local
+        # users eAPI does, and which paths are subscribed to is decided by the
+        # monitoring profiles, not here.
+        custom_structured_configuration_management_api_gnmi:
+          transport:
+            grpc:
+              - name: default
+                vrf: MGMT
+          provider: eos-native
         # ACL-MGMT-IN has to be raw structured config rather than an `ipv4_acls`
         # entry: AVD only renders the ipv4_acls catalogue on devices that
         # reference an ACL from an *interface*. The reference from

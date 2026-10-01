@@ -1783,3 +1783,17 @@ async def test_a_grant_from_a_silent_zone_still_gets_its_rule() -> None:
     await _generator(client).generate(parsed.model_dump(by_alias=True))
 
     assert any(kind == "SecurityPolicyRule" for kind, _ in client.created)
+
+
+def test_a_grant_does_not_depend_on_the_applications_default_deny() -> None:
+    """Cycle 034. `otternet-metrics` runs with default deny OFF and is still requested.
+
+    Grafana's pod gate comes from `allow-ingress`, which the composition renders
+    whenever `allowed_source_prefixes` is non-empty, so a grant must add its
+    source whatever `policy_default_deny` says. It does -- because the generator
+    never reads the flag. This keeps it that way: a grant that skipped the
+    source on a non-default-deny application would leave Grafana's pods
+    dropping the very branch the firewall was just opened to.
+    """
+    query = Path("generators/generate_app_access.gql").read_text(encoding="utf-8")
+    assert "policy_default_deny" not in query

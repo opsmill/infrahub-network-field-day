@@ -13,6 +13,16 @@
           "tcp_mss": {
             "value": 9138
           },
+          "snmp_community": {
+            "value": "otternet-ro"
+          },
+          "snmp_clients": {
+            "node": {
+              "prefix": {
+                "value": "10.0.0.0/24"
+              }
+            }
+          },
           "static_routes": {
             "edges": [
               {

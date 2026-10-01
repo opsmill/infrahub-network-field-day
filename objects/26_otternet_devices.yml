@@ -55,6 +55,45 @@ spec:
     - address: 172.20.41.25/24
       ip_namespace: default
       description: leaf-otternet-pod1-3-1 Management0
+    # --- telemetry addresses for everything that is not a switch (cycle 034) -
+    # The ContainerLab management addresses of the firewall, the FRR routers and
+    # the k3s nodes, taken from ../lab/otternet.clab.yml. A collector running in
+    # a pod reaches every device here, and cannot resolve a container name.
+    #
+    # Referenced as `telemetry_address`, never `mgmt_ip`: the reconciler reads
+    # that name as "push over eAPI", and these devices are still pushed to by
+    # container name. Declared in this file because it loads before 28_* and
+    # 31_*, which reference them.
+    - address: 172.20.41.31/24
+      ip_namespace: default
+      description: fw1 management (vrnetlab forwards SNMP to fxp0)
+    - address: 172.20.41.41/24
+      ip_namespace: default
+      description: k8s-node1 management (node-exporter, host network)
+    - address: 172.20.41.42/24
+      ip_namespace: default
+      description: k8s-node2 management (node-exporter, host network)
+    - address: 172.20.41.43/24
+      ip_namespace: default
+      description: k8s-node3 management (node-exporter, host network)
+    - address: 172.20.41.61/24
+      ip_namespace: default
+      description: isp-pe1 management (frr_exporter sidecar)
+    - address: 172.20.41.62/24
+      ip_namespace: default
+      description: isp-pe2 management (frr_exporter sidecar)
+    - address: 172.20.41.71/24
+      ip_namespace: default
+      description: cust-acme-ce management (frr_exporter sidecar)
+    - address: 172.20.41.73/24
+      ip_namespace: default
+      description: cust-globex-ce management (frr_exporter sidecar)
+    - address: 172.20.41.81/24
+      ip_namespace: default
+      description: branch-rtr management (frr_exporter sidecar)
+    - address: 172.20.41.91/24
+      ip_namespace: default
+      description: internet-rtr management (frr_exporter sidecar)
     # --- Loopback0: router ID and EVPN overlay peering ---------------------
     - address: 10.41.0.1/32
       ip_namespace: default

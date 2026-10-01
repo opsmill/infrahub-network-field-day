@@ -30,6 +30,7 @@ spec:
   kind: SecurityFirewall
   data:
     - name: fw1
+      telemetry_address: ["172.20.41.31/24", default]
       description: "Perimeter vSRX; every tenant VRF's only route out points at one of its zones"
       role: edge_firewall
       rack_face: front
@@ -41,6 +42,12 @@ spec:
       # packet this firewall silently cannot forward. Transcribed from
       # ../lab/configs/fw/vsrx/junos.conf, `security flow tcp-mss all-tcp`.
       tcp_mss: 9138
+      # SNMP for the telemetry collector (cycle 034). A read-only v2c community
+      # -- configuration rather than a credential, and the one value of its
+      # kind recorded in an artifact, because the device must receive it -- and
+      # the one prefix allowed to use it.
+      snmp_community: otternet-ro
+      snmp_clients: ["10.0.0.0/24", default]
       member_of_groups:
         - junos_firewalls
 
@@ -52,6 +59,7 @@ spec:
   data:
     # ---- the provider ----------------------------------------------------
     - name: isp-pe1
+      telemetry_address: ["172.20.41.61/24", default]
       description: "Customer-facing provider edge; holds a VRF per tenant"
       role: isp_edge
       status: active
@@ -61,6 +69,7 @@ spec:
       member_of_groups:
         - frr_routers
     - name: isp-pe2
+      telemetry_address: ["172.20.41.62/24", default]
       description: "Provider core; default VRF transit and the datacentre handoff"
       role: isp_core
       status: active
@@ -70,6 +79,7 @@ spec:
       member_of_groups:
         - frr_routers
     - name: internet-rtr
+      telemetry_address: ["172.20.41.91/24", default]
       description: "AS 64500 border router"
       role: internet_edge
       status: active
@@ -85,6 +95,7 @@ spec:
         - frr_routers
     # ---- customer edge ---------------------------------------------------
     - name: cust-acme-ce
+      telemetry_address: ["172.20.41.71/24", default]
       description: "acme hq CE; runs eBGP with the provider edge"
       role: customer_edge
       status: active
@@ -109,6 +120,7 @@ spec:
         data:
           name: acme-dr
     - name: cust-globex-ce
+      telemetry_address: ["172.20.41.73/24", default]
       description: "globex hq CE; runs eBGP with the provider edge"
       role: customer_edge
       status: active
@@ -124,6 +136,7 @@ spec:
         - frr_routers
     # ---- the branch ------------------------------------------------------
     - name: branch-rtr
+      telemetry_address: ["172.20.41.81/24", default]
       description: "Branch router with an integrated switched LAN; private circuit to the border leaf"
       role: branch_router
       status: active

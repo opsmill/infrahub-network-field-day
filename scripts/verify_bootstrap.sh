@@ -145,7 +145,8 @@ grep -q "torn down" "$LOG/bootstrap.log" \
     && pass "handover waited for teardown before resyncing" \
     || fail "handover did not report 'torn down'"
 
-for kind_name in "fabricapp otternet-demo" "fabricpeering otternet"; do
+for kind_name in "fabricapp otternet-demo" "fabricpeering otternet" \
+                 "fabricapp otternet-metrics" "fabricapp otternet-telemetry"; do
     set -- $kind_name
     ready=no
     for _ in $(seq 1 30); do
@@ -160,12 +161,19 @@ done
 # still terminating, which does not resolve on its own.
 check "$(kubectl get object --no-headers 2>/dev/null | grep -c 'otternet-demo.*Namespace')" \
     "1" "exactly one composed Namespace"
-# Only the applications Infrahub declares. The lab's installer applies its own
-# two as well and the handover deletes them, so anything left here is a workload
-# no proposed change can account for. Counted as well as named: a third
-# application from somewhere else would pass the two absence checks.
-check "$(kubectl get fabricapp --no-headers 2>/dev/null | wc -l | tr -d ' ')" "1" \
-    "exactly one FabricApp, the one Infrahub models"
+# Only the applications Infrahub declares: the demo and, since cycle 034, the
+# two observability applications. The lab's installer applies its access broker
+# as well and the handover deletes it, so anything beyond these three is a
+# workload no proposed change can account for. Counted as well as named: a
+# fourth application from somewhere else would pass every absence check.
+check "$(kubectl get fabricapp --no-headers 2>/dev/null | wc -l | tr -d ' ')" "3" \
+    "exactly three FabricApps, the ones Infrahub models"
+# One composed Namespace per application. Two for one application means a claim
+# was recreated while its first namespace was still terminating.
+for app in otternet-metrics otternet-telemetry; do
+    check "$(kubectl get object --no-headers 2>/dev/null | grep -c "$app.*Namespace")" "1" \
+        "exactly one composed Namespace for $app"
+done
 for app in otternet-access otternet-observability; do
     check "$(kubectl get fabricapp $app --no-headers 2>/dev/null | wc -l | tr -d ' ')" "0" \
         "unmodelled $app removed by the handover"
@@ -174,9 +182,10 @@ done
 stage "the cluster is inside the fabric"
 check "$(kubectl -n kube-system exec ds/cilium -- cilium-dbg bgp peers 2>/dev/null | grep -c established)" \
     "2" "Cilium sessions to both k8s leaves"
-# Four is now the exact set rather than a floor with slack in it: three pod
-# CIDRs, one per node, and the one VIP of the one application Infrahub models.
-# It used to carry the lab's two applications as well, so a missing VIP passed.
+# A floor, not an exact count: three pod CIDRs, one per node, and the demo's
+# VIP. Grafana's VIP is advertised only from the node running Grafana
+# (externalTrafficPolicy Local), so whether a given leaf learns it depends on
+# scheduling; the observability stage below asserts it from the branch instead.
 routes=$(docker exec clab-otternet-k8s-leaf1 Cli -p 15 -c 'show ip route vrf K8S_PROD bgp' 2>/dev/null \
     | grep -cE '10\.111|10\.112')
 [ "$routes" -ge 4 ] && pass "leaf learns the pod CIDRs and LoadBalancer VIPs ($routes)" \
@@ -316,6 +325,77 @@ curl -s -H "Authorization: Bearer $T" --max-time 25 \
 else
     fail "the portal's create mutation is not one Infrahub accepts"
 fi
+
+stage "observability"
+# Grafana, Prometheus and Telegraf, delivered from Infrahub (cycle 034). Every
+# check is about state a person would see, not about a step having run.
+km() { kubectl -n otternet-metrics "$@" 2>/dev/null; }
+prom_pod=$(km get pod -l app.kubernetes.io/name=prometheus -o name | head -1)
+promql() {
+    km exec "$prom_pod" -c prometheus -- wget -qO- \
+        "http://localhost:9090/api/v1/query?query=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1")" \
+    | python3 -c 'import json,sys
+r = json.load(sys.stdin)["data"]["result"]
+print(int(float(r[0]["value"][1])) if r else 0)' 2>/dev/null || echo -1
+}
+
+# THE GATE HOLDS BEFORE ANYONE ASKS. No grant is seeded, so the branch has no
+# route to Grafana's VIP and no firewall permit. If this answers, the request
+# alice makes in the demo would be decoration.
+docker exec "$DESK" curl -s -o /dev/null --max-time 5 http://10.112.240.81/ 2>/dev/null \
+    && fail "Grafana answers the branch with no grant; the request would change nothing" \
+    || pass "Grafana does not answer the branch before a grant exists"
+
+# SIGN-IN THROUGH DEX, driven end to end from the host through a port-forward.
+# The browser half goes to the issuer; Grafana's own token exchange goes out of
+# its pod to the tool node's management address -- so a pass here also proves
+# the back channel (research R3), which nothing else exercises.
+gsvc=$(km get svc -l app.kubernetes.io/name=grafana -o name | head -1)
+km port-forward "$gsvc" 13000:80 >/dev/null 2>&1 &
+pf=$!
+sleep 4
+grafana_role=$(bash -c '
+J=$(mktemp)
+auth=$(curl -s -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 10 http://127.0.0.1:13000/login/generic_oauth)
+case "$auth" in http://10.90.0.11:32556/dex/auth*client_id=grafana*) ;; *) echo "no-redirect"; exit 0;; esac
+curl -s -L -b "$J" -c "$J" -o /tmp/grafana-login.html --max-time 15 "$auth"
+form=$(grep -oE "action=\"[^\"]*\"" /tmp/grafana-login.html | head -1 | cut -d\" -f2 | sed "s/&amp;/\&/g")
+cb=$(curl -s -b "$J" -c "$J" -o /dev/null -w "%{redirect_url}" --max-time 15 \
+    -d "login=alice@otternet.lab" -d "password=password" "http://10.90.0.11:32556${form}")
+curl -s -b "$J" -c "$J" -o /dev/null --max-time 20 "http://127.0.0.1:13000/login/generic_oauth?${cb#*\?}"
+curl -s -b "$J" --max-time 10 http://127.0.0.1:13000/api/user/orgs \
+    | python3 -c "import json,sys; print(json.load(sys.stdin)[0][\"role\"])"
+' 2>/dev/null)
+kill "$pf" 2>/dev/null
+check "$grafana_role" "Viewer" "alice signs in to Grafana through Dex and lands as Viewer"
+
+# ORGANISATION METRICS, counted against Infrahub itself rather than a number
+# written here: one exporter series per DcimGenericDevice in the graph.
+want_devices=$(count DcimGenericDevice)
+check "$(promql 'count(infrahub_dcimgenericdevice_info)')" "$want_devices" \
+    "the organisation dashboard's device series match Infrahub's device count"
+
+# EVERY ORGANISATION PANEL HAS DATA. A dashboard that loads and shows "No data"
+# looks exactly like one whose exporter has nothing to say, so each panel's own
+# query is run, taken from the committed dashboard rather than written here.
+empty_panels=0
+while IFS= read -r expr; do
+    [ "$(promql "count(($expr))")" -ge 1 ] 2>/dev/null || { empty_panels=$((empty_panels + 1)); printf '      empty: %s\n' "$expr"; }
+done < <(python3 -c '
+import json
+for p in json.load(open("payloads/dashboards/organisation.json"))["panels"]:
+    for t in p.get("targets", []):
+        print(t["expr"])')
+check "$empty_panels" "0" "every organisation dashboard panel returns data"
+
+# DEVICE TELEMETRY, PER FAMILY, so a family that collects nothing fails by name.
+# The expected numbers are the seeded monitoring profiles' reach -- every member
+# of each family's group -- and every target Telegraf has came from Infrahub.
+for family in "DcimFabricSwitch 7" "DcimDevice 6" "SecurityFirewall 1" "ComputePhysicalServer 3"; do
+    set -- $family
+    check "$(promql "count(count by (device) ({job=\"telemetry\",kind=\"$1\"}))")" "$2" \
+        "telemetry reported by every modelled $1"
+done
 
 elapsed=$(( $(date +%s) - started ))
 printf '\n=== [%s] COMPLETE in %sm%ss — %s failure(s) ===\n' \

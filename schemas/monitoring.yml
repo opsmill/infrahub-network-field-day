@@ -1,0 +1,208 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# Monitoring intent (cycle 034).
+#
+# What is watched is intent, the same way what is configured is. A profile says
+# that the devices in some groups are watched for some measurements at an
+# interval; the telemetry collector's whole configuration -- every target,
+# every subscription, every filter -- is an artifact rendered from that, and a
+# change to it is reviewed in a proposed change like any other.
+#
+# A NEW NAMESPACE, and that is a choice rather than an accident. Monitoring is
+# not a service (no owner, no status, nothing to withdraw), not a device
+# attribute (it has to say "the leaves", which no single device can), and not
+# routing. Under `Service` it would appear in the portal as something to
+# request.
+#
+# NOTHING MAY TRIGGER ON THESE KINDS. Collected telemetry is an observation of
+# the devices, and these kinds decide what is observed; a trigger here would
+# let an edit to what is watched regenerate something watched.
+# tests/unit/test_deployment_schema_contract.py fails, naming the rule, when
+# someone adds one. The collector artifact is kept fresh by
+# generate-monitoring-collector, which the proposed-change pipeline runs.
+# ============================================================================
+
+nodes:
+  - name: Collector
+    namespace: Monitoring
+    description: "A running telemetry collector, configured entirely from Infrahub"
+    label: Monitoring Collector
+    icon: mdi:chart-line
+    # Reached through menus/menu.yml, not the auto-generated menu.
+    include_in_menu: false
+    human_friendly_id: ["name__value"]
+    display_label: "{{ name__value }}"
+    uniqueness_constraints:
+      - ["name__value"]
+    inherit_from:
+      # Without this the artifact definition loads and renders nothing.
+      - CoreArtifactTarget
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+        order_weight: 1000
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1010
+      # A Dropdown with one value, so a second renderer is an additive change
+      # rather than a new attribute.
+      - name: collector_type
+        kind: Dropdown
+        label: Collector Type
+        optional: false
+        default_value: telegraf
+        order_weight: 1100
+        choices:
+          - name: telegraf
+            label: Telegraf
+      # Where the rendered ConfigMap is delivered. The telemetry application's
+      # values mount it by name, so these two must agree with the values file;
+      # the transform's tests hold both.
+      - name: namespace_name
+        kind: Text
+        label: Kubernetes Namespace
+        optional: false
+        order_weight: 1110
+      - name: config_map_name
+        kind: Text
+        label: ConfigMap Name
+        optional: false
+        default_value: telegraf-intent
+        order_weight: 1120
+    relationships:
+      - name: cluster
+        peer: ClusterKubernetes
+        kind: Attribute
+        cardinality: one
+        optional: false
+        identifier: "monitoring_collector__cluster"
+        order_weight: 900
+      # NOT `profiles`: every node already has a built-in `profiles`
+      # relationship (to CoreProfile, Infrahub's node profiles), and a schema
+      # relationship of that name shadows it -- a query for this collector's
+      # profiles then asks CoreProfile for fields it has never heard of.
+      - name: monitoring_profiles
+        label: Profiles
+        peer: MonitoringProfile
+        kind: Generic
+        cardinality: many
+        optional: true
+        identifier: "monitoring_collector__profiles"
+        order_weight: 1200
+
+  - name: Profile
+    namespace: Monitoring
+    description: "Devices in some groups, watched for some measurements, at an interval"
+    label: Monitoring Profile
+    icon: mdi:tune
+    # Reached through menus/menu.yml, not the auto-generated menu.
+    include_in_menu: false
+    human_friendly_id: ["name__value"]
+    display_label: "{{ name__value }}"
+    uniqueness_constraints:
+      - ["name__value"]
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+        order_weight: 1000
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1010
+      # How a profile is withdrawn without being deleted. False renders nothing
+      # for it and says so in a comment in the artifact, so a profile that is
+      # switched off is visible rather than merely absent.
+      - name: enabled
+        kind: Boolean
+        optional: false
+        default_value: true
+        order_weight: 1100
+      - name: interval_seconds
+        kind: Number
+        label: Interval (seconds)
+        optional: false
+        default_value: 30
+        order_weight: 1110
+        parameters:
+          min_value: 10
+          max_value: 3600
+      # Narrows the groups to one role, which is how "the leaves" is said: the
+      # fabric's devices share one group, `avd_devices`, and role is on every
+      # kind. Absent means every member.
+      - name: device_role
+        kind: Text
+        label: Device Role
+        optional: true
+        description: "If set, only group members whose role equals this are watched"
+        order_weight: 1120
+    relationships:
+      - name: collector
+        peer: MonitoringCollector
+        kind: Generic
+        cardinality: one
+        optional: false
+        identifier: "monitoring_collector__profiles"
+        order_weight: 900
+      # GROUPS, NOT A DEVICE KIND. The four device kinds are siblings under
+      # DcimGenericDevice; a relationship to DcimDevice would reach the FRR
+      # routers and miss the fabric, and nothing would say so.
+      #
+      # MANDATORY MANY, because Backstage's form builder admits cardinality-one
+      # and mandatory cardinality-many relationships only. Optional, this field
+      # would silently not appear on the form.
+      - name: device_groups
+        label: Device Groups
+        peer: CoreStandardGroup
+        kind: Generic
+        cardinality: many
+        optional: false
+        min_count: 1
+        identifier: "monitoring_profile__device_groups"
+        order_weight: 950
+      # A relationship to a catalogue rather than a Dropdown or a List: a
+      # Dropdown holds one value, and a List attribute makes
+      # /api/schema/json_schema/{kind} return 500 on 1.10.6.
+      - name: measurements
+        peer: MonitoringMeasurement
+        kind: Generic
+        cardinality: many
+        optional: false
+        min_count: 1
+        identifier: "monitoring_profile__measurements"
+        order_weight: 960
+
+  - name: Measurement
+    namespace: Monitoring
+    description: "Something a collector knows how to collect, from the families it applies to"
+    label: Monitoring Measurement
+    icon: mdi:gauge
+    # Reached through menus/menu.yml, not the auto-generated menu.
+    include_in_menu: false
+    human_friendly_id: ["name__value"]
+    display_label: "{{ label__value or name__value }}"
+    uniqueness_constraints:
+      - ["name__value"]
+    attributes:
+      # THE NAME IS THE KEY the renderer dispatches on, together with the
+      # matched device's kind. A name no renderer knows is a test failure
+      # (test_monitoring_measurements_contract.py), never a silent no-op.
+      - name: name
+        kind: Text
+        unique: true
+        order_weight: 1000
+        parameters:
+          regex: "^[a-z][a-z0-9-]+$"
+      - name: label
+        kind: Text
+        optional: true
+        order_weight: 1010
+      - name: description
+        kind: Text
+        optional: true
+        order_weight: 1020

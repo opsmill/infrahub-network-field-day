@@ -12,6 +12,10 @@ query JunosConfigQuery($device: String!) {
         # while the artifact did not emit it. Optional with no default, so an
         # unset value renders no `flow` stanza rather than `mss 0`.
         tcp_mss { value }
+        # Cycle 034. SNMP for the telemetry collector: unset renders no `snmp`
+        # stanza at all, like tcp_mss and `flow`.
+        snmp_community { value }
+        snmp_clients { node { prefix { value } } }
         # Cycle 026. Seeded in cycle 025, reachable because cycle 024 widened
         # RoutingStaticRoute.device to DcimGenericDevice -- a SecurityFirewall
         # does not inherit DcimDevice.

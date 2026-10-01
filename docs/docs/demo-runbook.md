@@ -25,12 +25,23 @@ Three things go wrong if you skip these:
   `docker compose --profile reconcile up -d deployment-reconciler`, and for a
   demo set `OTTERNET_RECONCILE_FIREWALL_EVERY=1` so the firewall is compared
   every cycle rather than one in four, and `OTTERNET_RECONCILE_INTERVAL=120`.
+  Put both in `.env` at the repository root (gitignored) so they survive a
+  restart; the defaults, 600s and one cycle in four, leave a merge up to forty
+  minutes from the firewall. `docker exec infrahub-deployment-reconciler-1 env
+  | grep RECONCILE` shows what the running container has.
 - **A user with no Infrahub account cannot request anything.** The account is
   created by their first Infrahub sign-in, so a fresh environment fails the first
   request *after* creating its branch. `invoke tooling` provisions them; the
   `--check` above tells you if any are missing.
 - **Stale branches in the selector** are the first thing on screen in Infrahub
-  and invite the one question you do not want.
+  and invite the one question you do not want. Infrahub mirrors the git branches
+  of the repository it clones, so a local git branch reappears in Infrahub after
+  its Infrahub branch is deleted. Remove or push aside the git branch first.
+
+The branch user's screen is the branch desktop, through Guacamole on the host's
+port 8080 (`http://<host>:8080/`, over Tailscale for a remote laptop). The
+portal itself is reachable only from the branch side, so a browser on the
+presenter's laptop cannot open it directly.
 
 ## The arc
 
@@ -81,6 +92,40 @@ rule, the address-book entry and the source prefix the grant opened are removed 
 and a rule written by hand in the same zone pair is left alone, because removal
 is keyed on provenance rather than on shape.
 
+## Act two: a branch user asks for Grafana
+
+Grafana is already running when the demo starts. It is `otternet-metrics`, a seeded application
+that Infrahub delivered through Vidra like any other. Nobody at the branch can use it yet.
+
+**1. Show the gate.** On the branch desktop, the toolbar bookmark **Grafana (needs access)** opens
+`http://10.112.240.81/`, and nothing answers. The branch has no route to the VIP and no firewall
+permit, and Grafana's own pod policy names no branch source.
+
+**2. Ask.** In the portal, as `alice@otternet.lab`, request access to `otternet-metrics` from site
+`branch`. It is the ordinary access request; Grafana needs nothing special.
+
+**3. Read the proposed change.** The rule `branch → k8s-prod` on `junos-http`, the address-book
+entry for `10.112.240.81`, `10.70.0.0/24` added to the application's allowed sources, and the
+border leaf's `PL-DC-ADVERTISED-BRANCH` gaining the VIP. The Junos and EOS artifacts re-render
+alongside.
+
+**4. Merge, and sign in.** Once the reconciler has pushed fw1 and the leaf, reload the bookmark.
+Grafana redirects to the same Dex sign-in page the portal uses. `alice` signs in and lands as a
+**Viewer** in the OTTERNET folder.
+
+**5. Show the dashboards, in this order:**
+
+- **Organisation**: what Infrahub says the lab is, counted from the graph by the exporter.
+- **Fabric telemetry**: streaming telemetry from every switch. Point at **Intended sessions not
+  established**, which is empty, and say why that panel exists: Infrahub knows which sessions
+  should be up, so it can say which ones are missing.
+- **Monitoring is intent too.** In Infrahub, open the `fabric-core` profile and remove
+  `bgp-neighbor-state` on a branch. The proposed change shows the collector's configuration losing
+  its BGP subscriptions, and nothing else.
+
+**6. Revoke.** Set the grant to `decommissioning` and merge. After the next reconcile the bookmark
+stops answering again, and anyone already signed in loses the page with it.
+
 ## If you want the review step to bite
 
 ```bash
@@ -91,6 +136,29 @@ scripts/demo_break_isolation.sh --revert
 Adds one tenant's circuit to another tenant's L3VPN — the routing domain, not a
 label — and `wan-service-consistency` fails naming both tenants while everything
 else stays green. Nothing renders wrong, which is the point.
+
+## The agent, through the MCP server
+
+```bash
+uv run invoke mcp                                   # account, then container
+uv run python scripts/provision_mcp_agent.py --check
+curl -s http://127.0.0.1:8001/health                # {"status":"healthy"}
+```
+
+Claude Code picks the server up from `.mcp.json` as `infrahub-lab` and asks you to
+approve it the first time. It signs in as `mcp-agent`, which reads everything,
+writes only on a branch — the server creates one per session, named
+`mcp/session-<date>-<hex>` — and can open a proposed change. A write aimed at
+`main` is refused by Infrahub, not by the prompt. `find_reachable` answers
+"what depends on this": from `otternet-demo` it returns 24 connected objects,
+its VIP block first.
+
+**Do not claim the agent cannot merge.** On Infrahub 1.10.6 the
+`CoreProposedChangeMerge` mutation does not check `merge_proposed_change`, and
+the MCP server's `mutate_graphql` does not block it, so `mcp-agent` merged its
+own proposed change when tested. Say instead that every change the agent makes
+lands on a branch as a proposed change, and that merging is where the human
+decides.
 
 ## Timings, measured
 
@@ -109,10 +177,17 @@ pushed — two devices on one cycle, the firewall and the border leaf.
 
 ## What is already there
 
-`otter-bakery` is deployed and **not** reachable from the branch: an application
-with no grant. It is a ready-made target if you would rather demonstrate granting
-access to something that already exists than create an application first — the
-generated **Request application access** item does that in one step.
+Only `otternet-demo` is seeded, and it is **not** reachable from the branch: an
+application with no grant. It is a ready-made target if you would rather
+demonstrate granting access to something that already exists than create an
+application first — the generated **Request application access** item does that
+in one step.
+
+Anything else was requested through the portal and lives only in that
+environment's database, so a rebuild removes it. An earlier runbook named
+`otter-bakery` here; it was portal-created and does not survive a fresh
+bootstrap. Request it again during rehearsal if the demo wants a second
+ungranted application.
 
 ## Recovery
 

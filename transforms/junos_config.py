@@ -104,10 +104,30 @@ class JunosConfig(InfrahubTransform):
             "static_routes": self._static_routes(target),
             "applications": self._applications(result),
             "tcp_mss": _value(target, "tcp_mss").value if _value(target, "tcp_mss") else None,
+            "snmp": self._snmp(target),
         }
         return env.get_template("junos.j2").render(**context)
 
     # -- context ------------------------------------------------------------
+
+    @staticmethod
+    def _snmp(target: Any) -> dict[str, str] | None:
+        """The `snmp` stanza's two values, or None to render no stanza at all.
+
+        Raises:
+            JunosConfigError: for a community with no client prefix. An agent
+                with a community and no `clients` answers anyone who knows it.
+        """
+        community = _value(target, "snmp_community")
+        if community is None or not community.value:
+            return None
+        clients = _value(target, "snmp_clients")
+        prefix = clients.node.prefix.value if clients is not None and clients.node is not None else None
+        if not prefix:
+            raise JunosConfigError(
+                f"{target.name.value} has an SNMP community but no snmp_clients; refusing to answer everyone"
+            )
+        return {"community": str(community.value), "clients": str(prefix)}
 
     @staticmethod
     def _interfaces(target: Any) -> list[dict[str, Any]]:

@@ -12,6 +12,11 @@ query CrossplaneFabricAppQuery($name: String!) {
         exposed {
           value
         }
+        # Cycle 034: `dex` merges the lab identity provider's sign-in block into
+        # the chart values. Declared, never inferred from the chart name.
+        sso_provider {
+          value
+        }
         chart_repository {
           value
         }

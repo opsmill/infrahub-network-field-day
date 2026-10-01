@@ -48,14 +48,23 @@ spec:
       status: "provisioning"
       rack: "K8S_LEAFS"
       object_template: "otternet-workload-host"
+      telemetry_address: ["172.20.41.41/24", default]
+      member_of_groups:
+        - kubernetes_nodes
     - name: "k8s-node2"
       status: "provisioning"
       rack: "K8S_LEAFS"
       object_template: "otternet-workload-host"
+      telemetry_address: ["172.20.41.42/24", default]
+      member_of_groups:
+        - kubernetes_nodes
     - name: "k8s-node3"
       status: "provisioning"
       rack: "K8S_LEAFS"
       object_template: "otternet-workload-host"
+      telemetry_address: ["172.20.41.43/24", default]
+      member_of_groups:
+        - kubernetes_nodes
     - name: "host-a"
       status: "provisioning"
       rack: "APP_LEAFS"

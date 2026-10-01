@@ -30,6 +30,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
+import yaml  # noqa: E402
 from infrahub_sdk import Config, InfrahubClient  # noqa: E402
 
 from solution_arista_avd.generator import save_file_if_changed  # noqa: E402
@@ -47,7 +48,63 @@ PAYLOAD_DIR = _REPO_ROOT / "payloads"
 # naming it here raises `SchemaNotFoundError` rather than seeding nothing.
 PAYLOADS: dict[str, tuple[str, str, str]] = {
     "otternet-demo": ("otternet-demo-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
+    "otternet-metrics": ("otternet-metrics-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
+    "otternet-telemetry": ("otternet-telemetry-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
 }
+
+
+# Applications whose values payload has Grafana dashboards folded in at upload
+# time (cycle 034): application name -> directory of dashboard JSON files.
+#
+# THE DASHBOARDS STAY SEPARATE FILES IN GIT, so each is reviewable and diffable
+# on its own; the attachment Infrahub holds is the assembled whole, which is what
+# the transform renders and the chart receives under `grafana.dashboards`. The
+# assembly is deterministic -- files sorted, keys in a fixed order -- so an
+# unchanged tree produces an unchanged checksum and the upload stays a no-op.
+DASHBOARDS: dict[str, str] = {
+    "otternet-metrics": "dashboards",
+}
+
+# Where the chart's file provider reads them from. The provider's `path` must be
+# /var/lib/grafana/dashboards/<provider>, or the chart mounts them somewhere
+# Grafana never looks.
+_DASHBOARD_PROVIDER = "otternet"
+
+
+def assemble_payload(app_name: str, path: Path) -> bytes:
+    """The bytes to attach: the payload file, plus any dashboards for this app."""
+    if app_name not in DASHBOARDS:
+        return path.read_bytes()
+
+    values = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    grafana = values.setdefault("grafana", {})
+    grafana["dashboardProviders"] = {
+        "dashboardproviders.yaml": {
+            "apiVersion": 1,
+            "providers": [
+                {
+                    "name": _DASHBOARD_PROVIDER,
+                    "orgId": 1,
+                    "folder": "OTTERNET",
+                    "type": "file",
+                    "disableDeletion": True,
+                    "editable": False,
+                    "options": {"path": f"/var/lib/grafana/dashboards/{_DASHBOARD_PROVIDER}"},
+                }
+            ],
+        }
+    }
+    grafana["dashboards"] = {
+        _DASHBOARD_PROVIDER: {
+            board.stem: {"json": board.read_text(encoding="utf-8")}
+            for board in sorted((PAYLOAD_DIR / DASHBOARDS[app_name]).glob("*.json"))
+        }
+    }
+    header = (
+        f"# Assembled by scripts/seed_app_payloads.py from payloads/{path.name} and "
+        f"payloads/{DASHBOARDS[app_name]}/*.json.\n# Edit those, not this attachment.\n"
+    )
+    return (header + yaml.safe_dump(values, sort_keys=False, width=4096)).encode()
 
 
 async def seed(branch: str) -> int:
@@ -76,7 +133,7 @@ async def seed(branch: str) -> int:
             msg = f"payload {path} is missing; it is the reviewable source for {app_name}"
             raise FileNotFoundError(msg)
 
-        content = path.read_bytes()
+        content = assemble_payload(app_name, path)
         checksum = hashlib.sha256(content).hexdigest()
 
         app = await client.get(kind="ServiceFabricApp", branch=branch, name__value=app_name)

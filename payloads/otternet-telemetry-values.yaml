@@ -1,0 +1,68 @@
+---
+# Helm values for otternet-telemetry: Telegraf, configured entirely from
+# Infrahub (cycle 034).
+#
+# THE CHART'S OWN CONFIGURATION IS NOT USED. Telegraf runs with
+# `--config /etc/telegraf-intent/telegraf.conf`, a file in the ConfigMap
+# `telegraf-intent`, which is the rendered `Telemetry Collector Configuration`
+# artifact for MonitoringCollector `otternet-telegraf`, delivered by Vidra's
+# third sync. Every target, subscription and filter in it came from a
+# MonitoringProfile, so what this collector watches is changed in Infrahub and
+# reviewed in a proposed change -- never here.
+#
+# `--watch-config poll` is what makes a merged change take effect: a ConfigMap
+# update reaches a mounted volume within about a minute, and Telegraf reloads
+# when the file moves. The mount is the whole directory, never `subPath`,
+# because a subPath mount is not updated at all.
+
+# The Service is named `telegraf`, which is the target otternet-metrics'
+# Prometheus scrapes. The composed Helm release has a generated name, so without
+# this the Service name would be too.
+fullnameOverride: telegraf
+
+args:
+  - "--config"
+  - "/etc/telegraf-intent/telegraf.conf"
+  - "--watch-config"
+  - "poll"
+
+# GNMI_USERNAME / GNMI_PASSWORD, which the rendered configuration references as
+# ${GNMI_USERNAME} and ${GNMI_PASSWORD}. Created by `invoke cluster`; never in
+# the artifact, never in the graph.
+envFromSecret: telemetry-credentials
+
+volumes:
+  - name: telegraf-intent
+    configMap:
+      name: telegraf-intent
+mountPoints:
+  - name: telegraf-intent
+    mountPath: /etc/telegraf-intent
+    readOnly: true
+
+# The chart derives the Service's ports from `config.outputs`, so this is here
+# for the Service alone: it must agree with the `outputs.prometheus_client`
+# block the transform renders. The chart's statsd input and influxdb output
+# defaults are cleared so the unused chart ConfigMap claims nothing.
+config:
+  processors: []
+  inputs: []
+  outputs:
+    - prometheus_client:
+        listen: ":9273"
+metrics:
+  internal:
+    enabled: false
+
+# One replica: two collectors polling the same devices would double every
+# series.
+replicaCount: 1
+pdb:
+  create: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi

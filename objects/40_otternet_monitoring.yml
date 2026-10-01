@@ -1,0 +1,113 @@
+---
+# ============================================================================
+# OTTERNET -- what is monitored, as intent (cycle 034).
+#
+# Telegraf's whole configuration is the `Telemetry Collector Configuration`
+# artifact rendered from what follows: every target, subscription and filter.
+# Changing what the lab watches is an edit here, reviewed in a proposed change
+# whose artifact diff shows exactly which inputs move -- never an edit to the
+# collector.
+#
+# THE MEASUREMENT NAMES ARE THE CONTRACT with the renderer, which dispatches
+# on (measurement, device kind). A name it does not know is a unit-test failure
+# (test_monitoring_measurements_contract.py), not a silent no-op.
+#
+# The five profiles reach all four device kinds, so a fresh bootstrap collects
+# from every family -- and scripts/verify_bootstrap.sh counts each one.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: MonitoringMeasurement
+  data:
+    - name: interface-counters
+      label: Interface counters
+      description: "Octets, errors and operational state per interface"
+    - name: bgp-neighbor-state
+      label: BGP neighbour state
+      description: "Session state and prefixes per BGP neighbour"
+    - name: evpn-routes
+      label: EVPN routes
+      description: "EVPN routes received per overlay neighbour"
+    - name: system-resources
+      label: System resources
+      description: "CPU and memory of the device's control plane"
+    - name: security-sessions
+      label: Security sessions
+      description: "Current flow sessions on the firewall"
+    - name: node-resources
+      label: Node resources
+      description: "CPU, memory and network of a Kubernetes node, from node-exporter"
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: MonitoringCollector
+  data:
+    - name: otternet-telegraf
+      description: "The lab's one telemetry collector, in otternet-telemetry"
+      collector_type: telegraf
+      cluster: otternet
+      # Both must agree with payloads/otternet-telemetry-values.yaml, which
+      # mounts this ConfigMap by name into the namespace Vidra delivers it to.
+      namespace_name: otternet-telemetry
+      config_map_name: telegraf-intent
+      member_of_groups:
+        - monitoring_collectors
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: MonitoringProfile
+  data:
+    - name: fabric-core
+      description: "Every fabric switch: interfaces, BGP and the control plane"
+      collector: otternet-telegraf
+      interval_seconds: 30
+      device_groups:
+        - avd_devices
+      measurements:
+        - interface-counters
+        - bgp-neighbor-state
+        - system-resources
+    # "The leaves" is a role within the fabric group: the spines carry no EVPN
+    # services of their own, only the overlay sessions fabric-core watches.
+    - name: fabric-leaf-evpn
+      description: "EVPN routes on the leaves"
+      collector: otternet-telegraf
+      interval_seconds: 30
+      device_role: leaf
+      device_groups:
+        - avd_devices
+      measurements:
+        - evpn-routes
+    # BGP only. frr_exporter reports FRR's routing state, not the router's CPU
+    # or memory -- its process_* series describe the exporter itself -- so
+    # `system-resources` has no honest source on this family and the renderer
+    # has no entry for it.
+    - name: wan-routing
+      description: "The WAN's FRR routers: BGP sessions and prefixes"
+      collector: otternet-telegraf
+      interval_seconds: 30
+      device_groups:
+        - frr_routers
+      measurements:
+        - bgp-neighbor-state
+    - name: perimeter
+      description: "The firewall: interfaces, sessions and the control plane"
+      collector: otternet-telegraf
+      interval_seconds: 60
+      device_groups:
+        - junos_firewalls
+      measurements:
+        - interface-counters
+        - security-sessions
+        - system-resources
+    - name: cluster-nodes
+      description: "The k3s nodes, from node-exporter on the host network"
+      collector: otternet-telegraf
+      interval_seconds: 30
+      device_groups:
+        - kubernetes_nodes
+      measurements:
+        - node-resources

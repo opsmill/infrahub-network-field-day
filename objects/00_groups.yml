@@ -27,6 +27,12 @@ spec:
     # service kind, so an artifact definition cannot generate against a target
     # whose kind it cannot render.
     - name: service_fabric_apps
+    # Cycle 034. The target group of the `Telemetry Collector Configuration`
+    # artifact, and of generate-monitoring-collector, which keeps it fresh.
+    - name: monitoring_collectors
+    # The k3s nodes, so a monitoring profile can name them the way it names the
+    # other three device families. Nothing generates from this group.
+    - name: kubernetes_nodes
     # Artifact target group for the WAN's FRR configuration. Membership is
     # EXPLICIT, not derived from the device role: cust-acme-dr-ce is also a
     # `customer_edge`, but it runs no routing protocol and the lab renders no

@@ -220,3 +220,10 @@ venv
 vrnetlab
 vtysh
 worktree
+Grafana
+Telegraf
+Dex
+Alertmanager
+[Pp]rovisioning's
+[Rr]econciler's
+CRDs

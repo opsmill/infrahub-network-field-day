@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# Additions to the adopted compute schema (schemas/compute/compute.yml), kept
+# here so the adopted file diffs cleanly against upstream.
+# ============================================================================
+
+extensions:
+  nodes:
+    - kind: ComputePhysicalServer
+      relationships:
+        # Cycle 034. The k3s nodes are modelled only by their fabric-facing
+        # links, so nothing said where a collector could reach node-exporter.
+        # This is their address on the ContainerLab management network, which
+        # node-exporter answers on because it runs on the host network.
+        #
+        # Same name and reason as DcimDevice.telemetry_address, which explains
+        # why it is not `mgmt_ip`. A distinct identifier, so Infrahub keeps the
+        # three one-way relationships separate.
+        - name: telemetry_address
+          label: Telemetry Address
+          peer: IpamIPAddress
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: "The address telemetry collectors reach this machine at"
+          identifier: "compute_server__telemetry_address"
+          order_weight: 1670

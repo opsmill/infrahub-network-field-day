@@ -17,7 +17,10 @@ import pytest
 import yaml
 
 from transforms.crossplane_fabric_app import (
+    DEX_BACK_CHANNEL,
+    DEX_ISSUER,
     CrossplaneFabricAppTransform,
+    apply_sso,
     build_expose,
     build_policy,
     parse_selector,
@@ -39,6 +42,7 @@ def _data(
     namespace: str | None = "otternet-demo",
     vrf: str | None = "K8S_PROD",
     intra: bool = True,
+    sso: str | None = "none",
 ) -> CrossplaneFabricAppQuery:
     if service_selector is None:
         service_selector = ["otternet.lab/advertise=true"]
@@ -57,6 +61,7 @@ def _data(
                         "name": {"value": "otternet-demo"},
                         "namespace_name": ({"value": namespace} if namespace else None),
                         "exposed": {"value": exposed},
+                        "sso_provider": ({"value": sso} if sso else None),
                         "chart_repository": None,
                         "chart_name": None,
                         "chart_version": None,
@@ -259,3 +264,83 @@ def test_sequences_are_indented_under_their_parent() -> None:
         assert item_indent > key_indent, f"{line!r} is not indented under {key!r}"
 
     assert sequences, "nothing rendered a sequence, so this asserted nothing"
+
+
+# ---------------------------------------------------------------------------
+# Sign-in through Dex (cycle 034)
+# ---------------------------------------------------------------------------
+
+GRAFANA_VIP = "10.112.240.81"
+
+
+def _kps_values() -> dict[str, Any]:
+    return {
+        "crds": {"enabled": True},
+        "grafana": {
+            "service": {"type": "LoadBalancer", "port": 80, "annotations": {"lbipam.cilium.io/ips": GRAFANA_VIP}},
+            "grafana.ini": {"server": {"domain": "kept"}},
+        },
+    }
+
+
+def test_none_leaves_values_exactly_as_they_were() -> None:
+    """Every application that predates the field renders byte-identically."""
+    values = _kps_values()
+    assert apply_sso("none", chart="kube-prometheus-stack", values=values, name="a") == _kps_values()
+    assert apply_sso(None, chart="whoami", values=None, name="a") is None
+
+
+def test_dex_merges_the_sign_in_block_under_grafana() -> None:
+    values = apply_sso("dex", chart="kube-prometheus-stack", values=_kps_values(), name="otternet-metrics")
+    grafana = values["grafana"]
+    ini = grafana["grafana.ini"]
+    oauth = ini["auth.generic_oauth"]
+
+    # Browser-facing on the issuer; server-to-server over the management network.
+    assert oauth["auth_url"] == f"{DEX_ISSUER}/auth"
+    assert oauth["token_url"] == f"{DEX_BACK_CHANNEL}/token"
+    assert oauth["api_url"] == f"{DEX_BACK_CHANNEL}/userinfo"
+    assert oauth["client_id"] == "grafana"
+    # Everybody Viewer, nobody Admin through sign-in, and no password form.
+    assert oauth["role_attribute_path"] == "'Viewer'"
+    assert oauth["role_attribute_strict"] is True
+    assert oauth["allow_assign_grafana_admin"] is False
+    assert ini["auth"]["disable_login_form"] is True
+    # root_url is derived from the pinned address, because the redirect URI
+    # registered with Dex is <root_url>login/generic_oauth.
+    assert ini["server"]["root_url"] == f"http://{GRAFANA_VIP}/"
+    # Tuning in the values file survives the merge.
+    assert ini["server"]["domain"] == "kept"
+    assert grafana["service"]["port"] == 80
+
+
+def test_dex_takes_its_secrets_from_kubernetes_never_from_values() -> None:
+    values = apply_sso("dex", chart="kube-prometheus-stack", values=_kps_values(), name="otternet-metrics")
+    grafana = values["grafana"]
+    ref = grafana["envValueFrom"]["GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET"]["secretKeyRef"]
+    assert ref == {"name": "grafana-oidc", "key": "client-secret"}
+    assert grafana["admin"]["existingSecret"] == "grafana-admin"
+    assert "client_secret" not in grafana["grafana.ini"]["auth.generic_oauth"]
+    assert "adminPassword" not in grafana
+
+
+def test_dex_on_a_chart_with_no_renderer_raises() -> None:
+    """A sign-in block written to a key the chart ignores deploys, answers, and
+    lets nobody in -- with nothing logged. Refusing is the only safe answer."""
+    with pytest.raises(ValueError, match="whoami"):
+        apply_sso("dex", chart="whoami", values={}, name="otternet-demo")
+
+
+def test_dex_without_a_pinned_address_raises() -> None:
+    """The redirect URI names an address. An allocated one is unknown when Dex
+    is configured and can differ between rebuilds."""
+    values = _kps_values()
+    del values["grafana"]["service"]["annotations"]
+    with pytest.raises(ValueError, match=r"lbipam\.cilium\.io/ips"):
+        apply_sso("dex", chart="kube-prometheus-stack", values=values, name="otternet-metrics")
+
+
+def test_dex_render_is_deterministic() -> None:
+    first = apply_sso("dex", chart="kube-prometheus-stack", values=_kps_values(), name="m")
+    second = apply_sso("dex", chart="kube-prometheus-stack", values=_kps_values(), name="m")
+    assert first == second

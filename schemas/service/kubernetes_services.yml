@@ -149,6 +149,29 @@ nodes:
         # unreachability from the app tenant is an asserted negative.
         description: "Whether this application gets a VIP advertised into the fabric"
         order_weight: 1500
+      # DECLARED, NEVER INFERRED (cycle 034). `dex` makes crossplane_fabric_app
+      # merge the lab identity provider's sign-in block into the chart values.
+      # The renderer knows where that block goes for exactly the charts it has a
+      # renderer for and RAISES for any other, because a sign-in block written
+      # to a key a chart ignores is an application that deploys, answers, and
+      # lets nobody in -- with nothing logged anywhere.
+      #
+      # Reading the chart name instead would make renaming a chart a security
+      # change. The default keeps every existing application byte-identical.
+      - name: sso_provider
+        kind: Dropdown
+        label: Sign-in Provider
+        optional: false
+        default_value: none
+        description: "Whether people sign in to this application through the lab identity provider"
+        order_weight: 1510
+        choices:
+          - name: none
+            label: None
+            description: "The application handles its own sign-in, or has none"
+          - name: dex
+            label: Dex
+            description: "People sign in through the lab's single Dex issuer"
       - name: service_selector
         kind: List
         label: Service Selector

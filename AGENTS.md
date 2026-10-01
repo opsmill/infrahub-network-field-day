@@ -340,6 +340,100 @@ connection, honest attribution, and authorization delegated to the portal.
 
 See [auth/README.md](auth/README.md) for the sign-in flows and the things that failed first.
 
+## The MCP server, and the account it must not use
+
+`infrahub-mcp` runs beside Infrahub in the compose stack (profile `mcp`, pinned
+`registry.opsmill.io/opsmill/infrahub-mcp:v1.1.7`, `http://127.0.0.1:8001/mcp`),
+and `.mcp.json` registers it for Claude Code. `uv run invoke mcp` provisions its
+account and starts it; the bootstrap does both after `tooling`.
+
+**It signs in as `mcp-agent`, never as `agent`.** The upstream sidecar example
+uses `INFRAHUB_INITIAL_AGENT_TOKEN`, and here `agent` is a Super Administrator
+**the task workers run as** — so it cannot be demoted without breaking every
+generator, and it cannot be handed to a model without a back door past review.
+`scripts/provision_mcp_agent.py` creates `mcp-agent` in the `Agents` group with
+the `Agent Access` role, and keeps its password in `.env`.
+`tests/unit/test_mcp_service_contract.py` pins both.
+
+Three measured facts about that role:
+
+- **Opening a proposed change needs `edit_default_branch`.** A proposed change is
+  stored on `main`, and without the global permission the request is refused
+  before object permissions are consulted. With it, object permissions still
+  narrow the rest: a write to any other kind on `main` is refused.
+- **Nothing stops it merging its own proposed change.** On 1.10.6
+  `CoreProposedChangeMerge` never checks `merge_proposed_change` — the rule is in
+  `proposed_change/action_checker.py` and that mutation does not consult it — and
+  `infrahub-mcp` does not block the mutation. Approving, merging a branch and
+  loading a schema are refused.
+- **PyPI's `infrahub-mcp` 1.1.7 does not start.** It resolves against fastmcp 4 and
+  mcp 2 and fails at import with `cannot import name 'McpError' from 'mcp'`. The
+  published image carries the versions it was built with.
+
+`invoke stop` and `invoke destroy` pass `--profile '*'`. Without it `down` skips
+profiled services, and this one, being on the compose network, then holds that
+network open so it cannot be removed.
+
+## Observability, and Infrahub deciding what is watched
+
+Grafana and Prometheus (`otternet-metrics`) and Telegraf (`otternet-telemetry`) are seeded
+`ServiceFabricApp`s, delivered by Vidra like `otternet-demo`. **Telegraf's whole configuration is
+an artifact**: `telemetry_collector_config` renders one ConfigMap per `MonitoringCollector` from
+the `MonitoringProfile`s that name it, and a third `InfrahubSync` delivers it into
+`otternet-telemetry`. What the lab watches is changed in Infrahub and reviewed in a proposed
+change, exactly like what it is configured with. See
+[observability.md](docs/docs/developer-guide/observability.md).
+
+Seven things look like oversights and are not:
+
+- **The new name is deliberate.** `otternet-metrics` replaces the lab's `otternet-observability`,
+  which `invoke cluster` keeps out with `OTTERNET_SKIP_OBSERVABILITY`. Two kube-prometheus-stack
+  releases contend for the same CRDs, and the second fails `invalid ownership metadata`. Vidra
+  goes up before Crossplane, so both would be created in one window and deleting the lab's
+  afterwards is too late.
+- **`policy_default_deny: false` on both applications, and Grafana's pod gate still holds.**
+  Prometheus scrapes cluster internals that the composition's one selector-scoped ingress policy
+  cannot express. With `allowed_source_prefixes` non-empty the composition still renders
+  `allow-ingress` on Grafana's pods, and seeding the pod CIDR makes that policy exist from the
+  first render. So the branch is dropped at the pod until a grant adds `10.70.0.0/24`.
+- **The new address field is `telemetry_address`, never `mgmt_ip`.** To the reconciler,
+  `mgmt_ip` means "push over eAPI" (`reach = target.mgmt_ip or target.container`), and cycle 027
+  holds it on `DcimFabricSwitch` alone. The FRR routers, fw1 and the k3s nodes needed an address a
+  pod can reach, and `test_deployment_inventory_targets.py` pins that the reconciler never reads
+  the new one.
+- **The collector relationship is `monitoring_profiles`, not `profiles`.** Every node already has
+  a built-in `profiles` relationship to `CoreProfile`. A schema relationship of that name loads
+  cleanly and makes the query resolve against `CoreProfile`, failing with `Cannot query field
+  'device_groups' on type 'CoreProfile'`.
+- **`generate-monitoring-collector` writes nothing.** The artifact's target is the collector, and
+  almost nothing that changes what should be collected is a change to the collector. So it
+  re-renders the artifact on its branch, in every proposed change and after every merge. **No
+  trigger may name a `Monitoring*` kind**, for the same reason as `Deployment*`.
+- **The Dex back channel goes over the management network.** The browser uses the issuer
+  `10.90.0.11`; Grafana's token exchange goes to `172.20.41.101`, the path Vidra already uses,
+  because `10.90.0.11` from a pod crosses fw1 and no rule permits it. Grafana's VIP
+  (`10.112.240.81`) is pinned and its block seeded, because Dex names it before Infrahub
+  delivers anything.
+- **The SNMP community is in an artifact, deliberately.** The device must receive it in its
+  configuration. It is read-only and restricted to vrnetlab's internal `10.0.0.0/24`.
+
+Three measured facts about the device side:
+
+- **gNMI was off on every switch.** ContainerLab's boot template enables it, and provisioning's
+  `rollback clean-config` removed it. It is back through `avd_custom_hostvars` and the lab's
+  `group_vars`, with the golden files regenerated.
+- **FRR 10.2 to 10.5 ship no SNMP and no gNMI module** (checked on the official images), so each
+  router gets an `frr_exporter` sidecar in the lab topology. Re-platforming the WAN on SR Linux
+  is the named follow-up.
+- **The return-type generator mistypes a fragment on a generic.** `... on DcimInterface` becomes a
+  literal `__typename: "DcimInterface"` that no node reports, so every endpoint parsed as the
+  fieldless fallback and the link series came out empty with nothing raised. Use concrete kinds.
+
+**The exporter reads as `metrics-exporter`, never `admin` or `agent`.** It is built from a pinned
+upstream commit, because none is published, and runs on host port 8002, because 8001 is
+`infrahub-mcp`. `invoke metrics-exporter` provisions the account and starts it, and the bootstrap
+runs it after `mcp`.
+
 ## Generator and transform inventory
 
 The service layer offers seven kinds, each described where its generator or renderer is.
@@ -375,8 +469,8 @@ invisible on `main`, so a proposed change that is opened and then rejected does 
 Current generator definitions are registered in `.infrahub.yml`:
 `generate-fabric`, `generate-pod`, `generate-rack`, `generate-server-cabling`,
 `generate-avd-device-hostvar`, `generate-avd-device-structured-config`,
-`backfill-structured-config`, `generate-fabric-peering`, `generate-app-access`, and
-`generate-network-segment`.
+`backfill-structured-config`, `generate-fabric-peering`, `generate-app-access`,
+`generate-network-segment`, and `generate-monitoring-collector`.
 
 **An application is a Helm chart, and nothing else.** Cycle 033 made `chart_repository`,
 `chart_name` and `chart_version` mandatory together — which is what the Crossplane XRD already
@@ -563,7 +657,7 @@ to know before changing it:
 Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
 `containerlab_topology`, `cv_workspace_submission_webhook_payload`, `crossplane_fabric_peering`,
-`crossplane_fabric_app`, `frr_config`, and `junos_config`.
+`crossplane_fabric_app`, `frr_config`, `junos_config`, and `telemetry_collector_config`.
 
 `frr_config` renders the WAN's FRR configuration — the two ISP provider-edge routers, the
 internet router, the two customer edges and the branch router — as one `text/plain` artifact per
@@ -1328,6 +1422,8 @@ uv run invoke reconcile --dry-run --branch X  # report differences, change nothi
 uv run invoke reconcile                 # the loop, 600s default, 60s floor
 uv run invoke backstage-build           # build the portal image (it runs in the tooling cluster)
 uv run invoke tooling                   # Dex and the portal, into the tooling cluster
+uv run invoke mcp                       # the MCP server beside Infrahub, as mcp-agent
+uv run invoke metrics-exporter          # the Infrahub exporter beside Infrahub, as metrics-exporter
 uv run invoke cluster                   # Cilium, Vidra, Crossplane, then the handover
 uv run invoke cluster --no-handover     # ... leaving the lab in charge of all four
 uv run invoke vidra                     # the operator on its own, for a re-install

@@ -105,6 +105,26 @@ extensions:
           optional: true
           identifier: "device__asn"
           order_weight: 1650
+        # Cycle 034. A collector runs in a pod and cannot resolve a container
+        # name, so every device kind needs an address it can be observed at.
+        #
+        # NOT `mgmt_ip`, deliberately. That name means "reach this device over
+        # eAPI" to the reconciler (`reach = target.mgmt_ip or target.container`
+        # in deployment/devices.py), and cycle 027 moved it to DcimFabricSwitch
+        # alone; test_dcim_schema_contract.py holds it there. A router carrying
+        # a `mgmt_ip` would be one widened query away from being pushed to as a
+        # switch. This field is for observation only and changes nothing about
+        # how a configuration is pushed. On a switch the same address is its
+        # `mgmt_ip`, which the collector reads instead.
+        - name: telemetry_address
+          label: Telemetry Address
+          peer: IpamIPAddress
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: "The address telemetry collectors reach this device at; never used to push configuration"
+          identifier: "dcim_device__telemetry_address"
+          order_weight: 1670
 
     - kind: DcimFabricSwitch
       # The twelve fabric-only fields, moved here from DcimDevice by cycle 027.

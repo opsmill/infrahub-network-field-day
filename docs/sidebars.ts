@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'developer-guide/transforms',
         'developer-guide/checks',
         'developer-guide/vidra-delivery',
+        'developer-guide/observability',
         'developer-guide/deployment-reconciler',
         'developer-guide/concepts',
         {

@@ -120,6 +120,7 @@ exclude = [
     "transforms/crossplane_fabric_app_query.py",
     "transforms/frr_config_query.py",
     "transforms/junos_config_query.py",
+    "transforms/telemetry_collector_config_query.py",
 ]
 
 

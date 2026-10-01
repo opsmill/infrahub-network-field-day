@@ -182,6 +182,83 @@ services:
       retries: 5
       start_period: 90s
 
+  # The Infrahub MCP server, which is how an agent works with the platform.
+  #
+  # **It signs in as `mcp-agent`, not as `agent`.** The upstream sidecar example
+  # uses INFRAHUB_INITIAL_AGENT_TOKEN, and here that is a Super Administrator the
+  # task workers run as. `scripts/provision_mcp_agent.py` creates `mcp-agent`,
+  # which reads everything, writes only on branches and can open a proposed
+  # change, and writes its password to `.env`; `invoke mcp` runs it and starts
+  # this service.
+  #
+  # Behind a profile because it cannot sign in until that script has run, and a
+  # plain `docker compose up` on a fresh stack would otherwise crash-loop it.
+  #
+  # Bound to 127.0.0.1: auth mode `none` means whoever reaches the port acts as
+  # `mcp-agent`. The image is pinned because `infrahub-mcp` 1.1.7 from PyPI
+  # resolves against fastmcp 4 and mcp 2 and fails at import with
+  # `cannot import name 'McpError' from 'mcp'`; the published image is built
+  # from the project's lock file and carries the versions it was tested with.
+  infrahub-mcp:
+    image: registry.opsmill.io/opsmill/infrahub-mcp:v1.1.7
+    profiles: ["mcp"]
+    restart: unless-stopped
+    depends_on:
+      infrahub-server:
+        condition: service_healthy
+    environment:
+      INFRAHUB_ADDRESS: http://infrahub-server:8000
+      INFRAHUB_USERNAME: mcp-agent
+      INFRAHUB_PASSWORD: ${INFRAHUB_MCP_PASSWORD:-}
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8001"
+      INFRAHUB_MCP_BRANCH_PATTERN: ${INFRAHUB_MCP_BRANCH_PATTERN:-mcp/session-{date}-{hex}}
+    ports:
+      - "127.0.0.1:${INFRAHUB_MCP_PORT:-8001}:8001"
+    healthcheck:
+      test: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # The Infrahub exporter (cycle 034): the graph as Prometheus metrics, for
+  # Grafana's organisation dashboards. Prometheus in the workload cluster
+  # scrapes it at 172.20.41.1:8002 -- out of the node's management interface,
+  # masqueraded, the path Vidra already uses to reach Infrahub.
+  #
+  # BUILT FROM A PINNED COMMIT, because upstream publishes no image and no
+  # package. `docker compose --profile metrics build infrahub-exporter` fetches
+  # that commit; nothing here depends on the exporter's main branch.
+  #
+  # IT READS AS `metrics-exporter`, never `admin` or `agent`. Both are Super
+  # Administrators; `scripts/provision_metrics_exporter.py` creates the
+  # view-only account and writes its token into `.env`. The token reaches the
+  # exporter as one JSON variable because its settings model reads a nested
+  # block no other way -- see metrics/exporter.yml.
+  #
+  # Host port 8002, on every interface: 8001 is infrahub-mcp, and the pods
+  # reach the host on its management address, which a 127.0.0.1 binding would
+  # refuse.
+  infrahub-exporter:
+    build:
+      context: https://github.com/opsmill/infrahub-exporter.git#80974dfca53a532126ee5945eed7c07dbbff93c4
+      dockerfile: development/Dockerfile
+    image: otternet/infrahub-exporter:80974df
+    profiles: ["metrics"]
+    restart: unless-stopped
+    depends_on:
+      infrahub-server:
+        condition: service_healthy
+    command: ["/app/.venv/bin/python", "-m", "infrahub_exporter.main", "--config", "/config/exporter.yml"]
+    environment:
+      INFRAHUB_SIDECAR_INFRAHUB: >-
+        {"address": "http://infrahub-server:8000", "branch": "main", "token": "${INFRAHUB_EXPORTER_TOKEN:-}"}
+    volumes:
+      - ./metrics:/config:ro
+    ports:
+      - "8002:8001"
+
   # The deployment reconciler. Compares every device against its rendered
   # artifact on a timer and pushes the ones that genuinely differ.
   #

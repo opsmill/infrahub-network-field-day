@@ -90,3 +90,96 @@ spec:
 
       member_of_groups:
         - service_fabric_apps
+
+    # ---- Observability (cycle 034) -----------------------------------------
+    #
+    # Grafana, Prometheus and node-exporter. Replaces the lab's own
+    # `otternet-observability` claim, which is no longer applied beside it --
+    # and is named differently on purpose: Vidra refuses to adopt a resource it
+    # did not create, so a shared name leaves whichever writer got there first
+    # in charge.
+    - name: otternet-metrics
+      description: "Grafana and Prometheus: the lab's own observability"
+      status: active
+      owner: branch
+      cluster: otternet
+      namespace_name: otternet-metrics
+      vrf: K8S_PROD
+
+      chart_repository: https://prometheus-community.github.io/helm-charts
+      chart_name: kube-prometheus-stack
+      chart_version: "90.0.0"
+
+      # People sign in through the lab's one Dex issuer, and land as Viewer.
+      sso_provider: dex
+
+      exposed: true
+      vip_block: ["10.112.240.80/28", "default"]
+      service_selector:
+        - "otternet.lab/advertise=true"
+
+      # DEFAULT DENY OFF, which is a decision rather than a shortcut. Prometheus
+      # scrapes kubelets, the API server, Cilium and Telegraf in another
+      # namespace, and the composition's one selector-scoped ingress policy and
+      # CIDR-only allow-lists cannot express any of that; the lab's own copy
+      # needed two raw CiliumNetworkPolicies, and raw manifests left the model
+      # in cycle 033.
+      #
+      # GRAFANA'S POD GATE STILL HOLDS. With `allowed_source_prefixes`
+      # non-empty the composition renders `allow-ingress` on the pods matching
+      # `workload_selector`, and once a policy selects an endpoint its ingress
+      # is default-deny. Seeding the cluster's own pod prefix is what makes that
+      # policy exist from the first render, so a branch packet that got past
+      # the firewall is still dropped at Grafana until a grant adds 10.70.0.0/24
+      # -- which is exactly what generate-app-access does.
+      policy_default_deny: false
+      policy_allow_dns: true
+      policy_allow_intra_namespace: true
+      policy_allow_egress_api_server: true
+      policy_allow_egress_internet: true
+      allowed_source_prefixes:
+        - ["10.111.0.0/16", "default"]
+      # The pod port. The VIP answers on 80 (junos-http, below).
+      policy_allow_ports:
+        - port: "3000"
+          protocol: TCP
+      workload_selector:
+        - "app.kubernetes.io/name=grafana"
+
+      advertised_services:
+        - junos-http
+
+      member_of_groups:
+        - service_fabric_apps
+
+    # Telegraf, configured entirely from Infrahub: its ConfigMap is the
+    # `Telemetry Collector Configuration` artifact rendered from the monitoring
+    # profiles, delivered by Vidra's third sync. Cluster-internal: no VIP.
+    #
+    # Default deny off for the reason Grafana's is, sharpened: the only thing
+    # that talks to Telegraf is Prometheus, from another namespace, and the
+    # composition can allow ingress only by CIDR, which never matches a pod
+    # inside the cluster. Its own egress is to the management network, where
+    # every device it collects from lives.
+    - name: otternet-telemetry
+      description: "Telegraf: device telemetry, collected as Infrahub's monitoring profiles say"
+      status: active
+      owner: branch
+      cluster: otternet
+      namespace_name: otternet-telemetry
+      vrf: K8S_PROD
+
+      chart_repository: https://helm.influxdata.com/
+      chart_name: telegraf
+      chart_version: "1.8.77"
+
+      exposed: false
+
+      policy_default_deny: false
+      policy_allow_dns: true
+      policy_allow_intra_namespace: true
+      policy_allow_egress_api_server: false
+      policy_allow_egress_internet: true
+
+      member_of_groups:
+        - service_fabric_apps
