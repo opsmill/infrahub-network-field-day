@@ -37,7 +37,7 @@ flowchart LR
 
 ## What it's for
 
-- **Generate a complete fabric from a design** — define topology parameters and addressing pools; generators create all super-spines, spines, and leaves, allocate loopback, interconnect, and management addresses, BGP ASNs, and node IDs, and cable devices together automatically.
+- **Generate a complete fabric from a design** — define topology parameters and addressing pools; generators create the spines and leaves each pod and rack design calls for, allocate loopback, interconnect, and management addresses, BGP ASNs, and node IDs, and cable devices together automatically.
 - **Render EOS device configurations and documentation** — PyAVD runs inside Infrahub workers and produces EOS CLI configurations, per-device and fabric-level Markdown documentation, and a cabling plan CSV as downloadable artifacts.
 - **Make incremental day-two changes** — edit the design and regenerate; checksum-based idempotency applies changes only to affected objects; branch-aware pools prevent collisions across parallel work.
 - **Give other teams access to network data** — the fabric is queryable through the Infrahub Web UI, GraphQL API, and MCP interface; the [service portal](./service-portal.md) lets stakeholders without API or CLI access request services; every request is a branch with a proposed change.

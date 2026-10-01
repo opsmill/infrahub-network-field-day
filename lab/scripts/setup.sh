@@ -21,7 +21,7 @@ uv python install 3.12
 uv venv --python 3.12 .venv
 
 say "Installing ansible-core and pyavd"
-uv pip install --python .venv/bin/python "ansible-core<2.21" "pyavd[ansible]"
+uv pip install --python .venv/bin/python "ansible-core==2.20.9" "pyavd[ansible]==6.4.0"
 
 say "Installing Ansible collections into the lab directory"
 ANSIBLE_COLLECTIONS_PATH="$LAB_DIR/.ansible/collections" \

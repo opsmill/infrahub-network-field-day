@@ -31,6 +31,8 @@ export KUBECONFIG="${KUBECONFIG:-$LAB_KUBECONFIG}"
 INFRAHUB_USERNAME="${INFRAHUB_USERNAME:-admin}"
 INFRAHUB_PASSWORD="${INFRAHUB_PASSWORD:-infrahub}"
 INFRAHUB_CLUSTER_URL="${INFRAHUB_CLUSTER_URL:-http://172.20.41.1:8000}"
+# The chart, pinned like Cilium and Crossplane; the image tag is in vidra/helm-values.yaml.
+VIDRA_CHART_VERSION="${VIDRA_CHART_VERSION:-0.0.6}"
 
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 ok()   { printf '  \033[1;32mok\033[0m    %s\n' "$*"; }
@@ -60,7 +62,7 @@ say "Checking the cluster can reach Infrahub at $INFRAHUB_CLUSTER_URL"
 # localhost: inside a node, localhost is the node. The check runs in the
 # cluster rather than on this host for exactly that reason.
 if kubectl -n kube-system delete pod vidra-preflight --ignore-not-found >/dev/null 2>&1; then :; fi
-if kubectl -n kube-system run vidra-preflight --image=busybox:1.36 --restart=Never \
+if kubectl -n kube-system run vidra-preflight --image=busybox:1.36.1 --restart=Never \
         --command --timeout=120s --attach --rm -- \
         wget -q -O /dev/null --timeout=10 "$INFRAHUB_CLUSTER_URL/api/config" >/dev/null 2>&1; then
     ok "a pod can reach Infrahub"
@@ -105,6 +107,7 @@ say "Installing the operator"
 helm repo add vidra https://infrahub-operator.github.io/vidra >/dev/null 2>&1 || true
 helm repo update vidra >/dev/null
 helm upgrade --install vidra vidra/vidra-operator \
+    --version "$VIDRA_CHART_VERSION" \
     --namespace vidra-system \
     --values "$REPO_DIR/vidra/helm-values.yaml" \
     --wait --timeout 5m

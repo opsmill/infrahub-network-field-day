@@ -23,7 +23,7 @@ Per-device artifacts (`AVD EOS Configuration`, `AVD Device Documentation`) are r
 ## Finding a device artifact
 
 1. In the Infrahub UI, open **Data Centre Fabric → Switches**.
-2. Click a device (for example `leaf-pod-A1-1`).
+2. Click a device (for example `leaf-otternet-pod1-1-1`).
 3. Click the **Artifacts** tab on the device's detail page.
 4. You'll see rows for **AVD EOS Configuration** and **AVD Device Documentation**.
 
@@ -42,10 +42,10 @@ The EOS config is plain text — paste-ready for a lab switch or a virtual Arist
 
 ```text
 !
-hostname leaf-pod-A1-1
+hostname leaf-otternet-pod1-1-1
 !
 router bgp 65101
-   router-id 10.255.1.1
+   router-id 10.41.0.11
    …
 ```
 
@@ -56,7 +56,7 @@ The fabric and device markdown documents include tables, topology descriptions, 
 ## Finding a fabric artifact
 
 1. Open **Data Centre Fabric → Fabrics**.
-2. Click the fabric (`Fabric-L3LS-MultiPod-A`).
+2. Click the fabric (`OTTERNET_FABRIC`).
 3. Click the **Artifacts** tab.
 4. Open **AVD Fabric Documentation** or **ContainerLab Topology**.
 
@@ -68,11 +68,11 @@ the switches, Linux nodes for the servers — plus every fabric link as a `endpo
 ```yaml
 topology:
   nodes:
-    spine-infrahub-dc1-1:
+    spine-otternet-pod1-1:
       kind: arista_ceos
-      mgmt-ipv4: 10.0.6.11
+      mgmt-ipv4: 172.20.41.11
   links:
-    - endpoints: ["leaf-infrahub-dc1-1:eth49_1", "spine-infrahub-dc1-1:eth1_1"]
+    - endpoints: ["leaf-otternet-pod1-1-1:eth1", "spine-otternet-pod1-1:eth1"]
 ```
 
 Node kinds, container images, and interface-mapping binds come from schema attributes rather than

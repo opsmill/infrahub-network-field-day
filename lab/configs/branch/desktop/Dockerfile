@@ -10,7 +10,10 @@
 # XFCE because it starts in a second and has no compositor to fight with, and
 # TigerVNC rather than xrdp because Guacamole speaks VNC natively and xrdp
 # wants a session manager this container deliberately does not have.
-FROM ubuntu:24.04
+#
+# noble-20260911 is Ubuntu 24.04.5, the dated build the running image was made
+# from; the bare 24.04 tag moves with every point release.
+FROM ubuntu:noble-20260911
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8

@@ -37,7 +37,7 @@ Hostnames come from the generators (`spine-{pod}-{index}`, `leaf-{pod}-{rack_ind
 
 ## What It's For
 
-- **Generate a complete fabric from a design** — define topology parameters and addressing pools; generators create all super-spines, spines, and leaves, allocate loopback, interconnect, and management addresses, BGP ASNs, and node IDs, and cable devices together automatically.
+- **Generate a complete fabric from a design** — define topology parameters and addressing pools; generators create the spines and leaves each pod and rack design calls for, allocate loopback, interconnect, and management addresses, BGP ASNs, and node IDs, and cable devices together automatically.
 - **Render EOS device configurations and documentation** — PyAVD runs inside Infrahub workers and produces EOS CLI configurations, per-device and fabric-level Markdown documentation, and a cabling plan CSV as downloadable artifacts.
 - **Make incremental day-two changes** — edit the design and regenerate; checksum-based idempotency applies changes only to affected objects; branch-aware pools prevent collisions across parallel work.
 - **Give other teams access to network data** — the fabric is queryable through the Infrahub Web UI, GraphQL API, and MCP interface; the Backstage service portal lets stakeholders without API or CLI access request services; every request is a branch with a proposed change.
@@ -82,8 +82,8 @@ Then follow [Provision Your First Fabric](docs/docs/provision-first-fabric.md) t
 After `invoke load` completes and you run the generator chain on a fabric:
 
 1. **Seed data appears in the UI** — the manufacturer, cEOS-LAB device type and templates, addressing and numbering pools, and the `OTTERNET_FABRIC` design with its pod, three leaf racks, seven switches, four tenants and six VRFs are loaded.
-2. **FabricGenerator runs** — super-spine devices appear on the branch, with loopback and management addresses allocated from pools.
-3. **PodGenerator and RackGenerator trigger automatically** — spine and leaf devices appear, cabled to their uplinks, with interconnect addresses, BGP ASNs, and node IDs assigned.
+2. **FabricGenerator runs** — `OTTERNET_FABRIC` declares no device tier above its spines, so it creates no devices; it resolves the fabric's pools and triggers the pod generator.
+3. **PodGenerator and RackGenerator trigger automatically** — the two spines and five leaves are reconciled (their pinned identity is preserved), cabled to their uplinks and MLAG peers, and given interconnect addresses.
 4. **AVD generators run** — each device's PyAVD host_vars and structured configuration are stored as `AvdArtifact` graph objects.
 5. **Transforms produce artifacts** — EOS device configuration, per-device Markdown documentation, fabric documentation, and a cabling plan CSV are available as downloadable artifacts on each device and fabric object.
 6. **Propose and review** — open a proposed change from the branch; the UI shows a diff of every new object and the rendered artifacts for review before any configuration reaches production.

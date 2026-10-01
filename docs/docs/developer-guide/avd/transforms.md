@@ -102,9 +102,9 @@ Every "cannot render" path returns a comment rather than raising, so the artifac
 states the reason:
 
 ```text
-# ANTA disabled for fabric Fabric-L3LS-Multi-Domain
-# No structured config for leaf-infrahub-dc1-1
-# ANTA catalog: no fabric for leaf-infrahub-dc1-1
+# ANTA disabled for fabric OTTERNET_FABRIC
+# No structured config for leaf-otternet-pod1-1-1
+# ANTA catalog: no fabric for leaf-otternet-pod1-1-1
 ```
 
 ## Registration in `.infrahub.yml`

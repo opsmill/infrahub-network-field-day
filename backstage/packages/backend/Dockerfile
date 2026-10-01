@@ -16,7 +16,7 @@
 # https://backstage.io/docs/deployment/docker#multi-stage-build
 
 # Node 22 to match the host toolchain the bundle is built with.
-FROM node:22-trixie-slim
+FROM node:22.23.3-trixie-slim
 
 # Install sqlite3 dependencies. You can skip this if you don't use sqlite3 in the image,
 # in which case you should also move better-sqlite3 to "devDependencies" in package.json.

@@ -80,7 +80,7 @@ topology:
       image: ceos:4.36.0.1F
       startup-config: configs/__clabNodeName__.cfg
     linux:
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
 
   nodes:
     host-a:
@@ -98,13 +98,14 @@ directory a deployment would place fetched EOS configs in.
 
 ### Which devices are included
 
-Devices are selected by `DcimDevice.role`. Included: `super_spine`, `spine`, `leaf`,
-`border_leaf`, `l2leaf`, `l2spine`, `l3spine`. `ComputePhysicalServer` members of the fabric are
-included as Linux nodes.
+Switches are selected by `DcimFabricSwitch.role`: every fabric-switch role is included except
+`p`, `pe` and `rr` (the list is `NETWORK_ROLES` in `transforms/containerlab_topology.py`).
+`OTTERNET_FABRIC`'s seven switches are all `spine` or `leaf`. `ComputePhysicalServer` members of the
+fabric are included as Linux nodes.
 
-The `p`, `pe`, and `rr` roles are deliberately **excluded**. They belong to the ISIS-LDP fabric,
-whose interface naming has not been validated against ContainerLab, so admitting them would be
-speculative. Each excluded device is logged as a warning during the render rather than dropped
+The `p`, `pe`, and `rr` roles are deliberately **excluded**. They are MPLS core and edge roles the
+schema still offers, no fabric in this repository uses them, and their interface naming has not been
+validated against ContainerLab, so admitting them would be speculative. Each excluded device is logged as a warning during the render rather than dropped
 silently, so a fabric holding them renders without those devices and says so in the transform log.
 
 A link is only emitted when it resolves to exactly two endpoints and both endpoints belong to
@@ -117,19 +118,21 @@ Nothing about node identity is hardcoded in the transform. Three schema attribut
 | Attribute | Node | Drives |
 |-----------|------|--------|
 | `DcimPlatform.containerlab_os` | `kind:` on each node | `arista_ceos`, `linux` |
-| `DcimPlatform.containerlab_image` | `image:` on each `kinds` entry | `arista/ceos:4.36.0.1F`, `lab-server` |
-| `DcimDeviceType.containerlab_interface_mapping` | the `EosIntfMapping.json` bind | `DCS-7050CX3-32S.json` |
+| `DcimPlatform.containerlab_image` | `image:` on each `kinds` entry | `ceos:4.36.0.1F`, `ghcr.io/srl-labs/network-multitool` |
+| `DcimDeviceType.containerlab_interface_mapping` | the `EosIntfMapping.json` bind | unset on `Arista cEOS-LAB` (see below) |
 
 All three are optional `Text` attributes. A device whose platform has no `containerlab_os` cannot
 be rendered as a node; a device type with no `containerlab_interface_mapping` gets no
 mapping bind (the `binds` key is omitted entirely when a node has nothing to bind).
 
 `containerlab_interface_mapping` holds a **filename only**, not a path, and not the file contents.
-The file is resolved relative to the topology file at deploy time. Note the filenames intentionally differ from the device type's `part_number`
-(`DCS-7050CX3-32S.json` for part number `DCS-7050CX3-32C`) — the attribute exists precisely so the
-mapping filename does not have to be derived from anything else.
+The file is resolved relative to the topology file at deploy time. The attribute exists so the
+mapping filename does not have to be derived from anything else, such as the `part_number`.
 
-Seed values live in `objects/03_device_type.yml`.
+The platform values live in `objects/03_device_type.yml` and the device types in
+`objects/20_otternet_device_types.yml`. The `Arista cEOS-LAB` device type sets no
+`containerlab_interface_mapping`: every `OTTERNET_FABRIC` switch uses plain `Ethernet<N>` names,
+which cEOS maps without help, so no switch node carries a mapping bind.
 
 ## Interface names and why the mapping bind matters
 
@@ -153,11 +156,11 @@ corresponds to which EOS interface name, per device type. It is mounted read-onl
 
 ```yaml
 binds:
-  - configs/eos-intf-mapping/DCS-7050SX3-48YC8.json:/mnt/flash/EosIntfMapping.json:ro
+  - configs/eos-intf-mapping/<mapping-file>.json:/mnt/flash/EosIntfMapping.json:ro
 ```
 
-On a fabric whose spines use `Ethernet<N>/1` uplinks and whose leaves use `Ethernet49-50/1`, the
-mapping bind is what makes the AVD-rendered config match the interfaces that actually exist. To
+On a device type whose interfaces use breakout names such as `Ethernet<N>/1`, the mapping bind is
+what makes the AVD-rendered config match the interfaces that actually exist. To
 confirm it took effect after a deploy:
 
 ```bash

@@ -7,39 +7,39 @@ sidebar_position: 2
 
 # Provision your first fabric
 
-Prerequisites: [Quick Start](./quick-start.md) complete — Infrahub is running at `http://localhost:8000`, and seed data (fabrics, pods, racks, device types, IP pools) is loaded.
+Prerequisites: [Quick Start](./quick-start.md) complete — Infrahub is running at `http://localhost:8000`, and seed data (`OTTERNET_FABRIC`, its pod and three racks, the seven switches, device types, IP pools) is loaded.
 
 At this point the fabric design is loaded and the seven switches exist with their pinned identity, but they are **not cabled** and have no host_vars. The steps below generate the cabling, host_vars, and configurations for `OTTERNET_FABRIC`.
 
 ## The generator chain
 
-The project ships four generators that must run in a specific sequence. You trigger the first one; each subsequent generator is triggered automatically by the previous one finishing.
+The fabric is built by five generators that run in a fixed sequence. You trigger `generate-fabric`; the pod and rack generators follow it automatically through event triggers. The two AVD generators run when something asks for them (see Step 3).
 
 ```mermaid
 flowchart TD
-    A[generate-fabric] -->|creates super-spines<br/>triggers| B[generate-pod]
-    B -->|creates spines<br/>triggers| C[generate-rack]
-    C -->|creates leaves<br/>triggers| D[generate-avd-device-hostvar]
+    A[generate-fabric] -->|resolves pools<br/>triggers| B[generate-pod]
+    B -->|reconciles and cables spines<br/>triggers| C[generate-rack]
+    C -.->|reconciles and cables leaves<br/>then, on request| D[generate-avd-device-hostvar]
     D -->|per device| E[generate-avd-device-structured-config]
     E -->|per fabric| F[AVD artifacts ready]
 ```
 
 | Step | Generator | What it creates |
 |------|-----------|-----------------|
-| 1 | **generate-fabric** | Super-spine switches using the fabric loopback, VTEP, management, ASN, and node ID pools |
-| 2 | **generate-pod** | Spine switches for each pod |
-| 3 | **generate-rack** | Leaf switches for each rack |
+| 1 | **generate-fabric** | Nothing for `OTTERNET_FABRIC`: it declares no device tier above its spines. The generator resolves the fabric's pools and signals the pod generator |
+| 2 | **generate-pod** | The two spines of `otternet-pod1`, reconciled by name, with their interfaces expanded from the spine template |
+| 3 | **generate-rack** | The leaves of `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`, their uplink cabling to the spines, and the MLAG peer links |
 | 4 | **generate-avd-device-hostvar** | Per-device PyAVD hostvars (stored in the graph as an `AvdHostvarFile`) |
 | 5 | **generate-avd-device-structured-config** | Per-device structured AVD config (stored as `AvdStructuredConfigFile`) |
 
 ## Step 1 — Create a branch
 
-Do this work on a branch so the changes stay isolated and you can review them as a proposed change before bringing them into `main`. In the Infrahub UI: click the branch selector in the top bar, then **+ Create branch**, and name it something like `generate-fabric-l3ls-multipod-a`.
+Do this work on a branch so the changes stay isolated and you can review them as a proposed change before bringing them into `main`. In the Infrahub UI: click the branch selector in the top bar, then **+ Create branch**, and name it something like `generate-otternet-fabric`.
 
 You can also create a branch from the CLI:
 
 ```bash
-uv run infrahubctl branch create generate-fabric-l3ls-multipod-a
+uv run infrahubctl branch create generate-otternet-fabric
 ```
 
 The CLI route needs credentials in your shell — either `source .envrc` first or set `INFRAHUB_USERNAME`/`INFRAHUB_PASSWORD` (or `INFRAHUB_API_TOKEN`). If you take the CLI route, also switch the UI's branch selector to the new branch — subsequent UI actions need to be scoped there.
@@ -54,6 +54,16 @@ The CLI route needs credentials in your shell — either `source .envrc` first o
 
 Infrahub queues the generator and shows progress. The fabric generator itself takes under a minute.
 
+:::warning Run the topology generators once per fresh load
+`generate-fabric`, `generate-pod` and `generate-rack` are **not** idempotent against a fabric that is already cabled: `generate-pod` cuts each spine's interfaces down and deletes the leaf-facing ports the racks are cabled to, and `generate-rack` then fails. Run this step only on an instance where the fabric has not been built yet, such as straight after `invoke load`. To refresh the configuration of a fabric that is already built, run only the AVD stage (`uv run invoke avd --branch <branch>`).
+:::
+
+The CLI equivalent of Steps 2 and 3, including the AVD stage and artifact regeneration, is:
+
+```bash
+uv run invoke avd --topology --branch generate-otternet-fabric
+```
+
 ## Step 3 — Watch the chain run
 
 You don't need to manually trigger the pod and rack generators — they are chained
@@ -61,7 +71,8 @@ via event triggers.
 
 :::note The AVD stage is not chained from the rack generator
 `generate-avd-device-hostvar` has no trigger rule at all. It runs when something
-asks: `invoke avd`, the portal's request templates, or a proposed change (it is
+asks: `invoke avd`, a manual run from **Actions → Generator definitions**, the
+portal's request templates, or a proposed change (it is
 `execute_in_proposed_change: true`, which is what makes a service request show
 its fabric consequence). `generate-avd-device-structured-config` follows it, both
 through its own trigger on `avd_hostvars_ready` and in the proposed-change
@@ -75,20 +86,19 @@ In the UI:
    - `generate-fabric` (1 task, per fabric)
    - `generate-pod` (one per pod in the fabric)
    - `generate-rack` (one per rack in the fabric)
-   - `generate-avd-device-hostvar` (one per device created — super-spines, spines, leaves)
+   - `generate-avd-device-hostvar` (one per switch, seven in all), when you run it
    - `generate-avd-device-structured-config` (one task for the whole fabric, runs after all hostvars are ready)
 
 The full chain typically takes a few minutes depending on fabric size.
 
 ## Step 4 — Verify devices exist
 
-Once all tasks complete, open **Data Centre Fabric → Switches** in the menu. You should see devices with roles:
+Once all tasks complete, open **Data Centre Fabric → Switches** in the menu. You should see seven switches:
 
-- `super_spine` — top of the fabric
-- `spine` — one per pod
-- `leaf` — one or more per rack
+- `spine` — `spine-otternet-pod1-1` and `spine-otternet-pod1-2`
+- `leaf` — `leaf-otternet-pod1-1-1` and `-1-2` (`K8S_LEAFS`), `-2-1` and `-2-2` (`APP_LEAFS`), and `-3-1` (`BORDER_LEAFS`)
 
-Each device has a BGP ASN, a node ID, a loopback IP, a management IP, and interfaces with IP addresses assigned from the fabric's pools.
+Each switch keeps the BGP ASN, node ID, loopback and management address pinned in `objects/26_otternet_devices.yml`, and now has its uplink and MLAG peer interfaces cabled under **Data Centre Fabric → Connections**.
 
 ## Step 5 — Render the AVD artifacts
 

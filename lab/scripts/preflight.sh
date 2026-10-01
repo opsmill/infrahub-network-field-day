@@ -51,7 +51,7 @@ else
 fi
 
 FRR_IMAGE="${OTTERNET_FRR_IMAGE:-quay.io/frrouting/frr:10.2.1}"
-for img in rancher/k3s:v1.31.3-k3s1 ghcr.io/srl-labs/network-multitool "$FRR_IMAGE"; do
+for img in rancher/k3s:v1.31.3-k3s1 ghcr.io/srl-labs/network-multitool:v0.10.0 "$FRR_IMAGE"; do
     if docker image inspect "$img" >/dev/null 2>&1; then ok "$img"; else warn "$img not pulled yet (deploy will fetch it)"; fi
 done
 

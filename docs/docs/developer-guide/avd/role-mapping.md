@@ -11,11 +11,13 @@ sidebar_position: 5
 Role names are **PyAVD-version-sensitive** — see the [overview](./overview.md#pyavd-version) for the pinned version.
 :::
 
-Infrahub's `DcimDevice.role.value` is a string enum that the hostvars generator maps to a PyAVD `type`. The mapping lives in [`src/solution_arista_avd/avd.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/src/solution_arista_avd/avd.py):
+Infrahub's `DcimFabricSwitch.role.value` is a string enum that the hostvars generator maps to a PyAVD `type`. The mapping lives in [`src/solution_arista_avd/avd.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/src/solution_arista_avd/avd.py).
+
+`OTTERNET_FABRIC`, the one fabric this repository models, uses two of these roles: `spine` for its two spines and `leaf` for all five leaves, the border leaf included. The others are kept because the schema and the mapping still support them; no seed data uses them.
 
 ## Table
 
-| Infrahub role | PyAVD `type` | Primary scenario |
+| Infrahub role | PyAVD `type` | Typical AVD design |
 |---------------|--------------|------------------|
 | `super_spine` | `super-spine` | L3LS, 5-stage Clos |
 | `spine` | `spine` | L3LS |
@@ -59,15 +61,15 @@ An unrecognized role raises `ValueError` at generation time — Phase 1 fails fo
 
 ## Underlay-driven role selection
 
-The four non-L3LS example designs do not set spine/leaf roles manually. Instead the upstream generator derives them from the **fabric underlay**, so the same spine/leaf topology renders different device types per design:
+A non-L3LS design does not set spine/leaf roles manually. Instead the generator derives them from the **fabric underlay**, so the same spine/leaf topology renders different device types per design:
 
-| Fabric underlay | Spine-tier role | Leaf-tier role | Example design |
+| Fabric underlay | Spine-tier role | Leaf-tier role | AVD design |
 |-----------------|-----------------|----------------|----------------|
 | `none` | `l2spine` | `l2leaf` | Standalone L2LS |
 | `ospf` | `l3spine` | `l2leaf` | Campus |
 | `isis-ldp` | `p` | `pe` | MPLS ISIS-LDP IPVPN |
 
-These come from `SPINE_ROLE_BY_UNDERLAY` and `LEAF_ROLE_BY_UNDERLAY` in [`avd.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/src/solution_arista_avd/avd.py). The selection is **gated to non-L3LS underlays only**: a routed L3LS fabric (underlay `ebgp`) is not in either map, so it falls back to the default `spine` / `leaf` roles.
+These come from `SPINE_ROLE_BY_UNDERLAY` and `LEAF_ROLE_BY_UNDERLAY` in [`avd.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/src/solution_arista_avd/avd.py). The selection is **gated to non-L3LS underlays only**: a routed L3LS fabric (underlay `ebgp`, which is what `OTTERNET_FABRIC` uses) is not in either map, so it falls back to the default `spine` / `leaf` roles.
 
 ## MLAG in non-L3LS designs
 
@@ -77,14 +79,14 @@ Which generator forms the pair depends on the tier:
 
 | Tier | Generator | Peer-link source |
 |------|-----------|------------------|
-| `l2leaf` (rack tier) | `generate-rack` | Highest-numbered free access ports — the `arista-7050sx3-48yc8c` l2leaf model ships no dedicated `mlag_peer` interfaces |
+| `l2leaf` (rack tier) | `generate-rack` | Highest-numbered free access ports, for an l2leaf device type with no dedicated `mlag_peer` interfaces |
 | `l2spine` (pod tier, underlay `none`) | `generate-pod` | Highest-numbered free **super-spine-facing** ports, unused in a standalone L2LS fabric (it has no super-spines) |
 
 Both go through the shared `assign_mlag_peer_interfaces` helper on the generator mixin, so the choice is deterministic (ordered by the interface's computed `index`) and idempotent — a re-run converts nothing further. The l2spine pair has **no BGP ASN**: a pure Layer-2 tier runs no BGP.
 
 ## Per-tier spanning-tree priorities
 
-`Network.SpanningTreePriority` links a fabric to a per-role MSTP priority. Its `role` dropdown covers `super_spine`, `spine`, `leaf`, `l2leaf` and — for the non-L3LS designs — `l2spine` and `l3spine`. The L2LS example sets `l2spine: 4096` / `l2leaf: 16384`, which the hostvars generator emits as each tier's `spanning_tree_priority`.
+`Network.SpanningTreePriority` links a fabric to a per-role MSTP priority. Its `role` dropdown covers `super_spine`, `spine`, `leaf`, `l2leaf` and — for the non-L3LS designs — `l2spine` and `l3spine`. `OTTERNET_FABRIC` sets one, `leaf: 4096`, which the hostvars generator emits as `l3leaf.defaults.spanning_tree_priority`; the spines carry none, because the fabric runs MSTP on the leaf tier only.
 
 ## Role implications
 

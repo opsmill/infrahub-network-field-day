@@ -22,7 +22,7 @@ spec:
     - name: Linux
       description: Generic Linux host
       containerlab_os: linux
-      containerlab_image: ghcr.io/srl-labs/network-multitool
+      containerlab_image: ghcr.io/srl-labs/network-multitool:v0.10.0
     # The WAN routers. `kind: linux` in the topology because FRR ships as an
     # ordinary container rather than a ContainerLab-native node kind.
     #

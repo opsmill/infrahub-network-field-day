@@ -67,10 +67,13 @@ class ComputedInterfaceDescription(InfrahubTransform):
 **Output**: CSV file with all connections
 
 ```csv
-Source Device,Source Interface,Destination Device,Destination Interface,Link Type
-spine-A1-1,Ethernet1,super-spine-A-1,Ethernet1,uplink
-leaf-A1-01-1,Ethernet49,spine-A1-1,Ethernet1,uplink
+Source Rack,Source Device,Source Interface,Destination Rack,Destination Device,Destination Interface
+K8S_LEAFS,leaf-otternet-pod1-1-1,Ethernet10,,k8s-node1,eth1
+,spine-otternet-pod1-1,Ethernet1,K8S_LEAFS,leaf-otternet-pod1-1-1,Ethernet1
+,spine-otternet-pod1-2,Ethernet5,BORDER_LEAFS,leaf-otternet-pod1-3-1,Ethernet2
 ```
+
+Preview it with `uv run infrahubctl transform cabling_plan name=OTTERNET_FABRIC`.
 
 ### AvdEosConfigTransform
 
@@ -152,7 +155,7 @@ fabric, or no structured config — the transform returns a marker comment inste
 the artifact renders successfully and says why it is empty:
 
 ```text
-# ANTA disabled for fabric Fabric-L3LS-Multi-Domain
+# ANTA disabled for fabric OTTERNET_FABRIC
 ```
 
 ### CrossplaneFabricPeeringTransform
