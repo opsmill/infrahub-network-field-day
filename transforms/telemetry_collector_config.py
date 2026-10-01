@@ -349,6 +349,14 @@ class TelemetryCollectorConfig(InfrahubTransform):
                     "metric_batch_size": 1000,
                     "metric_buffer_limit": 10000,
                     "omit_hostname": True,
+                    # Agent-wide, not per input: Telegraf 1.40 refuses
+                    # `translator` inside [[inputs.snmp]] and exits. gosmi
+                    # needs no net-snmp tools in the image, and every OID
+                    # rendered here is numeric, so no MIB files either.
+                    "snmp_translator": "gosmi",
+                    # Set explicitly: the default flips in 1.40, and Telegraf
+                    # warns on every start until it is stated.
+                    "skip_processors_after_aggregators": True,
                 },
             ),
             "",
@@ -364,7 +372,7 @@ class TelemetryCollectorConfig(InfrahubTransform):
                 "[[processors.enum]]",
                 *_kv("  ", {"namepass": ["bgp_neighbor"]}),
                 "  [[processors.enum.mapping]]",
-                *_kv("    ", {"field": "session_state", "dest": "session_state_code"}),
+                *_kv("    ", {"fields": ["session_state"], "dest": "session_state_code"}),
                 "    [processors.enum.mapping.value_mappings]",
                 *_kv("      ", BGP_STATE_CODES),
             ]
@@ -471,7 +479,6 @@ class TelemetryCollectorConfig(InfrahubTransform):
                         "interval": interval,
                         "timeout": "5s",
                         "retries": 1,
-                        "translator": "gosmi",
                     },
                 ),
                 *self._tags(collector, watch, "inputs.snmp"),

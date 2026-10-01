@@ -227,3 +227,18 @@ def test_bgp_state_is_mapped_to_a_number_prometheus_can_keep() -> None:
     enum = conf["processors"]["enum"][0]
     assert enum["namepass"] == ["bgp_neighbor"]
     assert enum["mapping"][0]["value_mappings"]["ESTABLISHED"] == 6
+    # `fields`, not `field`: Telegraf 1.40 refuses the old option and exits.
+    assert enum["mapping"][0]["fields"] == ["session_state"]
+
+
+def test_options_telegraf_1_40_refuses_are_not_rendered() -> None:
+    """Both of these passed a TOML parse and killed the real collector at load.
+
+    `translator` inside [[inputs.snmp]] (agent-wide since 1.40) and
+    `processors.enum.mapping.field` (removed in 1.40). Measured against
+    telegraf:1.40-alpine, which exited on each in turn.
+    """
+    conf = _conf(_render()[0])
+    assert conf["agent"]["snmp_translator"] == "gosmi"
+    assert all("translator" not in block for block in conf["inputs"]["snmp"])
+    assert all("field" not in m for e in conf["processors"]["enum"] for m in e["mapping"])
