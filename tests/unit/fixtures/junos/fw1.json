@@ -11,7 +11,7 @@
             "value": "Perimeter vSRX; every tenant VRF's only route out points at one of its zones"
           },
           "tcp_mss": {
-            "value": 9138
+            "value": 9124
           },
           "snmp_community": {
             "value": "otternet-ro"

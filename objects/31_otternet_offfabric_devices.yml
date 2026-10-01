@@ -36,12 +36,13 @@ spec:
       rack_face: front
       device_type: ["Juniper", "Juniper vSRX"]
       platform: JunOS
-      # 9192 (the vSRX interface maximum) - 14 Ethernet - 20 IP - 20 TCP.
-      # The interfaces run 36 bytes short of the fabric's 9214, so two hosts
-      # that both believe the path is 9214 would negotiate MSS 9174 and build a
-      # packet this firewall silently cannot forward. Transcribed from
-      # ../lab/configs/fw/vsrx/junos.conf, `security flow tcp-mss all-tcp`.
-      tcp_mss: 9138
+      # 9214 (the fabric underlay) - 50 (VXLAN) - 20 (IP) - 20 (TCP). Not the
+      # firewall's own 9192 - 14 - 20 - 20 = 9138: traffic onward into a tenant
+      # VRF crosses the EVPN fabric as VXLAN, and at 9138 every full-size
+      # segment was dropped there silently. Measured from the branch desktop:
+      # MSS 9124 fetched Grafana's 41KB stylesheet in 9ms; MSS 9138 stalled at
+      # 3869 bytes. Transcribed into ../lab/configs/fw/vsrx/junos.conf.
+      tcp_mss: 9124
       # SNMP for the telemetry collector (cycle 034). A read-only v2c community
       # -- configuration rather than a credential, and the one value of its
       # kind recorded in an artifact, because the device must receive it -- and

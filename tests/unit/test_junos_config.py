@@ -603,7 +603,11 @@ def test_the_three_recovered_comment_blocks_are_present() -> None:
     which is exactly what happened for three cycles.
     """
     rendered = "\n".join(_rendered())
-    assert "Clamp TCP to what the 9192-byte interface MTU can actually carry" in rendered
+    # The clamp's comment names the VXLAN limit, because that is the one that
+    # binds (cycle 034): sized for the firewall's own MTU, it let full-size
+    # segments die inside the fabric.
+    assert "Clamp TCP to what the path behind this firewall can actually carry" in rendered
+    assert "9214 - 50 (VXLAN) - 20 (IP) - 20 (TCP) = 9124" in rendered
     assert "Named objects rather than bare CIDRs" in rendered
     assert "NAT is absent from this file, and that absence is load-bearing" in rendered
     assert "`make verify`" in rendered
