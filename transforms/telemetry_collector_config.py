@@ -514,8 +514,11 @@ class TelemetryCollectorConfig(InfrahubTransform):
                         "version": 2,
                         "community": device.snmp_community,
                         "interval": interval,
-                        "timeout": "5s",
-                        "retries": 1,
+                        # Patient, because the vSRX's agent is slow now and
+                        # then: the same walk takes 0.8s from the host and
+                        # occasionally timed out at 5s with one retry.
+                        "timeout": "10s",
+                        "retries": 2,
                     },
                 ),
                 *self._tags(collector, watch, "inputs.snmp"),

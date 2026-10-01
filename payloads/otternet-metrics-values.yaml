@@ -62,6 +62,13 @@ grafana:
     # (lab) Keeps the client IP intact, so the pod policy sees the real source,
     # and means only nodes running Grafana advertise the VIP.
     externalTrafficPolicy: Local
+  # Land people on the lab's own Organisation dashboard rather than Grafana's
+  # generic welcome page. The path is where the chart's file provider writes
+  # the dashboards scripts/seed_app_payloads.py folds in: provider `otternet`,
+  # one file per dashboard, named after its JSON file.
+  grafana.ini:
+    dashboards:
+      default_home_dashboard_path: /var/lib/grafana/dashboards/otternet/organisation.json
   # (lab) searchNamespace ALL makes the two k8s-sidecar processes poll every
   # namespace continuously; measured as the largest CPU consumers on the node.
   sidecar:

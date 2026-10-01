@@ -11,7 +11,7 @@
   "schemaVersion": 39,
   "version": 1,
   "editable": false,
-  "refresh": "30s",
+  "refresh": "1m",
   "time": {
     "from": "now-1h",
     "to": "now"
@@ -45,7 +45,24 @@
       ],
       "description": "Anything but in_sync. The reconciler pushes a differing device on its next cycle.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
         "overrides": []
       },
       "options": {}
