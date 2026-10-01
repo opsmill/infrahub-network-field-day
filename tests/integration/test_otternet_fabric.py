@@ -158,9 +158,9 @@ class TestOtternetFabric(TestInfrahubDockerClient):
     # --- stage 4: repository ----------------------------------------------
     @pytest.mark.asyncio(loop_scope="class")
     async def test_register_repository(
-        self, default_branch: str, client: InfrahubClient, root_directory: Path, remote_repos_dir: Path
+        self, default_branch: str, client: InfrahubClient, repository_source: Path, remote_repos_dir: Path
     ) -> None:
-        repo = GitRepo(name=REPO_NAME, src_directory=root_directory, dst_directory=remote_repos_dir)
+        repo = GitRepo(name=REPO_NAME, src_directory=repository_source, dst_directory=remote_repos_dir)
         await repo.add_to_infrahub(client=client)
         in_sync = await repo.wait_for_sync_to_complete(
             client=client, interval=REPO_SYNC_INTERVAL, retries=REPO_SYNC_RETRIES
