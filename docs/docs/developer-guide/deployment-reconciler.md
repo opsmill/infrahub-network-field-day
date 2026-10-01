@@ -71,9 +71,36 @@ someone edited a switch by hand.
 | --- | --- | --- |
 | `DcimFabricSwitch` | `configure session` + `show session-config … diffs` | session aborted |
 | `DcimDevice` (FRR) | `frr-reload.py --test` | nothing; staging dir only |
-| `SecurityFirewall` | `load replace` + `show \| compare` | candidate rolled back |
+| `SecurityFirewall` | `load override` + `show \| compare` | candidate rolled back |
 
 Nothing in the comparison path commits.
+
+## The firewall is replaced whole
+
+The firewall push is `load override`, then `commit confirmed 3`, then a fresh login over the
+reconciler's own path, then the confirming `commit` — the Junos counterpart of EOS's
+`rollback clean-config`. Everything the artifact omits is deleted: a hand-added rule, a stray
+application, the cleartext `plain-text-password-value` vrnetlab's `init.conf` leaves behind.
+
+It is safe for two reasons, and both were measured on a throwaway vSRX booted exactly as the lab
+boots `fw1`:
+
+- **The lifeline.** `_assert_junos_lifeline` refuses, before anything is staged, an artifact
+  missing an `fxp0` address, `services ssh`, `services netconf ssh`, a `super-user` login for the
+  account the reconciler authenticates as, or root authentication. It reads statements, not
+  substrings, so a comment mentioning `ssh` does not count and an `inactive:` `fxp0` is no
+  `fxp0`. An empty artifact fails it — under `override`, an empty file is an instruction to
+  erase the device.
+- **The confirmation is earned.** After `commit confirmed`, a new session must log in through
+  vrnetlab's forward to `fxp0` and NETCONF on 830 must answer a hello. Only then is the
+  confirming `commit` sent. On the prototype, an artifact that passed the lifeline but moved
+  `fxp0` off vrnetlab's guest address committed, failed the check, was never confirmed, and was
+  rolled back by Junos itself (`root via other`) without anyone touching the device. A probe that
+  answers within 30 seconds of the rollback is refused rather than raced, because a confirm
+  issued after the rollback commits nothing and still prints `commit complete`.
+
+`scp -O` stays load-bearing: without it the copy fails, the load does nothing, and
+`show | compare` comes back empty.
 
 The firewall is compared on **one cycle in four, and last**, because its comparison takes an
 exclusive configuration lock — at the default interval a per-cycle check would take that lock
@@ -102,12 +129,21 @@ matches.** Measured against this lab:
 | --- | --- |
 | EOS | nothing |
 | FRR | `neighbor <addr> activate`, `service integrated-vtysh-config`, `line vty` |
-| Junos | zone-pair ordering and comment round-tripping |
+| Junos | zone-pair ordering, comment round-tripping, `version`, `uid`, re-salted password hashes |
 
 FRR states things in the artifact that `show running-config` never echoes back — `activate` is
 the default for IPv4 unicast, the other two are file directives rather than running state.
-Junos reports the eleven zone-pair blocks in a different order (no object carries their order,
-and Junos matches on zone rather than position) and its comment blocks round-tripping.
+Junos reports the zone-pair blocks in a different order (no object carries their order, and
+Junos matches on zone rather than position), its comment blocks round-tripping, and two
+statements it writes itself on every commit — `version` and a login's `uid` — which the artifact
+never states.
+
+**Re-salted hashes are the subtle one.** Compared against a freshly booted vSRX, both of the
+lab's `$6$otternetlab$…` hashes come back as `$6$<random>$…`: the same password under a new salt,
+on every load. A rule that ignored `encrypted-password` changes would hide a changed password; a
+rule that reported them would push a freshly deployed firewall every cycle. So the normaliser
+hashes the reconciler's own password with each salt and suppresses the pair only when both
+match. A hash no known password explains is a changed secret, and differs.
 
 Read raw, all of that means "this device differs." A reconciler acting on it replaces the
 configuration of every FRR router and the firewall **on every cycle, forever**, while every log
@@ -142,7 +178,8 @@ as root inside the container, restored it seconds later. An in-sync firewall rep
 
 The suppression was right about the diff and wrong about the cause: the push was the bug.
 `fxp0` is now modelled, so the artifact carries it, the hierarchy can be replaced wholesale
-without deleting it, and the diff — along with the suppression — went away.
+without deleting it, and the diff — along with the suppression — went away. Under the full
+`load override` it is also the first item in the push's lifeline.
 
 The trade is stated rather than hidden: **the model is now authoritative for the firewall's
 management address.** Its values come from an `init.conf` that vrnetlab generates inside the

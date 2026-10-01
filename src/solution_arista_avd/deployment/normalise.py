@@ -9,8 +9,10 @@ non-empty difference against an artifact the device already matches:
   states them and ``show running-config`` never echoes them back -- the first is
   FRR's default for IPv4 unicast, the other two are file directives rather than
   running state.
-* **Junos** reports changed lines every time: the eleven zone-pair blocks in a
-  different order, and the artifact's comment blocks round-tripping.
+* **Junos** reports changed lines every time: the zone-pair blocks in a
+  different order, the artifact's comment blocks round-tripping, the
+  `version` and `uid` Junos stamps on every commit, and -- against a freshly
+  booted vSRX -- both password hashes re-salted.
 
 Read as-is, that means "this device differs", and a reconciler acting on it
 replaces the configuration of every FRR router and the firewall **on every cycle,
@@ -37,7 +39,10 @@ telling you something true.
 
 from __future__ import annotations
 
+import hashlib
 import re
+
+from solution_arista_avd.deployment import devices
 
 # --------------------------------------------------------------------------
 # FRR
@@ -123,6 +128,11 @@ def normalise_frr(raw: str) -> list[str]:
 # --------------------------------------------------------------------------
 # Junos
 # --------------------------------------------------------------------------
+#
+# The comparison is `load override` of the WHOLE artifact against the WHOLE
+# running configuration (cycle 035), so `system` is compared like everything
+# else. Measured on a throwaway vSRX booted exactly like fw1; every rule below
+# cites the capture that justified it, in tests/unit/fixtures/deployment/.
 
 # `!` marks a block Junos considers changed *in position*. Every one measured on
 # fw1 is a zone pair, and AGENTS.md already documents why their order cannot be
@@ -135,10 +145,24 @@ _JUNOS_MOVED = re.compile(r"^\s*!")
 _JUNOS_BANNER = re.compile(r"^\s*\[edit\b")
 
 # Comment syntax. Junos does not round-trip the artifact's comment blocks, so
-# re-loading an identical artifact shows them removed and re-added. The
-# `## SECRET-DATA` re-salting this repository already documents is the same
-# phenomenon wearing a different hat.
+# re-loading an identical artifact shows them removed and re-added.
 _JUNOS_COMMENT = re.compile(r"^\s*[+-]\s*(/\*|\*|\*/|#|##)")
+
+# Statements Junos WRITES ITSELF on every commit, so the artifact never states
+# them and every comparison shows them as deletions. Each is matched only as a
+# deletion and only under the banner it was measured under (junos_clean.diff):
+#
+# * `version` -- stamped from the running software at commit. Rendering it
+#   would tie the artifact to one firmware release for no behaviour.
+# * `uid` -- assigned to a login that names none (2000 for the first). The
+#   override re-assigns it, so a removal here is Junos's bookkeeping.
+_JUNOS_COMMIT_STAMPED = (
+    (re.compile(r"^\[edit\]$"), re.compile(r"^version \S+;$")),
+    (re.compile(r"^\[edit system login user \S+\]$"), re.compile(r"^uid \d+;$")),
+)
+
+# A hashed secret. `## SECRET-DATA` is how Junos marks it in `show | compare`.
+_JUNOS_SECRET = re.compile(r'^(encrypted-password) "([^"]+)";\s*## SECRET-DATA$')
 
 # NOTE: there was an `fxp0` suppression here, and its removal is the point.
 #
@@ -146,14 +170,9 @@ _JUNOS_COMMENT = re.compile(r"^\s*[+-]\s*(/\*|\*|\*/|#|##)")
 # management interface on every push, and vrnetlab restored it as root seconds
 # later -- so an in-sync firewall reported `- fxp0 {...}` forever and the
 # reconciler had to ignore it. Suppressing it was correct given the push, and
-# wrong about the cause: the push was the bug.
-#
-# `_junos_replace_tagged` now tags each modelled interface instead of the
-# stanza, so the candidate leaves fxp0 alone and the diff no longer mentions it.
-# The suppression is gone deliberately rather than left as insurance: if the
-# tagging ever regresses, this module reports the firewall as differing --
-# loudly, every cycle -- instead of hiding it. That is the fail-noisy rule
-# applied to itself.
+# wrong about the cause: the push was the bug. fxp0 is modelled now, and under
+# `load override` an fxp0 deletion in the diff means the artifact lost it --
+# which the push's lifeline refuses. It is reported, never hidden.
 
 
 def _junos_split(line: str) -> tuple[str, int, str]:
@@ -172,23 +191,157 @@ def _junos_split(line: str) -> tuple[str, int, str]:
     return "", len(line) - len(stripped), stripped
 
 
-def normalise_junos(raw: str) -> list[str]:
-    """Significant lines from `show | compare` after a `load replace`."""
-    kept: list[str] = []
+# -- SHA-crypt, so a re-salted secret can be recognised -----------------------
+#
+# Python 3.13 removed the `crypt` module, and the reconciler image is 3.13, so
+# this is the published algorithm (Drepper, "Unix crypt using SHA-256 and
+# SHA-512") in the standard library's hashlib. Verified against `openssl
+# passwd -6` and against the lab's own `$6$otternetlab$...` hash in the tests.
+
+_B64 = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+_SHA512_ORDER = (
+    (0, 21, 42), (22, 43, 1), (44, 2, 23), (3, 24, 45), (25, 46, 4), (47, 5, 26), (6, 27, 48),
+    (28, 49, 7), (50, 8, 29), (9, 30, 51), (31, 52, 10), (53, 11, 32), (12, 33, 54), (34, 55, 13),
+    (56, 14, 35), (15, 36, 57), (37, 58, 16), (59, 17, 38), (18, 39, 60), (40, 61, 19), (62, 20, 41),
+)  # fmt: skip
+_SHA256_ORDER = (
+    (0, 10, 20), (21, 1, 11), (12, 22, 2), (3, 13, 23), (24, 4, 14),
+    (15, 25, 5), (6, 16, 26), (27, 7, 17), (18, 28, 8), (9, 19, 29),
+)  # fmt: skip
+
+
+def _b64_24(b2: int, b1: int, b0: int, count: int) -> str:
+    word = (b2 << 16) | (b1 << 8) | b0
+    out = []
+    for _ in range(count):
+        out.append(_B64[word & 0x3F])
+        word >>= 6
+    return "".join(out)
+
+
+def sha_crypt(password: str, setting: str) -> str | None:
+    """`crypt(3)` for `$5$` and `$6$` settings, or None for any other scheme.
+
+    `setting` may be a full hash; only its scheme, rounds and salt are read.
+    """
+    parts = setting.split("$")
+    if len(parts) < 3 or parts[0] or parts[1] not in {"5", "6"}:
+        return None
+    ident, rest = parts[1], parts[2:]
+    rounds, custom = 5000, False
+    if rest and rest[0].startswith("rounds="):
+        try:
+            rounds = max(1000, min(999_999_999, int(rest[0][len("rounds=") :])))
+        except ValueError:
+            return None
+        custom, rest = True, rest[1:]
+    if not rest:
+        return None
+    salt = rest[0][:16].encode()
+    digest = hashlib.sha512 if ident == "6" else hashlib.sha256
+    size = digest().digest_size
+    key = password.encode()
+
+    alternate = digest(key + salt + key).digest()
+    ctx = digest(key + salt)
+    remaining = len(key)
+    while remaining > size:
+        ctx.update(alternate)
+        remaining -= size
+    ctx.update(alternate[:remaining])
+    bits = len(key)
+    while bits:
+        ctx.update(alternate if bits & 1 else key)
+        bits >>= 1
+    current = ctx.digest()
+
+    p_bytes = (digest(key * len(key)).digest() * (len(key) // size + 1))[: len(key)]
+    s_bytes = (digest(salt * (16 + current[0])).digest() * (len(salt) // size + 1))[: len(salt)]
+
+    for index in range(rounds):
+        ctx = digest(p_bytes if index & 1 else current)
+        if index % 3:
+            ctx.update(s_bytes)
+        if index % 7:
+            ctx.update(p_bytes)
+        ctx.update(current if index & 1 else p_bytes)
+        current = ctx.digest()
+
+    if ident == "6":
+        encoded = "".join(_b64_24(current[a], current[b], current[c], 4) for a, b, c in _SHA512_ORDER)
+        encoded += _b64_24(0, 0, current[63], 2)
+    else:
+        encoded = "".join(_b64_24(current[a], current[b], current[c], 4) for a, b, c in _SHA256_ORDER)
+        encoded += _b64_24(0, current[31], current[30], 3)
+    prefix = f"${ident}$" + (f"rounds={rounds}$" if custom else "")
+    return f"{prefix}{salt.decode()}${encoded}"
+
+
+def junos_same_secret(first: str, second: str, passwords: tuple[str, ...]) -> bool:
+    """True only when both hashes are PROVEN to be one of `passwords`.
+
+    Junos re-salts a `## SECRET-DATA` value when it loads it -- measured: the
+    lab's `$6$otternetlab$...` hash came back as `$6$<random>$...` of the same
+    password on every load against a freshly booted vSRX -- so two different
+    strings can be one password. The only way to know is to hash a candidate
+    password with each salt. A hash no known password explains is a CHANGED
+    secret, and reads as drift: proving sameness is what suppresses, never
+    failing to prove difference.
+    """
+    if first == second:
+        return True
+    return any(
+        password and sha_crypt(password, first) == first and sha_crypt(password, second) == second
+        for password in passwords
+    )
+
+
+def _known_passwords() -> tuple[str, ...]:
+    """The credential the reconciler itself logs in with, and nothing else."""
+    return (devices.VSRX_PASSWORD,)
+
+
+def normalise_junos(raw: str, passwords: tuple[str, ...] | None = None) -> list[str]:
+    """Significant lines from `show | compare` after a `load override`.
+
+    `passwords` are the secrets a re-salted hash may be proven against; by
+    default the reconciler's own login password.
+    """
+    known = _known_passwords() if passwords is None else passwords
+    kept: list[str | None] = []
+    banner = ""
+    # Secret lines in the current hunk: (position in kept, sign, leaf, hash).
+    secrets: list[tuple[int, str, str, str]] = []
+
+    def flush() -> None:
+        removed = [s for s in secrets if s[1] == "-"]
+        added = [s for s in secrets if s[1] == "+"]
+        paired = len(removed) == 1 and len(added) == 1 and removed[0][2] == added[0][2]
+        if paired and junos_same_secret(removed[0][3], added[0][3], known):
+            kept[removed[0][0]] = None
+            kept[added[0][0]] = None
+        secrets.clear()
 
     for line in raw.splitlines():
         sign, _indent, text = _junos_split(line)
 
-        if not text or _JUNOS_BANNER.match(line):
+        if _JUNOS_BANNER.match(line):
+            flush()
+            banner = line.strip()
             continue
-        if _JUNOS_MOVED.match(line):
+        if not text or _JUNOS_MOVED.match(line):
             continue
-        if sign and _JUNOS_COMMENT.match(line):
+        if not sign or _JUNOS_COMMENT.match(line):
             continue
-        if sign:
-            kept.append(line.rstrip())
+        if sign == "-" and any(b.match(banner) and s.match(text) for b, s in _JUNOS_COMMIT_STAMPED):
+            continue
+        secret = _JUNOS_SECRET.match(text)
+        if secret:
+            secrets.append((len(kept), sign, secret.group(1), secret.group(2)))
+        kept.append(line.rstrip())
+    flush()
 
-    return kept
+    return [line for line in kept if line is not None]
 
 
 # --------------------------------------------------------------------------

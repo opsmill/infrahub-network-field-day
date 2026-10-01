@@ -294,12 +294,31 @@ Renders the perimeter firewall's Junos configuration — one `text/plain` artifa
 targeting the `junos_firewalls` group. The fourth and last of the lab domains held in a
 hand-maintained file outside Infrahub.
 
-**It covers 573 of `junos.conf`'s 677 lines, and says which 104 it does not.** The `system`
-stanza holds two `encrypted-password` hashes and is excluded permanently — they must never enter
-the model and the query must never ask for them. `routing-options` needs a device-level static
-route the schema has no home for, and the `flow` block is unmodelled. A renderer that silently
-omits part of a firewall's configuration is more dangerous than one that does not exist, so the
-exclusion total is a test rather than a note.
+**It renders the firewall's whole configuration**, because the reconciler pushes it with
+`load override`, which deletes whatever the file omits. That is every line of `junos.conf`
+except its 72 lines of top-level commentary, plus what vrnetlab's `init.conf` injects at boot:
+`fxp0`, `host-name`, `services { ssh; netconf; }`, `management-instance` and the `mgmt_junos`
+routing instance with vrnetlab's two gateways. The exclusion total is a test rather than a note,
+and a second oracle — the captured running configuration of a freshly booted vSRX, in
+`tests/unit/fixtures/junos/vsrx_booted.conf` — holds the artifact against everything the device
+actually runs.
+
+What is data and what is not, in the `system` stanza:
+
+| Statement | Source | Why |
+| --- | --- | --- |
+| `host-name` | the firewall's `name` | the one value the model genuinely owns |
+| `services`, `management-instance` | `templates/junos/system.j2` | the delivery path; every other value makes the firewall unreachable |
+| the two `encrypted-password` hashes | `templates/junos/system.j2`, copied from `junos.conf` | a recorded exception; see below |
+| `mgmt_junos` gateways | constants in `junos_config.py` | facts about vrnetlab's QEMU network, checked against `fxp0`'s subnet |
+
+**The hashes are the lab's existing ones, rendered and never modelled.** A full replace without
+them would leave the firewall with no logins, so they have to reach the artifact. They do not
+reach the graph: a credential in the model would be on every branch, in every export and within
+the MCP server's read access. `test_the_only_credentials_are_the_labs_existing_hashes` pins the
+exception to exactly those two values, and refuses `plain-text-password-value` — the cleartext
+`init.conf` writes, which Junos keeps verbatim and which the first full replace removes. Neither
+`junos.conf` nor the device runs syslog, NTP or a name server, so none is rendered.
 
 **Order is asserted where it is behaviour and relaxed where it is not:**
 

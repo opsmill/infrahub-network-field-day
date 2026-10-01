@@ -1,0 +1,51 @@
+{# The `system` stanza. Rendered since the push became a full `load override`:
+   the device's whole configuration is replaced by this artifact, so anything
+   not in it is deleted -- and `system` is where the management path lives.
+
+   WHAT IS DATA AND WHAT IS NOT, and why:
+
+   * `host-name` is the firewall's NAME in Infrahub, the one value here the
+     model genuinely owns.
+   * `services` and `management-instance` are the DELIVERY PATH, not intent.
+     The reconciler arrives over SSH (and vrnetlab forwards NETCONF on 830) to
+     fxp0 inside `mgmt_junos`; every value but this one makes the firewall
+     unreachable, so modelling them would add nothing but a way to break the
+     push. `assert_junos_lifeline` refuses an artifact that lacks them.
+   * The two `encrypted-password` values are the LAB'S EXISTING HASHES, copied
+     verbatim from lab/configs/fw/vsrx/junos.conf (SHA-512 of the password
+     vrnetlab and containerlab already use; that file says how it was made).
+     They live in this template, never in the graph: a credential in the model
+     reaches every branch, every export, the GraphQL API and the MCP server's
+     read access, while here it is where it already was -- in git, and in the
+     artifact the device must receive. Never a `plain-text-password-value`:
+     vrnetlab's init.conf writes one, the device keeps it verbatim as
+     cleartext, and a full override is what finally removes it.
+   * `root-login allow` is vrnetlab's own setting, kept so that the replace
+     removes nothing the device was booted with.
+
+   Nothing else is rendered because nothing else runs: neither junos.conf nor
+   the running device has syslog, NTP or a name server. Adding them here would
+   be inventing configuration. #}
+system {
+    host-name {{ node }};
+    root-authentication {
+        encrypted-password "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71";
+    }
+    login {
+        user admin {
+            class super-user;
+            authentication {
+                encrypted-password "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71";
+            }
+        }
+    }
+    services {
+        ssh {
+            root-login allow;
+        }
+        netconf {
+            ssh;
+        }
+    }
+    management-instance;
+}

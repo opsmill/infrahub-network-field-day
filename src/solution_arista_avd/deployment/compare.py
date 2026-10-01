@@ -158,8 +158,13 @@ def compare_frr(target: dv.Target, config: str) -> str:
 def compare_junos(target: dv.Target, config: str) -> str:
     """The firewall's own `show | compare` for the artifact as a candidate.
 
+    `load override`, the same verb the push uses, so the comparison covers the
+    WHOLE running configuration -- `system` included -- and anything on the
+    device the artifact does not state shows up as a deletion. A comparison by
+    a different verb would be measuring something the push would not do.
+
     `scp -O` is load-bearing. Without it the copy fails with "problem checking
-    file: No such file or directory", `load replace` does nothing, and
+    file: No such file or directory", the load does nothing, and
     `show | compare` comes back empty -- which reads exactly like "in sync".
 
     The candidate is rolled back and the CLI exited, which releases the
@@ -176,10 +181,10 @@ def compare_junos(target: dv.Target, config: str) -> str:
     # the push that would have waited for it.
     dv.wait_for_vsrx(target)
 
-    dv.assert_junos_scope(target, config)
-    tagged = dv.junos_replace_tagged(config)
+    dv.assert_junos_lifeline(target, config)
+    payload = dv.junos_override_payload(config)
 
-    staged = _dexec(target, ["sh", "-c", f"cat > {JUNOS_STAGE}"], stdin=tagged)
+    staged = _dexec(target, ["sh", "-c", f"cat > {JUNOS_STAGE}"], stdin=payload)
     if staged.returncode != 0:
         raise dv.ProvisionError(f"{target.device}: could not stage the configuration: {staged.stderr.strip()}")
 
@@ -189,7 +194,7 @@ def compare_junos(target: dv.Target, config: str) -> str:
 
     result = dv.vsrx_cli(
         target,
-        f"configure exclusive\nload replace {JUNOS_REMOTE}\nshow | compare\nrollback 0\nexit\nexit\n",
+        f"configure exclusive\nload override {JUNOS_REMOTE}\nshow | compare\nrollback 0\nexit\nexit\n",
     )
     out = result.stdout or ""
     if "No such file" in out:

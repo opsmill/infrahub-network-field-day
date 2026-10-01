@@ -196,11 +196,13 @@ extensions:
           description: "Clamps TCP MSS in security flow; unset renders no flow stanza"
         # Cycle 034: SNMP, the one telemetry path this firewall can be given
         # through the model. gNMI/JTI is configured under `system services
-        # extension-service`, and `system` is the hierarchy the push path
-        # refuses by design (_assert_junos_scope) because it holds credential
-        # hashes.
+        # extension-service`; `system` has been rendered since cycle 035, as
+        # fixed template content, so modelling JTI is now possible and has not
+        # been done.
         #
-        # THE ONE CREDENTIAL IN AN ARTIFACT, and recorded as such. A v2c
+        # ONE OF TWO CREDENTIALS IN THE ARTIFACT, and recorded as such -- the
+        # other is the lab's pair of login hashes, which are template content
+        # rather than data (see AGENTS.md). A v2c
         # community has to reach the device in its configuration, so it is in
         # the rendered Junos artifact whatever the model does; SNMPv3 would put
         # its keys there too. It is read-only and restricted to `snmp_clients`.

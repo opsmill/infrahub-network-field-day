@@ -7,7 +7,8 @@ it. The CLI is still `scripts/provision_lab.py`; everything below it is here.
 **Nothing in this module was rewritten during the lift.** Every comment is a
 scar from something measured against the running lab, and the ones that look
 like trivia are the expensive ones -- the trailing `end`, the per-run session
-name, `load replace` rather than `override` or `update`, `scp -O`.
+name, `scp -O`. (The firewall's `load replace` was the one deliberate rewrite
+since: it is a full `load override` now that the artifact renders `system`.)
 
 Three device families, three delivery paths, because the lab gives them three
 different front doors:
@@ -304,9 +305,9 @@ EOS_LIFELINE = (
 # moment would erase all six routers and report success.
 #
 # EOS was already protected: its lifeline names the management interface, so an
-# empty artifact fails the check. Junos is protected by the shape of `load
-# replace`, which only touches hierarchies the file actually tags. FRR had
-# nothing.
+# empty artifact fails the check. Junos has the same kind of lifeline,
+# `_assert_junos_lifeline`, since its push became a full `load override`. FRR
+# had nothing.
 #
 # `hostname` rather than `router bgp`, deliberately. Every one of the five FRR
 # templates emits `hostname {{ node }}`, while a future FRR device that runs no
@@ -408,40 +409,38 @@ def push_frr(target: Target, config: str) -> str:
 
 
 def push_junos(target: Target, config: str) -> str:
-    """Load and commit the firewall's configuration on the vSRX.
+    """Replace the firewall's whole configuration with the rendered artifact.
 
-    **`load replace` with explicit `replace:` tags. The alternatives were tried
-    against the running firewall and both are destructive.**
+    **`load override`, then `commit confirmed`, then a reachability check, and
+    only then the confirming `commit`.** The Junos counterpart of EOS's
+    `rollback clean-config`: the running configuration becomes the file, and
+    anything the file omits is deleted -- a hand-added rule, a stray
+    `applications` entry, vrnetlab's cleartext `plain-text-password-value`.
 
-    The artifact holds only `interfaces`, `routing-options` and `security`. It
-    has no `system` stanza, deliberately: that stanza carries two credential
-    hashes which are never modelled, so the renderer cannot emit them and the
-    query must never ask.
+    That is only safe because the artifact is now COMPLETE. Until it rendered
+    `system`, `override` would have committed a firewall with no logins and no
+    `services { ssh; netconf; }` -- the management path this function arrives
+    on -- which is why the push was `load replace` on tagged hierarchies, and
+    why `load update` (measured deleting `system`) was rejected too. Two guards
+    make the full replace survivable:
 
-    - `load override` replaces the whole configuration, so it would commit a
-      firewall with no `system` at all -- no root authentication, no admin user.
-    - `load update` compares the *complete* file against the running
-      configuration and deletes whatever the file omits. Measured on this device,
-      it removed `system` including `services { ssh; netconf; }`, which is the
-      management path this script arrives on. It looks like a partial-update verb
-      and is not one.
-    - `load merge` fails the other way: a security policy deleted from the model
-      would stay on the firewall, still permitting traffic the model says is
-      denied.
+    - **`_assert_junos_lifeline`** refuses, before anything is staged, an
+      artifact missing what management needs: an fxp0 address, `ssh` and
+      `netconf` services, the login this module authenticates as, and root
+      authentication. An empty artifact fails it, which matters more here
+      than anywhere: an empty override is an instruction to erase the device.
+    - **The confirmation is earned, not sent.** `commit confirmed` arms an
+      automatic rollback; the confirming `commit` is issued only after a FRESH
+      session has logged in over the same path -- container, vrnetlab's
+      forward, fxp0 -- and NETCONF has answered a hello. If the new
+      configuration broke management, that session never arrives, nothing
+      confirms, and Junos restores the previous configuration by itself after
+      `JUNOS_CONFIRM_MINUTES`.
 
-    `load replace` acts only on hierarchies carrying a `replace:` tag, which
-    `_junos_replace_tagged` inserts before each top-level stanza. Each modelled
-    hierarchy is replaced outright, so deletions propagate, and everything else
-    -- `system` above all -- is untouched.
-
-    One diff is expected and is not this script's doing: Junos re-serialises
-    every `## SECRET-DATA` value with a fresh salt on any load. Re-loading the
-    device's own unmodified configuration produces the identical diff, so the
-    password hashes appearing to change is Junos, not a credential rewrite.
-
-    The commit is `commit confirmed`, because a firewall is exactly the device
-    where a mistaken policy can remove the path you would fix it over. If the
-    confirmation below does not arrive, Junos rolls the change back by itself.
+    `## SECRET-DATA` values come back re-salted on every load -- measured on the
+    prototype: the lab's `$6$otternetlab$...` hash is stored as `$6$<random>$...`
+    of the same password. That is Junos, not a credential rewrite, and
+    `normalise.junos_same_secret` is what keeps it from reading as drift.
 
     The route in is indirect: the vSRX is a VM inside the ContainerLab container,
     not the container itself. The container reaches it on 127.0.0.1 and carries
@@ -451,15 +450,15 @@ def push_junos(target: Target, config: str) -> str:
     if not _container_running(target.container):
         raise ProvisionError(f"{target.device}: container {target.container} is not running")
 
-    _assert_junos_scope(target, config)
+    _assert_junos_lifeline(target, config)
     _wait_for_vsrx(target)
-    tagged = _junos_replace_tagged(config)
+    payload = _junos_override_payload(config)
     remote_path = "/var/tmp/infrahub.conf"  # noqa: S108 - on the vSRX, the conventional load location
     staged_path = "/tmp/infrahub-fw.conf"  # noqa: S108 - inside the node's own container
 
     staged = subprocess.run(  # noqa: S603
         ["docker", "exec", "-i", target.container, "sh", "-c", f"cat > {staged_path}"],  # noqa: S607
-        input=tagged,
+        input=payload,
         capture_output=True,
         text=True,
         check=False,
@@ -473,19 +472,111 @@ def push_junos(target: Target, config: str) -> str:
             f"{target.device}: could not copy the configuration to the vSRX: {copy.stderr.strip()[:200]}"
         )
 
-    # `commit confirmed 2` arms a two-minute automatic rollback; the second
-    # commit below confirms it. Losing management access between the two leaves
-    # the firewall on its previous configuration rather than unreachable.
     load = _vsrx_cli(
         target,
-        f"configure exclusive\nload replace {remote_path}\ncommit confirmed 2\nexit\nexit\n",
+        f"configure exclusive\nload override {remote_path}\ncommit confirmed {JUNOS_CONFIRM_MINUTES}\nexit\nexit\n",
     )
+    committed_at = time.monotonic()
     _assert_junos_ok(target, load, "load")
+    if "commit complete" not in load.stdout:
+        # The session may have died with the commit -- a configuration that
+        # moves fxp0 takes this very connection with it. Whether or not it
+        # committed, confirming now would be confirming blind.
+        raise ProvisionError(
+            f"{target.device}: the confirmed commit did not report completion; not confirming. "
+            f"If it committed, Junos rolls it back within {JUNOS_CONFIRM_MINUTES} minute(s)."
+        )
+
+    _assert_vsrx_reachable(target)
+
+    # A probe that only succeeds late may be succeeding BECAUSE the rollback
+    # already ran -- and a confirming `commit` then commits nothing and still
+    # prints "commit complete", reporting success for a push Junos undid.
+    if time.monotonic() - committed_at > JUNOS_CONFIRM_MINUTES * 60 - _CONFIRM_MARGIN:
+        raise ProvisionError(
+            f"{target.device}: management answered too close to the {JUNOS_CONFIRM_MINUTES}-minute "
+            "rollback to confirm safely; not confirming. Re-run once the device has settled."
+        )
 
     confirm = _vsrx_cli(target, "configure exclusive\ncommit\nexit\nexit\n")
     _assert_junos_ok(target, confirm, "confirm")
+    if "commit complete" not in confirm.stdout:
+        raise ProvisionError(
+            f"{target.device}: management came back but the confirming commit did not complete; "
+            f"Junos rolls back within {JUNOS_CONFIRM_MINUTES} minute(s)."
+        )
 
-    return f"loaded and committed on {target.container} (replace: interfaces, routing-options, security)"
+    return f"override committed and confirmed on {target.container} after a management check"
+
+
+# Minutes Junos waits for the confirming commit before restoring the previous
+# configuration. Long enough for `_assert_vsrx_reachable`'s retries -- three
+# failing attempts measured 89s on the prototype, each waiting out ssh's
+# connect and banner timeouts -- short enough that a push which broke
+# management is undone before anyone has to reach for the console. Two minutes
+# left 30s between the last probe and the rollback; three leaves a margin.
+JUNOS_CONFIRM_MINUTES = 3
+
+# Seconds before the rollback after which a confirmation is refused rather than
+# raced -- see the check in `push_junos`.
+_CONFIRM_MARGIN = 30
+
+# Attempts and spacing for the post-commit management check. A false negative
+# costs a rollback, never an outage, so this errs towards giving up.
+_REACHABILITY_ATTEMPTS = 3
+_REACHABILITY_INTERVAL = 10
+
+# The smallest NETCONF exchange that proves the subsystem answers: the server's
+# hello is printed before ours is read, and close-session ends it cleanly.
+_NETCONF_PROBE = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<hello xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">'
+    "<capabilities><capability>urn:ietf:params:netconf:base:1.0</capability></capabilities>"
+    "</hello>]]>]]>"
+    '<rpc message-id="1" xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><close-session/></rpc>]]>]]>'
+)
+
+
+def _assert_vsrx_reachable(target: Target) -> None:
+    """Log in again, over the path the reconciler uses, before confirming.
+
+    A NEW session, deliberately: the one that committed was already
+    authenticated, so it proves nothing about the configuration it installed.
+    This one has to resolve through vrnetlab's forward to fxp0's address,
+    authenticate as `VSRX_USERNAME` against the new `system login`, and reach
+    the CLI -- and NETCONF on 830 has to answer, because vrnetlab forwards it
+    and `services netconf` is in the lifeline.
+
+    Raises:
+        ProvisionError: when either probe fails every attempt. The commit is
+            then left unconfirmed, and Junos rolls it back on its own.
+    """
+    failure = "no attempt made"
+    for attempt in range(_REACHABILITY_ATTEMPTS):
+        if attempt:
+            time.sleep(_REACHABILITY_INTERVAL)
+        try:
+            cli = _vsrx_cli(target, "show version | match Hostname\nexit\n")
+            if "Hostname:" not in cli.stdout:
+                failure = f"CLI login failed: {(cli.stderr or cli.stdout).strip()[:160]}"
+                continue
+            netconf = _vsrx(
+                target,
+                ["ssh", "-T", *_SSH_OPTS, "-p", "830", "-s", f"{VSRX_USERNAME}@127.0.0.1", "netconf"],
+                stdin=_NETCONF_PROBE,
+            )
+            if "<hello" not in netconf.stdout:
+                failure = f"NETCONF did not answer: {(netconf.stderr or netconf.stdout).strip()[:160]}"
+                continue
+        except subprocess.TimeoutExpired:
+            failure = "the probe timed out"
+            continue
+        return
+
+    raise ProvisionError(
+        f"{target.device}: management did not survive the new configuration ({failure}). "
+        f"Not confirming; Junos rolls it back within {JUNOS_CONFIRM_MINUTES} minute(s)."
+    )
 
 
 def _wait_for_vsrx(target: Target, timeout: int = 600) -> None:
@@ -519,6 +610,9 @@ def _wait_for_vsrx(target: Target, timeout: int = 600) -> None:
     )
 
 
+# ServerAlive is for the push: a configuration that moves fxp0 takes the
+# committing session with it, and without a keepalive ssh waits on that dead
+# connection for longer than the confirmed commit's rollback window.
 _SSH_OPTS = (
     "-o",
     "StrictHostKeyChecking=no",
@@ -526,13 +620,18 @@ _SSH_OPTS = (
     "UserKnownHostsFile=/dev/null",
     "-o",
     "ConnectTimeout=20",
+    "-o",
+    "ServerAliveInterval=5",
+    "-o",
+    "ServerAliveCountMax=3",
 )
 
 
-def _vsrx(target: Target, argv: list[str]) -> subprocess.CompletedProcess[str]:
+def _vsrx(target: Target, argv: list[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
     """Run a command inside the node's container, authenticating to the vSRX."""
     return subprocess.run(  # noqa: S603
         ["docker", "exec", "-i", target.container, "sshpass", "-p", VSRX_PASSWORD, *argv],  # noqa: S607
+        input=stdin,
         capture_output=True,
         text=True,
         check=False,
@@ -581,94 +680,131 @@ def _assert_junos_ok(target: Target, result: subprocess.CompletedProcess[str], s
         raise ProvisionError(f"{target.device}: {stage} failed: {result.stderr.strip()[:200]}")
 
 
-def _junos_replace_tagged(config: str) -> str:
-    """The artifact, prepared for `load replace`.
+def _junos_override_payload(config: str) -> str:
+    """The artifact, prepared for `load override`: the artifact itself.
 
-    A `replace:` tag is inserted before each top-level stanza. That is what
-    confines the load to the modelled hierarchies and leaves `system` alone --
-    see `push_junos` for why that matters.
-
-    **`interfaces` is replaced wholesale, and the model carries `fxp0` so that is
-    safe.** It was not always: the model owned only the data interfaces, so
-    replacing the hierarchy deleted the firewall's management interface on every
-    push. It survived because vrnetlab, running as root inside the container,
-    restored it before the `commit confirmed` had to be confirmed -- the
-    device's commit log showed the pair every time:
-
-        16:49:01 admin via cli commit confirmed   <- fxp0 deleted here
-        16:51:03 root via other                   <- vrnetlab puts it back
-        16:51:10 admin via cli                    <- the confirm
-
-    Modelling fxp0 closes that and keeps full deletion semantics: removing an
-    interface from the model removes it from the device.
-
-    **The cost, stated plainly.** The model is now AUTHORITATIVE for the
-    firewall's management address, and its values came from an `init.conf` that
-    vrnetlab generates inside the container and that no repository holds. If
-    they ever drift from what vrnetlab assigns, this push sets the wrong
-    management address and nothing restores it -- recovery is the container
-    console. `tests/unit/test_junos_config.py::FXP0_FROM_INIT_CONF` is the only
-    thing asserting they still agree.
+    No `replace:` tags any more -- `override` replaces the whole configuration,
+    so there is nothing to confine and nothing to tag. That also retires the
+    empty-`applications` workaround, which existed because `load replace` left
+    an omitted hierarchy alone: under `override` an omitted hierarchy is
+    deleted, and so is `routing-options` when the model holds no route. The
+    model is authoritative for every hierarchy now, not only the tagged ones.
 
     Lines beginning `!` are dropped as a **compatibility fallback, not the fix**.
     The renderer used to emit its provenance header as `! Rendered by
     Infrahub...`, which is EOS and FRR comment syntax and a syntax error in
     Junos: the load failed at line 1 and error recovery then skipped ahead, so
-    the file loaded partially and still reported "load complete". The template
-    now emits `#`, Junos's own comment character, which loads with no errors and
-    is not stored in the configuration. This filter stays so that an instance
-    whose stored artifact predates that fix still provisions instead of half
-    loading; it is a no-op against a current artifact.
+    the file loaded partially and still reported "load complete". Under
+    `override` a partial load is a partial FIREWALL, so the filter matters more
+    than it did. The template emits `#`, which Junos loads with no errors.
     """
     lines = [line for line in config.splitlines() if not line.startswith("!")]
-    out: list[str] = []
-    present: set[str] = set()
-    for line in lines:
-        match = _TOP_LEVEL_STANZA.match(line)
-        if match:
-            present.add(match.group(1))
-            out.append("replace:")
-        out.append(line)
-
-    # A stanza the artifact OMITS is not replaced, because there is nothing to
-    # tag -- so the device keeps whatever it had. That is invisible until a
-    # stanza stops being rendered: revoking an access grant removed its policy
-    # and left its `applications` declaration behind, and the next grant added
-    # another. Emitting an empty replaced stanza deletes the hierarchy instead.
-    for stanza in sorted(_OPTIONAL_MODEL_OWNED_STANZAS - present):
-        out.extend(["replace:", f"{stanza} {{", "}"])
-
-    return "\n".join(out) + "\n"
+    return "\n".join(lines) + "\n"
 
 
-# A top-level Junos stanza opener: unindented, lowercase, ending in ` {`.
-_TOP_LEVEL_STANZA = re.compile(r"^([a-z][a-z0-9-]*) \{$")
+# What a full replace must never remove, as statement paths into the artifact.
+# Each is something the reconciler's own route in depends on: vrnetlab forwards
+# the container's 22 and 830 to fxp0's address, the reconciler authenticates as
+# VSRX_USERNAME, and root authentication is what Junos refuses to commit
+# without. A missing one is refused before anything reaches the device.
+def _junos_lifeline() -> tuple[tuple[str, tuple[str, ...], str], ...]:
+    """(description, path, required leaf prefix or "" for a block) per need."""
+    return (
+        ("an fxp0 IPv4 address", ("interfaces", "fxp0", "unit 0", "family inet"), "address "),
+        ("system services ssh", ("system", "services", "ssh"), ""),
+        ("system services netconf ssh", ("system", "services", "netconf", "ssh"), ""),
+        (
+            f"a login for {VSRX_USERNAME!r} with an encrypted password",
+            ("system", "login", f"user {VSRX_USERNAME}", "authentication"),
+            "encrypted-password ",
+        ),
+        (
+            f"super-user class for {VSRX_USERNAME!r}",
+            ("system", "login", f"user {VSRX_USERNAME}"),
+            "class super-user",
+        ),
+        ("root-authentication", ("system", "root-authentication"), "encrypted-password "),
+    )
 
-# Stanzas the model owns but renders only when it has content. Each is emitted
-# empty-and-replaced when the artifact omits it, so removing the last object in
-# a hierarchy removes the hierarchy from the device.
-#
-# `routing-options` is deliberately NOT here. Its absence today means "this
-# firewall has no static routes in the model", and the device keeps the routes
-# it has; making the model authoritative for that is a defensible change and a
-# different one from this fix, which is about generated objects accumulating.
-_OPTIONAL_MODEL_OWNED_STANZAS = frozenset({"applications"})
 
+def _junos_statements(config: str) -> set[tuple[str, ...]]:
+    """Every statement in a braces-form Junos configuration, as a path.
 
-def _assert_junos_scope(target: Target, config: str) -> None:
-    """Refuse a Junos artifact that has grown a `system` stanza.
+    A block contributes its own path; a leaf contributes its path plus its
+    text. Comments are skipped, `## SECRET-DATA` tails stripped, and anything
+    under `inactive:` is left out -- an inactive fxp0 is no fxp0.
 
-    `load update` leaves `system` alone only because the artifact does not
-    contain it. If a future schema change ever renders one, this push would start
-    replacing the firewall's credentials with whatever the model holds -- which
-    is the situation the model exists to avoid. Fail loudly instead, so the
-    delivery path is reconsidered rather than silently changing meaning.
+    Small on purpose: the lifeline asks "is this statement present?", and a
+    textual substring match answered `ssh` for the `ssh-rsa` in a comment.
     """
-    if any(line.startswith(("system {", "system ")) for line in config.splitlines()):
+    paths: set[tuple[str, ...]] = set()
+    stack: list[str] = []
+    inactive_depth: int | None = None
+    in_comment = False
+    for raw in config.splitlines():
+        line = raw.strip()
+        if in_comment:
+            if "*/" in line:
+                in_comment = False
+            continue
+        if line.startswith("/*"):
+            in_comment = "*/" not in line
+            continue
+        if not line or line.startswith("#"):
+            continue
+        # Junos ignores runs of whitespace between words, and the artifact
+        # pads its route lines into columns. Collapsing them is what makes a
+        # statement from the artifact compare equal to the device's own.
+        line = " ".join(re.sub(r"\s*(##.*|/\*.*\*/)$", "", line).split())
+        inactive = line.startswith("inactive: ")
+        line = line.removeprefix("inactive: ").removeprefix("replace: ")
+        if line == "}":
+            if stack:
+                stack.pop()
+            if inactive_depth is not None and len(stack) < inactive_depth:
+                inactive_depth = None
+            continue
+        if line.endswith("{"):
+            stack.append(line[:-1].strip())
+            if inactive and inactive_depth is None:
+                inactive_depth = len(stack)
+            if inactive_depth is None:
+                paths.add(tuple(stack))
+            continue
+        if line.endswith(";") and inactive_depth is None and not inactive:
+            paths.add((*stack, line[:-1].strip()))
+    return paths
+
+
+def _assert_junos_lifeline(target: Target, config: str) -> None:
+    """Refuse an artifact a full replace could not survive.
+
+    Replaces `_assert_junos_scope`, which refused a `system` stanza because the
+    push was then confined to the hierarchies the artifact named. Under
+    `load override` the opposite holds: an artifact WITHOUT `system` is the
+    dangerous one, because whatever it omits is deleted. Same role as
+    `_assert_eos_lifeline`, which checks for `interface Management0`.
+
+    Also refused: a `plain-text-password-value`, which Junos stores verbatim.
+    vrnetlab's init.conf writes one, and a renderer that ever emitted one
+    would be putting a cleartext credential into every stored artifact.
+    """
+    statements = _junos_statements(config)
+    missing = []
+    for description, path, leaf in _junos_lifeline():
+        found = any(s[:-1] == path and s[-1].startswith(leaf) for s in statements) if leaf else path in statements
+        if not found:
+            missing.append(description)
+    if missing:
         raise ProvisionError(
-            f"{target.device}: the Junos artifact now contains a 'system' stanza. "
-            "This push replaces every hierarchy the artifact names, so it would overwrite the "
-            "device's credentials. Review the renderer before provisioning the firewall again."
+            f"{target.device}: refusing a full replace -- the artifact is missing {', '.join(missing)}, "
+            "and `load override` deletes whatever the file omits, so the commit would cut the "
+            "management path this push arrives on"
+        )
+    if any("plain-text-password-value" in s[-1] for s in statements):
+        raise ProvisionError(
+            f"{target.device}: refusing a Junos artifact carrying plain-text-password-value; "
+            "Junos stores that verbatim, so the artifact would hold a cleartext credential"
         )
 
 
@@ -723,8 +859,9 @@ def provision(targets: list[Target], branch: str, dry_run: bool) -> int:
 eos_config_lines = _eos_config_lines
 assert_eos_lifeline = _assert_eos_lifeline
 assert_frr_lifeline = _assert_frr_lifeline
-assert_junos_scope = _assert_junos_scope
-junos_replace_tagged = _junos_replace_tagged
+assert_junos_lifeline = _assert_junos_lifeline
+junos_override_payload = _junos_override_payload
+assert_vsrx_reachable = _assert_vsrx_reachable
 container_running = _container_running
 vsrx = _vsrx
 vsrx_cli = _vsrx_cli

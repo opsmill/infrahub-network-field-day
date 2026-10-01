@@ -4,18 +4,26 @@ The fourth and last of the lab domains cycle 010 listed as hand-maintained. The
 fabric renders through PyAVD, Kubernetes and applications through Crossplane,
 the WAN through ``frr_config`` -- and the firewall, until now, not at all.
 
-WHAT THIS DOES NOT COVER, because a renderer that silently omits part of a
-firewall's configuration is worse than one that does not exist:
+THIS IS THE FIREWALL'S WHOLE CONFIGURATION, not a set of hierarchies. The
+reconciler pushes it with ``load override``, which replaces the running
+configuration and deletes whatever the file omits -- the Junos counterpart of
+EOS's ``rollback clean-config`` -- so the artifact carries everything the
+device needs to stay reachable:
 
-* ``system { … }`` -- two ``encrypted-password`` hashes. These must never enter
-  the model and must never be rendered. Permanent, not deferred.
-* the 72-line file header -- lab documentation ABOUT the file, not device
-  configuration. Reproducing it would put a false provenance claim in the
-  artifact, so it is replaced by this renderer's own one-line header.
-656 of the file's 741 lines. The excluded 85 are the two items above, and they
-are excluded for DIFFERENT reasons -- one is configuration this project will
-not model, the other is not configuration. ``test_the_exclusions_add_up``
-computes the totals from the device file rather than asserting literals.
+* ``system`` -- host-name, the two logins, ``services { ssh; netconf; }`` and
+  ``management-instance``. **The two ``encrypted-password`` hashes are a
+  deliberate, user-approved exception to "credentials never reach an
+  artifact"**, recorded in AGENTS.md beside the SNMP community. They are still
+  not MODELLED: they are the lab's existing hashes, fixed content in
+  ``templates/junos/system.j2``, so the graph and the query hold none.
+* ``fxp0`` and the ``mgmt_junos`` routing instance -- what vrnetlab's
+  ``init.conf`` supplies at boot and an override would otherwise delete.
+
+WHAT IS STILL NOT RENDERED is the lab file's 72-line header: lab documentation
+ABOUT the file, not device configuration. Reproducing it would put a false
+provenance claim in the artifact, so it is replaced by this renderer's own
+one-line header. ``test_the_exclusions_add_up`` computes the totals from the
+device file rather than asserting literals.
 
 ONE THING THIS RENDERER CANNOT REPRODUCE, and it is a limit of the model rather
 than of the templates: the SEQUENCE of the eleven zone-pair blocks. A pair is
@@ -54,6 +62,16 @@ KEYWORDS = frozenset({"any"})
 
 DEFAULT_MTU = 1514
 """DcimInterface.mtu's schema default, and Junos's own."""
+
+MANAGEMENT_INTERFACE = "fxp0"
+
+# vrnetlab's QEMU user-network gateways, which the `mgmt_junos` default routes
+# point at. They are facts about vrnetlab -- its init.conf writes exactly these,
+# and its QEMU `user` netdev answers on them -- not lab addressing, which is why
+# they are constants rather than data, and why `_management` checks each one is
+# on fxp0's subnet before rendering it.
+VRNETLAB_GATEWAY = "10.0.0.2"
+VRNETLAB_GATEWAY6 = "2001:db8::1"
 
 
 class JunosConfigError(RuntimeError):
@@ -105,10 +123,41 @@ class JunosConfig(InfrahubTransform):
             "applications": self._applications(result),
             "tcp_mss": _value(target, "tcp_mss").value if _value(target, "tcp_mss") else None,
             "snmp": self._snmp(target),
+            "management": self._management(target),
         }
         return env.get_template("junos.j2").render(**context)
 
     # -- context ------------------------------------------------------------
+
+    def _management(self, target: Any) -> dict[str, str | None] | None:
+        """The `mgmt_junos` default routes, or None when fxp0 is not modelled.
+
+        A firewall with no fxp0 renders no routing instance -- and the push's
+        lifeline then refuses the artifact, because an override without fxp0
+        deletes the management interface.
+
+        Raises:
+            JunosConfigError: when fxp0 is modelled on a subnet the vrnetlab
+                gateway is not on. The route would commit and never install,
+                and every SNMP reply would be dropped with nothing logged.
+        """
+        fxp0 = next((i for i in self._interfaces(target) if i["name"] == MANAGEMENT_INTERFACE), None)
+        if fxp0 is None or fxp0["address"] is None:
+            return None
+        if ip_address(VRNETLAB_GATEWAY) not in ip_interface(fxp0["address"]).network:
+            raise JunosConfigError(
+                f"{MANAGEMENT_INTERFACE} {fxp0['address']} is not on vrnetlab's management subnet "
+                f"(gateway {VRNETLAB_GATEWAY}); the mgmt_junos default route would never install"
+            )
+        gateway6 = None
+        if fxp0["address6"] is not None:
+            if ip_address(VRNETLAB_GATEWAY6) not in ip_interface(fxp0["address6"]).network:
+                raise JunosConfigError(
+                    f"{MANAGEMENT_INTERFACE} {fxp0['address6']} is not on vrnetlab's IPv6 management "
+                    f"subnet (gateway {VRNETLAB_GATEWAY6})"
+                )
+            gateway6 = VRNETLAB_GATEWAY6
+        return {"gateway": VRNETLAB_GATEWAY, "gateway6": gateway6}
 
     @staticmethod
     def _snmp(target: Any) -> dict[str, str] | None:
@@ -199,7 +248,7 @@ class JunosConfig(InfrahubTransform):
         exits = {}
         for iface in self._interfaces(target):
             # fxp0 has an address but lives in the mgmt_junos routing instance,
-            # which init.conf owns. It is never an exit for a route in the
+            # whose own defaults `_management` renders. It is never an exit for a route in the
             # default instance, so it must not claim one here.
             if iface["address"] is None or iface["zone"] is None:
                 continue

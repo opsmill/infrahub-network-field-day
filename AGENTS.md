@@ -421,6 +421,8 @@ Seven things look like oversights and are not:
   network: vrnetlab forwards UDP/161 with the poller's real source address, so the
   clients are `172.20.41.0/24`, not vrnetlab's internal `10.0.0.0/24`. Unbound, or with
   the internal subnet, every poll counts as a "Bad community use" and nothing answers.
+  It is no longer the only credential there: since cycle 035 the firewall's two login hashes
+  are too, as template content rather than data -- see `junos_config` below.
 
 Three measured facts about the device side:
 
@@ -697,16 +699,31 @@ it is held byte-for-byte against `lab/wan/rendered/*/frr.conf` by
   configs.
 
 `junos_config` renders the perimeter firewall's Junos configuration as one `text/plain` artifact
-targeting the `junos_firewalls` group. Three things to know:
+targeting the `junos_firewalls` group. Four things to know:
 
-- **It covers 656 of `junos.conf`'s 741 lines, and the 85 it does not are two different things.**
-  The `system` stanza (13 lines) is *configuration deliberately never modelled*: two credential
-  hashes that must never enter the model, and the query must never ask. The file header (72 lines)
-  is *not configuration at all* — 68 comments and 4 blanks of lab documentation about the file,
-  including how vrnetlab appends it to `init.conf`; the artifact replaces it with its own
-  provenance line, because reproducing it would make a false claim about where the file came from.
-  Grouping the two as "excluded lines" hides that difference, which is why they are named
-  separately here and asserted separately in `test_the_exclusions_add_up`.
+- **It is the firewall's WHOLE configuration, because the push is `load override`** (cycle 035).
+  Anything the artifact omits is deleted from the device, so it renders every line of
+  `junos.conf` except the 72 lines of top-level commentary — 68 comments and 4 blanks of lab
+  documentation about the file, replaced by the artifact's own provenance line because
+  reproducing it would make a false claim about where the file came from — **plus what
+  vrnetlab's `init.conf` injects at boot**: `fxp0`, `host-name`, `services { ssh; netconf; }`,
+  `management-instance` and the `mgmt_junos` routing instance. `init.conf` is generated inside
+  the container and committed nowhere, so `tests/unit/fixtures/junos/vsrx_booted.conf` — the
+  running configuration of a vSRX booted exactly like `fw1` — is the committed record of it, and
+  `test_the_artifact_states_everything_a_booted_vsrx_runs` holds the artifact against it
+  statement by statement. `test_the_exclusions_add_up` keeps the arithmetic.
+- **The firewall's two login hashes are in the artifact, deliberately — a user-approved
+  exception.** A full replace without `system` leaves the device with no logins and no SSH, so
+  the artifact must carry `root-authentication` and the `admin` login. They are the **lab's
+  existing hashes** (SHA-512 of the password vrnetlab and containerlab already use, copied from
+  `junos.conf`), and they are **template content in `templates/junos/system.j2`, never data**: in
+  the model they would reach every branch, every export and the MCP server's read access, while
+  in the template they are where they already were — in git. Never cleartext:
+  `test_the_only_credentials_are_the_labs_existing_hashes` pins exactly those two values and
+  refuses `plain-text-password-value`, which is what `init.conf` writes and Junos keeps
+  verbatim — the first full replace removes it. `host-name` comes from the model; `services` and
+  `management-instance` are the delivery path, fixed in the template, because every other value
+  makes the firewall unreachable. Nothing runs syslog, NTP or a name server, so none is rendered.
 
   Everything else matches the device byte for byte, **with one exception the model cannot close**:
   the *sequence* of the eleven zone-pair blocks. A zone pair is derived from each rule's source and
@@ -984,23 +1001,40 @@ one. `tests/unit/test_deployment_normalise.py` holds real captured device output
 in-sync and the changed case; an empty result is only evidence when a non-empty one is proven
 beside it.
 
-Three things worth knowing before debugging it:
+Worth knowing before debugging it:
 
-- **`fxp0` is modelled, and that is what makes `load replace` on `interfaces` safe.** The
-  hierarchy is replaced wholesale, so it deletes everything the artifact omits -- which is how
-  removing an interface from the model removes it from the device. While the model owned only
-  the data interfaces, that same behaviour deleted the firewall's management interface on
-  *every* push, and it survived only because vrnetlab restored it as root before the
-  `commit confirmed` had to be confirmed, visible as a `root via other` commit wedged between
-  the two `admin` commits.
-  **The consequence is that the model is now authoritative for the firewall's management
-  address**, and its values came from an `init.conf` vrnetlab generates inside the container
-  that no repository holds. If they drift from what vrnetlab assigns, a push sets the wrong
-  address and nothing restores it -- recovery is the container console.
-  `tests/unit/test_junos_config.py::FXP0_FROM_INIT_CONF` is the only thing asserting they still
-  agree, and it is hand-maintained. `SecurityZone` on a firewall interface became optional in
-  `schemas/security/security.yml` to allow this: a deliberate change to the upstream contract,
-  because a management interface is in no zone.
+- **The firewall is replaced whole: `load override`, `commit confirmed 3`, a fresh login, then
+  the confirming `commit`.** The counterpart of EOS's `rollback clean-config`, since cycle 035.
+  Two guards make it survivable, both proven on a throwaway vSRX booted exactly like `fw1`:
+  `_assert_junos_lifeline` refuses, before staging, an artifact missing an `fxp0` address,
+  `services ssh`, `services netconf ssh`, a `super-user` login for `VSRX_USERNAME` or root
+  authentication (statements, not substrings; an `inactive:` fxp0 is no fxp0; an empty artifact
+  fails it, and under `override` an empty file erases the device). And the confirmation is
+  **earned**: `_assert_vsrx_reachable` logs in again through vrnetlab's forward and asks NETCONF
+  for a hello before the confirm is sent. Measured: an artifact moving `fxp0` off vrnetlab's
+  guest address passed the lifeline, committed, failed the check, was never confirmed, and was
+  rolled back by Junos itself (`root via other`). A probe answering within 30s of the rollback is
+  refused rather than raced — a confirm issued after the rollback commits nothing and still
+  prints `commit complete`.
+- **`fxp0` is modelled, and the model is authoritative for the firewall's management
+  address.** It was modelled first because `load replace` on `interfaces` deleted it on every
+  push; under the full override it is the lifeline's first item. Its values, like the
+  `mgmt_junos` gateways (constants in `junos_config.py`), come from an `init.conf` vrnetlab
+  generates inside the container. If they drift from what vrnetlab assigns, a push now *fails
+  the post-commit check and rolls back* rather than stranding the device.
+  `FXP0_FROM_INIT_CONF` and its siblings in `tests/unit/test_junos_config.py` are hand-maintained;
+  `fixtures/junos/vsrx_booted.conf` is the captured witness they are checked against.
+  `SecurityZone` on a firewall interface became optional in `schemas/security/security.yml` to
+  allow this: a deliberate change to the upstream contract, because a management interface is in
+  no zone.
+- **Junos re-salts password hashes on load, and only proof suppresses it.** Against a freshly
+  booted vSRX, both `$6$otternetlab$…` hashes come back as `$6$<random>$…` on every load — the
+  same password. `normalise.junos_same_secret` hashes the reconciler's own password with each
+  salt (`sha_crypt`, because Python 3.13 removed `crypt`) and suppresses the pair only when both
+  match; an unexplained hash is a changed password and differs. `version` and a login's `uid` are
+  stamped by Junos on every commit and suppressed as deletions only, under the banner they were
+  measured under. Every rule has a captured in-sync *and* drifted fixture, including drift inside
+  `system`.
 - **`frr-reload.py --test` returns `0` whether or not the configuration matches**, and its
   output is `Lines To Add` / `Lines To Delete` sections rather than `+`/`-` prefixes. A parser
   written against diff prefixes reports "no differences" for a device that has genuinely
@@ -1009,12 +1043,12 @@ Three things worth knowing before debugging it:
   the difference between the running configuration and the file. Artifact generation is
   asynchronous and an unrendered artifact exists, reports `Ready`, and is empty — so a
   provision run at the wrong moment would wipe all six WAN routers and report success. EOS was
-  already protected by `_assert_eos_lifeline` and Junos by the shape of `load replace`, which
-  only touches hierarchies the file tags; FRR had nothing until `_assert_frr_lifeline`. It keys
+  already protected by `_assert_eos_lifeline`; Junos is now protected by `_assert_junos_lifeline`;
+  FRR had nothing until `_assert_frr_lifeline`. It keys
   on `hostname`, which every FRR template emits, rather than on `router bgp` — a future FRR
   device running no BGP is plausible, and a guard that refuses a legitimate configuration is a
   worse failure than the one it prevents.
-- **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load replace` does
+- **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load override` does
   nothing, and `show | compare` comes back empty — which reads exactly like "in sync."
 
 State goes to `DeploymentState` (cycle 029). `last_confirmed_at` moves only when the device
@@ -1256,7 +1290,7 @@ three routes in, because the lab gives them three different front doors:
 | --- | --- | --- | --- |
 | `DcimFabricSwitch` | AVD EOS Configuration | `mgmt_ip`, eAPI | config session + `rollback clean-config` |
 | `DcimDevice` | FRR Configuration | container name | `frr-reload.py --reload` |
-| `SecurityFirewall` | Junos Configuration | container name | `load replace` + `commit confirmed` |
+| `SecurityFirewall` | Junos Configuration | container name | `load override` + `commit confirmed` + login check |
 
 **The switches are reached by address and the rest by name, deliberately.**
 Infrahub calls a switch `leaf-otternet-pod1-1-1` and ContainerLab calls the same box
@@ -1273,16 +1307,19 @@ deletes it from the device. Three things are worth knowing before changing
   enable mode and the commit that follows is rejected as an invalid command, so
   the session is abandoned and the switch silently keeps its old configuration.
   `_eos_config_lines` strips it and appends its own.
-- **The firewall must use `load replace` with `replace:` tags.** `load override`
-  and `load update` were both measured against the running vSRX and both delete
-  the `system` stanza -- including `services { ssh; netconf; }`, the management
-  path this script arrives on. The artifact has no `system` stanza because those
-  are credential hashes that are never modelled. `_assert_junos_scope` fails
-  loudly if one ever appears, rather than letting the push start overwriting
-  credentials.
-- **Junos re-serialises `## SECRET-DATA` with a fresh salt on any load**, so a
+- **The firewall uses `load override`, and only because the artifact is complete.**
+  `load override` and `load update` were once measured deleting the `system`
+  stanza -- including `services { ssh; netconf; }`, the management path this
+  script arrives on -- because the artifact then had none, which is why the push
+  was `load replace` with `replace:` tags until cycle 035. The artifact now
+  renders `system`, fxp0 and `mgmt_junos`, `_assert_junos_lifeline` refuses one
+  that lacks them, and the confirming commit waits for a fresh login. Measured
+  on a vSRX booted like `fw1`: the first full replace changed exactly two
+  `display set` lines -- it removed `init.conf`'s two cleartext
+  `plain-text-password-value` entries -- and added none.
+- **Junos re-serialises `## SECRET-DATA` with a fresh salt on load**, so a
   diff showing the password hashes changing is Junos, not a credential rewrite.
-  Re-loading the device's own unmodified configuration produces the same diff.
+  The comparison proves it rather than assuming it -- see the normaliser above.
 
 ## The Kubernetes half, and who owns which resource
 
