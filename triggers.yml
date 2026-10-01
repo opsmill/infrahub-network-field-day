@@ -324,3 +324,307 @@ spec:
         data:
           - relationship_name: source_address
             modification_type: updated
+
+    # -------------------------------------------------- every other service kind
+    # The same rule, for the same reason, applied to the five kinds that were
+    # still `created`-only. `status` is how each of them is withdrawn (the table
+    # in AGENTS.md), and until these existed setting `decommissioning` on a
+    # segment, an application, an onboarding, a placement or a peering fired
+    # nothing: the branch showed a status change with the subnet, the VIP block,
+    # the EVPN tenant, the machine or the BGP sessions still there.
+    #
+    # The discipline is ServiceAppAccess's, exactly. ONE RULE PER FIELD THE
+    # GENERATOR READS from its own target (its `.gql` under generators/), and
+    # never a field it WRITES BACK. Every generator below records what it built
+    # on the service -- `subnet`/`vlan`/`svi`, `vip_block`/`vip_block_managed`,
+    # `evpn_tenant`/`mac_vrf_vni_base`, `server`, `peerings` -- and watching any
+    # of those would turn each run into the next one's trigger.
+    #
+    # `status` is the one field that is both, and it terminates because every
+    # `_set_status` returns before saving when the value already matches and
+    # every record step saves only when what it records changed. A request
+    # therefore costs the build plus one no-op, and so does a withdrawal.
+    # tests/unit/test_service_trigger_contract.py holds the field lists.
+    #
+    # Fields the query selects but the output does not depend on (a segment's
+    # `tenant` and `fabric`, a placement's `tenant`) are deliberately unwatched:
+    # a run that can only produce what is already there is a cost with no diff.
+
+    # ServiceNetworkSegment. `vlan_id` is the REQUESTED id -- the generator never
+    # writes it back -- and `prefix_length` is honoured only before a subnet is
+    # allocated; an allocated one is never resized, and the run says so.
+    - name: trigger-network-segment-generator-update-status
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "updated"
+      action: run-network-segment-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: status
+            value_match: any
+
+    - name: trigger-network-segment-generator-update-description
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "updated"
+      action: run-network-segment-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: description
+            value_match: any
+
+    - name: trigger-network-segment-generator-update-vlan-id
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "updated"
+      action: run-network-segment-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: vlan_id
+            value_match: any
+
+    - name: trigger-network-segment-generator-update-prefix-length
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "updated"
+      action: run-network-segment-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: prefix_length
+            value_match: any
+
+    - name: trigger-network-segment-generator-update-vrf
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "updated"
+      action: run-network-segment-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: vrf
+            modification_type: updated
+
+    # Cardinality many: `updated` covers a tag added or removed, which is
+    # exactly the edit that moves the SVI onto or off a set of switches.
+    - name: trigger-network-segment-generator-update-avd-tags
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "updated"
+      action: run-network-segment-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: avd_tags
+            modification_type: updated
+
+    - name: trigger-network-segment-generator-update-subnet-pool
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "updated"
+      action: run-network-segment-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: subnet_pool
+            modification_type: updated
+
+    - name: trigger-network-segment-generator-update-vlan-pool
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "updated"
+      action: run-network-segment-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: vlan_pool
+            modification_type: updated
+
+    # ServiceFabricApp. `exposed` is a withdrawal of its own: an application
+    # that stops being exposed gives its managed block back.
+    # `allowed_source_prefixes` is NOT watched -- generate-app-access writes it,
+    # and a rule on it would run this generator on every grant.
+    - name: trigger-fabric-app-generator-update-status
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-fabric-app-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: status
+            value_match: any
+
+    - name: trigger-fabric-app-generator-update-exposed
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-fabric-app-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: exposed
+            value_match: any
+
+    - name: trigger-fabric-app-generator-update-vip-block-size
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-fabric-app-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: vip_block_size
+            value_match: any
+
+    - name: trigger-fabric-app-generator-update-cluster
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-fabric-app-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: cluster
+            modification_type: updated
+
+    # ServiceTenantOnboarding. `mac_vrf_vni_base` is read AND written -- the
+    # generator records the base it derived -- so it is unwatched: restating a
+    # base after the tenant exists needs an explicit run.
+    - name: trigger-tenant-onboarding-generator-update-status
+      branch_scope: "other_branches"
+      node_kind: ServiceTenantOnboarding
+      mutation_action: "updated"
+      action: run-tenant-onboarding-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: status
+            value_match: any
+
+    - name: trigger-tenant-onboarding-generator-update-description
+      branch_scope: "other_branches"
+      node_kind: ServiceTenantOnboarding
+      mutation_action: "updated"
+      action: run-tenant-onboarding-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: description
+            value_match: any
+
+    - name: trigger-tenant-onboarding-generator-update-organization
+      branch_scope: "other_branches"
+      node_kind: ServiceTenantOnboarding
+      mutation_action: "updated"
+      action: run-tenant-onboarding-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: organization
+            modification_type: updated
+
+    - name: trigger-tenant-onboarding-generator-update-fabric
+      branch_scope: "other_branches"
+      node_kind: ServiceTenantOnboarding
+      mutation_action: "updated"
+      action: run-tenant-onboarding-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: fabric
+            modification_type: updated
+
+    # ServiceServerPlacement.
+    - name: trigger-server-placement-generator-update-status
+      branch_scope: "other_branches"
+      node_kind: ServiceServerPlacement
+      mutation_action: "updated"
+      action: run-server-placement-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: status
+            value_match: any
+
+    - name: trigger-server-placement-generator-update-description
+      branch_scope: "other_branches"
+      node_kind: ServiceServerPlacement
+      mutation_action: "updated"
+      action: run-server-placement-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: description
+            value_match: any
+
+    - name: trigger-server-placement-generator-update-hostname
+      branch_scope: "other_branches"
+      node_kind: ServiceServerPlacement
+      mutation_action: "updated"
+      action: run-server-placement-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: hostname
+            value_match: any
+
+    - name: trigger-server-placement-generator-update-server-role
+      branch_scope: "other_branches"
+      node_kind: ServiceServerPlacement
+      mutation_action: "updated"
+      action: run-server-placement-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: server_role
+            value_match: any
+
+    - name: trigger-server-placement-generator-update-rack
+      branch_scope: "other_branches"
+      node_kind: ServiceServerPlacement
+      mutation_action: "updated"
+      action: run-server-placement-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: rack
+            modification_type: updated
+
+    - name: trigger-server-placement-generator-update-template
+      branch_scope: "other_branches"
+      node_kind: ServiceServerPlacement
+      mutation_action: "updated"
+      action: run-server-placement-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: template
+            modification_type: updated
+
+    # ServiceFabricPeering. It writes no status at all, so a decommissioned
+    # peering costs exactly one run; `peerings` is its record and is unwatched.
+    - name: trigger-fabric-peering-generator-update-status
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricPeering
+      mutation_action: "updated"
+      action: run-fabric-peering-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: status
+            value_match: any
+
+    - name: trigger-fabric-peering-generator-update-cluster
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricPeering
+      mutation_action: "updated"
+      action: run-fabric-peering-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: cluster
+            modification_type: updated

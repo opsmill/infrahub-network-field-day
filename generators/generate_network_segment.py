@@ -474,7 +474,19 @@ class NetworkSegmentGenerator(InfrahubGenerator):
         generator's *target*, not something it owns; letting it join the
         tracking group would make it a deletion candidate on any later run that
         did not touch it.
+
+        GUARDED ON WHAT IS ALREADY RECORDED, like `_set_status`. `triggers.yml`
+        re-runs this generator on `updated`, so a rebuild that re-saved an
+        unchanged record would emit an update for no change on every pass.
+        Termination does not depend on it -- these three relationships are
+        outputs and no rule watches them -- but a no-op run must write nothing.
         """
+        if (context.recorded_subnet_id, context.recorded_vlan_id, context.recorded_svi_id) == (
+            subnet_id,
+            vlan_id,
+            svi_id,
+        ):
+            return
         service = await self.client.get(kind="ServiceNetworkSegment", id=context.segment.id)
         service.subnet = subnet_id  # type: ignore[attr-defined]
         service.vlan = vlan_id  # type: ignore[attr-defined]

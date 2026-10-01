@@ -431,6 +431,47 @@ async def test_a_rerun_writes_its_own_objects_again() -> None:
     assert [kind for kind, _ in client.created] == ["IpamVLAN", "EvpnSvi"]
 
 
+class _UpsertingClient(_RecordingClient):
+    """Returns the id it was handed, as an upsert onto an existing node does."""
+
+    async def create(self, kind: str, data: dict[str, Any]) -> Any:
+        node = await super().create(kind, data)
+        if "id" in data:
+            node.id = data["id"]
+        return node
+
+
+@pytest.mark.asyncio
+async def test_a_rerun_of_a_built_segment_writes_nothing_to_the_service() -> None:
+    """What makes the `updated` triggers terminate.
+
+    `triggers.yml` re-runs this generator when the segment's status changes,
+    and the build path ends by setting `active` -- so the run after a build is
+    always a no-op, and must stay one. A save here would be an update event on
+    the target for no change.
+    """
+    client = _UpsertingClient()
+    client.nodes["seg-1"] = _RecordingNode("seg-1", status="active")
+    parsed = _query(
+        segment=_segment(status="active", subnet=("pfx-1", "10.230.0.0/24"), vlan=("vlan-1", 500), svi="svi-1"),
+        existing_vlan=[{"node": {"id": "vlan-1", "vlan_id": _wrap(500)}}],
+        existing_svi=[{"node": {"id": "svi-1", "svi_id": _wrap(500)}}],
+    )
+    await _generator(client).generate(parsed.model_dump(by_alias=True))
+
+    assert client.nodes["seg-1"].saves == []
+
+
+@pytest.mark.asyncio
+async def test_a_first_build_records_what_it_made() -> None:
+    """The positive case beside the guard, so an empty save list above is
+    evidence of the guard rather than of a generator that never records."""
+    client = _UpsertingClient()
+    await _generator(client).generate(_query().model_dump(by_alias=True))
+
+    assert len(client.nodes["seg-1"].saves) == 2  # the record, then the status
+
+
 @pytest.mark.asyncio
 async def test_a_collision_refuses_before_anything_is_written() -> None:
     """A VLAN wearing the requested name that the service does not record."""

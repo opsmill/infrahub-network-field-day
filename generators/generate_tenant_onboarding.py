@@ -217,7 +217,18 @@ class TenantOnboardingGenerator(InfrahubGenerator):
 
     async def _record(self, context: OnboardingContext, tenant_id: str) -> None:
         """``update_group_context=False``: the request is this generator's
-        target, not something it owns."""
+        target, not something it owns.
+
+        Guarded like `_set_status`: `triggers.yml` re-runs this generator on
+        `updated`, and a no-op run must write nothing. `mac_vrf_vni_base` is
+        written here, which is why no rule watches it."""
+        recorded = _node_of(context.onboarding.evpn_tenant)
+        if (
+            recorded is not None
+            and recorded.id == tenant_id
+            and _value(context.onboarding.mac_vrf_vni_base) == context.vni_base
+        ):
+            return
         service = await self.client.get(kind="ServiceTenantOnboarding", id=context.onboarding.id)
         service.evpn_tenant = tenant_id  # type: ignore[attr-defined]
         service.mac_vrf_vni_base.value = context.vni_base  # type: ignore[union-attr]
@@ -233,6 +244,15 @@ class TenantOnboardingGenerator(InfrahubGenerator):
         L2VLANs, and deleting one with tenants' networks beneath it would take
         them too. The generator reports rather than cascading, because the
         operator has to decide what happens to those networks.
+
+        **A refusal RAISES and leaves `status` alone, rather than recording
+        `error`.** `triggers.yml` re-runs this generator when `status` changes,
+        and `error` is not a withdrawn status -- so recording it fired a second
+        run that took the BUILD path, upserted the tenant and stamped the
+        service `active`: a refused decommission silently reverted to a live
+        tenant. Left at `decommissioning`, the service says what is true
+        (withdrawal asked for, not done), the failed run says why, and setting
+        it again once the VRFs are gone retries.
         """
         name = _value(onboarding.name)
         tenant = _node_of(onboarding.evpn_tenant)
@@ -248,14 +268,11 @@ class TenantOnboardingGenerator(InfrahubGenerator):
                 continue
             await manager.fetch()
             if manager.peer_ids:
-                self.logger.warning(
-                    "EVPN tenant %r still has %s %s; refusing to delete it. Remove them first",
-                    _value(tenant.name),
-                    len(manager.peer_ids),
-                    relationship,
+                msg = (
+                    f"EVPN tenant {_value(tenant.name)!r} still has {len(manager.peer_ids)} "
+                    f"{relationship}; refusing to delete it. Remove them first"
                 )
-                await self._set_status(onboarding.id, "error")
-                return
+                raise ValueError(msg)
 
         service = await self.client.get(kind="ServiceTenantOnboarding", id=onboarding.id)
         service.evpn_tenant = None  # type: ignore[attr-defined]

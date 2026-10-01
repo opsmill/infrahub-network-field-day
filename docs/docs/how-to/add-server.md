@@ -88,6 +88,8 @@ If the proposed change shows the server but no updated device configs:
 
 An operator can make the same request in the Infrahub UI or with `infrahubctl`: create a branch, create a `ServiceServerPlacement` on it with the fields above as a member of the `service_server_placements` group, and open a proposed change. The `created` event rule runs the placement generator on the branch, exactly as it does for a portal request.
 
+To withdraw a server, set the placement's **Status** to `decommissioning` on a branch. An `updated` event rule watches that field, so the generator runs on its own: it deletes the machine with its interfaces and cabling, and sets the status to `decommissioned`. Editing the hostname, role, rack, template, or description re-runs it the same way.
+
 See [Common Issues](../troubleshooting.md) for more.
 
 ## Source
