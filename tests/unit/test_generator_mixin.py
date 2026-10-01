@@ -8,6 +8,7 @@ import httpx
 import pytest
 from infrahub_sdk.exceptions import ServerNotResponsiveError
 
+from generators.asn import ensure_shared_device_asn
 from solution_arista_avd.generator import GeneratorMixin, save_file_if_changed, trigger_hostvar_generation
 from solution_arista_avd.pool_roles import ResourceRole
 
@@ -1027,7 +1028,13 @@ async def test_ensure_shared_device_asn_allocates_one_asn_for_unlinked_devices()
     gen.client.get.side_effect = fetched_devices
     gen.allocate_routing_asn = AsyncMock(return_value=routing_asn)  # type: ignore[method-assign]
 
-    result = await gen.ensure_shared_device_asn(devices, object(), "fabric-1")  # type: ignore[arg-type]
+    result = await ensure_shared_device_asn(
+        client=gen.client,
+        devices=devices,  # type: ignore[arg-type]
+        asn_pool=object(),  # type: ignore[arg-type]
+        fabric_id="fabric-1",
+        allocate_routing_asn=gen.allocate_routing_asn,
+    )
 
     assert result == routing_asn
     gen.allocate_routing_asn.assert_awaited_once()
@@ -1045,7 +1052,13 @@ async def test_ensure_shared_device_asn_reuses_first_existing_asn_in_device_orde
     gen.client.get.side_effect = fetched_devices
     gen.allocate_routing_asn = AsyncMock()  # type: ignore[method-assign]
 
-    result = await gen.ensure_shared_device_asn(devices, object(), "fabric-1")  # type: ignore[arg-type]
+    result = await ensure_shared_device_asn(
+        client=gen.client,
+        devices=devices,  # type: ignore[arg-type]
+        asn_pool=object(),  # type: ignore[arg-type]
+        fabric_id="fabric-1",
+        allocate_routing_asn=gen.allocate_routing_asn,
+    )
 
     assert result is None
     gen.allocate_routing_asn.assert_not_awaited()
@@ -1067,7 +1080,13 @@ async def test_ensure_shared_device_asn_relinks_mixed_old_state_to_first_existin
     gen.client.get.side_effect = fetched_devices
     gen.allocate_routing_asn = AsyncMock()  # type: ignore[method-assign]
 
-    result = await gen.ensure_shared_device_asn(devices, object(), "fabric-1")  # type: ignore[arg-type]
+    result = await ensure_shared_device_asn(
+        client=gen.client,
+        devices=devices,  # type: ignore[arg-type]
+        asn_pool=object(),  # type: ignore[arg-type]
+        fabric_id="fabric-1",
+        allocate_routing_asn=gen.allocate_routing_asn,
+    )
 
     assert result is None
     gen.allocate_routing_asn.assert_not_awaited()
@@ -1085,7 +1104,13 @@ async def test_ensure_shared_device_asn_noops_when_all_devices_already_share_asn
     gen.client.get.side_effect = fetched_devices
     gen.allocate_routing_asn = AsyncMock()  # type: ignore[method-assign]
 
-    result = await gen.ensure_shared_device_asn(devices, object(), "fabric-1")  # type: ignore[arg-type]
+    result = await ensure_shared_device_asn(
+        client=gen.client,
+        devices=devices,  # type: ignore[arg-type]
+        asn_pool=object(),  # type: ignore[arg-type]
+        fabric_id="fabric-1",
+        allocate_routing_asn=gen.allocate_routing_asn,
+    )
 
     assert result is None
     gen.allocate_routing_asn.assert_not_awaited()

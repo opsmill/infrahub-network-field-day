@@ -21,7 +21,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from infrahub_sdk.exceptions import NodeNotFoundError
 
 from generators.generate_fabric_app import (
     FabricAppGenerator,
@@ -200,7 +199,6 @@ class _RecordingNode:
         # the attribute it writes. Overridden by a `status=` kwarg below, which
         # is how a test says what the service already carried.
         self.status = _RecordingAttribute("provisioning")
-        self.artifacts: list[str] = []
         for key, value in attributes.items():
             setattr(self, key, _RecordingAttribute(value))
 
@@ -216,8 +214,10 @@ class _RecordingNode:
             }
         )
 
-    async def artifact_generate(self, name: str) -> None:
-        self.artifacts.append(name)
+
+class _OkResponse:
+    def raise_for_status(self) -> None:
+        return None
 
 
 @dataclass
@@ -231,9 +231,25 @@ class _RecordingClient:
     # double that always answers `provisioning` would make every no-op look like
     # a write.
     node_status: str = "provisioning"
+    # The application's rendered artifacts. Empty is a brand-new application,
+    # whose artifact does not exist until the definition first runs.
+    artifact_ids: list[str] = field(default_factory=lambda: ["artifact-app-1"])
+    posted: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    address: str = "http://infrahub:8000"
 
-    async def get(self, kind: str, id: str) -> Any:  # noqa: A002
+    async def get(self, kind: str, id: str | None = None, **_filters: Any) -> Any:  # noqa: A002
+        if kind == "CoreArtifactDefinition":
+            return _RecordingNode("def-app")
+        assert id is not None
         return self.nodes.setdefault(id, _RecordingNode(id, status=self.node_status))
+
+    async def filters(self, kind: str, **filters: Any) -> list[Any]:
+        assert kind == "CoreArtifact"
+        return [_RecordingNode(artifact_id) for artifact_id in self.artifact_ids]
+
+    async def _post(self, url: str, payload: dict[str, Any]) -> Any:
+        self.posted.append((url, payload))
+        return _OkResponse()
 
     async def delete(self, kind: str, id: str) -> None:  # noqa: A002
         self.deleted.append((kind, id))
@@ -248,6 +264,7 @@ def _generator(client: _RecordingClient) -> FabricAppGenerator:
     generator._client = client  # type: ignore[attr-defined]
     generator._init_client = client  # type: ignore[attr-defined]
     generator.logger = logging.getLogger("test")
+    generator.branch = "a-review-branch"
     return generator
 
 
@@ -404,12 +421,19 @@ async def test_withdrawing_from_an_application_with_no_block_does_nothing() -> N
 
 
 @pytest.mark.asyncio
-async def test_the_manifest_is_rerendered_after_an_allocation() -> None:
-    """The block only reaches the cluster through the artifact."""
+async def test_the_manifest_is_rerendered_after_an_allocation_on_the_generators_branch() -> None:
+    """The block only reaches the cluster through the artifact.
+
+    And on a branch, only through a render requested ON that branch:
+    `Node.artifact_generate` omits `?branch=`, so this generator used to
+    re-render `main` while running on a proposed change's branch.
+    """
     client = _RecordingClient()
     await _generator(client).generate(_query(app=_app()).model_dump(by_alias=True))
 
-    assert client.nodes["app-1"].artifacts == ["Crossplane FabricApp"]
+    assert client.posted == [
+        ("http://infrahub:8000/api/artifact/generate/def-app?branch=a-review-branch", {"nodes": ["artifact-app-1"]})
+    ]
 
 
 @pytest.mark.asyncio
@@ -417,25 +441,16 @@ async def test_a_brand_new_application_with_no_artifact_yet_is_not_a_warning() -
     """The most common path of all, and it was reported as a failure.
 
     A service created moments ago has no CoreArtifact -- the node appears when
-    the artifact definition first runs against it -- so asking to regenerate one
-    raises NodeNotFoundError. Measured on this generator's first live
-    allocation, where it printed a multi-line WARNING beside a perfectly correct
-    result.
+    the artifact definition first runs against it. Measured on this generator's
+    first live allocation, where it printed a multi-line WARNING beside a
+    perfectly correct result. Nothing is requested: the definition's first run
+    renders it, and a whole-group render is not this generator's to ask for.
     """
-
-    class _NoArtifactNode(_RecordingNode):
-        async def artifact_generate(self, name: str) -> None:
-            raise NodeNotFoundError(node_type="CoreArtifact", identifier={"name__value": name})
-
-    class _NoArtifactClient(_RecordingClient):
-        async def get(self, kind: str, id: str) -> Any:  # noqa: A002
-            return self.nodes.setdefault(id, _NoArtifactNode(id))
-
-    client = _NoArtifactClient()
-    caplog_free = _generator(client)
+    client = _RecordingClient(artifact_ids=[])
 
     # The allocation must still complete; the missing artifact is not a failure.
-    await caplog_free.generate(_query(app=_app()).model_dump(by_alias=True))
+    await _generator(client).generate(_query(app=_app()).model_dump(by_alias=True))
 
+    assert client.posted == []
     assert len(client.allocations) == 1
     assert client.nodes["app-1"].saves[0]["managed"] is True

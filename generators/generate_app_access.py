@@ -88,10 +88,10 @@ from dataclasses import dataclass, field
 from hashlib import blake2b
 from operator import itemgetter
 from typing import Any
-from urllib.parse import quote
 
 from infrahub_sdk.generator import InfrahubGenerator
 
+from .artifact_render import request_artifact_render
 from .generate_app_access_query import (
     GenerateAppAccessQuery,
     GenerateAppAccessQueryTargetEdgesNode,
@@ -1179,18 +1179,12 @@ class AppAccessGenerator(InfrahubGenerator):
         regeneration produced byte-identical output and only a second one moved
         it. Asking explicitly, after the save, is what closes that window.
         """
-        branch = self.branch if isinstance(getattr(self, "branch", None), str) else None
         try:
-            artifact = await self._init_client.get(
-                kind="CoreArtifact",
-                name__value=APPLICATION_ARTIFACT,
-                object__ids=[application_id],
-                branch=branch,
-            )
-            definition = await self._init_client.get(
-                kind="CoreArtifactDefinition",
-                artifact_name__value=APPLICATION_ARTIFACT,
-                branch=branch,
+            sent = await request_artifact_render(
+                self._init_client,
+                artifact_name=APPLICATION_ARTIFACT,
+                target_id=application_id,
+                branch=self.branch_name,
             )
         except Exception as exc:  # noqa: BLE001 - the grant is built; this is delivery
             self.logger.info(
@@ -1199,11 +1193,9 @@ class AppAccessGenerator(InfrahubGenerator):
                 exc,
             )
             return
-
-        url = f"{self._init_client.address}/api/artifact/generate/{definition.id}"
-        if branch:
-            url = f"{url}?branch={quote(branch, safe='')}"
-        await self._init_client._post(url, payload={"nodes": [artifact.id]})  # noqa: SLF001
+        if not sent:
+            self.logger.info("No %r artifact exists yet; its first render picks this up", APPLICATION_ARTIFACT)
+            return
         self.logger.info("Requested a re-render of %r", APPLICATION_ARTIFACT)
 
     async def _advertise(self, context: GrantContext, advertisement: Advertisement | None) -> None:
@@ -1319,45 +1311,20 @@ class AppAccessGenerator(InfrahubGenerator):
             return
 
         try:
-            # NOT `firewall.artifact_generate(...)`, WHICH IS A NO-OP ON A BRANCH.
-            #
-            # The SDK helper posts to `/api/artifact/generate/{id}` with no
-            # `branch` parameter, and that endpoint regenerates against `main`
-            # when none is given. On a branch the objects were therefore written,
-            # this method logged that it had asked for a re-render, and the
-            # branch's artifact kept its old checksum -- so a proposed change
-            # showed the new rule as data and no configuration diff at all.
-            # Measured: identical checksums on `main` and the branch after the
-            # generator ran, and the rule appearing the moment the same endpoint
-            # was called with `?branch=`.
-            #
-            # That is the very failure this method exists to prevent, and a
-            # branch is where AGENTS.md says this work should happen -- so the
-            # helper was hiding the bug in the place it mattered most.
-            branch = self.branch_name
-            # `nodes` NAMES THE ARTIFACT, NOT ITS TARGET, and passing the
-            # firewall's id instead is accepted and silently regenerates
-            # nothing -- the endpoint matches it against no artifact and
-            # returns 200. Measured, and it looks exactly like the missing
-            # branch does.
-            artifact = await self._init_client.get(
-                kind="CoreArtifact",
-                name__value=FIREWALL_ARTIFACT,
-                object__ids=[firewall_id],
-                branch=branch,
+            # NOT `firewall.artifact_generate(...)`, WHICH IS A NO-OP ON A BRANCH:
+            # see generators/artifact_render.py. A branch is where AGENTS.md says
+            # this work should happen, so the SDK helper hid the bug in the place
+            # it mattered most -- measured as identical checksums on `main` and
+            # the branch after the generator ran.
+            sent = await request_artifact_render(
+                self._init_client,
+                artifact_name=FIREWALL_ARTIFACT,
+                target_id=firewall_id,
+                branch=self.branch_name,
             )
-            definition = await self._init_client.get(
-                kind="CoreArtifactDefinition",
-                artifact_name__value=FIREWALL_ARTIFACT,
-                branch=branch,
-            )
-            url = f"{self._init_client.address}/api/artifact/generate/{definition.id}"
-            if branch:
-                url = f"{url}?branch={quote(branch, safe='')}"
-            # `_post` is private, and is what the SDK's own `generate()` uses;
-            # there is no public call that takes a branch.
-            response = await self._init_client._post(url, payload={"nodes": [artifact.id]})  # noqa: SLF001
-            response.raise_for_status()
+            if not sent:
+                msg = f"no {FIREWALL_ARTIFACT!r} artifact exists for the firewall"
+                raise LookupError(msg)  # noqa: TRY301 - reported by the handler below
         except Exception as exc:  # noqa: BLE001 - see the docstring; never fatal here
             self.logger.warning(
                 "Could not re-render %r (%s). The objects are correct; regenerate the artifact "

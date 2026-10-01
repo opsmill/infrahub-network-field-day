@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Protocol, cast
 
 from solution_arista_avd.protocols import DcimFabricSwitch, RoutingAsn
@@ -7,6 +8,8 @@ from solution_arista_avd.protocols import DcimFabricSwitch, RoutingAsn
 if TYPE_CHECKING:
     from infrahub_sdk import InfrahubClient
     from infrahub_sdk.protocols import CoreNumberPool
+
+logger = logging.getLogger(__name__)
 
 
 class RoutingAsnAllocator(Protocol):
@@ -36,7 +39,13 @@ async def ensure_shared_device_asn(
     fabric_id: str,
     allocate_routing_asn: RoutingAsnAllocator,
 ) -> RoutingAsn | None:
-    """Link all devices to one shared fabric-owned RoutingAsn."""
+    """Link all devices to one shared fabric-owned ``RoutingAsn``.
+
+    The first existing ASN found in the supplied device order is the
+    idempotency anchor. If none of the devices has an ASN yet, allocate one from
+    the fabric pool and link every device to it. Existing non-selected ASN nodes
+    are intentionally left in place; only the device links are reconciled.
+    """
     if not devices:
         return None
 
@@ -72,7 +81,11 @@ async def ensure_shared_device_asn(
             await set_device_asn(client, fetched_device.id, shared_asn_id)
     except Exception:
         if routing_asn is not None:
-            await routing_asn.delete()
+            # A failed clean-up must not replace the error that caused it.
+            try:
+                await routing_asn.delete()
+            except Exception:
+                logger.exception("Failed to clean up shared RoutingAsn %s after device ASN link error", routing_asn.id)
         raise
 
     return routing_asn

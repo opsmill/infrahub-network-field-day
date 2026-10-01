@@ -807,6 +807,10 @@ class _RecordingClient:
     async def delete(self, kind: str, id: str) -> None:  # noqa: A002
         self.deleted.append((kind, id))
 
+    async def filters(self, kind: str, **filters: Any) -> list[Any]:
+        self.fetched.append(f"{kind}:{filters}")
+        return [self.nodes.setdefault(kind, _RecordingNode(f"{kind}-id"))]
+
     async def _post(self, url: str, payload: dict[str, Any]) -> Any:
         """The artifact re-render. Recorded because the URL is the assertion.
 

@@ -45,9 +45,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from infrahub_sdk.exceptions import NodeNotFoundError
 from infrahub_sdk.generator import InfrahubGenerator
 
+from .artifact_render import request_artifact_render
 from .generate_fabric_app_query import (
     GenerateFabricAppQuery,
     GenerateFabricAppQueryTargetEdgesNode,
@@ -325,29 +325,36 @@ class FabricAppGenerator(InfrahubGenerator):
         against that assumption, which cost cycle 033 a day when it turned out
         not to hold for the firewall.
 
+        It goes through `artifact_render.request_artifact_render` rather than
+        `Node.artifact_generate`, which omits `?branch=` and so re-rendered
+        `main` while this generator ran on a branch.
+
         **A missing artifact is the NORMAL first run, not a failure.** A service
         created moments ago has no `CoreArtifact` yet -- the node appears when
-        the artifact definition first runs against it -- so asking to regenerate
-        one raises `NodeNotFoundError`. Reported as a warning it reads as a
+        the artifact definition first runs against it. Reported as a warning it reads as a
         broken generator on the single most common path there is, which is how
         people are taught to ignore warnings. Measured on the first live
         allocation this generator ever made.
         """
         try:
-            service = await self._init_client.get(kind="ServiceFabricApp", id=app_id)
-            await service.artifact_generate(APP_ARTIFACT)
-        except NodeNotFoundError:
-            self.logger.info(
-                "No %r artifact exists for this application yet; it will be rendered when the "
-                "artifact definition first runs",
-                APP_ARTIFACT,
+            sent = await request_artifact_render(
+                self._init_client,
+                artifact_name=APP_ARTIFACT,
+                target_id=app_id,
+                branch=self.branch_name,
             )
-            return
         except Exception as exc:  # noqa: BLE001 - see the docstring; never fatal here
             self.logger.warning(
                 "Could not re-render %r (%s); the allocation is correct, regenerate the artifact",
                 APP_ARTIFACT,
                 exc,
+            )
+            return
+        if not sent:
+            self.logger.info(
+                "No %r artifact exists for this application yet; it will be rendered when the "
+                "artifact definition first runs",
+                APP_ARTIFACT,
             )
             return
         self.logger.info("Requested a re-render of %r", APP_ARTIFACT)
