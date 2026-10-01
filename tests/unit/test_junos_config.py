@@ -734,9 +734,12 @@ def test_the_snmp_stanza_is_read_only_and_client_restricted() -> None:
     snmp = _stanza(_rendered(), "snmp")
     assert "    community otternet-ro {" in snmp
     assert "        authorization read-only;" in snmp
-    assert "            10.0.0.0/24;" in snmp
-    # fxp0 is in mgmt_junos under `management-instance`; without this the agent
-    # ignores every request arriving there.
+    # Bound to mgmt_junos, with the management network as its clients: every
+    # poll arrives in that instance with its real source address, and either
+    # half missing made Junos count it as a "Bad community use" and answer
+    # nothing (measured on the lab's vSRX).
+    assert "        routing-instance mgmt_junos {" in snmp
+    assert "                172.20.41.0/24;" in snmp
     assert "    routing-instance-access;" in snmp
     assert not [line for line in snmp if "read-write" in line]
 

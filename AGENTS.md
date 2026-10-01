@@ -415,7 +415,10 @@ Seven things look like oversights and are not:
   (`10.112.240.81`) is pinned and its block seeded, because Dex names it before Infrahub
   delivers anything.
 - **The SNMP community is in an artifact, deliberately.** The device must receive it in its
-  configuration. It is read-only and restricted to vrnetlab's internal `10.0.0.0/24`.
+  configuration. It is read-only, bound to `mgmt_junos` and restricted to the management
+  network: vrnetlab forwards UDP/161 with the poller's real source address, so the
+  clients are `172.20.41.0/24`, not vrnetlab's internal `10.0.0.0/24`. Unbound, or with
+  the internal subnet, every poll counts as a "Bad community use" and nothing answers.
 
 Three measured facts about the device side:
 

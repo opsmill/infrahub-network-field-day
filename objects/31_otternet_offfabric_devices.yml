@@ -46,9 +46,10 @@ spec:
       # SNMP for the telemetry collector (cycle 034). A read-only v2c community
       # -- configuration rather than a credential, and the one value of its
       # kind recorded in an artifact, because the device must receive it -- and
-      # the one prefix allowed to use it.
+      # the one prefix allowed to use it: the management network, because
+      # vrnetlab forwards UDP/161 with the poller's source address intact.
       snmp_community: otternet-ro
-      snmp_clients: ["10.0.0.0/24", default]
+      snmp_clients: ["172.20.41.0/24", default]
       member_of_groups:
         - junos_firewalls
 

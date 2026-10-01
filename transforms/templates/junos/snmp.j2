@@ -8,9 +8,17 @@
    other hierarchy the artifact emits -- and removing it from the model removes
    it from the device.
 
-   `routing-instance-access`, because fxp0 sits in `mgmt_junos` under
-   `management-instance`; without it the agent ignores requests arriving there.
-   Syntax validated on the lab's vSRX with `commit check` (research R7). #}
+   THE COMMUNITY IS BOUND TO `mgmt_junos`, because fxp0 sits in that instance
+   under `management-instance` and every poll arrives there. Unbound -- or
+   bound with the wrong `clients` -- Junos counts each request as a "Bad
+   community use" and answers nothing. `routing-instance-access` lets the agent
+   accept requests in a non-default instance at all.
+
+   The clients are the MANAGEMENT NETWORK, not vrnetlab's internal 10.0.0.0/24:
+   vrnetlab forwards UDP/161 with the poller's source address intact, so fxp0
+   sees 172.20.41.x -- the host, or a k3s node masquerading the Telegraf pod.
+   Measured with `monitor traffic interface fxp0`, then answered `sysName=fw1`
+   with exactly this stanza. #}
 {% if snmp %}
 snmp {
     /* Read-only, polled by the telemetry collector the monitoring profiles
@@ -18,8 +26,10 @@ snmp {
      * receives; it is restricted to the one client prefix below. */
     community {{ snmp.community }} {
         authorization read-only;
-        clients {
-            {{ snmp.clients }};
+        routing-instance mgmt_junos {
+            clients {
+                {{ snmp.clients }};
+            }
         }
     }
     routing-instance-access;

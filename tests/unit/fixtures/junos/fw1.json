@@ -19,7 +19,7 @@
           "snmp_clients": {
             "node": {
               "prefix": {
-                "value": "10.0.0.0/24"
+                "value": "172.20.41.0/24"
               }
             }
           },

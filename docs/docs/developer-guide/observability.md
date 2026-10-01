@@ -102,8 +102,9 @@ renderer is pinned against:
   daemons' sockets.
 
 **The SNMP community is the one credential-like value in an artifact.** The device must receive it
-in its configuration whatever the model does. It is read-only and restricted to vrnetlab's
-internal network.
+in its configuration whatever the model does. It is read-only, bound to `mgmt_junos` (fxp0's
+instance), and restricted to the management network `172.20.41.0/24`, because vrnetlab forwards
+the poll with its real source address.
 
 ## Organisation metrics
 
