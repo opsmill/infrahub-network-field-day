@@ -21,7 +21,7 @@ The integration targets **pyavd >= 6.4.0, < 6.5.0** (pinned in [`pyproject.toml`
 The following sections are version-sensitive — review them when upgrading PyAVD:
 
 - [Hostvars Reference](./hostvars.md) — the PyAVD input schema.
-- [Role Mapping](./role-mapping.md) — AVD device type names (for example, `l3leaf`, `super-spine`).
+- [Role Mapping](./role-mapping.md) — AVD device type names (for example, `spine`, `l3leaf`).
 - [Transforms](./transforms.md) — the PyAVD functions the transforms call (`validate_inputs`, `get_avd_facts`, `get_device_structured_config`, `get_device_config`, `get_fabric_documentation`).
 :::
 
@@ -52,12 +52,12 @@ flowchart TD
 ### Phase 1 — Hostvars
 
 **Generator**: [`generate-avd-device-hostvar`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_avd_device_hostvar.py)
-**Target**: each `DcimDevice` in the `avd_devices` group (one task per device).
+**Target**: each `DcimFabricSwitch` in the `avd_devices` group (one task per device; seven for `OTTERNET_FABRIC`).
 
 For each device the generator:
 
 1. Extracts device attributes — name, role, BGP ASN, node ID, loopback, management IP.
-2. Determines the **uplink role** based on the device's role: `spine → super_spine` interfaces, `leaf` and `border_leaf → spine` interfaces, `l2leaf → leaf` interfaces, `super_spine →` no uplinks.
+2. Determines the **uplink role** based on the device's role: `leaf` and `border_leaf → spine` interfaces, `l2leaf → leaf` interfaces, and `spine →` the fabric-level tier when the fabric declares one. `OTTERNET_FABRIC` declares none, so its spines have no uplinks.
 3. Extracts connected endpoints (servers) from interfaces with `role = "server"`, including tagged/untagged VLANs.
 4. For leaves, extracts the MLAG peer information, then the virtual router MAC.
 5. For leaves and spines, queries EVPN tenants, VRFs, SVIs, and L2 VLANs associated with the fabric (skipped entirely for `l2leaf`).

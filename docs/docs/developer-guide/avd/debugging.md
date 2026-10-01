@@ -31,7 +31,7 @@ await client.login()
 
 artifact = await client.get(
     kind="AvdArtifact",
-    device__name__value="leaf-pod-A1-1",
+    device__name__value="leaf-otternet-pod1-1-1",
     branch="main",
     prefetch_relationships=True,
     include=["hostvar_file", "structured_config_file"],

@@ -208,7 +208,8 @@ Run it against a fabric from the CLI:
 
 ```bash
 # Variables are passed as key=value; this check takes the fabric name.
-uv run infrahubctl check cv-config-validation name=Fabric-L3LS-Multi-Domain --branch <branch-name>
+# OTTERNET_FABRIC does not set cloudvision_managed, so this logs a skip and passes.
+uv run infrahubctl check cv-config-validation name=OTTERNET_FABRIC --branch <branch-name>
 
 # List the checks the repository defines
 uv run infrahubctl check --list

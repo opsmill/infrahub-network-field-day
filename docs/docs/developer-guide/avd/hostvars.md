@@ -11,21 +11,21 @@ sidebar_position: 2
 Hostvars structure is **PyAVD-version-sensitive** — see the [overview](./overview.md#pyavd-version) for the pinned version.
 :::
 
-[`generate-avd-device-hostvar`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_avd_device_hostvar.py) builds the PyAVD hostvars dict below for each `DcimDevice`. The dict is serialised to JSON and stored as an `AvdHostvarFile` attached to the device's `AvdArtifact` (see [AvdArtifact & File Storage](./artifacts.md)).
+[`generate-avd-device-hostvar`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_avd_device_hostvar.py) builds the PyAVD hostvars dict below for each `DcimFabricSwitch` in the `avd_devices` group. The dict is serialised to JSON and stored as an `AvdHostvarFile` attached to the device's `AvdArtifact` (see [AvdArtifact & File Storage](./artifacts.md)).
 
 ## Top-level fields (all roles)
 
 | Field | Type | Source | Notes |
 |-------|------|--------|-------|
-| `type` | string | Role-mapped from `DcimDevice.role.value` | See [Role Mapping](./role-mapping.md). |
+| `type` | string | Role-mapped from `DcimFabricSwitch.role.value` | See [Role Mapping](./role-mapping.md). |
 | `fabric_name` | string | `NetworkFabric.name.value` | |
-| `id` | int | `DcimDevice.node_id.value` | Fabric-unique device identifier. |
-| `bgp_as` | string | `DcimDevice.asn.node.asn.value` | Stringified; PyAVD expects a string. |
-| `loopback_ipv4_address` | string | `DcimDevice.loopback_ip` | Optional; stripped of CIDR. |
-| `loopback_ipv4_pool` | string | `DcimDevice.loopback_ip.node.ip_prefix.node.prefix.value` | Parent Infrahub prefix for the Loopback0 address. |
-| `vtep_loopback_ipv4_address` | string | `DcimDevice.vtep_loopback_ip` | Leaf and border-leaf only; stripped of CIDR. |
-| `vtep_loopback_ipv4_pool` | string | `DcimDevice.vtep_loopback_ip.node.ip_prefix.node.prefix.value` | Parent Infrahub prefix for the VTEP loopback address; emitted for VTEP leaf roles. |
-| `mgmt_ip` | string | `DcimDevice.mgmt_ip` | Optional; includes CIDR (for example, `10.255.0.11/24`). |
+| `id` | int | `DcimFabricSwitch.node_id.value` | Fabric-unique device identifier. |
+| `bgp_as` | string | `DcimFabricSwitch.asn.node.asn.value` | Stringified; PyAVD expects a string. |
+| `loopback_ipv4_address` | string | `DcimFabricSwitch.loopback_ip` | Optional; stripped of CIDR. |
+| `loopback_ipv4_pool` | string | `DcimFabricSwitch.loopback_ip.node.ip_prefix.node.prefix.value` | Parent Infrahub prefix for the Loopback0 address. |
+| `vtep_loopback_ipv4_address` | string | `DcimFabricSwitch.vtep_loopback_ip` | Leaf and border-leaf only; stripped of CIDR. |
+| `vtep_loopback_ipv4_pool` | string | `DcimFabricSwitch.vtep_loopback_ip.node.ip_prefix.node.prefix.value` | Parent Infrahub prefix for the VTEP loopback address; emitted for VTEP leaf roles. |
+| `mgmt_ip` | string | `DcimFabricSwitch.mgmt_ip` (relationship to `IpamIPAddress`) | Optional; includes CIDR (for example, `172.20.41.21/24`). `mgmt_ip` exists only on fabric switches; the other device kinds carry `telemetry_address` instead, which is never used to push configuration. |
 | `mgmt_gateway` | string | Fabric-level setting | Optional. |
 | `spanning_tree_settings.mode` | string | `NetworkFabric.spanning_tree_mode.value` | Optional; PyAVD 6.3 fabric-wide STP mode (`mstp`, `rstp`, `rapid-pvst`, or `none`). |
 
@@ -35,7 +35,8 @@ Role-specific STP priorities are modeled as `NetworkSpanningTreePriority` child 
 
 ## Uplink fields — `spine`, `leaf`, `border_leaf`, `l2leaf`
 
-Super-spines have no uplinks; all other roles do.
+These roles have uplinks. In `OTTERNET_FABRIC` only the leaves do: the fabric declares no tier above
+its spines, so a spine's uplink block is empty.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -51,8 +52,7 @@ Which *remote* role supplies the uplink depends on the local role:
 
 | Local role | Uplink remote role |
 |------------|-------------------|
-| `super_spine` | none (top of fabric) |
-| `spine` | `super_spine` |
+| `spine` | the fabric-level tier, when the fabric declares one; none in `OTTERNET_FABRIC` |
 | `leaf` | `spine` |
 | `border_leaf` | `spine` |
 | `l2leaf` | `leaf` |
@@ -61,13 +61,9 @@ Enforced in [`generate_avd_device_hostvar.py`](https://github.com/opsmill/infrah
 
 ## Role-specific blocks
 
-### `super_spine`
-
-No additional fields beyond top-level. Super-spines sit at the top of the fabric and receive uplinks from spines; they have no own uplinks.
-
 ### `spine`
 
-- Uplink block (above) with upstream `super_spine` devices.
+- Uplink block (above) only when the fabric declares a tier above the spines; `OTTERNET_FABRIC`'s spines have none.
 - No leaf-level extensions (no MLAG, no virtual MAC).
 
 ### `leaf` and `border_leaf`
@@ -82,8 +78,12 @@ Leaves and Border Leafs map to PyAVD `l3leaf` and carry the richest hostvars:
 | `mlag_peer_ipv4_address` | Peer link IP. |
 | `virtual_router_mac_address` | Per-fabric VMAC used for SVI gateways. |
 | `l3_interfaces` / SVIs | Emitted from `EvpnSvi` objects attached to VLANs on this leaf's L2 domain. |
-| `connected_endpoints` | Per interface with `role = "server"` (see below). |
+| `servers` (connected endpoints) | Per interface with `role = "server"` (see below). |
 | EVPN tenants/VRFs/VLANs | Derived from `EvpnTenant` → `IpamVRF` → `EvpnSvi` → `IpamVLAN` chain filtered to this fabric. |
+
+:::note
+`OTTERNET_FABRIC`'s border leaf, `leaf-otternet-pod1-3-1`, has the role `leaf`, not `border_leaf`, and the fabric has no DCI links or EVPN gateway groups. The two `border_leaf` features below are schema-supported and unused here.
+:::
 
 Border Leafs additionally consume valid `NetworkLink` objects with `role=dci` and emit PyAVD `l3_edge.p2p_links` entries. Each DCI link must have exactly two inherited physical endpoints, both endpoint devices must use role `border_leaf`, and both endpoint interfaces must use role `peering`. When the fabric underlay routing protocol is **eBGP**, both endpoint devices must have a BGP ASN assigned and each end's `as` is taken from the endpoint device's own `asn`; with a non-BGP underlay (for example, OSPF) the link is still emitted for reachability, `as` is omitted, and no ASN is required. Point-to-point addresses are allocated as one `/31` per link. DCI pool resolution starts with the endpoint fabric's `fabric_ip_pools` member whose `IpamPrefix.role` is `dci`, falls back to the legacy `NetworkFabric.dci_pool`, and then uses a deterministic Fabric Supernet-derived fallback when the required DCI prefix-pool role is missing. For links between fabrics, the sorted-first endpoint chooses the shared allocation source so both border leafs allocate the same prefix. Endpoint IPs are not stored as DCI-specific link fields.
 
@@ -94,7 +94,7 @@ Generated DCI entries are self-contained and do not use `l3_edge.p2p_links_profi
   "l3_edge": {
     "p2p_links": [
       {
-        "nodes": ["ih-dc1-leaf1a", "ih-dc2-leaf1a"],
+        "nodes": ["border-leaf-a", "border-leaf-b"],
         "interfaces": ["Ethernet5", "Ethernet5"],
         "as": [65101, 65201],
         "ip": ["172.16.0.0/31", "172.16.0.1/31"],
@@ -155,18 +155,21 @@ For every interface on the device whose `role.value == "server"`, an entry is em
 
 ```json
 {
-  "name": "server-1",
+  "name": "k8s-node1",
   "adapters": [
     {
-      "endpoint_ports": ["eth0"],
+      "endpoint_ports": ["eth1"],
       "switch_ports": ["Ethernet10"],
-      "switches": ["leaf-pod-A1-1"],
-      "mode": "trunk",
-      "vlans": "100-105"
+      "switches": ["leaf-otternet-pod1-1-1"],
+      "mode": "access",
+      "vlans": "110",
+      "spanning_tree_portfast": "edge"
     }
   ]
 }
 ```
+
+The entries are emitted under PyAVD's top-level `servers` key.
 
 - `mode: "trunk"` + `vlans: "100-105"` for interfaces with multiple tagged VLANs (formatted via `netutils`).
 - `mode: "access"` + a single `vlans: "100"` for access-only interfaces.
@@ -178,38 +181,38 @@ The switchport VLAN itself comes from the server side: `generate-server-cabling`
 
 ## Pure Layer-2 tenants and tag-scoped VLANs
 
-An `Evpn.Tenant` whose `mac_vrf_vni_base` is unset emits **no** `mac_vrf_vni_base`, so PyAVD derives no VNI, no VXLAN, and no EVPN for it. That is what makes the standalone L2LS design pure Layer-2 (its `l2spine`/`l2leaf` devices are not VTEPs). Overlay tenants that do set a VNI base are unaffected.
+An `Evpn.Tenant` whose `mac_vrf_vni_base` is unset emits **no** `mac_vrf_vni_base`, so PyAVD derives no VNI, no VXLAN, and no EVPN for it. That is how a pure Layer-2 tenant is expressed. Every `OTTERNET_FABRIC` tenant sets a VNI base (`TENANT_APP` uses `12000`, for example), so none of them is affected.
 
 `Evpn.L2Vlan` has `rack_tags` (→ `LocationRack`) and `avd_tags` (→ `AvdTag`), mirroring the shape already on `Evpn.Svi`. Both are emitted as the VLAN's `tags` list — rack names first, then AVD tag names, deduplicated:
 
 ```yaml
 l2vlans:
   - id: 10
-    name: BLUE-NET
-    tags: [bluezone]
+    name: EXAMPLE-NET
+    tags: [k8s]
 ```
 
 AVD matches those against each node's `filter.tags`, which the generator emits on the leaf node-group from the rack's `avd_tags`:
 
 ```yaml
-l2leaf:
+l3leaf:
   node_groups:
-    - group: L2LS_RACK1
+    - group: K8S_LEAFS
       filter:
-        tags: [bluezone, greenzone]
+        tags: [k8s]
 ```
 
-The result is per-rack VLAN scoping without hand-listing VLANs per switch: tag a VLAN `bluezone`, tag the racks that should carry it, and only those leaf pairs render it.
+The result is per-rack VLAN scoping without hand-listing VLANs per switch: tag a VLAN `k8s`, and only the leaf pairs whose rack carries that tag render it. In `OTTERNET_FABRIC` the tags are `k8s` (`K8S_LEAFS`), `app` and `cloud` (`APP_LEAFS`) and `border` (`BORDER_LEAFS`), and the same matching scopes the tenants' SVIs.
 
 ## AVD custom hostvars escape hatch
 
-`avd_custom_hostvars` is an optional JSON attribute on `NetworkFabric`, `NetworkPod`, and `DcimDevice`. It is intended as an escape hatch for PyAVD hostvars that are not yet modeled by the Infrahub schemas and hostvar generator.
+`avd_custom_hostvars` is an optional JSON attribute on `NetworkFabric`, `NetworkPod`, and `DcimFabricSwitch`. It is intended as an escape hatch for PyAVD hostvars that are not yet modeled by the Infrahub schemas and hostvar generator.
 
 Custom hostvars are merged in this order:
 
 1. `NetworkFabric.avd_custom_hostvars`
 2. `NetworkPod.avd_custom_hostvars`
-3. `DcimDevice.avd_custom_hostvars`
+3. `DcimFabricSwitch.avd_custom_hostvars`
 4. Generated hostvars from Infrahub-modeled data
 
 That means device-level custom values override pod-level custom values, pod-level custom values override fabric-level custom values, and generated hostvars override all custom values. Custom hostvars are fill-only relative to modeled data: they can add keys the generator does not produce, but they cannot replace generated values such as `fabric_name`, role-specific `nodes`, generated tenant data, or generated connected endpoints.
@@ -249,9 +252,9 @@ The following native schema inputs anchor the AVD example scenarios. They are op
 
 | Input | Node | Scenario |
 |-------|------|----------|
-| `evpn_vlan_aware_bundles` (Boolean) | `NetworkFabric` | Multi-Pod 5-stage Clos |
+| `evpn_vlan_aware_bundles` (Boolean) | `NetworkFabric` | EVPN VLAN-aware bundles |
 | `underlay_routing_protocol` values `none`, `isis-ldp` | `NetworkFabric` | Standalone L2LS (`none`), ISIS-LDP IPVPN (`isis-ldp`) |
-| Roles `l2spine`, `l3spine`, `p`, `pe`, `rr` | `DcimDevice` | L2LS, campus, ISIS-LDP IPVPN — see [Role Mapping](./role-mapping.md) |
+| Roles `l2spine`, `l3spine`, `p`, `pe`, `rr` | `DcimFabricSwitch` | L2LS, campus, ISIS-LDP IPVPN — see [Role Mapping](./role-mapping.md) |
 
 Generator consumption of these inputs (route-server derivation, standalone L2LS and campus topology generation) is delivered alongside the per-scenario seed designs.
 
@@ -267,46 +270,80 @@ Common validation failures:
 
 ## Full leaf example
 
+The hostvars stored for `leaf-otternet-pod1-1-1`, trimmed. The fabric's `avd_custom_hostvars`
+pass-through keys (management API, access lists, prefix lists, route maps, platform settings) and the
+`tenants` block are omitted; everything shown is generated from the graph.
+
 ```json
 {
   "type": "l3leaf",
-  "fabric_name": "Fabric-L3LS-MultiPod-A",
-  "id": 1,
-  "bgp_as": "65101",
-  "loopback_ipv4_address": "10.255.1.1",
-  "loopback_ipv4_pool": "10.255.1.0/24",
-  "vtep_loopback_ipv4_address": "10.255.2.1",
-  "vtep_loopback_ipv4_pool": "10.255.2.0/24",
-  "mgmt_ip": "10.255.0.11/24",
-  "mgmt_gateway": "10.255.0.1",
-  "spanning_tree_settings": {
-    "mode": "mstp"
-  },
+  "fabric_name": "OTTERNET_FABRIC",
+  "mgmt_gateway": "172.20.41.1",
+  "virtual_router_mac_address": "00:1c:73:00:00:99",
+  "underlay_routing_protocol": "ebgp",
+  "overlay_routing_protocol": "ebgp",
+  "p2p_uplinks_mtu": 9214,
   "l3leaf": {
     "defaults": {
-      "spanning_tree_priority": 8192
-    }
+      "platform": "cEOS-LAB",
+      "loopback_ipv4_offset": 10,
+      "spanning_tree_mode": "mstp",
+      "spanning_tree_priority": 4096
+    },
+    "nodes": [
+      {
+        "name": "leaf-otternet-pod1-1-1",
+        "id": 1,
+        "loopback_ipv4_address": "10.41.0.11",
+        "loopback_ipv4_pool": "10.41.0.0/24",
+        "vtep_loopback_ipv4_address": "10.41.1.11",
+        "vtep_loopback_ipv4_pool": "10.41.1.0/24",
+        "mgmt_ip": "172.20.41.21/24",
+        "mlag_peer_ipv4_pool": "10.41.254.0/24",
+        "mlag_peer_l3_ipv4_pool": "10.41.253.0/24",
+        "uplink_interfaces": ["Ethernet1", "Ethernet2"],
+        "uplink_switches": ["spine-otternet-pod1-1", "spine-otternet-pod1-2"],
+        "uplink_switch_interfaces": ["Ethernet1", "Ethernet1"],
+        "uplink_ipv4_pool": "10.41.255.0/24",
+        "max_uplink_switches": 2,
+        "mlag_interfaces": ["Ethernet3", "Ethernet4"],
+        "virtual_router_mac_address": "00:1c:73:00:00:99"
+      }
+    ],
+    "node_groups": [
+      {
+        "group": "K8S_LEAFS",
+        "nodes": [{"name": "leaf-otternet-pod1-1-1"}, {"name": "leaf-otternet-pod1-1-2"}],
+        "mlag_domain_id": "K8S_LEAFS",
+        "bgp_as": "65101",
+        "virtual_router_mac_address": "00:1c:73:00:00:99",
+        "filter": {"tags": ["k8s"]}
+      }
+    ]
   },
-  "uplink_interfaces": ["Ethernet1", "Ethernet2"],
-  "uplink_switches": ["spine-A1-1", "spine-A1-2"],
-  "uplink_switch_interfaces": ["Ethernet1", "Ethernet1"],
-  "virtual_router_mac_address": "00:1C:73:00:00:11",
-  "connected_endpoints": [
+  "servers": [
     {
-      "name": "server-1",
+      "name": "k8s-node1",
       "adapters": [
         {
-          "endpoint_ports": ["eth0"],
+          "endpoint_ports": ["eth1"],
           "switch_ports": ["Ethernet10"],
-          "switches": ["leaf-pod-A1-1"],
-          "mode": "trunk",
-          "vlans": "100-105"
+          "switches": ["leaf-otternet-pod1-1-1"],
+          "mode": "access",
+          "vlans": "110",
+          "spanning_tree_portfast": "edge",
+          "spanning_tree_bpduguard": "enabled",
+          "description": "k3s-server"
         }
       ]
     }
   ]
 }
 ```
+
+The per-device fields in the tables above land on the device's entry in `<node type>.nodes`, and
+the MLAG pair's shared values (`bgp_as`, `mlag_domain_id`) on its `node_groups` entry, named for
+the rack.
 
 ## Tests
 

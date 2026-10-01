@@ -108,16 +108,17 @@ then the `OTTERNET_FABRIC` design (`20`–`28`): device types and templates, poo
 
 Open the Infrahub UI at **`http://localhost:8000`** and log in. You should see:
 
-- **Devices → Types & Models → Manufacturers**: Arista, Dell, and other manufacturers.
+- **Devices → Types & Models → Manufacturers**: `Arista`, `FRRouting`, `Juniper`, and `Generic`.
 - **Fabric Design → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
-- **Locations → Racks**: pre-defined racks per pod.
-- **IPAM → Prefixes**: the fabric supernet and per-fabric prefix pools.
+- **Locations → Racks**: `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`.
+- **Devices → Fabric Switches**: the two spines and five leaves, with their pinned management addresses.
+- **IPAM → Prefixes**: the `10.41.0.0/16` fabric supernet and the prefixes its pools draw from.
 
 If you don't see these, re-run `uv run invoke load` or see [Common Issues](./troubleshooting.md).
 
 ## Next: provision a fabric
 
-The stack is up but no devices exist yet — fabrics, pods, and racks are defined but leaves, spines, and super-spines need to be generated. Follow [Provision Your First Fabric](./provision-first-fabric.md) next.
+The stack is up and the seven switches exist with their pinned identity, but nothing is cabled yet and no host_vars or configurations have been rendered — `invoke load` runs no generators. Follow [Provision Your First Fabric](./provision-first-fabric.md) next.
 
 ## Common commands
 
