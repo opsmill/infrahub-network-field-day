@@ -253,7 +253,7 @@ Now the denied case. A pod outside the namespace has no business reaching the
 frontend:
 
 ```bash
-kubectl run otternet-debug --image=nicolaka/netshoot:latest --restart=Never --command -- sleep 900
+kubectl run otternet-debug --image=nicolaka/netshoot:v0.16 --restart=Never --command -- sleep 900
 kubectl exec otternet-debug -- curl -sS --max-time 6 http://10.111.0.141:8080/   # times out
 
 for p in $(kubectl -n kube-system get pods -l k8s-app=cilium -o name | sed 's|pod/||'); do

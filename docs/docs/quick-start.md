@@ -35,8 +35,9 @@ The project extends the base Infrahub image with `pyavd` and project code. Build
 uv run invoke build
 ```
 
-To build against a different Infrahub release, set `INFRAHUB_BASE_VERSION` first — the compose files
-default to `1.10.6`:
+To build against a different Infrahub release, set `INFRAHUB_BASE_VERSION` first. Without it, the
+version is the `ARG INFRAHUB_BASE_VERSION` default in the `Dockerfile`, which the compose files and
+`invoke` both follow:
 
 ```bash
 export INFRAHUB_BASE_VERSION=<infrahub-version>
@@ -108,16 +109,17 @@ then the `OTTERNET_FABRIC` design (`20`–`28`): device types and templates, poo
 
 Open the Infrahub UI at **`http://localhost:8000`** and log in. You should see:
 
-- **Devices → Types & Models → Manufacturers**: Arista, Dell, and other manufacturers.
-- **Fabric Design → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
-- **Locations → Racks**: pre-defined racks per pod.
-- **IPAM → Prefixes**: the fabric supernet and per-fabric prefix pools.
+- **Fabric Design & AVD → Device Catalogue → Manufacturers**: `Arista`, `FRRouting`, `Juniper`, and `Generic`.
+- **Data Centre Fabric → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
+- **Data Centre Fabric → Racks**: `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`.
+- **Data Centre Fabric → Switches**: the two spines and five leaves, with their pinned management addresses.
+- **IP Addressing & VLANs → Prefixes**: the `10.41.0.0/16` fabric supernet and the prefixes its pools draw from.
 
 If you don't see these, re-run `uv run invoke load` or see [Common Issues](./troubleshooting.md).
 
 ## Next: provision a fabric
 
-The stack is up but no devices exist yet — fabrics, pods, and racks are defined but leaves, spines, and super-spines need to be generated. Follow [Provision Your First Fabric](./provision-first-fabric.md) next.
+The stack is up and the seven switches exist with their pinned identity, but nothing is cabled yet and no host_vars or configurations have been rendered — `invoke load` runs no generators. Follow [Provision Your First Fabric](./provision-first-fabric.md) next.
 
 ## Common commands
 

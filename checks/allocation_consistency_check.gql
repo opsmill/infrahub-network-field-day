@@ -1,0 +1,276 @@
+query AllocationConsistencyCheckQuery {
+  # RULE 1. The domain a VLAN id has to be unique in is the FABRIC, not the
+  # IpamL2Domain: the hostvar generator emits every tenant that names a fabric
+  # into that fabric's `network_services`, and the id AVD renders is
+  # `EvpnSvi.svi_id` / `EvpnL2Vlan.vlan_id` -- never `IpamVLAN.vlan_id`. Infrahub
+  # enforces `[vlan_id, l2domain]` on IpamVLAN already; nothing enforces anything
+  # across the two network-service kinds or across VRFs and tenants.
+  EvpnTenant {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        mac_vrf_vni_base {
+          value
+        }
+        fabrics {
+          edges {
+            node {
+              id
+              name {
+                value
+              }
+            }
+          }
+        }
+        vrfs {
+          edges {
+            node {
+              id
+            }
+          }
+        }
+        l2vlans {
+          edges {
+            node {
+              id
+              name {
+                value
+              }
+              vlan_id {
+                value
+              }
+              vni_override {
+                value
+              }
+              vlan {
+                node {
+                  id
+                  name {
+                    value
+                  }
+                  vlan_id {
+                    value
+                  }
+                }
+              }
+              rack_tags {
+                edges {
+                  node {
+                    id
+                    name {
+                      value
+                    }
+                  }
+                }
+              }
+              avd_tags {
+                edges {
+                  node {
+                    id
+                    name {
+                      value
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Joined to its tenant through `EvpnTenant.vrfs`, by VRF id. The tags are the
+  # rendered `svis[].tags`: rack names plus AvdTag names, exactly as
+  # `_build_svi_tags` builds them, because the tag set is what decides which
+  # switches carry the SVI.
+  EvpnSvi {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        svi_id {
+          value
+        }
+        ip_address_virtual {
+          value
+        }
+        ip_virtual_router_addresses {
+          value
+        }
+        vrf {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        vlan {
+          node {
+            id
+            name {
+              value
+            }
+            vlan_id {
+              value
+            }
+          }
+        }
+        rack_tags {
+          edges {
+            node {
+              id
+              name {
+                value
+              }
+            }
+          }
+        }
+        avd_tags {
+          edges {
+            node {
+              id
+              name {
+                value
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # RULE 2. Segment subnets carry no `vrf` of their own -- the generator
+  # allocates them with a role and a description only -- so the segment is what
+  # says which routing domain a subnet is in.
+  ServiceNetworkSegment {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        vrf {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        subnet {
+          node {
+            id
+            prefix {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Every prefix, filtered by role in Python: the hand-written tenant subnets
+  # (`tenant_host`, `tenant_cloud`) are what an allocated or hand-named segment
+  # subnet can collide with.
+  IpamPrefix {
+    edges {
+      node {
+        id
+        prefix {
+          value
+        }
+        role {
+          value
+        }
+        vrf {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # A pool's resources are containers by design -- 10.230.0.0/16 contains every
+  # segment subnet ever allocated -- so they are excluded from overlap.
+  CoreIPPrefixPool {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        resources {
+          edges {
+            node {
+              __typename
+              id
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # RULE 3. `vip_pools` are the only supernets the leaves' inbound route policy
+  # permits, so a block outside them is advertised by the cluster and refused by
+  # the fabric.
+  ServiceFabricApp {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        exposed {
+          value
+        }
+        vip_block_managed {
+          value
+        }
+        vip_block {
+          node {
+            id
+            prefix {
+              value
+            }
+          }
+        }
+        cluster {
+          node {
+            id
+            name {
+              value
+            }
+            vip_pools {
+              edges {
+                node {
+                  id
+                  prefix {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

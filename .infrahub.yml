@@ -79,6 +79,9 @@ queries:
   # Global zone-advertisement check
   - name: zone_advertisement_check
     file_path: "./checks/zone_advertisement_check.gql"
+  # Global allocation-consistency check
+  - name: allocation_consistency_check
+    file_path: "./checks/allocation_consistency_check.gql"
   - name: cv_workspace_submission_webhook
     file_path: "./transforms/cv_workspace_submission_webhook.gql"
 
@@ -373,6 +376,13 @@ check_definitions:
   - name: zone-advertisement
     file_path: "./checks/zone_advertisement_check.py"
     class_name: ZoneAdvertisementCheck
+  # Also global. The two allocating generators draw from pools beside numbers
+  # and blocks typed by hand, and the domains that matter -- a VLAN id per
+  # FABRIC, a subnet per VRF, a VIP block per cluster pool -- are ones no schema
+  # uniqueness constraint covers. Every collision here loads and merges cleanly.
+  - name: allocation-consistency
+    file_path: "./checks/allocation_consistency_check.py"
+    class_name: AllocationConsistencyCheck
 
 python_transforms:
   - name: computed_interface_description

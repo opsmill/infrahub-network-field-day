@@ -202,14 +202,15 @@ async def check_fabric_hostvars_ready(client: InfrahubClient, fabric_id: str) ->
 def extract_uplinks_from_dict(
     interfaces: list[GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges],
     uplink_role: str | None,
-    device_id: str,  # noqa: ARG001 — part of the public signature; retained for callers/tests
 ) -> UplinkData:
     """Extract uplink information from device interfaces (dict format).
+
+    The local interface is excluded from a link's endpoints by its own id, so the
+    device id is not needed.
 
     Args:
         interfaces: List of interface edge dicts from GraphQL response
         uplink_role: The interface role to filter for uplinks (e.g., "super_spine", "spine")
-        device_id: The current device's ID to exclude from endpoints
 
     Returns:
         Dict with uplink_interfaces, uplink_switches, uplink_switch_interfaces
@@ -1316,7 +1317,124 @@ def _flush_switch_lag_groups(groups: dict[tuple[str, int], dict[str, Any]], *, m
         group["server"]["adapters"].append(adapter)
 
 
-def extract_connected_endpoints(  # noqa: C901
+def _remote_server_device(endpoint: Any, interface: Any, *, skip_l2leaf_endpoints: bool) -> Any | None:
+    """The physical server at the far end of a server-role link, or ``None`` to skip it.
+
+    The local interface is itself one of the link's endpoints and is skipped by id.
+    A remote l2leaf is dropped when ``skip_l2leaf_endpoints`` is set: AVD models
+    it through the l2leaf type, not ``connected_endpoints``.
+    """
+    if not endpoint:
+        return None
+    if not (endpoint.id != interface.id and hasattr(endpoint, "device")):
+        return None
+    remote_device = endpoint.device.node
+    if not remote_device:
+        return None
+    if _device_typename(endpoint) != "ComputePhysicalServer":
+        return None
+    remote_role = getattr(remote_device, "role", None)
+    if skip_l2leaf_endpoints and remote_role and remote_role.value == "l2leaf":
+        return None
+    return remote_device
+
+
+def _add_server_adapter(
+    server: ServerEndpoint,
+    adapter_keys: set[str],
+    switch_lag_groups: dict[tuple[str, int], dict[str, Any]],
+    *,
+    interface: Any,
+    endpoint: Any,
+    switch_lag_node: object | None,
+    vlan_config: tuple[list[int], int | None],
+    hostname: str,
+    mlag_active: bool,
+    skip_l2leaf_endpoints: bool,
+) -> None:
+    """Add the adapter one server-facing link contributes to ``server``.
+
+    Three shapes, tried in order: a switch-side LAG (grouped across links and
+    flushed later), a server-side LAG (one adapter per server LAG), and a plain
+    single-link adapter. ``adapter_keys`` makes repeated links idempotent.
+    """
+    server_name = server["name"]
+    endpoint_port = endpoint.name.value
+    switch_port = interface.name.value
+    # Detect port-channel on the remote (server) endpoint
+    endpoint_lag = getattr(endpoint, "lag", None)
+    endpoint_lag_node = endpoint_lag.node if endpoint_lag and endpoint_lag.node else None
+    if switch_lag_node:
+        channel_id = _lag_channel_id(switch_lag_node, require_port_channel_name=True)
+        if channel_id is None:
+            lag_name = _value(switch_lag_node, "name")
+            raise ValueError(f"Switch LAG '{lag_name}' is missing channel_id and cannot derive one from its name")
+        links = _switch_lag_member_links(
+            server_lag_node=endpoint_lag_node,
+            fallback_switch_lag_node=switch_lag_node,
+            fallback_local_interface=interface,
+            fallback_endpoint=endpoint,
+            hostname=hostname,
+            skip_l2leaf_endpoints=skip_l2leaf_endpoints,
+        )
+        _add_switch_lag_adapter(
+            server,
+            switch_lag_groups,
+            server_name=server_name,
+            switch_lag_node=switch_lag_node,
+            endpoint_lag_node=endpoint_lag_node,
+            links=links,
+        )
+        return
+
+    if endpoint_lag_node:
+        adapter_key = f"lag:{endpoint_lag_node.id}"
+        if adapter_key in adapter_keys:
+            return
+        lag_adapter = _lag_member_adapter(
+            lag_node=endpoint_lag_node,
+            switch_lag_node=switch_lag_node,
+            local_interface=interface,
+            mlag_active=mlag_active,
+            skip_l2leaf_endpoints=skip_l2leaf_endpoints,
+        )
+        if lag_adapter:
+            server["adapters"].append(lag_adapter)
+            adapter_keys.add(adapter_key)
+            return
+
+    adapter_key = f"interface:{interface.id}:{endpoint.id}"
+    if adapter_key in adapter_keys:
+        return
+
+    # Build adapter config
+    adapter: dict[str, Any] = {
+        "endpoint_ports": [endpoint_port],
+        "switch_ports": [switch_port],
+        "switches": [hostname],
+    }
+
+    if endpoint_lag_node:
+        apply_lag_adapter_config(
+            adapter,
+            endpoint_lag_node,
+            mlag_active=mlag_active,
+            evpn_lag_node=switch_lag_node,
+            endpoint_lag_node=endpoint_lag_node,
+        )
+
+    # Determine mode and add VLAN config
+    tagged_vlans, untagged_vlan = vlan_config
+    _apply_vlan_adapter_config(adapter, tagged_vlans, untagged_vlan)
+
+    # Edge-port hardening and the port description
+    _apply_edge_port_config(adapter, interface)
+
+    server["adapters"].append(adapter)
+    adapter_keys.add(adapter_key)
+
+
+def extract_connected_endpoints(
     interfaces: list[GenerateAvdDeviceInputsQueryDcimFabricSwitchEdgesNodeInterfacesEdges],
     hostname: str,
     *,
@@ -1358,109 +1476,34 @@ def extract_connected_endpoints(  # noqa: C901
             continue
 
         # Extract VLAN information (only active VLANs)
-        tagged_vlans, untagged_vlan = _extract_vlan_config(interface)
+        vlan_config = _extract_vlan_config(interface)
         switch_lag_node = _node(_field(interface, "lag"))
 
-        endpoints = link.connected_endpoints.edges or []
-        for ep_edge in endpoints:
+        for ep_edge in link.connected_endpoints.edges or []:
             endpoint = ep_edge.node
-            if not endpoint:
+            remote_device = _remote_server_device(endpoint, interface, skip_l2leaf_endpoints=skip_l2leaf_endpoints)
+            if remote_device is None:
                 continue
-            # Skip this interface, find the remote one
-            if endpoint.id != interface.id and hasattr(endpoint, "device"):
-                remote_device = endpoint.device.node
-                if remote_device:
-                    if _device_typename(endpoint) != "ComputePhysicalServer":
-                        continue
-                    # Skip L2 leaf devices — AVD handles them via l2leaf type, not connected_endpoints
-                    remote_role = getattr(remote_device, "role", None)
-                    if skip_l2leaf_endpoints and remote_role and remote_role.value == "l2leaf":
-                        continue
 
-                    server_name = remote_device.name.value
-                    endpoint_port = endpoint.name.value
-                    switch_port = interface.name.value
+            # Group adapters by server. A server is registered before its
+            # adapter is resolved, exactly as it always was.
+            server_name = remote_device.name.value
+            if server_name not in servers:
+                servers[server_name] = {"name": server_name, "adapters": []}
+                server_adapter_keys[server_name] = set()
 
-                    # Group adapters by server
-                    if server_name not in servers:
-                        servers[server_name] = {
-                            "name": server_name,
-                            "adapters": [],
-                        }
-                        server_adapter_keys[server_name] = set()
-
-                    # Detect port-channel on the remote (server) endpoint
-                    endpoint_lag = getattr(endpoint, "lag", None)
-                    endpoint_lag_node = endpoint_lag.node if endpoint_lag and endpoint_lag.node else None
-                    if switch_lag_node:
-                        channel_id = _lag_channel_id(switch_lag_node, require_port_channel_name=True)
-                        if channel_id is None:
-                            lag_name = _value(switch_lag_node, "name")
-                            raise ValueError(
-                                f"Switch LAG '{lag_name}' is missing channel_id and cannot derive one from its name"
-                            )
-                        links = _switch_lag_member_links(
-                            server_lag_node=endpoint_lag_node,
-                            fallback_switch_lag_node=switch_lag_node,
-                            fallback_local_interface=interface,
-                            fallback_endpoint=endpoint,
-                            hostname=hostname,
-                            skip_l2leaf_endpoints=skip_l2leaf_endpoints,
-                        )
-                        _add_switch_lag_adapter(
-                            servers[server_name],
-                            switch_lag_groups,
-                            server_name=server_name,
-                            switch_lag_node=switch_lag_node,
-                            endpoint_lag_node=endpoint_lag_node,
-                            links=links,
-                        )
-                        continue
-
-                    if endpoint_lag and endpoint_lag.node:
-                        adapter_key = f"lag:{endpoint_lag.node.id}"
-                        if adapter_key in server_adapter_keys[server_name]:
-                            continue
-                        lag_adapter = _lag_member_adapter(
-                            lag_node=endpoint_lag.node,
-                            switch_lag_node=switch_lag_node,
-                            local_interface=interface,
-                            mlag_active=mlag_active,
-                            skip_l2leaf_endpoints=skip_l2leaf_endpoints,
-                        )
-                        if lag_adapter:
-                            servers[server_name]["adapters"].append(lag_adapter)
-                            server_adapter_keys[server_name].add(adapter_key)
-                            continue
-
-                    adapter_key = f"interface:{interface.id}:{endpoint.id}"
-                    if adapter_key in server_adapter_keys[server_name]:
-                        continue
-
-                    # Build adapter config
-                    adapter: dict[str, Any] = {
-                        "endpoint_ports": [endpoint_port],
-                        "switch_ports": [switch_port],
-                        "switches": [hostname],
-                    }
-
-                    if endpoint_lag and endpoint_lag.node:
-                        apply_lag_adapter_config(
-                            adapter,
-                            endpoint_lag.node,
-                            mlag_active=mlag_active,
-                            evpn_lag_node=switch_lag_node,
-                            endpoint_lag_node=endpoint_lag.node,
-                        )
-
-                    # Determine mode and add VLAN config
-                    _apply_vlan_adapter_config(adapter, tagged_vlans, untagged_vlan)
-
-                    # Edge-port hardening and the port description
-                    _apply_edge_port_config(adapter, interface)
-
-                    servers[server_name]["adapters"].append(adapter)
-                    server_adapter_keys[server_name].add(adapter_key)
+            _add_server_adapter(
+                servers[server_name],
+                server_adapter_keys[server_name],
+                switch_lag_groups,
+                interface=interface,
+                endpoint=endpoint,
+                switch_lag_node=switch_lag_node,
+                vlan_config=vlan_config,
+                hostname=hostname,
+                mlag_active=mlag_active,
+                skip_l2leaf_endpoints=skip_l2leaf_endpoints,
+            )
 
     _flush_switch_lag_groups(switch_lag_groups, mlag_active=mlag_active)
     return _sort_server_endpoints(servers)
@@ -1991,15 +2034,6 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         await pool.save(allow_upsert=True, update_group_context=False)
         return str(child_prefix)
 
-    async def _ensure_fabric_supernet_fallback_pool(
-        self,
-        *,
-        fabric: object,
-        role: ResourceRole,
-        fabric_pool_refs: dict[ResourceRole, object],  # noqa: ARG002 - kept for test visibility and call symmetry
-    ) -> object | None:
-        return await ensure_fabric_supernet_fallback_pool(self.client, fabric=fabric, role=role)
-
     @staticmethod
     def _get_first_attr(obj: object, *names: str) -> object | None:
         """Return the first present attribute/relationship by name, preserving falsey objects."""
@@ -2058,10 +2092,8 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             or getattr(fabric, "uplink_pool", None)
         )
         if uplink_ref is None:
-            uplink_ref = await self._ensure_fabric_supernet_fallback_pool(
-                fabric=fabric,
-                role=ResourceRole.FABRIC_POINT_TO_POINT,
-                fabric_pool_refs=fabric_role_pools,
+            uplink_ref = await ensure_fabric_supernet_fallback_pool(
+                self.client, fabric=fabric, role=ResourceRole.FABRIC_POINT_TO_POINT
             )
 
         uplink = await self._require_pool_prefix(uplink_ref, "CoreIPPrefixPool", fabric_name, "uplink_pool")
@@ -2207,70 +2239,92 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             return attr.get("value")
         return attr.value if hasattr(attr, "value") else None
 
+    @staticmethod
+    def _relationship_edge_nodes(source: object, relationship_name: str) -> list[Any]:
+        """The non-null peer nodes of a cardinality-many relationship, in query order."""
+        rel = getattr(source, relationship_name, None)
+        if not rel or not hasattr(rel, "edges"):
+            return []
+        return [edge.node for edge in rel.edges if edge.node]
+
     @classmethod
-    def _extract_management_settings(cls, fabric: object) -> dict[str, Any]:  # noqa: C901 — maps many optional fabric fields
-        """Extract DNS, NTP, and local user settings from fabric."""
+    def _extract_dns_servers(cls, fabric: object) -> list[dict[str, Any]]:
+        """``dns_servers`` entries: host address (prefix length dropped) and optional VRF."""
+        dns_list: list[dict[str, Any]] = []
+        for node in cls._relationship_edge_nodes(fabric, "dns_servers"):
+            ip = cls._gql_val(node, "ip_address")
+            if not ip:
+                continue
+            entry: dict[str, Any] = {"ip_address": str(ip).split("/")[0]}
+            vrf = cls._gql_val(node, "vrf")
+            if vrf:
+                entry["vrf"] = vrf
+            dns_list.append(entry)
+        return dns_list
+
+    @classmethod
+    def _extract_ntp_servers(cls, fabric: object) -> list[dict[str, Any]]:
+        """``ntp_servers`` entries: name, optional ``server_vrf``, and ``iburst`` when set."""
+        ntp_list: list[dict[str, Any]] = []
+        for node in cls._relationship_edge_nodes(fabric, "ntp_servers"):
+            name = cls._gql_val(node, "name")
+            if not name:
+                continue
+            entry: dict[str, Any] = {"name": name}
+            server_vrf = cls._gql_val(node, "server_vrf")
+            if server_vrf:
+                entry["server_vrf"] = server_vrf
+            if cls._gql_val(node, "iburst"):
+                entry["iburst"] = True
+            ntp_list.append(entry)
+        return ntp_list
+
+    @classmethod
+    def _extract_local_users(cls, fabric: object) -> list[dict[str, Any]]:
+        """``local_users`` entries. A non-sha512 password is never emitted, only ``no_password``."""
+        users_list: list[dict[str, Any]] = []
+        for node in cls._relationship_edge_nodes(fabric, "local_users"):
+            name = cls._gql_val(node, "name")
+            if not name:
+                continue
+            user: dict[str, Any] = {
+                "name": name,
+                "privilege": cls._gql_val(node, "privilege") or 15,
+                "role": cls._gql_val(node, "role") or "network-admin",
+            }
+            pw_type = cls._gql_val(node, "password_type")
+            pw_value = cls._gql_val(node, "password")
+            if pw_type == "sha512" and pw_value:
+                user["sha512_password"] = pw_value
+            elif pw_value:
+                user["no_password"] = True
+            users_list.append(user)
+        return users_list
+
+    @classmethod
+    def _extract_management_settings(cls, fabric: object) -> dict[str, Any]:
+        """Extract DNS, NTP, and local user settings from fabric.
+
+        Key order is part of the output (the hostvars are serialized and
+        checksummed): dns_servers, ntp_servers, ntp_set_first_server_as_preferred,
+        local_users. Empty sections are omitted.
+        """
         result: dict[str, Any] = {}
 
-        dns_servers_rel = getattr(fabric, "dns_servers", None)
-        if dns_servers_rel and hasattr(dns_servers_rel, "edges"):
-            dns_list = []
-            for edge in dns_servers_rel.edges:
-                node = edge.node
-                if node:
-                    ip = cls._gql_val(node, "ip_address")
-                    if ip:
-                        entry: dict[str, Any] = {"ip_address": str(ip).split("/")[0]}
-                        vrf = cls._gql_val(node, "vrf")
-                        if vrf:
-                            entry["vrf"] = vrf
-                        dns_list.append(entry)
-            if dns_list:
-                result["dns_servers"] = dns_list
+        dns_list = cls._extract_dns_servers(fabric)
+        if dns_list:
+            result["dns_servers"] = dns_list
 
-        ntp_servers_rel = getattr(fabric, "ntp_servers", None)
-        if ntp_servers_rel and hasattr(ntp_servers_rel, "edges"):
-            ntp_list = []
-            for edge in ntp_servers_rel.edges:
-                node = edge.node
-                if node:
-                    name = cls._gql_val(node, "name")
-                    if name:
-                        entry: dict[str, Any] = {"name": name}
-                        server_vrf = cls._gql_val(node, "server_vrf")
-                        if server_vrf:
-                            entry["server_vrf"] = server_vrf
-                        if cls._gql_val(node, "iburst"):
-                            entry["iburst"] = True
-                        ntp_list.append(entry)
-            if ntp_list:
-                result["ntp_servers"] = ntp_list
+        ntp_list = cls._extract_ntp_servers(fabric)
+        if ntp_list:
+            result["ntp_servers"] = ntp_list
 
         if cls._gql_val(fabric, "ntp_set_first_server_as_preferred"):
             result["ntp_set_first_server_as_preferred"] = True
 
-        local_users_rel = getattr(fabric, "local_users", None)
-        if local_users_rel and hasattr(local_users_rel, "edges"):
-            users_list = []
-            for edge in local_users_rel.edges:
-                node = edge.node
-                if node:
-                    name = cls._gql_val(node, "name")
-                    if name:
-                        user: dict[str, Any] = {
-                            "name": name,
-                            "privilege": cls._gql_val(node, "privilege") or 15,
-                            "role": cls._gql_val(node, "role") or "network-admin",
-                        }
-                        pw_type = cls._gql_val(node, "password_type")
-                        pw_value = cls._gql_val(node, "password")
-                        if pw_type == "sha512" and pw_value:
-                            user["sha512_password"] = pw_value
-                        elif pw_value:
-                            user["no_password"] = True
-                        users_list.append(user)
-            if users_list:
-                result["local_users"] = users_list
+        users_list = cls._extract_local_users(fabric)
+        if users_list:
+            result["local_users"] = users_list
 
         return result
 
@@ -2529,8 +2583,288 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             },
         }
 
+    # --- hostvars sections ------------------------------------------------------
+    #
+    # `_build_hostvars` assembles the payload from one builder per AVD section and
+    # merges them in a FIXED order. The order is not cosmetic: the hostvars are
+    # serialized with `json.dumps` and checksummed, and a checksum change is what
+    # re-uploads the file -- so a reordered key is a spurious diff on every switch.
+    # Each builder returns only the keys it sets, in the order it sets them, and
+    # an empty dict/list when its section does not apply.
+
     @staticmethod
-    def _build_hostvars(  # noqa: C901 — assembles the full AVD hostvars payload
+    def _build_node_identity(
+        *,
+        hostname: str,
+        role: str,
+        node_id: int | None,
+        bgp_asn: int | None,
+        is_mlag_leaf: bool,
+        loopback_ip: str | None,
+        loopback_ipv4_pool: str | None,
+        vtep_loopback_ip: str | None,
+        vtep_loopback_ipv4_pool: str | None,
+        mgmt_ip: str | None,
+        evpn_gateway: EvpnGatewayPayload | None,
+    ) -> dict[str, Any]:
+        """The node's identity, addressing and EVPN role: the head of ``<type>.nodes[0]``."""
+        node: dict[str, Any] = {"name": hostname}
+        if node_id is not None:
+            node["id"] = node_id
+        # Super-spines act as EVPN route servers in the multi-pod (5-stage Clos)
+        # design. This is fully determined by the role, so derive it here.
+        if role == "super_spine":
+            node["evpn_role"] = "server"
+        # An MLAG leaf takes its ASN from its node group, never from the node.
+        if bgp_asn is not None and not is_mlag_leaf:
+            node["bgp_as"] = str(bgp_asn)
+        if loopback_ip:
+            node["loopback_ipv4_address"] = loopback_ip
+            if loopback_ipv4_pool:
+                node["loopback_ipv4_pool"] = loopback_ipv4_pool
+        if vtep_loopback_ip:
+            node["vtep_loopback_ipv4_address"] = vtep_loopback_ip
+            if vtep_loopback_ipv4_pool and role in LEAF_FAMILY_ROLES:
+                node["vtep_loopback_ipv4_pool"] = vtep_loopback_ipv4_pool
+        if mgmt_ip:
+            node["mgmt_ip"] = mgmt_ip
+        if evpn_gateway:
+            node["evpn_gateway"] = evpn_gateway
+        return node
+
+    @staticmethod
+    def _build_node_underlay(
+        *,
+        pools: dict[str, str | None],
+        uplinks: UplinkData,
+        uplink_pool_reservation: UplinkPoolReservation | None,
+    ) -> dict[str, Any]:
+        """MLAG peer pools, then the routed uplinks and their pool reservation."""
+        node: dict[str, Any] = {}
+        if pools.get("mlag_peer_ipv4_pool"):
+            node["mlag_peer_ipv4_pool"] = pools["mlag_peer_ipv4_pool"]
+        if pools.get("mlag_peer_l3_ipv4_pool"):
+            node["mlag_peer_l3_ipv4_pool"] = pools["mlag_peer_l3_ipv4_pool"]
+
+        if uplinks["uplink_interfaces"]:
+            node["uplink_interfaces"] = uplinks["uplink_interfaces"]
+            node["uplink_switches"] = uplinks["uplink_switches"]
+            node["uplink_switch_interfaces"] = uplinks["uplink_switch_interfaces"]
+            if pools.get("uplink_ipv4_pool"):
+                node["uplink_ipv4_pool"] = pools["uplink_ipv4_pool"]
+            if uplink_pool_reservation:
+                node["max_uplink_switches"] = uplink_pool_reservation["max_uplink_switches"]
+                if uplink_pool_reservation["max_parallel_uplinks"]:
+                    node["max_parallel_uplinks"] = uplink_pool_reservation["max_parallel_uplinks"]
+        return node
+
+    @staticmethod
+    def _build_node_mlag_and_svi(
+        *,
+        role: str,
+        renders_mlag: bool,
+        mlag_info: dict[str, Any],
+        virtual_router_mac: str | None,
+        has_tenants: bool,
+    ) -> dict[str, Any]:
+        """The tail of the node: MLAG peer-link interfaces and the anycast-SVI MAC."""
+        node: dict[str, Any] = {}
+        # Extract MLAG peer interfaces for leaf devices (AVD needs mlag_interfaces)
+        if mlag_info["domain_id"] and renders_mlag and "mlag_peer_interfaces" in mlag_info:
+            node["mlag_interfaces"] = mlag_info["mlag_peer_interfaces"]
+
+        # Only devices that render anycast SVIs (ip_address_virtual) need
+        # virtual_router_mac at node level: L3 leaves, the l3spine campus core, and
+        # MPLS PE routers. Gated on the role so fabric transit roles that carry a
+        # fabric virtual_router_mac but no SVIs (spine/super_spine/p/rr) keep their
+        # existing mac-free node config — routed L3LS spines are unaffected.
+        if role in SVI_RENDERING_ROLES and virtual_router_mac and has_tenants:
+            node["virtual_router_mac_address"] = virtual_router_mac
+        return node
+
+    @staticmethod
+    def _build_fabric_settings(
+        *,
+        mgmt_gateway: str | None,
+        virtual_router_mac: str | None,
+        underlay_routing_protocol: str | None,
+        overlay_routing_protocol: str | None,
+        evpn_vlan_aware_bundles: bool | None,
+        p2p_uplinks_mtu: int | None,
+        spanning_tree_mode: str | None,
+    ) -> dict[str, Any]:
+        """Fabric-wide top-level keys: management gateway, MAC, routing protocols, MTU, STP mode."""
+        settings: dict[str, Any] = {}
+        if mgmt_gateway:
+            settings["mgmt_gateway"] = mgmt_gateway
+        if virtual_router_mac:
+            settings["virtual_router_mac_address"] = virtual_router_mac
+        # Some underlay values are Infrahub design sentinels (standalone L2LS
+        # "none"), not real pyAVD underlay values; omit the key for those and
+        # let the node-type behavior apply.
+        if underlay_routing_protocol and underlay_routing_protocol not in NON_EMITTED_UNDERLAYS:
+            settings["underlay_routing_protocol"] = underlay_routing_protocol
+        if overlay_routing_protocol:
+            settings["overlay_routing_protocol"] = overlay_routing_protocol
+        if evpn_vlan_aware_bundles:
+            settings["evpn_vlan_aware_bundles"] = True
+        if p2p_uplinks_mtu is not None:
+            settings["p2p_uplinks_mtu"] = p2p_uplinks_mtu
+        if spanning_tree_mode:
+            settings["spanning_tree_settings"] = {"mode": spanning_tree_mode}
+        return settings
+
+    @staticmethod
+    def _build_node_type_defaults(*, role: str, spanning_tree_priorities: dict[str, int]) -> dict[str, Any]:
+        """``<type>.defaults``: the role's spanning-tree priority, when the fabric sets one."""
+        role_priority = spanning_tree_priorities.get(role)
+        if role_priority is None:
+            return {}
+        return {"spanning_tree_priority": role_priority}
+
+    @staticmethod
+    def _build_bgp_peer_groups(bgp_passwords: dict[str, str | None]) -> dict[str, Any]:
+        """``bgp_peer_groups`` carrying the overlay, underlay and MLAG peer passwords."""
+        bgp_peer_groups: dict[str, Any] = {}
+        if bgp_passwords.get("evpn_overlay"):
+            bgp_peer_groups["evpn_overlay_peers"] = {"password": bgp_passwords["evpn_overlay"]}
+        if bgp_passwords.get("underlay"):
+            bgp_peer_groups["ipv4_underlay_peers"] = {"password": bgp_passwords["underlay"]}
+        if bgp_passwords.get("mlag"):
+            bgp_peer_groups["mlag_ipv4_underlay_peer"] = {"password": bgp_passwords["mlag"]}
+        return {"bgp_peer_groups": bgp_peer_groups} if bgp_peer_groups else {}
+
+    @staticmethod
+    def _build_management_hostvars(management: dict[str, Any]) -> dict[str, Any]:
+        """``dns_settings``, ``ntp_settings`` and ``aaa_settings`` from the fabric's management data."""
+        result: dict[str, Any] = {}
+        if management.get("dns_servers"):
+            result["dns_settings"] = {"servers": management["dns_servers"]}
+        if management.get("ntp_servers"):
+            ntp_settings: dict[str, Any] = {"servers": []}
+            for srv in management["ntp_servers"]:
+                server_entry: dict[str, Any] = {"name": srv["name"]}
+                if srv.get("iburst"):
+                    server_entry["iburst"] = True
+                ntp_settings["servers"].append(server_entry)
+                # server_vrf goes at the ntp_settings level, not per-server
+                if "server_vrf" in srv and "server_vrf" not in ntp_settings:
+                    ntp_settings["server_vrf"] = srv["server_vrf"]
+            if management.get("ntp_set_first_server_as_preferred"):
+                ntp_settings["set_first_ntp_server_as_preferred"] = True
+            result["ntp_settings"] = ntp_settings
+        if management.get("local_users"):
+            result["aaa_settings"] = {"local_users": management["local_users"]}
+        return result
+
+    @staticmethod
+    def _build_mlag_node_group(
+        *,
+        hostname: str,
+        is_leaf_family: bool,
+        mlag_info: dict[str, Any],
+        virtual_router_mac: str | None,
+        node_group_filter: dict[str, Any],
+    ) -> dict[str, Any]:
+        """An MLAG pair's node group, keyed by its pair-unique MLAG domain."""
+        mlag_bgp_asn = mlag_info.get("bgp_asn")
+        pair_names = sorted(dict.fromkeys([*mlag_info.get("peer_names", []), hostname]))
+        node_group: dict[str, Any] = {
+            "group": mlag_info["domain_id"],
+            "nodes": [{"name": name} for name in pair_names],
+            "mlag_domain_id": mlag_info["domain_id"],
+        }
+        # L3 leaves run iBGP across the MLAG pair, so an ASN is mandatory.
+        # A pure-L2 MLAG tier (l2leaf/l2spine) runs no BGP and has none.
+        if mlag_bgp_asn is not None:
+            node_group["bgp_as"] = str(mlag_bgp_asn)
+        elif is_leaf_family:
+            msg = f"MLAG domain {mlag_info['domain_id']} for leaf {hostname} has no BGP ASN"
+            raise ValueError(msg)
+        effective_vrmac = mlag_info["virtual_router_mac"] or virtual_router_mac
+        if effective_vrmac:
+            node_group["virtual_router_mac_address"] = effective_vrmac
+        if node_group_filter:
+            node_group["filter"] = node_group_filter
+        return node_group
+
+    @staticmethod
+    def _build_rack_node_group(
+        *, hostname: str, rack_info: RackInfo, node_group_filter: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """A non-MLAG rack's node group: every rack leaf, MLAG disabled when the rack says so."""
+        rack_name = rack_info.get("name")
+        if not rack_name:
+            return None
+        leaf_names = sorted(dict.fromkeys([*rack_info.get("leaf_names", []), hostname]))
+        node_group: dict[str, Any] = {
+            "group": rack_name,
+            "nodes": [{"name": leaf_name} for leaf_name in leaf_names],
+        }
+        if node_group_filter:
+            node_group["filter"] = node_group_filter
+        if rack_info.get("mlag") is False:
+            node_group["mlag"] = False
+        return node_group
+
+    @classmethod
+    def _build_node_groups(
+        cls,
+        *,
+        hostname: str,
+        renders_mlag: bool,
+        is_leaf_family: bool,
+        rack_info: RackInfo,
+        mlag_info: dict[str, Any],
+        virtual_router_mac: str | None,
+    ) -> list[dict[str, Any]]:
+        """``<type>.node_groups``, or an empty list when the device renders no group.
+
+        MLAG grouping is a per-pair concept, so an MLAG leaf is grouped by its MLAG
+        domain (which is pair-unique — a rack with multiple pairs yields several
+        domains) and lists only its peer pair. A non-MLAG rack groups every rack
+        leaf together and disables MLAG at the node-group level rather than in
+        l3leaf.defaults.
+        """
+        if not renders_mlag:
+            return []
+        avd_tags = sorted(dict.fromkeys(rack_info.get("avd_tags", [])))
+        node_group_filter = cls._build_node_group_filter(avd_tags, rack_info)
+        if mlag_info["domain_id"]:
+            return [
+                cls._build_mlag_node_group(
+                    hostname=hostname,
+                    is_leaf_family=is_leaf_family,
+                    mlag_info=mlag_info,
+                    virtual_router_mac=virtual_router_mac,
+                    node_group_filter=node_group_filter,
+                )
+            ]
+        rack_group = cls._build_rack_node_group(
+            hostname=hostname, rack_info=rack_info, node_group_filter=node_group_filter
+        )
+        return [rack_group] if rack_group else []
+
+    @staticmethod
+    def _build_services_hostvars(
+        *,
+        tenants_data: list[dict[str, Any]],
+        connected_endpoints: list[ServerEndpoint],
+        dci_l3_edge_p2p_links: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        """``tenants``, ``servers`` and ``l3_edge``: what the fabric carries rather than how it is built."""
+        result: dict[str, Any] = {}
+        if tenants_data:
+            result["tenants"] = tenants_data
+        if connected_endpoints:
+            result["servers"] = connected_endpoints
+        if dci_l3_edge_p2p_links:
+            result["l3_edge"] = {"p2p_links": dci_l3_edge_p2p_links}
+        return result
+
+    @classmethod
+    def _build_hostvars(
+        cls,
         *,
         hostname: str,
         role: str,
@@ -2564,179 +2898,98 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         custom_hostvars: dict[str, Any] | None = None,
         uplink_pool_reservation: UplinkPoolReservation | None = None,
     ) -> dict[str, Any]:
-        """Build the complete pyAVD hostvars structure."""
+        """Build the complete pyAVD hostvars structure.
+
+        Top-level key order, which the serialized checksum depends on:
+
+        1. ``type``, ``fabric_name``
+        2. fabric settings (``_build_fabric_settings``)
+        3. ``<type>`` -- here only when it carries ``defaults``
+        4. ``bgp_peer_groups``
+        5. management (``dns_settings``, ``ntp_settings``, ``aaa_settings``)
+        6. ``<type>`` -- here when it has no ``defaults``; ``nodes`` then ``node_groups``
+        7. services (``tenants``, ``servers``, ``l3_edge``)
+
+        ``avd_custom_hostvars`` is then merged UNDER the result, so its own keys
+        lead and the generated values win.
+        """
         avd_type = get_generator_avd_type(role)
         node_type_key = "super_spine" if role == "super_spine" else avd_type
 
-        # Build node config
-        node_config: dict[str, Any] = {"name": hostname}
-        if node_id is not None:
-            node_config["id"] = node_id
-        # Super-spines act as EVPN route servers in the multi-pod (5-stage Clos)
-        # design. This is fully determined by the role, so derive it here.
-        if role == "super_spine":
-            node_config["evpn_role"] = "server"
         is_leaf_family = role in LEAF_FAMILY_ROLES
         # Renders MLAG constructs (node-group, mlag_domain_id, peer-link) for the
         # L3LS leaf family AND the non-L3LS main tier (l2leaf/l2spine/l3spine) when
         # the caller flags this device as MLAG-capable for its design.
         renders_mlag = is_leaf_family or mlag_capable
         is_mlag_leaf = bool(mlag_info.get("domain_id")) and renders_mlag
-        if bgp_asn is not None and not is_mlag_leaf:
-            node_config["bgp_as"] = str(bgp_asn)
-        if loopback_ip:
-            node_config["loopback_ipv4_address"] = loopback_ip
-            if loopback_ipv4_pool:
-                node_config["loopback_ipv4_pool"] = loopback_ipv4_pool
-        if vtep_loopback_ip:
-            node_config["vtep_loopback_ipv4_address"] = vtep_loopback_ip
-            if vtep_loopback_ipv4_pool and role in LEAF_FAMILY_ROLES:
-                node_config["vtep_loopback_ipv4_pool"] = vtep_loopback_ipv4_pool
-        if mgmt_ip:
-            node_config["mgmt_ip"] = mgmt_ip
-        if evpn_gateway:
-            node_config["evpn_gateway"] = evpn_gateway
 
-        if pools.get("mlag_peer_ipv4_pool"):
-            node_config["mlag_peer_ipv4_pool"] = pools["mlag_peer_ipv4_pool"]
-        if pools.get("mlag_peer_l3_ipv4_pool"):
-            node_config["mlag_peer_l3_ipv4_pool"] = pools["mlag_peer_l3_ipv4_pool"]
+        node_config: dict[str, Any] = {
+            **cls._build_node_identity(
+                hostname=hostname,
+                role=role,
+                node_id=node_id,
+                bgp_asn=bgp_asn,
+                is_mlag_leaf=is_mlag_leaf,
+                loopback_ip=loopback_ip,
+                loopback_ipv4_pool=loopback_ipv4_pool,
+                vtep_loopback_ip=vtep_loopback_ip,
+                vtep_loopback_ipv4_pool=vtep_loopback_ipv4_pool,
+                mgmt_ip=mgmt_ip,
+                evpn_gateway=evpn_gateway,
+            ),
+            **cls._build_node_underlay(pools=pools, uplinks=uplinks, uplink_pool_reservation=uplink_pool_reservation),
+            **cls._build_node_mlag_and_svi(
+                role=role,
+                renders_mlag=renders_mlag,
+                mlag_info=mlag_info,
+                virtual_router_mac=virtual_router_mac,
+                has_tenants=bool(tenants_data),
+            ),
+        }
 
-        if uplinks["uplink_interfaces"]:
-            node_config["uplink_interfaces"] = uplinks["uplink_interfaces"]
-            node_config["uplink_switches"] = uplinks["uplink_switches"]
-            node_config["uplink_switch_interfaces"] = uplinks["uplink_switch_interfaces"]
-            if pools.get("uplink_ipv4_pool"):
-                node_config["uplink_ipv4_pool"] = pools["uplink_ipv4_pool"]
-            if uplink_pool_reservation:
-                node_config["max_uplink_switches"] = uplink_pool_reservation["max_uplink_switches"]
-                if uplink_pool_reservation["max_parallel_uplinks"]:
-                    node_config["max_parallel_uplinks"] = uplink_pool_reservation["max_parallel_uplinks"]
-
-        # Extract MLAG peer interfaces for leaf devices (AVD needs mlag_interfaces)
-        if mlag_info["domain_id"] and renders_mlag and "mlag_peer_interfaces" in mlag_info:
-            node_config["mlag_interfaces"] = mlag_info["mlag_peer_interfaces"]
-
-        # Only devices that render anycast SVIs (ip_address_virtual) need
-        # virtual_router_mac at node level: L3 leaves, the l3spine campus core, and
-        # MPLS PE routers. Gated on the role so fabric transit roles that carry a
-        # fabric virtual_router_mac but no SVIs (spine/super_spine/p/rr) keep their
-        # existing mac-free node config — routed L3LS spines are unaffected.
-        if role in SVI_RENDERING_ROLES and virtual_router_mac and tenants_data:
-            node_config["virtual_router_mac_address"] = virtual_router_mac
-
-        # Build hostvars
         hostvars: dict[str, Any] = {"type": avd_type, "fabric_name": fabric_name}
+        hostvars.update(
+            cls._build_fabric_settings(
+                mgmt_gateway=mgmt_gateway,
+                virtual_router_mac=virtual_router_mac,
+                underlay_routing_protocol=underlay_routing_protocol,
+                overlay_routing_protocol=overlay_routing_protocol,
+                evpn_vlan_aware_bundles=evpn_vlan_aware_bundles,
+                p2p_uplinks_mtu=p2p_uplinks_mtu,
+                spanning_tree_mode=spanning_tree_mode,
+            )
+        )
+        # The node-type section sits here when it has defaults and after the
+        # management keys otherwise -- the position it has always had in each case.
+        defaults = cls._build_node_type_defaults(role=role, spanning_tree_priorities=spanning_tree_priorities)
+        if defaults:
+            hostvars[node_type_key] = {"defaults": defaults}
+        hostvars.update(cls._build_bgp_peer_groups(bgp_passwords))
+        hostvars.update(cls._build_management_hostvars(management))
 
-        if mgmt_gateway:
-            hostvars["mgmt_gateway"] = mgmt_gateway
-        if virtual_router_mac:
-            hostvars["virtual_router_mac_address"] = virtual_router_mac
-        # Some underlay values are Infrahub design sentinels (standalone L2LS
-        # "none"), not real pyAVD underlay values; omit the key for those and
-        # let the node-type behavior apply.
-        if underlay_routing_protocol and underlay_routing_protocol not in NON_EMITTED_UNDERLAYS:
-            hostvars["underlay_routing_protocol"] = underlay_routing_protocol
-        if overlay_routing_protocol:
-            hostvars["overlay_routing_protocol"] = overlay_routing_protocol
-        if evpn_vlan_aware_bundles:
-            hostvars["evpn_vlan_aware_bundles"] = True
-        if p2p_uplinks_mtu is not None:
-            hostvars["p2p_uplinks_mtu"] = p2p_uplinks_mtu
-        if spanning_tree_mode:
-            hostvars["spanning_tree_settings"] = {"mode": spanning_tree_mode}
+        node_type_section = hostvars.setdefault(node_type_key, {})
+        node_type_section["nodes"] = [node_config]
+        node_groups = cls._build_node_groups(
+            hostname=hostname,
+            renders_mlag=renders_mlag,
+            is_leaf_family=is_leaf_family,
+            rack_info=rack_info,
+            mlag_info=mlag_info,
+            virtual_router_mac=virtual_router_mac,
+        )
+        if node_groups:
+            node_type_section["node_groups"] = node_groups
 
-        role_priority = spanning_tree_priorities.get(role)
-        if role_priority is not None:
-            hostvars.setdefault(node_type_key, {})
-            hostvars[node_type_key]["defaults"] = hostvars[node_type_key].get("defaults", {})
-            hostvars[node_type_key]["defaults"]["spanning_tree_priority"] = role_priority
-
-        # BGP peer group passwords
-        bgp_peer_groups: dict[str, Any] = {}
-        if bgp_passwords.get("evpn_overlay"):
-            bgp_peer_groups["evpn_overlay_peers"] = {"password": bgp_passwords["evpn_overlay"]}
-        if bgp_passwords.get("underlay"):
-            bgp_peer_groups["ipv4_underlay_peers"] = {"password": bgp_passwords["underlay"]}
-        if bgp_passwords.get("mlag"):
-            bgp_peer_groups["mlag_ipv4_underlay_peer"] = {"password": bgp_passwords["mlag"]}
-        if bgp_peer_groups:
-            hostvars["bgp_peer_groups"] = bgp_peer_groups
-
-        # Management settings
-        if management.get("dns_servers"):
-            hostvars["dns_settings"] = {"servers": management["dns_servers"]}
-        if management.get("ntp_servers"):
-            ntp_settings: dict[str, Any] = {"servers": []}
-            for srv in management["ntp_servers"]:
-                server_entry: dict[str, Any] = {"name": srv["name"]}
-                if srv.get("iburst"):
-                    server_entry["iburst"] = True
-                ntp_settings["servers"].append(server_entry)
-                # server_vrf goes at the ntp_settings level, not per-server
-                if "server_vrf" in srv and "server_vrf" not in ntp_settings:
-                    ntp_settings["server_vrf"] = srv["server_vrf"]
-            if management.get("ntp_set_first_server_as_preferred"):
-                ntp_settings["set_first_ntp_server_as_preferred"] = True
-            hostvars["ntp_settings"] = ntp_settings
-        if management.get("local_users"):
-            hostvars["aaa_settings"] = {"local_users": management["local_users"]}
-
-        hostvars[node_type_key] = hostvars.get(node_type_key, {})
-        hostvars[node_type_key]["nodes"] = [node_config]
-
-        # Assemble the leaf node_group. MLAG grouping is a per-pair concept, so an
-        # MLAG leaf is grouped by its MLAG domain (which is pair-unique — a rack with
-        # multiple pairs yields several domains) and lists only its peer pair. A
-        # non-MLAG rack groups every rack leaf together and disables MLAG at the
-        # node-group level rather than in l3leaf.defaults.
-        if renders_mlag:
-            avd_tags = sorted(dict.fromkeys(rack_info.get("avd_tags", [])))
-            node_group_filter = GenerateAVDDeviceHostvar._build_node_group_filter(avd_tags, rack_info)
-            if mlag_info["domain_id"]:
-                mlag_bgp_asn = mlag_info.get("bgp_asn")
-                pair_names = sorted(dict.fromkeys([*mlag_info.get("peer_names", []), hostname]))
-                node_group: dict[str, Any] = {
-                    "group": mlag_info["domain_id"],
-                    "nodes": [{"name": name} for name in pair_names],
-                    "mlag_domain_id": mlag_info["domain_id"],
-                }
-                # L3 leaves run iBGP across the MLAG pair, so an ASN is mandatory.
-                # A pure-L2 MLAG tier (l2leaf/l2spine) runs no BGP and has none.
-                if mlag_bgp_asn is not None:
-                    node_group["bgp_as"] = str(mlag_bgp_asn)
-                elif is_leaf_family:
-                    msg = f"MLAG domain {mlag_info['domain_id']} for leaf {hostname} has no BGP ASN"
-                    raise ValueError(msg)
-                effective_vrmac = mlag_info["virtual_router_mac"] or virtual_router_mac
-                if effective_vrmac:
-                    node_group["virtual_router_mac_address"] = effective_vrmac
-                if node_group_filter:
-                    node_group["filter"] = node_group_filter
-                hostvars[node_type_key]["node_groups"] = [node_group]
-            else:
-                rack_name = rack_info.get("name")
-                leaf_names = sorted(dict.fromkeys([*rack_info.get("leaf_names", []), hostname]))
-                if rack_name:
-                    node_group = {
-                        "group": rack_name,
-                        "nodes": [{"name": leaf_name} for leaf_name in leaf_names],
-                    }
-                    if node_group_filter:
-                        node_group["filter"] = node_group_filter
-                    if rack_info.get("mlag") is False:
-                        node_group["mlag"] = False
-                    hostvars[node_type_key]["node_groups"] = [node_group]
-
-        if tenants_data:
-            hostvars["tenants"] = tenants_data
-        if connected_endpoints:
-            hostvars["servers"] = connected_endpoints
-        if dci_l3_edge_p2p_links:
-            hostvars["l3_edge"] = {"p2p_links": dci_l3_edge_p2p_links}
+        hostvars.update(
+            cls._build_services_hostvars(
+                tenants_data=tenants_data,
+                connected_endpoints=connected_endpoints,
+                dci_l3_edge_p2p_links=dci_l3_edge_p2p_links,
+            )
+        )
 
         if custom_hostvars:
-            hostvars = GenerateAVDDeviceHostvar._deep_merge(custom_hostvars, hostvars)
+            hostvars = cls._deep_merge(custom_hostvars, hostvars)
 
         return hostvars
 
@@ -2753,229 +3006,144 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
         prefix = cls._get_attr_value(_node(_field(ip_node, "ip_prefix")), "prefix")
         return address if isinstance(address, str) else None, prefix if isinstance(prefix, str) else None
 
-    async def generate(self, data: dict) -> None:  # noqa: C901 — top-level generator orchestration
-        raw_data = data
-        data: GenerateAvdDeviceInputsQuery = GenerateAvdDeviceInputsQuery(**data)
-        device = data.dcim_fabric_switch.edges[0].node
-        pod = device.pod.node
-        fabric = pod.parent.node
+    @staticmethod
+    def _raw_fabric(raw_data: object) -> dict[str, Any] | None:
+        """The fabric node from the raw (un-modelled) query response, if present.
 
-        # Mark hostvars as not ready while regenerating
-        await set_fabric_avd_hostvars_ready(self.client, fabric.id, False)
+        The uplink pool reservation reads fields the generated Pydantic model does
+        not carry, so it is handed the raw dict when there is one.
+        """
+        if not isinstance(raw_data, dict):
+            return None
+        device_node = (raw_data.get("DcimFabricSwitch", {}).get("edges") or [{}])[0].get("node") or {}
+        return device_node.get("pod", {}).get("node", {}).get("parent", {}).get("node")
 
-        # Extract basic device info
-        device_id = device.id
-        hostname = device.name.value
-        role = device.role.value
-        bgp_asn = device.asn.node.asn.value if device.asn and device.asn.node and device.asn.node.asn else None
-        node_id = device.node_id.value if device.node_id else None
-
-        # Extract IP addresses and their parent prefixes.
-        loopback_ip, loopback_ipv4_pool = self._extract_ip_address_and_parent_prefix(device.loopback_ip)
-        vtep_loopback_ip, vtep_loopback_ipv4_pool = self._extract_ip_address_and_parent_prefix(device.vtep_loopback_ip)
-
-        mgmt_ip = None
-        if device.mgmt_ip and device.mgmt_ip.node:
-            mgmt_ip = device.mgmt_ip.node.address.value
-
-        # Extract fabric info
-        fabric_name = fabric.name.value
-        mgmt_gateway = fabric.mgmt_gateway.value if fabric.mgmt_gateway else None
-
-        # Determine uplink role based on device role. In standalone L2LS/campus
-        # fabrics the main leaf tier (l2leaf) uplinks to the spine tier
-        # (l2spine/l3spine) via interface role "spine"; the access-tier l2leaf
-        # under an L3LS fabric uplinks to the L3 leaf via interface role "leaf".
-        # l2spine/l3spine are top-of-fabric (no uplinks).
-        fabric_underlay = self._get_attr_value(fabric, "underlay_routing_protocol")
-        uplink_role = _device_uplink_role(role, fabric_underlay)
-
-        # Extract uplinks
-        iface_edges = device.interfaces.edges or []
-        uplinks = extract_uplinks_from_dict(iface_edges, uplink_role, device_id)
-        raw_fabric = (
-            (
-                ((raw_data.get("DcimFabricSwitch", {}).get("edges") or [{}])[0].get("node") or {})
-                .get("pod", {})
-                .get("node", {})
-                .get("parent", {})
-                .get("node")
-            )
-            if isinstance(raw_data, dict)
-            else None
-        )
-        uplink_pool_reservation = self._derive_uplink_pool_reservation(
-            raw_fabric or fabric, fabric_underlay=fabric_underlay
-        )
-
-        is_l2leaf = role == "l2leaf"
-        # In non-L3LS designs (standalone L2LS "none", campus "ospf") the main tier
-        # (l2leaf/l2spine/l3spine) forms MLAG pairs and needs node-group / peer-link
-        # rendering. Gated on the underlay so the L3LS access-tier l2leaf is untouched.
-        mlag_capable = role in MLAG_MAIN_TIER_ROLES and fabric_underlay in SPINE_UPLINK_UNDERLAYS
-
-        # Extract fabric L3LS settings (with backwards-compatible fallbacks)
-        # L2 leafs don't participate in EVPN/BGP/VXLAN so skip most L3 settings
-        virtual_router_mac = None if is_l2leaf else self._get_attr_value(fabric, "virtual_router_mac")
-        underlay_routing_protocol = None if is_l2leaf else self._get_attr_value(fabric, "underlay_routing_protocol")
-        overlay_routing_protocol = None if is_l2leaf else self._get_attr_value(fabric, "overlay_routing_protocol")
-        evpn_vlan_aware_bundles = None if is_l2leaf else self._get_attr_value(fabric, "evpn_vlan_aware_bundles")
-        p2p_uplinks_mtu = (
-            None if is_l2leaf else self._get_first_attr_value(fabric, "p_2_p_uplinks_mtu", "p2p_uplinks_mtu")
-        )
-        spanning_tree_mode = self._get_attr_value(fabric, "spanning_tree_mode")
-        spanning_tree_priorities: dict[str, int] = {}
-        spanning_tree_priority_edges = getattr(getattr(fabric, "spanning_tree_priorities", None), "edges", None) or []
-        for edge in spanning_tree_priority_edges:
+    @classmethod
+    def _extract_spanning_tree_priorities(cls, fabric: object) -> dict[str, int]:
+        """The fabric's per-role spanning-tree priorities, as ``{role: priority}``."""
+        priorities: dict[str, int] = {}
+        edges = getattr(getattr(fabric, "spanning_tree_priorities", None), "edges", None) or []
+        for edge in edges:
             priority_node = edge.node
             if not priority_node:
                 continue
-            priority_role = self._get_attr_value(priority_node, "role")
-            priority_value = self._get_attr_value(priority_node, "priority")
+            priority_role = cls._get_attr_value(priority_node, "role")
+            priority_value = cls._get_attr_value(priority_node, "priority")
             if priority_role and priority_value is not None:
-                spanning_tree_priorities[priority_role] = priority_value
-        # BGP peer group passwords (not applicable for L2 leafs)
-        bgp_passwords: dict[str, str | None] = {"evpn_overlay": None, "underlay": None, "mlag": None}
-        if not is_l2leaf:
-            bgp_passwords = {
-                "evpn_overlay": self._get_attr_value(fabric, "bgp_evpn_overlay_password"),
-                "underlay": self._get_attr_value(fabric, "bgp_underlay_password"),
-                "mlag": self._get_attr_value(fabric, "bgp_mlag_password"),
-            }
+                priorities[priority_role] = priority_value
+        return priorities
 
-        # Extract management settings from fabric (applies to all device types)
-        management = self._extract_management_settings(fabric)
-        custom_hostvars = self._merge_custom_hostvars(
-            self._extract_custom_hostvars(fabric),
-            self._extract_custom_hostvars(pod),
-            self._extract_custom_hostvars(device),
-        )
-
-        # Extract configurable IP pools. L2 leafs run no L3 underlay/overlay, so
-        # the uplink/vtep/loopback/mlag-L3 pools stay unset. A main-tier l2leaf
-        # (mlag_capable) still forms an MLAG pair, so it needs the pod's MLAG
-        # peer-link pool — without it PyAVD cannot address the peer-link SVI.
+    @classmethod
+    def _extract_bgp_passwords(cls, fabric: object, *, is_l2leaf: bool) -> dict[str, str | None]:
+        """BGP peer group passwords; none for an L2 leaf, which runs no BGP."""
         if is_l2leaf:
-            pools: dict[str, str | None] = {
-                "uplink_ipv4_pool": None,
-                "mlag_peer_ipv4_pool": None,
-                "mlag_peer_l3_ipv4_pool": None,
-            }
-            if mlag_capable:
-                mlag_peer_ref = _pool_refs_by_role(pod, "pod_ip_pools").get(ResourceRole.MLAG) or getattr(
-                    pod, "mlag_peer_pool", None
-                )
-                pools["mlag_peer_ipv4_pool"] = await self._extract_pool_prefix(mlag_peer_ref, "CoreIPAddressPool")
-                if not pools["mlag_peer_ipv4_pool"]:
-                    pools["mlag_peer_ipv4_pool"] = await self._ensure_default_mlag_pool_prefix(ResourceRole.MLAG, pod)
-        else:
-            pools = await self._extract_l3ls_pools(fabric, pod)
+            return {"evpn_overlay": None, "underlay": None, "mlag": None}
+        return {
+            "evpn_overlay": cls._get_attr_value(fabric, "bgp_evpn_overlay_password"),
+            "underlay": cls._get_attr_value(fabric, "bgp_underlay_password"),
+            "mlag": cls._get_attr_value(fabric, "bgp_mlag_password"),
+        }
 
-        # Extract rack and MLAG domain info. Applies to L3 leaf devices and to the
-        # non-L3LS main tier (mlag_capable l2leaf); the L3LS access-tier l2leaf is skipped.
-        rack_info: RackInfo = {"name": None, "mlag": None, "leaf_names": []}
-        mlag_info: dict[str, Any] = {"domain_id": None, "bgp_asn": None, "virtual_router_mac": None, "peer_names": []}
-        if not is_l2leaf or mlag_capable:
-            rack_info = self._extract_rack_info(device)
-            rack_avd_tags, rack_always_include = await self._fetch_rack_avd_scoping(
-                device.rack.node.id if device.rack.node else None
+    async def _extract_device_pools(
+        self, fabric: object, pod: object, *, is_l2leaf: bool, mlag_capable: bool
+    ) -> dict[str, str | None]:
+        """Extract configurable IP pools for the device.
+
+        L2 leafs run no L3 underlay/overlay, so the uplink/vtep/loopback/mlag-L3
+        pools stay unset. A main-tier l2leaf (mlag_capable) still forms an MLAG
+        pair, so it needs the pod's MLAG peer-link pool — without it PyAVD cannot
+        address the peer-link SVI.
+        """
+        if not is_l2leaf:
+            return await self._extract_l3ls_pools(fabric, pod)
+        pools: dict[str, str | None] = {
+            "uplink_ipv4_pool": None,
+            "mlag_peer_ipv4_pool": None,
+            "mlag_peer_l3_ipv4_pool": None,
+        }
+        if mlag_capable:
+            mlag_peer_ref = _pool_refs_by_role(pod, "pod_ip_pools").get(ResourceRole.MLAG) or getattr(
+                pod, "mlag_peer_pool", None
             )
-            rack_info["avd_tags"] = rack_avd_tags
-            rack_info["always_include_vrfs_in_tenants"] = rack_always_include
-            mlag_info = self._extract_mlag_info(device)
-            # Extract mlag_peer interface names for AVD mlag_interfaces
-            if mlag_info["domain_id"] and iface_edges:
-                mlag_peer_ifaces = []
-                for edge in iface_edges:
-                    iface = edge.node
-                    if hasattr(iface, "role") and iface.role and iface.role.value == "mlag_peer":
-                        mlag_peer_ifaces.append(iface.name.value)
-                if mlag_peer_ifaces:
-                    mlag_info["mlag_peer_interfaces"] = sorted(mlag_peer_ifaces)
+            pools["mlag_peer_ipv4_pool"] = await self._extract_pool_prefix(mlag_peer_ref, "CoreIPAddressPool")
+            if not pools["mlag_peer_ipv4_pool"]:
+                pools["mlag_peer_ipv4_pool"] = await self._ensure_default_mlag_pool_prefix(ResourceRole.MLAG, pod)
+        return pools
 
-        # Extract connected endpoints (servers). Only an L3 leaf/border_leaf drops
-        # l2leaf remotes (its downlinks to access switches); a main-tier l2leaf
-        # serves endpoints directly and its dual-homed legs land on sibling l2leaf
-        # switches of the same MLAG pair, which must be retained.
-        connected_endpoints = extract_connected_endpoints(
-            iface_edges,
-            hostname,
-            mlag_active=bool(mlag_info["domain_id"]),
-            skip_l2leaf_endpoints=role in LEAF_FAMILY_ROLES,
+    @staticmethod
+    def _mlag_peer_interface_names(iface_edges: list[Any]) -> list[str]:
+        """Sorted names of the device's ``mlag_peer``-role interfaces (AVD ``mlag_interfaces``)."""
+        names = []
+        for edge in iface_edges:
+            iface = edge.node
+            if hasattr(iface, "role") and iface.role and iface.role.value == "mlag_peer":
+                names.append(iface.name.value)
+        return sorted(names)
+
+    async def _extract_rack_and_mlag(
+        self, device: Any, iface_edges: list[Any], *, is_l2leaf: bool, mlag_capable: bool
+    ) -> tuple[RackInfo, dict[str, Any]]:
+        """Rack grouping and MLAG domain info.
+
+        Applies to L3 leaf devices and to the non-L3LS main tier (mlag_capable
+        l2leaf); the L3LS access-tier l2leaf gets empty placeholders.
+        """
+        if is_l2leaf and not mlag_capable:
+            rack_info: RackInfo = {"name": None, "mlag": None, "leaf_names": []}
+            return rack_info, {"domain_id": None, "bgp_asn": None, "virtual_router_mac": None, "peer_names": []}
+
+        rack_info = self._extract_rack_info(device)
+        rack_avd_tags, rack_always_include = await self._fetch_rack_avd_scoping(
+            device.rack.node.id if device.rack.node else None
         )
+        rack_info["avd_tags"] = rack_avd_tags
+        rack_info["always_include_vrfs_in_tenants"] = rack_always_include
+        mlag_info = self._extract_mlag_info(device)
+        # Extract mlag_peer interface names for AVD mlag_interfaces
+        if mlag_info["domain_id"] and iface_edges:
+            mlag_peer_ifaces = self._mlag_peer_interface_names(iface_edges)
+            if mlag_peer_ifaces:
+                mlag_info["mlag_peer_interfaces"] = mlag_peer_ifaces
+        return rack_info, mlag_info
 
-        # Fetch tenant/VLAN services. Skipped only for the L3LS access-tier
-        # l2leaf (pure access under an EVPN fabric); in a standalone L2LS/campus
-        # fabric the l2leaf is the main tier and carries the fabric's VLANs.
-        tenants_data: list[dict[str, Any]] = []
-        if not is_l2leaf or fabric_underlay in SPINE_UPLINK_UNDERLAYS:
-            tenants_data = await self._build_tenants_hostvars(fabric.id)
-
-        dci_l3_edge_p2p_links: list[dict[str, Any]] = []
+    async def _build_dci_links(
+        self, raw_data: dict, *, role: str, hostname: str, underlay_routing_protocol: str | None
+    ) -> list[dict[str, Any]]:
+        """A border leaf's DCI ``l3_edge`` point-to-point links; empty for every other role."""
         raw_dci_links = [
             edge.get("node")
             for edge in (raw_data.get("NetworkLink", {}).get("edges") or [])
             if isinstance(edge, dict) and edge.get("node")
         ]
-        if raw_dci_links and role == "border_leaf":
-            dci_l3_edge_p2p_links = await build_dci_l3_edge_p2p_links(
-                self.client,
-                dci_links=raw_dci_links,
-                hostname=hostname,
-                underlay_routing_protocol=underlay_routing_protocol,
-            )
-
-        evpn_gateway = self._extract_evpn_gateway_payload(device, hostname=hostname, role=role)
-
-        hostvars = self._build_hostvars(
+        if not (raw_dci_links and role == "border_leaf"):
+            return []
+        return await build_dci_l3_edge_p2p_links(
+            self.client,
+            dci_links=raw_dci_links,
             hostname=hostname,
-            role=role,
-            bgp_asn=bgp_asn,
-            node_id=node_id,
-            loopback_ip=loopback_ip,
-            loopback_ipv4_pool=loopback_ipv4_pool,
-            vtep_loopback_ip=vtep_loopback_ip,
-            vtep_loopback_ipv4_pool=vtep_loopback_ipv4_pool,
-            mgmt_ip=mgmt_ip,
-            fabric_name=fabric_name,
-            mgmt_gateway=mgmt_gateway,
-            virtual_router_mac=virtual_router_mac,
             underlay_routing_protocol=underlay_routing_protocol,
-            overlay_routing_protocol=overlay_routing_protocol,
-            evpn_vlan_aware_bundles=evpn_vlan_aware_bundles,
-            mlag_capable=mlag_capable,
-            p2p_uplinks_mtu=p2p_uplinks_mtu,
-            spanning_tree_mode=spanning_tree_mode,
-            spanning_tree_priorities=spanning_tree_priorities,
-            bgp_passwords=bgp_passwords,
-            management=management,
-            pools=pools,
-            uplinks=uplinks,
-            rack_info=rack_info,
-            mlag_info=mlag_info,
-            tenants_data=tenants_data,
-            connected_endpoints=connected_endpoints,
-            dci_l3_edge_p2p_links=dci_l3_edge_p2p_links,
-            evpn_gateway=evpn_gateway,
-            custom_hostvars=custom_hostvars,
-            uplink_pool_reservation=uplink_pool_reservation,
         )
 
-        # Validate hostvars against pyAVD schema before saving
-        import json
-
+    @staticmethod
+    def _validate_hostvars(hostvars: dict[str, Any], hostname: str) -> None:
+        """Validate hostvars against the pyAVD schema, raising with every violation."""
         from pyavd import validate_inputs
 
         validated = validate_inputs(hostvars)
-        if validated.validation_result.violations:
-            violation_msgs = []
-            for v in validated.validation_result.violations:
-                msg = getattr(v, "message", str(v))
-                path = getattr(v, "path", "")
-                violation_msgs.append(f"{msg} (path: {path})")
+        if not validated.validation_result.violations:
+            return
+        violation_msgs = []
+        for v in validated.validation_result.violations:
+            msg = getattr(v, "message", str(v))
+            path = getattr(v, "path", "")
+            violation_msgs.append(f"{msg} (path: {path})")
 
-            error_detail = "; ".join(violation_msgs)
-            raise ValueError(f"pyAVD validation failed for {hostname}: {error_detail}")
+        error_detail = "; ".join(violation_msgs)
+        raise ValueError(f"pyAVD validation failed for {hostname}: {error_detail}")
+
+    async def _store_hostvars(self, *, hostname: str, device_id: str, hostvars: dict[str, Any]) -> None:
+        """Upsert the device's AvdArtifact and upload its hostvar file if the checksum moved."""
+        import json
 
         new_content = json.dumps(hostvars, indent=2).encode()
         new_checksum = hashlib.sha256(new_content).hexdigest()
@@ -3021,5 +3189,134 @@ class GenerateAVDDeviceHostvar(InfrahubGenerator):
             self.logger.info(f"Hostvars unchanged for {hostname}")
         else:
             self.logger.info(f"Hostvars updated for {hostname}")
+
+    async def generate(self, data: dict) -> None:
+        raw_data = data
+        data: GenerateAvdDeviceInputsQuery = GenerateAvdDeviceInputsQuery(**data)
+        device = data.dcim_fabric_switch.edges[0].node
+        pod = device.pod.node
+        fabric = pod.parent.node
+
+        # Mark hostvars as not ready while regenerating
+        await set_fabric_avd_hostvars_ready(self.client, fabric.id, False)
+
+        # Extract basic device info
+        device_id = device.id
+        hostname = device.name.value
+        role = device.role.value
+        bgp_asn = device.asn.node.asn.value if device.asn and device.asn.node and device.asn.node.asn else None
+        node_id = device.node_id.value if device.node_id else None
+
+        # Extract IP addresses and their parent prefixes.
+        loopback_ip, loopback_ipv4_pool = self._extract_ip_address_and_parent_prefix(device.loopback_ip)
+        vtep_loopback_ip, vtep_loopback_ipv4_pool = self._extract_ip_address_and_parent_prefix(device.vtep_loopback_ip)
+
+        mgmt_ip = device.mgmt_ip.node.address.value if device.mgmt_ip and device.mgmt_ip.node else None
+
+        # Determine uplink role based on device role. In standalone L2LS/campus
+        # fabrics the main leaf tier (l2leaf) uplinks to the spine tier
+        # (l2spine/l3spine) via interface role "spine"; the access-tier l2leaf
+        # under an L3LS fabric uplinks to the L3 leaf via interface role "leaf".
+        # l2spine/l3spine are top-of-fabric (no uplinks).
+        fabric_underlay = self._get_attr_value(fabric, "underlay_routing_protocol")
+        uplink_role = _device_uplink_role(role, fabric_underlay)
+
+        # Extract uplinks
+        iface_edges = device.interfaces.edges or []
+        uplinks = extract_uplinks_from_dict(iface_edges, uplink_role)
+        uplink_pool_reservation = self._derive_uplink_pool_reservation(
+            self._raw_fabric(raw_data) or fabric, fabric_underlay=fabric_underlay
+        )
+
+        is_l2leaf = role == "l2leaf"
+        # In non-L3LS designs (standalone L2LS "none", campus "ospf") the main tier
+        # (l2leaf/l2spine/l3spine) forms MLAG pairs and needs node-group / peer-link
+        # rendering. Gated on the underlay so the L3LS access-tier l2leaf is untouched.
+        mlag_capable = role in MLAG_MAIN_TIER_ROLES and fabric_underlay in SPINE_UPLINK_UNDERLAYS
+
+        # Extract fabric L3LS settings (with backwards-compatible fallbacks)
+        # L2 leafs don't participate in EVPN/BGP/VXLAN so skip most L3 settings
+        # (read from None, every one of these is None).
+        l3_fabric = None if is_l2leaf else fabric
+        virtual_router_mac = self._get_attr_value(l3_fabric, "virtual_router_mac")
+        underlay_routing_protocol = self._get_attr_value(l3_fabric, "underlay_routing_protocol")
+        overlay_routing_protocol = self._get_attr_value(l3_fabric, "overlay_routing_protocol")
+        evpn_vlan_aware_bundles = self._get_attr_value(l3_fabric, "evpn_vlan_aware_bundles")
+        p2p_uplinks_mtu = self._get_first_attr_value(l3_fabric, "p_2_p_uplinks_mtu", "p2p_uplinks_mtu")
+
+        # Extract management settings from fabric (applies to all device types)
+        management = self._extract_management_settings(fabric)
+        custom_hostvars = self._merge_custom_hostvars(
+            self._extract_custom_hostvars(fabric),
+            self._extract_custom_hostvars(pod),
+            self._extract_custom_hostvars(device),
+        )
+
+        pools = await self._extract_device_pools(fabric, pod, is_l2leaf=is_l2leaf, mlag_capable=mlag_capable)
+        rack_info, mlag_info = await self._extract_rack_and_mlag(
+            device, iface_edges, is_l2leaf=is_l2leaf, mlag_capable=mlag_capable
+        )
+
+        # Extract connected endpoints (servers). Only an L3 leaf/border_leaf drops
+        # l2leaf remotes (its downlinks to access switches); a main-tier l2leaf
+        # serves endpoints directly and its dual-homed legs land on sibling l2leaf
+        # switches of the same MLAG pair, which must be retained.
+        connected_endpoints = extract_connected_endpoints(
+            iface_edges,
+            hostname,
+            mlag_active=bool(mlag_info["domain_id"]),
+            skip_l2leaf_endpoints=role in LEAF_FAMILY_ROLES,
+        )
+
+        # Fetch tenant/VLAN services. Skipped only for the L3LS access-tier
+        # l2leaf (pure access under an EVPN fabric); in a standalone L2LS/campus
+        # fabric the l2leaf is the main tier and carries the fabric's VLANs.
+        tenants_data: list[dict[str, Any]] = []
+        if not is_l2leaf or fabric_underlay in SPINE_UPLINK_UNDERLAYS:
+            tenants_data = await self._build_tenants_hostvars(fabric.id)
+
+        dci_l3_edge_p2p_links = await self._build_dci_links(
+            raw_data, role=role, hostname=hostname, underlay_routing_protocol=underlay_routing_protocol
+        )
+
+        evpn_gateway = self._extract_evpn_gateway_payload(device, hostname=hostname, role=role)
+
+        hostvars = self._build_hostvars(
+            hostname=hostname,
+            role=role,
+            bgp_asn=bgp_asn,
+            node_id=node_id,
+            loopback_ip=loopback_ip,
+            loopback_ipv4_pool=loopback_ipv4_pool,
+            vtep_loopback_ip=vtep_loopback_ip,
+            vtep_loopback_ipv4_pool=vtep_loopback_ipv4_pool,
+            mgmt_ip=mgmt_ip,
+            fabric_name=fabric.name.value,
+            mgmt_gateway=fabric.mgmt_gateway.value if fabric.mgmt_gateway else None,
+            virtual_router_mac=virtual_router_mac,
+            underlay_routing_protocol=underlay_routing_protocol,
+            overlay_routing_protocol=overlay_routing_protocol,
+            evpn_vlan_aware_bundles=evpn_vlan_aware_bundles,
+            mlag_capable=mlag_capable,
+            p2p_uplinks_mtu=p2p_uplinks_mtu,
+            spanning_tree_mode=self._get_attr_value(fabric, "spanning_tree_mode"),
+            spanning_tree_priorities=self._extract_spanning_tree_priorities(fabric),
+            bgp_passwords=self._extract_bgp_passwords(fabric, is_l2leaf=is_l2leaf),
+            management=management,
+            pools=pools,
+            uplinks=uplinks,
+            rack_info=rack_info,
+            mlag_info=mlag_info,
+            tenants_data=tenants_data,
+            connected_endpoints=connected_endpoints,
+            dci_l3_edge_p2p_links=dci_l3_edge_p2p_links,
+            evpn_gateway=evpn_gateway,
+            custom_hostvars=custom_hostvars,
+            uplink_pool_reservation=uplink_pool_reservation,
+        )
+
+        # Validate hostvars against pyAVD schema before saving
+        self._validate_hostvars(hostvars, hostname)
+        await self._store_hostvars(hostname=hostname, device_id=device_id, hostvars=hostvars)
 
         await check_fabric_hostvars_ready(self.client, fabric.id)

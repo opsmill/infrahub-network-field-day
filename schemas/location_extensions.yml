@@ -18,7 +18,7 @@ nodes:
     description: "A customer or branch premises outside the datacentre"
     label: Site
     icon: mdi:office-building-marker
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - LocationGeneric
       - LocationHosting

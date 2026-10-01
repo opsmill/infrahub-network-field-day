@@ -47,19 +47,26 @@ The solution is a repository of schemas, generators, and transforms loaded on to
 
 ## Data model hierarchy
 
-The system models a 3-tier datacenter network fabric:
+The repository models one fabric, `OTTERNET_FABRIC`: a single-pod, 3-stage L3LS EVPN/VXLAN fabric
+with two spines and three leaf racks.
 
 ```text
-NetworkFabric (e.g., "Fabric-L3LS-MultiPod-A")
-├── NetworkPod (e.g., "Pod-A1", "Pod-A2")
-│   ├── LocationRack (e.g., "Rack-A1-01", "Rack-A1-02")
-│   │   └── DcimDevice [leaf] (e.g., "leaf-A1-01-1")
-│   │       └── InterfacePhysical (e.g., "Ethernet1")
-│   │           ├── NetworkLink → remote interface
-│   │           └── IpamIPAddress
-│   └── DcimDevice [spine] (e.g., "spine-A1-1")
-└── DcimDevice [super_spine] (e.g., "ss-A-1")
+NetworkFabric "OTTERNET_FABRIC"
+└── NetworkPod "otternet-pod1"
+    ├── DcimFabricSwitch [spine] "spine-otternet-pod1-1", "spine-otternet-pod1-2"
+    ├── LocationRack "K8S_LEAFS"     (MLAG pair)
+    │   └── DcimFabricSwitch [leaf] "leaf-otternet-pod1-1-1", "leaf-otternet-pod1-1-2"
+    ├── LocationRack "APP_LEAFS"     (MLAG pair)
+    │   └── DcimFabricSwitch [leaf] "leaf-otternet-pod1-2-1", "leaf-otternet-pod1-2-2"
+    └── LocationRack "BORDER_LEAFS"  (single border leaf)
+        └── DcimFabricSwitch [leaf] "leaf-otternet-pod1-3-1"
+            └── DcimInterface (e.g., "Ethernet1")
+                ├── NetworkLink → remote interface
+                └── IpamIPAddress
 ```
+
+The schema can also express a fabric-level tier above the spines, through a `NetworkFabric`
+device design; `OTTERNET_FABRIC` declares none.
 
 ## IP address management
 
@@ -75,9 +82,10 @@ NetworkFabric
 │   └── Prefix allocations for point-to-point links
 ├── mgmt_pool: CoreIPAddressPool
 │   └── OOB management addresses
-├── CoreNumberPool: ASN Pool (65000-65999)
-│   └── Tier-aware eBGP ASN allocation: shared super-spine ASN per fabric, shared spine ASN per pod, leaf ASNs per device or MLAG domain
-└── CoreNumberPool: Node ID Pool (1-65535)
+├── CoreNumberPool: OTTERNET-ASN-Pool (65104-65109)
+│   └── Tier-aware eBGP ASN allocation: shared spine ASN per pod, leaf ASNs per device or MLAG domain.
+│       The seven switches' ASNs (65100-65103) are pinned in objects/26_otternet_devices.yml.
+└── CoreNumberPool: OTTERNET-NodeID-Pool (1-100)
     └── Per-device unique identifier
 ```
 
@@ -87,15 +95,15 @@ Generators run in sequence to build infrastructure:
 
 ```text
 ┌─────────────────────────┐
-│  1. FabricGenerator     │  Triggered on: NetworkFabric
-│  - Resolve fabric pools │  Creates: Super-spine devices
-│  - Create super-spines  │
+│  1. FabricGenerator     │  Run on: NetworkFabric
+│  - Resolve fabric pools │  Creates: no devices for OTTERNET_FABRIC
+│  - Signal the pods      │
 └───────────┬─────────────┘
             ▼
 ┌─────────────────────────┐
 │  2. PodGenerator        │  Triggered on: NetworkPod
 │  - Create spine devices │  Creates: Spine switches
-│  - Link to super-spines │
+│  - Expand interfaces    │
 └───────────┬─────────────┘
             ▼
 ┌─────────────────────────┐
@@ -105,7 +113,7 @@ Generators run in sequence to build infrastructure:
 └───────────┬─────────────┘
             ▼
 ┌─────────────────────────┐
-│  4. AVD Generators      │  Triggered on: NetworkFabric/Device
+│  4. AVD Generators      │  Run on: avd_devices / NetworkFabric
 │  - Build hostvars       │  Creates: AVD configs
 │  - Generate struct cfg  │
 └─────────────────────────┘
@@ -139,7 +147,7 @@ Examples:
 
 ## Validation pipeline
 
-Alongside transforms, proposed-change validation runs **checks** — Python routines that report pass, information, or error rather than producing an artifact. The repository ships one, `cv-config-validation`, which deploys the rendered EOS configs into a CloudVision workspace and blocks the proposed change on a failed build. See [Checks](./checks.md).
+Alongside transforms, proposed-change validation runs **checks** — Python routines that report pass, information, or error rather than producing an artifact. The repository ships five: `cv-config-validation`, which deploys the rendered EOS configs into a CloudVision workspace and blocks the proposed change on a failed build; `fabric-pool-validation`; and the global `peering-consistency`, `zone-advertisement` and `wan-service-consistency`. See [Checks](./checks.md).
 
 ## Checksum-based change detection
 

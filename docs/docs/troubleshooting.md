@@ -62,7 +62,7 @@ uv run invoke load
 
 ### Cause
 
-Triggers connect the generators into a chain: `generate-fabric` → `generate-pod` → `generate-rack` → `generate-avd-device-hostvar` → `generate-avd-device-structured-config`. If triggers didn't load — the last step of `invoke load` — the chain is broken.
+Triggers connect the topology generators into a chain: `generate-fabric` → `generate-pod` → `generate-rack`. The AVD stage is not on that chain: `generate-avd-device-hostvar` runs when `invoke avd`, a proposed change or a manual run asks for it, and `generate-avd-device-structured-config` follows it through the `avd_hostvars_ready` trigger. If triggers didn't load — the last step of `invoke load` — the chain is broken.
 
 ### Diagnose
 
@@ -96,10 +96,11 @@ Open the Infrahub UI and check each of these lists is populated:
 
 | Menu | Expected |
 |------|----------|
-| Devices → Types & Models → Manufacturers | Arista, Dell, and others |
-| Devices → Types & Models → Device Types | Arista models (7050-CX3, etc.) |
-| Fabric Design → Fabrics | `Fabric-L3LS-MultiPod-A` and `Fabric-L3LS-MultiPod-B` |
-| IPAM → Prefixes | supernet and per-fabric pools |
+| Fabric Design & AVD → Device Catalogue → Manufacturers | `Arista`, `FRRouting`, `Juniper`, `Generic` |
+| Fabric Design & AVD → Device Catalogue → Device Types | `Arista cEOS-LAB`, plus the lab's FRR, vSRX, and Linux container types |
+| Data Centre Fabric → Fabrics | `OTTERNET_FABRIC` |
+| Data Centre Fabric → Switches | the seven `spine-otternet-pod1-*` and `leaf-otternet-pod1-*` switches |
+| IP Addressing & VLANs → Prefixes | the `10.41.0.0/16` fabric supernet, its loopback, VTEP, point-to-point and MLAG prefixes, and `172.20.41.0/24` for management |
 
 If any are empty, seed data did not load.
 
@@ -132,7 +133,7 @@ Re-run the structured-config generator for the fabric:
 
 1. In the Infrahub UI, on the correct branch, open **Actions → Generator definitions**.
 2. Click **`generate-avd-device-structured-config`**.
-3. Click **Run** and select the fabric (for example, `Fabric-L3LS-MultiPod-A`).
+3. Click **Run** and select the fabric, `OTTERNET_FABRIC`.
 
 Once the task completes, the artifact renders on the next open.
 
@@ -145,7 +146,7 @@ Alternatively, in the artifact preview panel, click **Regenerate**.
 The **AVD ANTA Catalog** artifact renders successfully but holds a single line:
 
 ```text
-# ANTA disabled for fabric Fabric-L3LS-MultiPod-A
+# ANTA disabled for fabric OTTERNET_FABRIC
 ```
 
 ### Cause

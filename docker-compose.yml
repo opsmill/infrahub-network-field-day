@@ -243,7 +243,7 @@ services:
       - 6362:6362
 
   task-manager:
-    image: "${INFRAHUB_DOCKER_IMAGE:-registry.opsmill.io/opsmill/infrahub}:${VERSION:-1.10.6}"
+    image: "${INFRAHUB_DOCKER_IMAGE:-registry.opsmill.io/opsmill/infrahub}:${VERSION:-${INFRAHUB_BASE_VERSION:-1.10.6}}"
     command: uvicorn --host 0.0.0.0 --port 4200 --factory infrahub.prefect_server.app:create_infrahub_prefect
     restart: unless-stopped
     depends_on:
@@ -259,7 +259,7 @@ services:
       start_period: 10s
 
   task-manager-db:
-    image: "${POSTGRES_DOCKER_IMAGE:-postgres:18-alpine}"
+    image: "${POSTGRES_DOCKER_IMAGE:-postgres:18.6-alpine}"
     restart: unless-stopped
     environment:
       - POSTGRES_USER=${INFRAHUB_TASKMANAGER_DB_USER:-postgres}
@@ -276,7 +276,7 @@ services:
       retries: 5
 
   infrahub-server:
-    image: "${INFRAHUB_DOCKER_IMAGE:-registry.opsmill.io/opsmill/infrahub}:${VERSION:-1.10.6}"
+    image: "${INFRAHUB_DOCKER_IMAGE:-registry.opsmill.io/opsmill/infrahub}:${VERSION:-${INFRAHUB_BASE_VERSION:-1.10.6}}"
     restart: unless-stopped
     command: >
       gunicorn --config backend/infrahub/serve/gunicorn_config.py
@@ -322,7 +322,7 @@ services:
     deploy:
       mode: replicated
       replicas: 2
-    image: "${INFRAHUB_DOCKER_IMAGE:-registry.opsmill.io/opsmill/infrahub}:${VERSION:-1.10.6}"
+    image: "${INFRAHUB_DOCKER_IMAGE:-registry.opsmill.io/opsmill/infrahub}:${VERSION:-${INFRAHUB_BASE_VERSION:-1.10.6}}"
     command: prefect worker start --type infrahubasync --pool infrahub-worker --with-healthcheck
     restart: unless-stopped
     depends_on:

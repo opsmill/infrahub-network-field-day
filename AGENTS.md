@@ -733,9 +733,10 @@ Check definitions are `cv-config-validation` (`checks/cv_config_check.py`), with
 workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and
 `checks/cv_helpers.py`; `fabric-pool-validation` (`checks/fabric_pool_check.py`); and
 `peering-consistency` (`checks/peering_consistency_check.py`); `zone-advertisement`
-(`checks/zone_advertisement_check.py`); and `wan-service-consistency`
-(`checks/wan_service_check.py`). The first two are targeted on `fabrics`; the last three
-are **global** — they have no `targets`, because their rules are statements about the whole
+(`checks/zone_advertisement_check.py`); `wan-service-consistency`
+(`checks/wan_service_check.py`); and `allocation-consistency`
+(`checks/allocation_consistency_check.py`). The first two are targeted on `fabrics`; the last
+four are **global** — they have no `targets`, because their rules are statements about the whole
 graph rather than about one fabric.
 
 `wan-service-consistency` guards the lab's central claim. The WAN service kinds **name**
@@ -779,6 +780,31 @@ the named list at device scope whenever it advertises, so once a grant has run t
 declares the very name the rule questions. Reading device scope made the reference
 self-fulfilling: a branch naming a nonexistent list failed the check before a grant ran and
 passed it afterwards.
+
+`allocation-consistency` covers what the two allocating generators and hand-entered data can
+collide on, in the domains no schema constraint reaches. Three rules:
+
+- **A VLAN id is unique per FABRIC, not per `IpamL2Domain`.** `IpamVLAN`'s
+  `[vlan_id, l2domain]` constraint already refuses a duplicate inside one domain — measured:
+  `Violates uniqueness constraint 'vlan_id-l2domain'` — but a second `IpamL2Domain` with the
+  same id loads cleanly, and AVD never renders `IpamVLAN.vlan_id` anyway. It renders
+  `EvpnSvi.svi_id` and `EvpnL2Vlan.vlan_id` for every tenant naming the fabric, constrained only
+  per VRF and per tenant. Reported: the same id with **intersecting tags** (one switch carries
+  both), the same **VNI** on one fabric (`vni_override`, else base + id — two VRFs of one tenant
+  collide this way whatever the tags), and an SVI/L2 VLAN whose id disagrees with the `IpamVLAN`
+  it names. The same id on disjoint tags in different tenants is legitimate and passes.
+- **Tenant subnets do not overlap within a VRF.** Candidates are segment subnets plus
+  `tenant_host`/`tenant_cloud` prefixes, **minus pool resources** — `10.230.0.0/16` contains every
+  allocation by design. A segment subnet carries no `vrf` (the generator sets a role and a
+  description only), so the VRF comes from the segment, then the prefix, then the SVI whose
+  gateway lies inside it; an unresolvable prefix is compared against every VRF. One subnet
+  recorded by two segments is reported too — withdrawing either deletes the other's.
+- **A VIP block sits inside its cluster's `vip_pools` and overlaps no other app's block.** The
+  pools are the only supernets the leaves accept, so a block outside them is advertised and
+  refused with nothing logged.
+
+Like `wan-service-consistency`, it ignores `status`: a decommissioning service still holds its
+allocation until its generator returns it, and a hand-declared block is never returned.
 
 ## Repository sync, and the one thing that wedges it
 

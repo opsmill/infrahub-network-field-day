@@ -44,7 +44,7 @@ nodes:
     description: "One location of a WAN tenant, and how it attaches"
     label: WAN Site
     icon: mdi:office-building-marker
-    include_in_menu: true
+    include_in_menu: false
     human_friendly_id:
       - tenant__name__value
       - name__value
@@ -181,7 +181,7 @@ nodes:
     description: "A provider's transit peering with an internet autonomous system"
     label: Internet Peering
     icon: mdi:web
-    include_in_menu: true
+    include_in_menu: false
     human_friendly_id:
       - name__value
     display_label: name__value

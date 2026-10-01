@@ -146,9 +146,9 @@ def test_standalone_network_dci_link_schema_is_absent() -> None:
 
 def test_dci_links_menu_not_exposed_and_network_link_discovery_remains() -> None:
     menu = _load_yaml("menus/menu.yml")
-    device_children = next(item for item in menu["spec"]["data"] if item["name"] == "DeviceMenu")["children"]["data"]
+    fabric_children = next(item for item in menu["spec"]["data"] if item["name"] == "FabricMenu")["children"]["data"]
 
     stale_kind = "Network" + "Dci" + "Link"
-    assert not any(item.get("kind") == stale_kind for item in device_children)
-    network_link_menu = next(item for item in device_children if item.get("kind") == "NetworkLink")
+    assert not any(item.get("kind") == stale_kind for item in fabric_children)
+    network_link_menu = next(item for item in fabric_children if item.get("kind") == "NetworkLink")
     assert network_link_menu["label"] == "Connections"
