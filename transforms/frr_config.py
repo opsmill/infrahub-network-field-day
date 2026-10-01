@@ -4,7 +4,7 @@ The half of the lab AVD does not cover. The fabric renders through PyAVD; these
 six routers render here, from the same graph, with the same property: change the
 model, re-render, review the diff.
 
-The templates are ported from ``../lab/wan/templates`` with one line changed --
+The templates are ported from ``lab/wan/templates`` with one line changed --
 the provenance header, because Infrahub is not ``wan/render.py``. Everything
 else, comments included, is identical, and ``tests/unit/test_frr_config.py``
 holds it to the lab's rendered output line for line.

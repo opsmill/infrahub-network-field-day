@@ -7,8 +7,8 @@
 # the leaves' route policy, the firewall address book, and the CNI's own
 # policies. One object each is what makes agreement between them a graph fact.
 #
-# Sourced from ../lab/wan/tenants.yml, ../lab/configs/fw/vsrx/junos.conf and
-# ../lab/crossplane/platform/10-peering.yaml.
+# Sourced from lab/wan/tenants.yml, lab/configs/fw/vsrx/junos.conf and
+# lab/crossplane/platform/10-peering.yaml.
 #
 # Loaded before 30_* because organizations, devices, zones and the cluster all
 # reference these.

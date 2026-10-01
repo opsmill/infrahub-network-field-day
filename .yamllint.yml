@@ -5,8 +5,11 @@ ignore: |
   /.git
   /.github
   /.venv
-  # lab/ has its own uv project, so its virtualenv needs ignoring too.
+  # The lab's AVD toolchain virtualenv and collections (`make -C lab setup`).
   /lab/.venv
+  /lab/.ansible
+  # Rendered by lab/wan/render.py; gitignored.
+  /lab/wan/rendered
   /.specify
   /node_modules
   # Backstage scaffolding. Vendored from the upstream portal example and
@@ -51,3 +54,7 @@ rules:
     max: 140
     allow-non-breakable-words: true
     allow-non-breakable-inline-mappings: false
+    ignore: |
+      # One Go-template line inside a block scalar. A yamllint directive there
+      # would become part of the template, and wrapping it changes the template.
+      /lab/crossplane/apps/01-composition-fabric-app.yaml

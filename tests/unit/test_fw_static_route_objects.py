@@ -1,6 +1,6 @@
 """The perimeter firewall's static routes, checked against three sources.
 
-Eight routes transcribed from ``../lab/configs/fw/vsrx/junos.conf`` onto
+Eight routes transcribed from ``lab/configs/fw/vsrx/junos.conf`` onto
 ``fw1``. Cycle 024 widened ``RoutingStaticRoute.device`` so a
 ``SecurityFirewall`` could own one; cycle 025 put the device's real forwarding
 decisions in the graph; cycle 026 renders them.
@@ -53,7 +53,7 @@ REPO_ROOT = Path(__file__).parents[2]
 
 ROUTES = REPO_ROOT / "objects/32b_otternet_fw_static_routes.yml"
 SECURITY = REPO_ROOT / "objects/32_otternet_security.yml"
-ORACLE = Path("../lab/configs/fw/vsrx/junos.conf")
+ORACLE = Path(__file__).resolve().parents[2] / "lab" / "configs/fw/vsrx/junos.conf"
 
 FIREWALL = "fw1"
 EXPECTED_ROUTE_COUNT = 8
@@ -94,7 +94,7 @@ EXPECTED_ADDRESS_BOOK_NAMES = {
 
 def _oracle_lines() -> list[str]:
     if not ORACLE.is_file():
-        pytest.skip("lab repo not checked out alongside this one")
+        pytest.skip("the lab file this test reads is missing from lab/")
     return ORACLE.read_text(encoding="utf-8").splitlines()
 
 

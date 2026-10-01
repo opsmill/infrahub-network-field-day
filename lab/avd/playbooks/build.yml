@@ -1,0 +1,18 @@
+---
+# Render the whole fabric offline. Needs no switches, no ceOS image and no lab
+# running -- which makes it the fastest way to review a change and the natural
+# thing to put in CI.
+- name: Build intended configuration for OTTERNET fabric
+  hosts: OTTERNET_FABRIC
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Generate structured configs, device configs and documentation
+      ansible.builtin.import_role:
+        name: arista.avd.eos_designs
+      vars:
+        avd_structured_config_file_format: yml
+
+    - name: Render EOS CLI from the structured configs
+      ansible.builtin.import_role:
+        name: arista.avd.eos_cli_config_gen

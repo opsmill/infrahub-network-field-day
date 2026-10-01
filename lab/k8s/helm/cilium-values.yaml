@@ -1,0 +1,142 @@
+# Cilium for the OTTERNET lab.
+#
+# The choices here exist to make pod traffic *visible to the fabric*, which is
+# what lets the leaf ACLs and the firewall policies act on real pod addresses:
+#
+#   * native routing, no overlay -- the fabric already provides VXLAN, and a
+#     second encapsulation would hide pod IPs from the leaves entirely
+#   * masquerading off -- pods appear on the wire as pod IPs, not node IPs
+#   * BGP control plane on -- the pod CIDR and LoadBalancer VIPs are advertised
+#     to the leaves and redistributed into EVPN as type-5 routes
+#
+# Chart version is pinned in k8s/bootstrap/install-cilium.sh.
+---
+# Talk to the k3s API server on the fabric address, not the management one.
+k8sServiceHost: 10.110.0.11
+k8sServicePort: 6443
+
+# Cilium replaces kube-proxy, and k3s is started with --disable-kube-proxy to
+# match. This is NOT optional here: LoadBalancer VIPs handed out by Cilium's
+# LB-IPAM are only programmed into a datapath that Cilium owns. With
+# kubeProxyReplacement: false the VIP is allocated and advertised over BGP --
+# the fabric even installs the /32 -- but `cilium-dbg service list` shows only
+# the ClusterIP, no node ever answers the VIP, and connections just time out.
+kubeProxyReplacement: true
+
+# Bind the datapath to the fabric-facing interface.
+devices: eth1
+
+ipam:
+  mode: cluster-pool
+  operator:
+    clusterPoolIPv4PodCIDRList:
+      - 10.111.0.0/16
+    clusterPoolIPv4MaskSize: 24
+
+routingMode: native
+ipv4NativeRoutingCIDR: 10.111.0.0/16
+autoDirectNodeRoutes: true
+
+# Pod IPs on the wire. Without this the fabric only ever sees node addresses and
+# the whole point of the ACL and firewall demo evaporates.
+enableIPv4Masquerade: false
+bpf:
+  masquerade: false
+
+  # Pod egress has to traverse netfilter, so send it through the legacy host
+  # path rather than eBPF host routing.
+  #
+  # With eBPF host routing (the default) a packet leaving a pod is redirected
+  # straight to the egress device in BPF and never enters the host's upper
+  # stack, so it never passes POSTROUTING. That is exactly the point of the
+  # feature, and it means the one iptables MASQUERADE rule this lab needs -- pod
+  # CIDR out eth0, for internet-bound traffic only, installed by
+  # k8s/bootstrap/k3s-entrypoint.sh -- never matches. Its packet counter sits at
+  # zero while pods fail to reach anything off-cluster, and cilium monitor shows
+  # no drop, because nothing is dropping it.
+  #
+  # The alternative is to let Cilium do the masquerading, but that means adding
+  # eth0 to `devices` and widening ipv4NativeRoutingCIDR to 10.0.0.0/8 to keep
+  # fabric traffic un-SNATed. Both trade a much larger blast radius on the part
+  # of the datapath this lab is actually demonstrating for a performance
+  # property that does not matter here. This way Cilium still masquerades
+  # nothing at all, and the only NAT in the cluster is one explicit rule on the
+  # management interface.
+  hostLegacyRouting: true
+
+bgpControlPlane:
+  enabled: true
+
+# Agent and operator metrics on 9962/9963, for the Prometheus that FabricApp
+# otternet-observability deploys to scrape. serviceMonitor is deliberately NOT
+# enabled here: that would make this release depend on a CRD which only exists
+# after kube-prometheus-stack is installed, and Cilium has to come up first --
+# it is the CNI. The scrape configs live on the Prometheus side instead.
+prometheus:
+  enabled: true
+
+# Policy enforcement plus the observability to prove it is working.
+policyEnforcementMode: default
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+  metrics:
+    enableOpenMetrics: true
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - port-distribution
+      - httpV2
+
+operator:
+  replicas: 1
+  prometheus:
+    enabled: true
+
+# Cilium must attach its socket-LB hooks to the K3S CONTAINER's cgroup root, not
+# to its own.
+#
+# With autoMount left on, the agent mounts a fresh cgroup2 at
+# /run/cilium/cgroupv2 and -- in this nested containerlab-inside-k3s-inside-pod
+# arrangement -- the root of that mount is the cilium agent's own cgroup, which
+# is a leaf with no children. The connect4/connect6 programs are then attached
+# to a cgroup that contains exactly one process: cilium-agent. No other pod's
+# connect() ever passes through them, so ClusterIP translation silently does not
+# happen for any pod in the cluster.
+#
+# The symptom is total but easy to miss, because nothing in a purely
+# north-south demo touches a ClusterIP: pods reach node addresses and
+# LoadBalancer VIPs from outside work fine, while `nc -z 10.112.0.1 443` from
+# any pod times out and in-cluster DNS never resolves. It shows up the moment
+# something needs the API server from inside the cluster -- a controller,
+# an operator, Crossplane -- which then fails with
+#   dial tcp 10.112.0.1:443: i/o timeout
+# and looks like an RBAC or a network policy problem.
+#
+# Pointing hostRoot at the k3s container's real cgroup2 mount (which does
+# contain kubepods/) attaches the hooks where the pods actually are. This is the
+# same class of bug as the /sys/fs/bpf shared-mount problem: k3d and kind set
+# this up for you, a plain containerlab node does not.
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+
+# CNI paths: use the CONTAINERD DEFAULTS, not the k3s ones.
+#
+# k3s is usually described as keeping CNI in /var/lib/rancher/k3s/..., and its
+# kubelet flags do point there -- but with flannel disabled, the containerd
+# config k3s generates here has no [plugins."io.containerd.grpc.v1.cri".cni]
+# section at all, so containerd falls back to /etc/cni/net.d and /opt/cni/bin.
+# Since the kubelet learns CNI readiness from containerd over CRI, containerd's
+# view is the one that counts. Point Cilium at the k3s paths and you get a
+# perfectly valid 05-cilium.conflist that nothing ever reads, while every node
+# sits NotReady with "cni plugin not initialized".
+cni:
+  binPath: /opt/cni/bin
+  confPath: /etc/cni/net.d

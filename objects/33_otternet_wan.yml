@@ -16,7 +16,7 @@
 # They reach each other by sharing a VPN, not because anything is leaked, so
 # there is no relationship between them.
 #
-# Sourced from ../lab/wan/tenants.yml.
+# Sourced from lab/wan/tenants.yml.
 # ============================================================================
 apiVersion: infrahub.app/v1
 kind: Object

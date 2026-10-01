@@ -1,0 +1,266 @@
+---
+# The access broker itself, deployed the same way every other application in
+# this lab is deployed: as a FabricApp.
+#
+# That is not tidiness for its own sake. The portal has to be reachable from the
+# branch before anyone has been granted anything, so it needs a VIP, a BGP
+# advertisement and a CiliumNetworkPolicy naming the branch LAN -- which is
+# exactly what a FabricApp is. The one hand-written firewall rule that keeps it
+# reachable (`branch-to-access-portal`) lives in
+# configs/fw/vsrx/junos.conf and is the only branch-to-DC permit in the
+# baseline. Everything else the branch can reach, it was granted.
+apiVersion: otternet.lab/v1alpha1
+kind: FabricApp
+metadata:
+  name: otternet-access
+spec:
+  namespace: otternet-access
+  tenant: k8s-prod
+
+  expose:
+    # Third /28 out of the range the border leaf re-advertises. See
+    # crossplane/apps/10-demo.yaml (…240.0/28) and 20-observability.yaml
+    # (…240.16/28); requested apps are allocated from …240.48/28 upwards by the
+    # catalog below.
+    vipBlock: 10.112.240.32/28
+    serviceSelector:
+      otternet.lab/advertise: "true"
+
+  policy:
+    defaultDeny: true
+    allowDNS: true
+    allowIntraNamespace: true
+    # The portal is a Kubernetes API client and nothing else -- no database, no
+    # egress to the internet, no other namespace.
+    allowEgressToAPIServer: true
+    allowFrom:
+      - 10.70.0.0/24      # the branch office, over its private circuit
+      - 10.210.0.0/24     # the classic app tenant, so the demo can be driven
+                          # from host-a as well as from the branch desktop
+    allowFromPorts:
+      - port: "8080"
+        protocol: TCP
+    workloadSelector:
+      app: access-portal
+
+  manifests:
+    # ---- the catalog ------------------------------------------------------
+    # What may be requested, and what happens when it is. An entry with a
+    # `provision` block is deployed on demand; an entry without one is already
+    # running and only the firewall stands between the branch and it. Both
+    # shapes are in here on purpose -- they are the two halves of the ask.
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: access-catalog
+      data:
+        catalog.json: |
+          {
+            "applications": [
+              {
+                "key": "demo-frontend",
+                "displayName": "Demo frontend",
+                "description": "The two-tier whoami app on the k8s pod",
+                "requiresApproval": false,
+                "vip": "10.112.240.0",
+                "ports": [80],
+                "source": {
+                  "zone": "branch",
+                  "address": "branch-users",
+                  "cidr": "10.70.0.0/24"
+                }
+              },
+              {
+                "key": "grafana",
+                "displayName": "Grafana",
+                "description": "Fabric and cluster dashboards, deployed by Crossplane",
+                "requiresApproval": true,
+                "vip": "10.112.240.64",
+                "ports": [80],
+                "source": {
+                  "zone": "branch",
+                  "address": "branch-users",
+                  "cidr": "10.70.0.0/24"
+                }
+              },
+              {
+                "key": "kanboard",
+                "displayName": "Kanboard",
+                "description": "Project tracker - not running until somebody asks for it",
+                "requiresApproval": true,
+                "vip": "10.112.240.49",
+                "ports": [80],
+                "source": {
+                  "zone": "branch",
+                  "address": "branch-users",
+                  "cidr": "10.70.0.0/24"
+                },
+                "provision": {
+                  "namespace": "otternet-kanboard",
+                  "image": "kanboard/kanboard:v1.2.46",
+                  "containerPort": 80,
+                  "vipBlock": "10.112.240.48/28",
+                  "replicas": 1
+                }
+              }
+            ]
+          }
+
+    # ---- the portal -------------------------------------------------------
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: access-portal
+
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: access-portal
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: access-portal
+        template:
+          metadata:
+            labels:
+              app: access-portal
+          spec:
+            serviceAccountName: access-portal
+            # Prefer a worker over the control-plane node. Not a hard
+            # constraint -- the lite profile has fewer nodes -- but the
+            # control-plane node is the one that runs out of room first, and it
+            # is also the one whose BGP session advertises this app's VIP.
+            affinity:
+              nodeAffinity:
+                preferredDuringSchedulingIgnoredDuringExecution:
+                  - weight: 100
+                    preference:
+                      matchExpressions:
+                        - key: node-role.kubernetes.io/control-plane
+                          operator: DoesNotExist
+            containers:
+              - name: portal
+                image: otternet/access-portal:local
+                # The image is built on the lab host and imported into each k3s
+                # node by scripts/access-images.sh; there is no registry to pull
+                # it from, so a pull attempt is a guaranteed ImagePullBackOff.
+                imagePullPolicy: IfNotPresent
+                ports:
+                  - containerPort: 8080
+                readinessProbe:
+                  httpGet: {path: /healthz, port: 8080}
+                  initialDelaySeconds: 2
+                resources:
+                  requests: {cpu: 10m, memory: 32Mi}
+                  limits: {memory: 128Mi}
+                volumeMounts:
+                  - name: catalog
+                    mountPath: /etc/access
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  capabilities: {drop: ["ALL"]}
+                  seccompProfile: {type: RuntimeDefault}
+            volumes:
+              - name: catalog
+                configMap:
+                  name: access-catalog
+                  items:
+                    - key: catalog.json
+                      path: catalog.json
+
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        name: access-portal
+        labels:
+          otternet.lab/advertise: "true"
+        annotations:
+          # Pinned rather than allocated. The branch desktop's Firefox homepage
+          # and the firewall's one baseline branch rule both name this address,
+          # so it has to survive a redeploy.
+          lbipam.cilium.io/ips: "10.112.240.33"
+      spec:
+        type: LoadBalancer
+        externalTrafficPolicy: Local
+        selector:
+          app: access-portal
+        ports:
+          - port: 80
+            targetPort: 8080
+            protocol: TCP
+
+    # ---- the firewall controller ------------------------------------------
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: fw-controller
+
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: firewall-credentials
+      type: Opaque
+      stringData:
+        # vrnetlab's default vSRX credential, which containerlab passes to the
+        # node and configs/fw/vsrx/junos.conf hashes into the committed config.
+        #
+        # In git because the box it opens is a container on this host with no
+        # route off it; a real deployment would source this from a secret store
+        # and use a purpose-made automation account rather than admin.
+        username: admin
+        password: admin@123
+
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: fw-controller
+      spec:
+        replicas: 1
+        strategy:
+          # hostNetwork means the two replicas of a rolling update would fight
+          # over the same Junos configuration session. One at a time, old
+          # one gone first.
+          type: Recreate
+        selector:
+          matchLabels:
+            app: fw-controller
+        template:
+          metadata:
+            labels:
+              app: fw-controller
+          spec:
+            serviceAccountName: fw-controller
+            # The firewall's management address is on containerlab's management
+            # bridge. Pods on the fabric have no route to it and should not have
+            # one -- sharing the node's netns is how a real automation host
+            # would reach it, and it keeps the management path out of the
+            # tenant's dataplane entirely.
+            hostNetwork: true
+            dnsPolicy: ClusterFirstWithHostNet
+            containers:
+              - name: controller
+                image: otternet/fw-controller:local
+                imagePullPolicy: IfNotPresent
+                env:
+                  - name: FW_HOST
+                    value: "172.20.41.31"
+                  - name: FW_USER
+                    valueFrom:
+                      secretKeyRef: {name: firewall-credentials, key: username}
+                  - name: FW_PASSWORD
+                    valueFrom:
+                      secretKeyRef: {name: firewall-credentials, key: password}
+                  - name: RECONCILE_INTERVAL
+                    value: "20"
+                resources:
+                  requests: {cpu: 10m, memory: 48Mi}
+                  limits: {memory: 192Mi}
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  runAsNonRoot: true
+                  runAsUser: 65532
+                  capabilities: {drop: ["ALL"]}
+                  seccompProfile: {type: RuntimeDefault}

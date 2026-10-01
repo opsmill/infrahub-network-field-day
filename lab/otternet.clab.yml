@@ -1,0 +1,759 @@
+---
+# OTTERNET — EVPN/VXLAN fabric with AVD automation, zone-based security and Kubernetes.
+#
+# Everything tunable is an env var with a sane default, so one topology file serves
+# every profile. See the Makefile for the profiles that drive these.
+#
+#   OTTERNET_CEOS_IMAGE   ceOS image tag                  (default ceos:4.36.0.1F)
+#   OTTERNET_CEOS_MEMORY  per-switch memory limit         (default 2048MB, 'lite' uses 1536MB)
+#   OTTERNET_VSRX_IMAGE   firewall image                  (built by make fw-image)
+#   OTTERNET_FRR_IMAGE    ISP / CE / branch router image  (default frr 10.2.1)
+#   OTTERNET_DESKTOP_IMAGE   branch workstation image     (built by make desktop-image)
+#   OTTERNET_GUACD_IMAGE     guacd image                  (default guacamole/guacd:1.5.5)
+#   OTTERNET_GUACAMOLE_IMAGE Guacamole web image          (default guacamole/guacamole:1.5.5)
+#
+name: otternet
+
+mgmt:
+  network: otternet-mgmt
+  bridge: br-otternet
+  ipv4-subnet: 172.20.41.0/24
+
+topology:
+  kinds:
+    arista_ceos:
+      image: ${OTTERNET_CEOS_IMAGE:=ceos:4.36.0.1F}
+      memory: ${OTTERNET_CEOS_MEMORY:=2048MB}
+      env:
+        # containerlab's built-in ceOS boot template reads this and puts Management0
+        # into a VRF, enables eAPI/gNMI/NETCONF in that VRF, and installs the default
+        # route there. It lines up exactly with AVD's mgmt_interface_vrf default.
+        CLAB_MGMT_VRF: MGMT
+        INTFTYPE: eth
+    linux:
+      image: ghcr.io/srl-labs/network-multitool
+
+  nodes:
+    # ------------------------------------------------------------------ spines
+    spine1:
+      kind: arista_ceos
+      mgmt-ipv4: 172.20.41.11
+      labels: {role: spine, tier: underlay}
+    spine2:
+      kind: arista_ceos
+      mgmt-ipv4: 172.20.41.12
+      labels: {role: spine, tier: underlay}
+
+    # ------------------------------------------------- leaves: kubernetes pod
+    k8s-leaf1:
+      kind: arista_ceos
+      mgmt-ipv4: 172.20.41.21
+      labels: {role: l3leaf, tier: overlay, pod: k8s}
+    k8s-leaf2:
+      kind: arista_ceos
+      mgmt-ipv4: 172.20.41.22
+      labels: {role: l3leaf, tier: overlay, pod: k8s}
+
+    # ------------------------------------------------ leaves: classic app pod
+    app-leaf1:
+      kind: arista_ceos
+      mgmt-ipv4: 172.20.41.23
+      labels: {role: l3leaf, tier: overlay, pod: app}
+    app-leaf2:
+      kind: arista_ceos
+      mgmt-ipv4: 172.20.41.24
+      labels: {role: l3leaf, tier: overlay, pod: app}
+
+    # ---------------------------------------------------------- border / edge
+    border-leaf1:
+      kind: arista_ceos
+      mgmt-ipv4: 172.20.41.25
+      labels: {role: l3leaf, tier: overlay, pod: border}
+
+    # --------------------------------------------------------------- firewall
+    # A real Junos box, run as a VM by vrnetlab. Every tenant, customer and site
+    # reaches every other one by being routed out of the border leaf into a zone
+    # here and back in, so this node is not optional scenery -- there is no path
+    # between any two of those networks that does not cross it.
+    #
+    # The image is built locally by scripts/build-vsrx.sh (`make fw-image`)
+    # because Juniper does not redistribute it. A free account registered for
+    # "Evaluation user access" is enough; no support contract.
+    #
+    # Unlike most vrnetlab kinds, `startup-config` genuinely works here:
+    # launch.py appends the mounted file to its own init.conf and Junos loads the
+    # result at boot, so the box comes up already configured and there is no
+    # post-boot push step. Note *appends* -- configs/fw/vsrx/junos.conf must not
+    # restate what init.conf already sets up (fxp0, the admin user, the
+    # mgmt_junos instance, ssh, netconf).
+    #
+    # 5120MB: the VM itself wants 4096MB and QEMU needs room on top of it.
+    fw1:
+      kind: juniper_vsrx
+      image: ${OTTERNET_VSRX_IMAGE:=vrnetlab/juniper_vsrx:22.3R1.11}
+      memory: 5120MB
+      mgmt-ipv4: 172.20.41.31
+      binds:
+        - configs/fw/vsrx/junos.conf:/config/startup-config.cfg:ro
+      labels: {role: firewall, tier: security}
+
+    # ------------------------------------------------------------- tooling
+    # The bridge the host shares with the tooling cluster. Created by
+    # scripts/tooling-bridge.sh before deploy, because containerlab requires a
+    # `bridge` node to already exist -- it attaches to one, it does not make one.
+    br-otter-tool:
+      kind: bridge
+
+    # A single-node k3s for the tooling cluster: Backstage, Dex, and anything
+    # else that serves PEOPLE rather than the fabric.
+    #
+    # One node, not three. The workload cluster is three because it demonstrates
+    # Cilium peering BGP from every node; nothing here peers with anything, and
+    # a second copy of a 3x3GB cluster would cost more memory than the whole WAN.
+    #
+    # Its default route stays on the management interface so image pulls work.
+    # 10.0.0.0/8 goes via fw1, which is what puts the firewall in the path for
+    # everything in the lab's routed space -- including, deliberately, the
+    # branch users who come to it.
+    tool-node1:
+      kind: linux
+      image: rancher/k3s:v1.31.3-k3s1
+      mgmt-ipv4: 172.20.41.101
+      memory: 3072MB
+      cpu: 2
+      binds:
+        - k8s/bootstrap/k3s-entrypoint.sh:/opt/k3s-entrypoint.sh:ro
+        - k8s/.kubeconfig-tooling:/output
+      env:
+        K3S_TOKEN: otternet-tooling-not-a-secret
+        FABRIC_IPV4: 10.90.0.11/24
+        FABRIC_GW: 10.90.0.254
+        FABRIC_ROUTES: 10.0.0.0/8
+        FABRIC_MTU: "9214"
+      entrypoint: /bin/sh
+      cmd: >-
+        /opt/k3s-entrypoint.sh server
+        --node-ip 10.90.0.11 --advertise-address 10.90.0.11
+        --tls-san 10.90.0.11 --tls-san 172.20.41.101
+        --disable=traefik
+        --cluster-cidr 10.91.0.0/16 --service-cidr 10.92.0.0/16
+        --write-kubeconfig /output/kubeconfig.yaml --write-kubeconfig-mode 644
+      labels: {role: tooling-server, tier: tooling}
+
+    # ------------------------------------------------------- kubernetes nodes
+    # eth1 is the fabric-facing interface and carries the k8s node IP, so it must
+    # be up *before* k3s starts. The mounted entrypoint waits for containerlab to
+    # wire the link, addresses it, then execs k3s.
+    k8s-node1:
+      kind: linux
+      image: rancher/k3s:v1.31.3-k3s1
+      mgmt-ipv4: 172.20.41.41
+      # 3072MB, and for the same reason node2 and node3 are oversized: this node
+      # carries the k3s control plane AND, since the access broker arrived, the
+      # portal and the fw-controller. At 2048MB it sat at 99% of its cgroup
+      # limit, and the way that presents is not an OOM kill -- it is the Cilium
+      # agent losing its Kubernetes watches, its BGP sessions dropping to idle,
+      # and `kubectl exec` hanging, while the node still reports Ready. The
+      # visible symptom was a LoadBalancer VIP that never got advertised,
+      # because externalTrafficPolicy: Local means only the node running the pod
+      # announces it -- and that node's BGP was down.
+      memory: 3072MB
+      cpu: 2
+      binds:
+        - k8s/bootstrap/k3s-entrypoint.sh:/opt/k3s-entrypoint.sh:ro
+        - k8s/.kubeconfig:/output
+      env:
+        K3S_TOKEN: otternet-lab-not-a-secret
+        FABRIC_IPV4: 10.110.0.11/24
+        FABRIC_GW: 10.110.0.1
+        FABRIC_ROUTES: 10.0.0.0/8
+        FABRIC_MTU: "9214"
+      entrypoint: /bin/sh
+      cmd: >-
+        /opt/k3s-entrypoint.sh server
+        --node-ip 10.110.0.11 --advertise-address 10.110.0.11
+        --tls-san 10.110.0.11 --tls-san 172.20.41.41
+        --flannel-backend=none --disable-network-policy
+        --disable=traefik --disable=servicelb --disable-kube-proxy
+        --cluster-cidr 10.111.0.0/16 --service-cidr 10.112.0.0/16
+        --write-kubeconfig /output/kubeconfig.yaml --write-kubeconfig-mode 644
+      labels: {role: k8s-server, tier: workload}
+
+    # NOTE: the agents deliberately do NOT pass --disable-kube-proxy.
+    #
+    # It is a `k3s server` flag only -- `k3s agent` rejects it outright with
+    #   FATA flag provided but not defined: -disable-kube-proxy
+    # and exits immediately. Because containerlab starts these nodes with
+    # --restart=always, and a docker restart rebuilds the network sandbox
+    # without the veth containerlab wired in from outside, an agent that cannot
+    # start does not merely fail: it loops, and after the first restart the node
+    # has no eth1 and no way to get one. The visible symptom is two of three
+    # k8s nodes with no fabric interface at all while the switches look
+    # perfectly healthy, which reads as a containerlab wiring bug.
+    #
+    # kube-proxy is disabled cluster-wide by the flag on k8s-node1 (the server).
+    k8s-node2:
+      kind: linux
+      image: rancher/k3s:v1.31.3-k3s1
+      mgmt-ipv4: 172.20.41.42
+      # 2560MB, not 1536MB: this is where the observability stack's heavy pods
+      # are scheduled (they carry anti-affinity away from the control-plane
+      # node, see crossplane/apps/20-observability.yaml). A k3s node container
+      # limit that is smaller than the sum of the pod limits it hosts does not
+      # fail at scheduling time -- the kubelet only knows about the node's
+      # reported capacity, which is the HOST's memory, not this cgroup limit.
+      # So pods schedule happily and are then OOM-killed by the kernel, which
+      # surfaces as unrelated containers dying inside the node.
+      memory: 2560MB
+      cpu: 1
+      binds:
+        - k8s/bootstrap/k3s-entrypoint.sh:/opt/k3s-entrypoint.sh:ro
+      env:
+        K3S_TOKEN: otternet-lab-not-a-secret
+        FABRIC_IPV4: 10.110.0.12/24
+        FABRIC_GW: 10.110.0.1
+        FABRIC_ROUTES: 10.0.0.0/8
+        FABRIC_MTU: "9214"
+      entrypoint: /bin/sh
+      cmd: >-
+        /opt/k3s-entrypoint.sh agent
+        --server https://10.110.0.11:6443 --node-ip 10.110.0.12
+      labels: {role: k8s-agent, tier: workload}
+
+    k8s-node3:
+      kind: linux
+      image: rancher/k3s:v1.31.3-k3s1
+      mgmt-ipv4: 172.20.41.43
+      # See the note on k8s-node2.
+      memory: 2560MB
+      cpu: 1
+      binds:
+        - k8s/bootstrap/k3s-entrypoint.sh:/opt/k3s-entrypoint.sh:ro
+      env:
+        K3S_TOKEN: otternet-lab-not-a-secret
+        FABRIC_IPV4: 10.110.0.13/24
+        FABRIC_GW: 10.110.0.1
+        FABRIC_ROUTES: 10.0.0.0/8
+        FABRIC_MTU: "9214"
+      entrypoint: /bin/sh
+      cmd: >-
+        /opt/k3s-entrypoint.sh agent
+        --server https://10.110.0.11:6443 --node-ip 10.110.0.13
+      labels: {role: k8s-agent, tier: workload}
+
+    # ------------------------------------------------------------------- ISP
+    # AS 65500. Two FRR routers rather than ceOS, deliberately: this is a
+    # transit provider, not part of the Arista fabric AVD builds, and at ~200MB
+    # each the whole WAN layer costs less than one more ceOS node.
+    #
+    # Customer separation is VRF-per-customer on the edge PE with no MPLS (see
+    # docs/design.md "The WAN"). The customer VRFs and the leaking that lets
+    # them reach DC services -- and stops them reaching each other -- all live on
+    # isp-pe1; isp-pe2 is plain transit to the DC.
+    #
+    # frr.conf and the VRF setup are RENDERED from wan/customers.yml, not written
+    # by hand: `make wan-build`. The entrypoint is ours because FRR must find the
+    # VRF devices already present when it reads its config -- zebra configures
+    # interfaces but does not create VRFs.
+    isp-pe1:
+      kind: linux
+      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      mgmt-ipv4: 172.20.41.61
+      memory: 256MB
+      binds:
+        - wan/rendered/isp-pe1/frr.conf:/etc/frr/frr.conf:ro
+        - wan/rendered/isp-pe1/daemons:/etc/frr/daemons:ro
+        - wan/rendered/isp-pe1/init.sh:/opt/init.sh:ro
+        # Shared with isp-pe1-exporter, which reads the daemons' sockets.
+        - wan/run/isp-pe1:/var/run/frr
+      entrypoint: /bin/bash
+      cmd: /opt/init.sh
+      labels: {role: isp-pe, tier: wan}
+
+    isp-pe2:
+      kind: linux
+      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      mgmt-ipv4: 172.20.41.62
+      memory: 256MB
+      binds:
+        - wan/rendered/isp-pe2/frr.conf:/etc/frr/frr.conf:ro
+        - wan/rendered/isp-pe2/daemons:/etc/frr/daemons:ro
+        - wan/rendered/isp-pe2/init.sh:/opt/init.sh:ro
+        # Shared with isp-pe2-exporter, which reads the daemons' sockets.
+        - wan/run/isp-pe2:/var/run/frr
+      entrypoint: /bin/bash
+      cmd: /opt/init.sh
+      labels: {role: isp-pe, tier: wan}
+
+    # -------------------------------------------------------- WAN customers
+    # Each customer is a CE router plus one host. Adding another is an entry in
+    # wan/customers.yml plus a node and two links here -- see
+    # docs/verifying.md "Onboarding a WAN customer".
+    cust-acme-ce:
+      kind: linux
+      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      mgmt-ipv4: 172.20.41.71
+      memory: 256MB
+      binds:
+        - wan/rendered/cust-acme-ce/frr.conf:/etc/frr/frr.conf:ro
+        - wan/rendered/cust-acme-ce/daemons:/etc/frr/daemons:ro
+        - wan/rendered/cust-acme-ce/init.sh:/opt/init.sh:ro
+        # Shared with cust-acme-ce-exporter, which reads the daemons' sockets.
+        - wan/run/cust-acme-ce:/var/run/frr
+      entrypoint: /bin/bash
+      cmd: /opt/init.sh
+      labels: {role: customer-ce, tier: wan, customer: acme}
+
+    cust-acme-host:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      mgmt-ipv4: 172.20.41.72
+      memory: 256MB
+      binds:
+        - wan/rendered/cust-acme-host/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: customer-host, tier: wan, customer: acme}
+
+    cust-globex-ce:
+      kind: linux
+      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      mgmt-ipv4: 172.20.41.73
+      memory: 256MB
+      binds:
+        - wan/rendered/cust-globex-ce/frr.conf:/etc/frr/frr.conf:ro
+        - wan/rendered/cust-globex-ce/daemons:/etc/frr/daemons:ro
+        - wan/rendered/cust-globex-ce/init.sh:/opt/init.sh:ro
+        # Shared with cust-globex-ce-exporter, which reads the daemons' sockets.
+        - wan/run/cust-globex-ce:/var/run/frr
+      entrypoint: /bin/bash
+      cmd: /opt/init.sh
+      labels: {role: customer-ce, tier: wan, customer: globex}
+
+    cust-globex-host:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      mgmt-ipv4: 172.20.41.74
+      memory: 256MB
+      binds:
+        - wan/rendered/cust-globex-host/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: customer-host, tier: wan, customer: globex}
+
+    # ---- acme's second site: statically routed, no protocol at all --------
+    # The same tenant as cust-acme-ce, attached a different way. There is no
+    # FRR on this CE: it is a multitool with addresses, ip_forward and a
+    # default route, and the PE holds a matching static for its LAN. See
+    # wan/customers.yml "TENANT, NOT CUSTOMER".
+    cust-acme-dr-ce:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      mgmt-ipv4: 172.20.41.75
+      memory: 256MB
+      binds:
+        - wan/rendered/cust-acme-dr-ce/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: customer-ce, tier: wan, tenant: acme, site: dr}
+
+    cust-acme-dr-host:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      mgmt-ipv4: 172.20.41.76
+      memory: 256MB
+      binds:
+        - wan/rendered/cust-acme-dr-host/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: customer-host, tier: wan, tenant: acme, site: dr}
+
+    # ------------------------------------------------------------ internet
+    # One router and one web server standing in for everything outside the
+    # provider. Tenants that buy internet access get a default route pointed
+    # at this; tenants that do not, do not -- which is the entire product.
+    internet-rtr:
+      kind: linux
+      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      mgmt-ipv4: 172.20.41.91
+      memory: 256MB
+      binds:
+        - wan/rendered/internet-rtr/frr.conf:/etc/frr/frr.conf:ro
+        - wan/rendered/internet-rtr/daemons:/etc/frr/daemons:ro
+        - wan/rendered/internet-rtr/init.sh:/opt/init.sh:ro
+        # Shared with internet-rtr-exporter, which reads the daemons' sockets.
+        - wan/run/internet-rtr:/var/run/frr
+      entrypoint: /bin/bash
+      cmd: /opt/init.sh
+      labels: {role: internet-router, tier: internet}
+
+    # network-multitool serves HTTP on :80 out of the box, so "can this
+    # customer reach the internet" is one curl.
+    internet-host:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      mgmt-ipv4: 172.20.41.92
+      memory: 256MB
+      binds:
+        - wan/rendered/internet-host/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: internet-host, tier: internet}
+
+    # ------------------------------------------------- tenant cloud instances
+    # A tenant's isolated compute in the datacentre: bare metal or a VM, which
+    # from the fabric's point of view is the same thing -- a host on an access
+    # port in the tenant's VLAN. Each sits in its own VRF with no route to the
+    # other, and the only way in is through a vSRX zone policy.
+    acme-cloud1:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      mgmt-ipv4: 172.20.41.93
+      memory: 256MB
+      binds:
+        - wan/rendered/acme-cloud1/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: tenant-cloud, tier: workload, tenant: acme}
+
+    globex-cloud1:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      mgmt-ipv4: 172.20.41.94
+      memory: 256MB
+      binds:
+        - wan/rendered/globex-cloud1/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: tenant-cloud, tier: workload, tenant: globex}
+
+    # ------------------------------------------------------- branch office
+    # The branch is NOT a WAN customer: it has a private circuit straight into
+    # border-leaf1, so it is a different trust level and gets its own VRF and
+    # its own firewall zone. Branch users reach DC services without their
+    # traffic ever entering the ISP.
+    branch-rtr:
+      kind: linux
+      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      mgmt-ipv4: 172.20.41.81
+      memory: 256MB
+      binds:
+        - wan/rendered/branch-rtr/frr.conf:/etc/frr/frr.conf:ro
+        - wan/rendered/branch-rtr/daemons:/etc/frr/daemons:ro
+        - wan/rendered/branch-rtr/init.sh:/opt/init.sh:ro
+        # Shared with branch-rtr-exporter, which reads the daemons' sockets.
+        - wan/run/branch-rtr:/var/run/frr
+      entrypoint: /bin/bash
+      cmd: /opt/init.sh
+      labels: {role: branch-router, tier: branch}
+
+    branch-host:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      mgmt-ipv4: 172.20.41.82
+      memory: 256MB
+      binds:
+        - wan/rendered/branch-host/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: branch-host, tier: branch}
+
+    # The branch employee's workstation: XFCE on Xvnc, with Firefox pointed at
+    # the access portal's VIP. Built locally by `make desktop-image` -- see
+    # configs/branch/desktop/ for why it is a container rather than a QEMU VM.
+    #
+    # No fabric MTU worries here: its init.sh sets 9214 like every other WAN
+    # host, and the VNC session to guacd never leaves the branch LAN.
+    branch-desktop:
+      kind: linux
+      image: ${OTTERNET_DESKTOP_IMAGE:=otternet/branch-desktop:local}
+      mgmt-ipv4: 172.20.41.83
+      memory: 2048MB
+      cpu: 2
+      binds:
+        - wan/rendered/branch-desktop/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: branch-desktop, tier: branch}
+
+    # guacd: the protocol half of Guacamole. On the branch LAN because it is
+    # what opens the VNC connection to the desktop.
+    #
+    # `user: "0"` is required, not cosmetic. The stock image runs as uid 1000,
+    # and containerlab's post-boot exec inherits that user -- so init.sh would
+    # fail on `ip addr replace` with a permission error and the node would come
+    # up with no branch LAN address at all.
+    branch-guacd:
+      kind: linux
+      image: ${OTTERNET_GUACD_IMAGE:=guacamole/guacd:1.5.5}
+      mgmt-ipv4: 172.20.41.85
+      memory: 256MB
+      user: "0"
+      binds:
+        - wan/rendered/branch-guacd/init.sh:/opt/init.sh:ro
+      exec:
+        - /opt/init.sh
+      labels: {role: branch-guacd, tier: branch}
+
+    # The Guacamole web front end -- how a human gets a browser onto the branch
+    # desktop: http://<lab host>:8080/guacamole/ , branch / branch.
+    #
+    # Management network only, with no link into the branch LAN. It talks to
+    # guacd and to the browser and to nothing else, so giving it a seat on the
+    # site network would be inventing an exposure the demo does not need.
+    # GUACD_HOSTNAME must be set even though guacamole.properties already names
+    # guacd: the image's entrypoint refuses to start without the variable.
+    branch-guac:
+      kind: linux
+      image: ${OTTERNET_GUACAMOLE_IMAGE:=guacamole/guacamole:1.5.5}
+      mgmt-ipv4: 172.20.41.84
+      # 2GB with the heap capped below, NOT 1GB with an unbounded JVM. At 1GB
+      # this container was OOM-killed by its own cgroup roughly hourly, and the
+      # only symptom a user saw was Guacamole's generic "An error has occurred
+      # and this action cannot be completed."
+      memory: 2048MB
+      ports:
+        - 8080:8080
+      env:
+        GUACAMOLE_HOME: /etc/guacamole
+        GUACD_HOSTNAME: 172.20.41.85
+        GUACD_PORT: "4822"
+        # THE HEAP IS CAPPED BY HAND BECAUSE CONTAINER DETECTION DOES NOT WORK
+        # HERE. The JVM reports `UseContainerSupport = true` and
+        # `MaxRAMPercentage = 25`, and then computes
+        #
+        #   MaxHeapSize := 16582180864     (15.4GB)
+        #
+        # which is a quarter of the HOST's 61GB, not of this container's limit
+        # -- even though `/sys/fs/cgroup/memory.max` inside the container reads
+        # the limit correctly. So the JVM grows until the cgroup killer stops
+        # it, `docker inspect` reports `OOMKilled: false` because the kill lands
+        # on the java process rather than on PID 1, and the exit code is 0.
+        # `dmesg` is the only place it is visible:
+        #
+        #   Memory cgroup out of memory: Killed process (java) anon-rss:994272kB
+        #
+        # An explicit -Xmx removes the dependency on that detection entirely.
+        JAVA_OPTS: "-Xms128m -Xmx768m -XX:MaxMetaspaceSize=256m"
+        # Serve at / rather than at /guacamole/.
+        #
+        # The image symlinks the war to $WEBAPP_CONTEXT.war, and Tomcat's ROOT
+        # is the one context that answers on the bare path. Without this the
+        # published port 404s at / and works only at /guacamole/, which is a
+        # trap the moment anyone port-forwards 8080 to their laptop and tries
+        # the obvious URL.
+        WEBAPP_CONTEXT: ROOT
+      binds:
+        - configs/branch/guacamole:/etc/guacamole:ro
+      labels: {role: branch-guacamole, tier: branch}
+
+    # --------------------------------------------------------- classic app hosts
+    # These prove east-west reachability into the k8s VRF *through* the firewall.
+    host-a:
+      kind: linux
+      mgmt-ipv4: 172.20.41.51
+      memory: 256MB
+      exec:
+        # 9214 matches the switch MTU. containerlab defaults these veths to
+        # 9500, which silently breaks large TCP through the fabric.
+        - ip link set eth1 mtu 9214
+        - ip addr replace 10.210.0.11/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace 10.0.0.0/8 via 10.210.0.1 dev eth1
+      labels: {role: host, tier: workload}
+
+    host-b:
+      kind: linux
+      mgmt-ipv4: 172.20.41.52
+      memory: 256MB
+      exec:
+        # 9214 matches the switch MTU. containerlab defaults these veths to
+        # 9500, which silently breaks large TCP through the fabric.
+        - ip link set eth1 mtu 9214
+        - ip addr replace 10.210.0.12/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace 10.0.0.0/8 via 10.210.0.1 dev eth1
+      labels: {role: host, tier: workload}
+
+    # ------------------------------------------------- FRR telemetry sidecars
+    # One frr_exporter per FRR router, for the telemetry collector the Infrahub
+    # repository configures. FRR has no telemetry API of its own in this image
+    # -- no SNMP module, no gNMI -- and frr_exporter reads the daemons' vty
+    # sockets, so each sidecar shares its router's network namespace (it
+    # answers on the router's own management address, port 9342) and its
+    # /var/run/frr through the bind above.
+    #
+    # One exporter process reads one socket directory, so there is one sidecar
+    # per router rather than one for all six. That also keeps the scrape target
+    # structural: a router's telemetry is at the router's address, so nothing
+    # has to pair a router with a port and nothing can pair them wrongly.
+    #
+    # Root, because FRR's sockets are frr:frrvty 0770 and the image runs as
+    # nobody. Which of its collectors' series are KEPT is decided in Infrahub,
+    # by the monitoring profiles, and rendered into Telegraf's configuration.
+    isp-pe1-exporter:
+      kind: linux
+      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
+      network-mode: container:isp-pe1
+      user: "0"
+      binds:
+        - wan/run/isp-pe1:/var/run/frr
+      cmd: --frr.socket.dir-path=/var/run/frr
+      labels: {role: telemetry-sidecar, tier: wan}
+
+    isp-pe2-exporter:
+      kind: linux
+      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
+      network-mode: container:isp-pe2
+      user: "0"
+      binds:
+        - wan/run/isp-pe2:/var/run/frr
+      cmd: --frr.socket.dir-path=/var/run/frr
+      labels: {role: telemetry-sidecar, tier: wan}
+
+    cust-acme-ce-exporter:
+      kind: linux
+      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
+      network-mode: container:cust-acme-ce
+      user: "0"
+      binds:
+        - wan/run/cust-acme-ce:/var/run/frr
+      cmd: --frr.socket.dir-path=/var/run/frr
+      labels: {role: telemetry-sidecar, tier: wan}
+
+    cust-globex-ce-exporter:
+      kind: linux
+      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
+      network-mode: container:cust-globex-ce
+      user: "0"
+      binds:
+        - wan/run/cust-globex-ce:/var/run/frr
+      cmd: --frr.socket.dir-path=/var/run/frr
+      labels: {role: telemetry-sidecar, tier: wan}
+
+    branch-rtr-exporter:
+      kind: linux
+      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
+      network-mode: container:branch-rtr
+      user: "0"
+      binds:
+        - wan/run/branch-rtr:/var/run/frr
+      cmd: --frr.socket.dir-path=/var/run/frr
+      labels: {role: telemetry-sidecar, tier: wan}
+
+    internet-rtr-exporter:
+      kind: linux
+      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
+      network-mode: container:internet-rtr
+      user: "0"
+      binds:
+        - wan/run/internet-rtr:/var/run/frr
+      cmd: --frr.socket.dir-path=/var/run/frr
+      labels: {role: telemetry-sidecar, tier: wan}
+
+  links:
+    # ---- leaf uplinks: every leaf dual-homed to both spines -----------------
+    - endpoints: ["spine1:eth1", "k8s-leaf1:eth1"]
+    - endpoints: ["spine2:eth1", "k8s-leaf1:eth2"]
+    - endpoints: ["spine1:eth2", "k8s-leaf2:eth1"]
+    - endpoints: ["spine2:eth2", "k8s-leaf2:eth2"]
+    - endpoints: ["spine1:eth3", "app-leaf1:eth1"]
+    - endpoints: ["spine2:eth3", "app-leaf1:eth2"]
+    - endpoints: ["spine1:eth4", "app-leaf2:eth1"]
+    - endpoints: ["spine2:eth4", "app-leaf2:eth2"]
+    - endpoints: ["spine1:eth5", "border-leaf1:eth1"]
+    - endpoints: ["spine2:eth5", "border-leaf1:eth2"]
+
+    # ---- MLAG peer-links: two members each, as a real deployment would ------
+    - endpoints: ["k8s-leaf1:eth3", "k8s-leaf2:eth3"]
+    - endpoints: ["k8s-leaf1:eth4", "k8s-leaf2:eth4"]
+    - endpoints: ["app-leaf1:eth3", "app-leaf2:eth3"]
+    - endpoints: ["app-leaf1:eth4", "app-leaf2:eth4"]
+
+    # ---- workload edge ports -----------------------------------------------
+    - endpoints: ["k8s-leaf1:eth10", "k8s-node1:eth1"]
+    - endpoints: ["k8s-leaf2:eth10", "k8s-node2:eth1"]
+    - endpoints: ["k8s-leaf2:eth11", "k8s-node3:eth1"]
+    - endpoints: ["app-leaf1:eth10", "host-a:eth1"]
+    - endpoints: ["app-leaf2:eth10", "host-b:eth1"]
+
+    # ---- firewall handoff: one wire per security zone ----------------------
+    # A physical link per VRF rather than a tagged trunk. One wire per zone
+    # reads far more clearly when demoing the service-insertion path, and it
+    # avoids depending on vlan tagging in a container dataplane.
+    #
+    # fw1:eth1..eth4 are what containerlab wires; inside Junos they appear as
+    # ge-0/0/0..ge-0/0/3, because fxp0 is the management interface (eth0). Every
+    # policy in configs/fw/vsrx/junos.conf is written against those names for
+    # that reason -- get it wrong and the config commits cleanly and never
+    # matches a packet.
+    - endpoints: ["border-leaf1:eth10", "fw1:eth1"]   # ge-0/0/0 -> zone k8s-prod
+    - endpoints: ["border-leaf1:eth11", "fw1:eth2"]   # ge-0/0/1 -> zone app-prod
+    - endpoints: ["border-leaf1:eth14", "fw1:eth3"]   # ge-0/0/2 -> zone wan
+    - endpoints: ["border-leaf1:eth15", "fw1:eth4"]   # ge-0/0/3 -> zone branch
+
+    # One wire per TENANT cloud, for the same reason as one wire per zone
+    # above: each tenant's cloud is a separate VRF on the leaf, so it needs a
+    # separate handoff, and a separate firewall zone is what lets the policy
+    # say "acme's sites reach acme's cloud" without naming addresses twice.
+    - endpoints: ["border-leaf1:eth16", "fw1:eth5"]   # ge-0/0/4 -> zone acme-cloud
+    - endpoints: ["border-leaf1:eth17", "fw1:eth6"]   # ge-0/0/5 -> zone globex-cloud
+
+    # ---- the tooling network ----------------------------------------------
+    # THE ONE FIREWALL INTERFACE THAT DOES NOT FACE THE FABRIC. Every wire
+    # above lands on border-leaf1; this one lands on a Linux bridge the HOST is
+    # also on, and that asymmetry is the entire point.
+    #
+    # Infrahub configures the fabric, the fabric carries the workload cluster.
+    # A tooling cluster reachable only through the fabric could therefore never
+    # be brought up before the fabric existed -- so the tooling network is
+    # L2-adjacent to the host instead, and comes up with no fabric and no
+    # firewall in the path. Branch users still reach it the hard way, through
+    # WAN -> border-leaf1 -> fw1 -> the `tooling` zone, so the firewall governs
+    # exactly the traffic that should be governed and none of the bootstrap.
+    #
+    # The vSRX is built with ten NICs (`num_nics = 10` in vrnetlab's launch.py)
+    # and six were wired, so this is a real port rather than a sub-interface
+    # sharing a link with production traffic.
+    - endpoints: ["fw1:eth7", "br-otter-tool:fw1-eth7"]   # ge-0/0/6 -> zone tooling
+    - endpoints: ["tool-node1:eth1", "br-otter-tool:tool1-eth1"]
+
+    # ---- ISP core and the DC handoff ---------------------------------------
+    # isp-pe1 faces the customers, isp-pe2 faces the DC, and the link between
+    # them carries only the default VRF -- the per-customer VRFs terminate on
+    # pe1, which is where leaking (and therefore isolation) is enforced.
+    - endpoints: ["isp-pe1:eth1", "isp-pe2:eth1"]     # ISP core, default VRF
+    - endpoints: ["isp-pe2:eth2", "border-leaf1:eth12"]  # ISP -> DC, VRF WAN
+
+    # ---- customer attachments ----------------------------------------------
+    # One wire per customer into the edge PE. The PE end is enslaved to that
+    # customer's VRF, which is the whole basis of the separation.
+    - endpoints: ["cust-acme-ce:eth1", "isp-pe1:eth2"]
+    - endpoints: ["cust-globex-ce:eth1", "isp-pe1:eth3"]
+    - endpoints: ["cust-acme-host:eth1", "cust-acme-ce:eth2"]
+    - endpoints: ["cust-globex-host:eth1", "cust-globex-ce:eth2"]
+
+    # acme's second site. Same tenant, same VRF on the PE, different kind of
+    # attachment -- so hq and dr reach each other with nothing leaked.
+    - endpoints: ["cust-acme-dr-ce:eth1", "isp-pe1:eth4"]
+    - endpoints: ["cust-acme-dr-host:eth1", "cust-acme-dr-ce:eth2"]
+
+    # ---- the internet, on the far side of the core PE ----------------------
+    - endpoints: ["internet-rtr:eth1", "isp-pe2:eth3"]
+    - endpoints: ["internet-host:eth1", "internet-rtr:eth2"]
+
+    # ---- tenant cloud instances, on ordinary access ports ------------------
+    - endpoints: ["app-leaf1:eth11", "acme-cloud1:eth1"]
+    - endpoints: ["app-leaf2:eth11", "globex-cloud1:eth1"]
+
+    # ---- branch office private circuit -------------------------------------
+    # Straight into the border leaf, bypassing the ISP entirely.
+    - endpoints: ["branch-rtr:eth1", "border-leaf1:eth13"]  # branch -> DC, VRF BRANCH
+
+    # ---- branch LAN ---------------------------------------------------------
+    # eth2/eth3/eth4 on branch-rtr are ports on br-branch, not three separate
+    # subnets -- see wan/customers.yml. That is what lets guacd open a VNC
+    # session straight to the desktop without the router forwarding it.
+    - endpoints: ["branch-host:eth1", "branch-rtr:eth2"]
+    - endpoints: ["branch-desktop:eth1", "branch-rtr:eth3"]
+    - endpoints: ["branch-guacd:eth1", "branch-rtr:eth4"]

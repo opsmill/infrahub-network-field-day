@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  File-based authentication, so the gateway needs no database.
+
+  Editing note: a double hyphen is illegal inside an XML comment, and
+  Guacamole's response to one is to reject the whole mapping, log
+  "is not valid" at WARN, and fail every login as INVALID_CREDENTIALS.
+  The rest of this repo uses double hyphens freely in comments; this file
+  cannot, so the prose here is written without them.
+
+  The official guacamole/guacamole image insists on an authentication backend
+  and normally means PostgreSQL or MySQL by that. Pointing GUACAMOLE_HOME at a
+  directory containing this file satisfies it with no database, no init SQL and
+  no third container. GUACD_HOSTNAME must still be set in the environment even
+  though guacamole.properties names guacd: the image's entrypoint checks the
+  variable before it ever reads the file.
+
+  Lab credentials, in git on purpose. This gateway is reachable on the lab
+  host's port 8080 and nowhere else.
+    Guacamole:  branch / branch
+    VNC:        the password baked into otternet/branch-desktop
+-->
+<user-mapping>
+    <authorize username="branch" password="branch">
+        <connection name="Branch office desktop">
+            <protocol>vnc</protocol>
+            <param name="hostname">10.70.0.20</param>
+            <param name="port">5901</param>
+            <param name="password">branchvnc</param>
+            <!-- A browser session into a workstation, not a console. -->
+            <param name="color-depth">24</param>
+            <param name="enable-audio">false</param>
+        </connection>
+    </authorize>
+</user-mapping>

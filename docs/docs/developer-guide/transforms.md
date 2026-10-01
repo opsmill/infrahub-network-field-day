@@ -253,9 +253,9 @@ graph, with the same property — change the model, re-render, review the diff.
 
 **Hybrid Python + Jinja2.** Python assembles a per-device context from one GraphQL query and
 selects one of five templates from the device's `role`; the templates under
-`transforms/templates/frr/` are ported from `../lab/wan/templates/` with exactly one line
+`transforms/templates/frr/` are ported from `lab/wan/templates/` with exactly one line
 changed, the provenance header. `tests/unit/test_frr_config.py` holds the output byte-for-byte
-against `../lab/wan/rendered/*/frr.conf` — 448 lines the lab actually runs.
+against `lab/wan/rendered/*/frr.conf` — 448 lines the lab actually runs.
 
 **It reads the service layer.** Cycle 010's layering rule says renderers read technical
 objects, and the provider edge is the documented exception, because its per-tenant import

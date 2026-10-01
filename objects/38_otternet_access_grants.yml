@@ -20,7 +20,7 @@
 # names next.
 #
 # That staging is now the FIREWALL's alone: the application behind the
-# access-portal VIP was the lab repository's `otternet-access`, which `invoke
+# access-portal VIP was the lab's `otternet-access`, which `invoke
 # cluster`'s handover deletes. The rule is permitted and unoccupied, and the
 # portal a branch user actually arrives at is Backstage in the tooling cluster.
 apiVersion: infrahub.app/v1

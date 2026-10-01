@@ -1,0 +1,22 @@
+---
+# Both providers target the cluster they are running in.
+#
+# InjectedIdentity means "use the ServiceAccount of the provider pod" rather
+# than a kubeconfig in a Secret. That is the right shape here: Crossplane is
+# managing its own cluster, so there is no external credential to hold, rotate
+# or leak into the repo.
+apiVersion: kubernetes.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: otternet
+spec:
+  credentials:
+    source: InjectedIdentity
+---
+apiVersion: helm.crossplane.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: otternet
+spec:
+  credentials:
+    source: InjectedIdentity

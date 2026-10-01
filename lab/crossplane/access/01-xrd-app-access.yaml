@@ -1,0 +1,130 @@
+---
+# AppAccess -- "this person may use that application", as one object.
+#
+# A request from the branch office arrives as one of these and, once approved,
+# it is the only thing that has to exist for the whole path to work:
+#
+#   * the application itself, deployed as a FabricApp if it was not running --
+#     which brings its namespace, its VIP, the BGP advertisement that puts that
+#     VIP in the leaves' VRF, and its CiliumNetworkPolicy with it
+#   * a FirewallAccess, which the fw-controller turns into an address object, a
+#     application object and a security policy on the vSRX
+#
+# Those are the two halves that are always forgotten separately. An app that is
+# deployed and not permitted is a ticket; a firewall hole with nothing behind it
+# is an audit finding. Bundling them means revoking access is `kubectl delete`
+# and the rule leaves the firewall with it.
+#
+# Cluster-scoped because what it composes is: a FabricApp is cluster-scoped and
+# so is a FirewallAccess.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: appaccesses.otternet.lab
+spec:
+  scope: Cluster
+  group: otternet.lab
+  names:
+    kind: AppAccess
+    plural: appaccesses
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                app:
+                  type: string
+                  description: Catalog key. Names the FabricApp and the firewall objects.
+                displayName:
+                  type: string
+                requester:
+                  type: string
+                justification:
+                  type: string
+                approved:
+                  type: boolean
+                  description: >-
+                    The gate. Nothing is composed while this is false -- no
+                    deployment, no VIP, no firewall rule -- so an unapproved
+                    request is inert rather than merely hidden. Approval is a
+                    patch on this field, which means it is in the audit log and
+                    can be done from the portal or from kubectl.
+                  default: false
+                approvedBy:
+                  type: string
+                source:
+                  type: object
+                  description: Where the request is coming from, in firewall terms.
+                  properties:
+                    zone:
+                      type: string
+                      default: branch
+                    address:
+                      type: string
+                      description: >-
+                        An existing Junos address-book entry. The firewall's
+                        own objects stay the vocabulary; this never synthesises
+                        a source CIDR of its own.
+                      default: branch-users
+                    cidr:
+                      type: string
+                      description: >-
+                        The same source as a CIDR, for the CiliumNetworkPolicy
+                        on a provisioned app. The firewall speaks objects and
+                        Cilium speaks CIDRs; both gates have to agree.
+                      default: 10.70.0.0/24
+                  default: {}
+                access:
+                  type: object
+                  properties:
+                    vip:
+                      type: string
+                      description: >-
+                        The address the grant opens. Must be inside
+                        10.112.240.0/24 -- that is the only DC range the border
+                        leaf re-advertises to the branch, so a VIP outside it is
+                        permitted by the firewall and still unroutable.
+                    ports:
+                      type: array
+                      items:
+                        type: integer
+                      default: [80]
+                  required: [vip]
+                provision:
+                  type: object
+                  description: >-
+                    How to deploy the app, for catalog entries that are not
+                    already running. Omit it and this is a grant against
+                    something that exists -- which is the other half of what the
+                    catalog offers.
+                  properties:
+                    namespace:
+                      type: string
+                    image:
+                      type: string
+                    containerPort:
+                      type: integer
+                      default: 8080
+                    vipBlock:
+                      type: string
+                    replicas:
+                      type: integer
+                      default: 1
+                  required: [namespace, image, vipBlock]
+              required: [app, access]
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  description: PendingApproval, Provisioning or Granted.
+                vip:
+                  type: string
+                provisioned:
+                  type: boolean

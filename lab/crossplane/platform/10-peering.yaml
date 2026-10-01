@@ -1,0 +1,26 @@
+---
+# The one FabricPeering for this cluster.
+#
+# Everything here has a counterpart on the switch side that AVD rendered:
+#
+#   localASN 65401         -> neighbor ... remote-as 65401 on both k8s leaves
+#   peers .2 / .3          -> the leaves' unique Vlan110 SVI addresses
+#   peer ASN 65101         -> the k8s-leaf MLAG pair's shared BGP AS
+#   authSecretName         -> cleartext_password: Otternet-Cilium in the AVD vars
+#   podCIDRCommunities     -> the community RM-CILIUM-IN adds on accept
+#
+# Change either side without the other and BGP either does not come up or comes
+# up and carries nothing. `make verify` checks both ends.
+apiVersion: otternet.lab/v1alpha1
+kind: FabricPeering
+metadata:
+  name: otternet
+spec:
+  localASN: 65401
+  peers:
+    - name: k8s-leaf1
+      address: 10.110.0.2
+      asn: 65101
+    - name: k8s-leaf2
+      address: 10.110.0.3
+      asn: 65101

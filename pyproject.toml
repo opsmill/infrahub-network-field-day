@@ -168,6 +168,11 @@ ignore = [
 # CloudVision integration uses pyavd._cv internals (no public API exists).
 "checks/cv_*.py" = ["PLC2701", "SLF001", "PLW0717"]
 "generators/submit_cv_workspace.py" = ["PLC2701", "PLW0717"]
+# The lab's access-broker apps: stdlib-only scripts baked into their own
+# python:3.12 images (lab/k8s/access/*/Dockerfile), talking to fixed in-cluster
+# URLs. Formatted like everything else, but not annotated, and not worth
+# rewriting: `invoke cluster` deletes the broker after the handover.
+"lab/k8s/access/**/*.py" = ["ALL"]
 
 
 #https://docs.astral.sh/ruff/formatter/black/

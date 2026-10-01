@@ -1,0 +1,119 @@
+---
+# FabricPeering -- the cluster's side of the BGP contract with the EVPN fabric.
+#
+# This is the platform-level API: how the cluster peers with the leaves, what it
+# is willing to tell them about itself, and which pool the LoadBalancer VIPs are
+# cut from. It replaces the four hand-applied manifests that used to live in
+# k8s/manifests/bgp/, and it is deliberately cluster-scoped -- every resource it
+# composes (CiliumBGPClusterConfig, CiliumBGPPeerConfig, CiliumBGPAdvertisement,
+# CiliumLoadBalancerIPPool) is itself cluster-scoped, and there is exactly one
+# of these per cluster.
+#
+# The point of putting it behind an XRD rather than applying the Cilium CRDs
+# directly is that the fabric's expectations become part of the API. localASN,
+# the peer addresses and the permitted CIDRs all have to agree with what AVD
+# rendered onto the leaves; stating them in one place, with the fabric-side
+# counterpart named in the description, is what stops the two drifting.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: fabricpeerings.otternet.lab
+spec:
+  scope: Cluster
+  group: otternet.lab
+  names:
+    kind: FabricPeering
+    plural: fabricpeerings
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                localASN:
+                  type: integer
+                  description: >-
+                    The cluster's BGP AS. Must match the neighbor's remote-as on
+                    the leaves (AVD: network_services -> bgp_peers).
+                nodeSelector:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: >-
+                    Which nodes run a BGP speaker. BGP is opt-in per node so a
+                    node can join the cluster without being wired into the
+                    fabric's routing table.
+                  default:
+                    otternet.lab/bgp: "true"
+                authSecretName:
+                  type: string
+                  description: >-
+                    Secret in kube-system holding the MD5 session password. Must
+                    match the leaves' `cleartext_password` -- AVD encrypts that
+                    per peer, so a hash copied between neighbours fails auth
+                    silently.
+                  default: otternet-bgp-auth
+                timers:
+                  type: object
+                  description: >-
+                    Aggressive by default so a leaf failure converges inside a
+                    demo's attention span rather than the usual 90 seconds.
+                  properties:
+                    connectRetrySeconds:
+                      type: integer
+                      default: 5
+                    holdTimeSeconds:
+                      type: integer
+                      default: 9
+                    keepAliveSeconds:
+                      type: integer
+                      default: 3
+                  default: {}
+                peers:
+                  type: array
+                  description: >-
+                    One entry per leaf. Peer the unique SVI addresses
+                    (10.110.0.2 / .3), never the shared VARP gateway
+                    10.110.0.1 -- an anycast address is ambiguous across an
+                    MLAG pair.
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      address:
+                        type: string
+                      asn:
+                        type: integer
+                    required: [name, address, asn]
+                podCIDRCommunities:
+                  type: array
+                  description: >-
+                    Standard communities tagged onto the per-node PodCIDR
+                    advertisement.
+                  items:
+                    type: string
+                  default: ["65401:110"]
+                advertisementSelector:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: >-
+                    Label that ties CiliumBGPAdvertisement objects to this
+                    peering. FabricApp stamps the same label on the
+                    advertisements it creates, which is how a per-app VIP
+                    advertisement joins this session without editing the
+                    peering.
+                  default:
+                    otternet.lab/advertise: fabric
+              required: [localASN, peers]
+            status:
+              type: object
+              properties:
+                peerCount:
+                  type: integer

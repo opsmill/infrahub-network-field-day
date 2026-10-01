@@ -1,7 +1,7 @@
 ---
 # The demo application, as an ordered service.
 #
-# Derived from ../lab/crossplane/apps/10-demo.yaml, which is the oracle the
+# Derived from lab/crossplane/apps/10-demo.yaml, which is the oracle the
 # transform is measured against -- with one deliberate divergence since cycle
 # 033. That file expresses the workload as raw manifests, and says why: whoami
 # had no upstream chart worth depending on. An application here is now a chart

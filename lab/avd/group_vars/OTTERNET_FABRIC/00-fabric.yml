@@ -1,0 +1,143 @@
+---
+# ============================================================================
+# Fabric-wide AVD inputs (AVD 6.x / pyavd 6.4.0)
+#
+# AVD 6.0 removed a lot of 5.x keys. Notably `design.type` is gone -- the node
+# type keys themselves now carry the design -- and most flat management keys
+# moved under *_settings dicts. `make avd-build` is the authority: eos_designs
+# validates every key and names the replacement for anything stale.
+# ============================================================================
+fabric_name: OTTERNET_FABRIC
+
+# eBGP underlay + eBGP EVPN overlay: the most common single-DC L3LS pattern and
+# the one that shows BGP policy most clearly in a demo.
+underlay_routing_protocol: ebgp
+overlay_routing_protocol: ebgp
+
+# --- connectivity to the switches -------------------------------------------
+# containerlab's ceOS boot template puts Management0 in VRF MGMT and enables
+# eAPI there, so AVD's defaults line up with the running lab.
+mgmt_interface: Management0
+mgmt_interface_vrf: MGMT
+mgmt_gateway: 172.20.41.1
+
+ansible_connection: ansible.netcommon.httpapi
+ansible_network_os: arista.eos.eos
+ansible_user: admin
+ansible_password: admin
+ansible_become: true
+ansible_become_method: enable
+ansible_httpapi_use_ssl: true
+ansible_httpapi_validate_certs: false
+ansible_httpapi_port: 443
+
+# --- addressing --------------------------------------------------------------
+fabric_ip_addressing:
+  mlag:
+    algorithm: first_id
+
+p2p_uplinks_mtu: 9214
+default_interface_mtu: 9214
+
+# --- security: authenticated BGP everywhere ---------------------------------
+# `cleartext_password` rather than a pre-hashed `password` on purpose: EOS BGP
+# type-7 ciphertext is keyed by the peer-group name (or neighbour address), so a
+# hash copied between peers silently fails to authenticate. AVD encrypts these
+# with the right key at build time. Lab credentials -- rotate for anything real.
+bgp_peer_groups:
+  ipv4_underlay_peers:
+    name: IPv4-UNDERLAY-PEERS
+    cleartext_password: "Otternet-Underlay"
+  evpn_overlay_peers:
+    name: EVPN-OVERLAY-PEERS
+    cleartext_password: "Otternet-Overlay"
+  mlag_ipv4_underlay_peer:
+    name: MLAG-IPv4-UNDERLAY-PEER
+    cleartext_password: "Otternet-Mlag"
+
+bgp_graceful_restart:
+  enabled: true
+  restart_time: 300
+
+underlay_filter_peer_as: false
+underlay_filter_redistribute_connected: true
+
+# --- management plane --------------------------------------------------------
+# Both users' sha512_password is a real crypt hash of "admin", matching
+# ansible_password above. Generated with: openssl passwd -6 admin
+# A hash that is not actually a hash of the password you think it is will apply
+# cleanly and then lock eAPI out of the switch on the next connection.
+aaa_settings:
+  local_users:
+    - name: admin
+      privilege: 15
+      role: network-admin
+      sha512_password: "$6$OtternetLab$9OUIc8rD9Tz1nLCqGCVqkB2Jc0hRbMwY0oFA4E4hmrcIUFo7/5n79zdOiNhJDnTnsmVg4t3MAZCcmlrYu6iln1"
+    - name: avd
+      privilege: 15
+      role: network-admin
+      sha512_password: "$6$OtternetLab$9OUIc8rD9Tz1nLCqGCVqkB2Jc0hRbMwY0oFA4E4hmrcIUFo7/5n79zdOiNhJDnTnsmVg4t3MAZCcmlrYu6iln1"
+  authorization:
+    exec:
+      default: local
+
+# eAPI on HTTPS only, and only inside the management VRF.
+management_eapi:
+  enabled: true
+  enable_https: true
+  enable_http: false
+  default_services: false
+  vrfs:
+    - name: MGMT
+      enabled: true
+
+# gNMI in the management VRF, for the telemetry collector the Infrahub
+# repository delivers. ContainerLab's boot template enables it, but the first
+# full configuration replace removes anything this file does not say -- so it
+# has to be said here. Port 6030 is the default, and the built-in control-plane
+# ACL already permits it. eos_designs has no key for gNMI in pyavd 6.4, so it is
+# passed through as structured config.
+custom_structured_configuration_management_api_gnmi:
+  transport:
+    grpc:
+      - name: default
+        vrf: MGMT
+  provider: eos-native
+
+# SSH restricted to the management subnet by ACL.
+ssh_settings:
+  enabled: true
+  idle_timeout: 15
+  vrfs:
+    - name: MGMT
+      enabled: true
+      ipv4_acl: ACL-MGMT-IN
+
+ntp_settings:
+  server_vrf: MGMT
+  set_first_ntp_server_as_preferred: true
+  servers:
+    - name: 172.20.41.1
+      iburst: true
+
+dns_settings:
+  domain: otternet.lab
+  servers:
+    - ip_address: 172.20.41.1
+      vrf: MGMT
+
+timezone: UTC
+
+logging_settings:
+  vrfs:
+    - name: MGMT
+      source_interface: Management0
+
+# --- platform ----------------------------------------------------------------
+# cEOS has no real hardware SSO, so trim the reload delays to what a container
+# actually honours.
+custom_platform_settings:
+  - platforms: [cEOS-LAB]
+    reload_delay:
+      mlag: 300
+      non_mlag: 330

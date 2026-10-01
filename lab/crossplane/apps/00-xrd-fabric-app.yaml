@@ -1,0 +1,196 @@
+---
+# FabricApp -- an application that is a participant in the fabric, not just a
+# tenant of the cluster.
+#
+# Claiming one of these gets you, from a single object:
+#
+#   * a namespace, labelled with the tenant the fabric knows it by
+#   * the application itself, from an upstream Helm chart and/or raw manifests
+#   * a LoadBalancer VIP pool cut for this app alone
+#   * a BGP advertisement that puts that VIP into the leaves' VRF, and from
+#     there into EVPN as a type-5 route
+#   * a default-deny CiliumNetworkPolicy plus the specific allows the app needs
+#
+# The reason to bundle those together is that they are not really separable. A
+# service with no pool never gets a VIP; a VIP with no advertisement is
+# unreachable off-cluster; an advertisement with no network policy exposes the
+# app to the whole app tenant. Every one of those is a working cluster and a
+# broken application, and each failure looks like a different problem. Making
+# them one API means the reachability of an app and the policy protecting it are
+# declared in the same breath and cannot drift apart.
+#
+# Cluster-scoped on purpose: it creates a Namespace and three cluster-scoped
+# Cilium objects, so it cannot live inside the namespace it defines.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: fabricapps.otternet.lab
+spec:
+  scope: Cluster
+  group: otternet.lab
+  names:
+    kind: FabricApp
+    plural: fabricapps
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                namespace:
+                  type: string
+                  description: Namespace to create and deploy into.
+                tenant:
+                  type: string
+                  description: >-
+                    Fabric tenant this app belongs to. Becomes the
+                    otternet.lab/tenant label, matching the VRF the leaves put its
+                    traffic in.
+                  default: k8s-prod
+                chart:
+                  type: object
+                  description: >-
+                    An upstream Helm chart. Optional -- an app may be raw
+                    manifests instead, or both.
+                  properties:
+                    repository:
+                      type: string
+                    name:
+                      type: string
+                    version:
+                      type: string
+                    values:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  required: [repository, name, version]
+                manifests:
+                  type: array
+                  description: >-
+                    Raw API objects to create in the namespace. This is the
+                    escape hatch for anything a chart cannot express -- and for
+                    workloads that simply have no chart. Each becomes its own
+                    provider-kubernetes Object, so it is reconciled and
+                    drift-corrected exactly like the chart is.
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                expose:
+                  type: object
+                  description: >-
+                    Put this app on the fabric. Omit it and the app is
+                    cluster-internal: no pool, no advertisement, no route off
+                    the cluster.
+                  properties:
+                    vipBlock:
+                      type: string
+                      description: >-
+                        CIDR to allocate this app's VIPs from. Must sit inside
+                        10.112.0.0/16 or the leaves' RM-CILIUM-IN will refuse
+                        the advertisement -- which is the intended behaviour,
+                        not a bug to work around.
+                    serviceSelector:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: >-
+                        Which Services in the namespace get a VIP and get
+                        advertised. A Service is never exposed to the fabric
+                        just by being of type LoadBalancer.
+                    communities:
+                      type: array
+                      items:
+                        type: string
+                      default: ["65401:112"]
+                    advertisementSelector:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: >-
+                        Must match the FabricPeering's advertisementSelector, or
+                        the advertisement is created and never attached to a
+                        BGP session.
+                      default:
+                        otternet.lab/advertise: fabric
+                  required: [vipBlock, serviceSelector]
+                policy:
+                  type: object
+                  description: Baseline CiliumNetworkPolicy generated for the namespace.
+                  properties:
+                    defaultDeny:
+                      type: boolean
+                      default: true
+                    allowDNS:
+                      type: boolean
+                      default: true
+                    allowIntraNamespace:
+                      type: boolean
+                      description: >-
+                        Let pods in this namespace talk to each other. Almost
+                        every multi-component app needs it, and default-deny
+                        denies egress as well as ingress -- so without this a
+                        chart's own components cannot reach one another and the
+                        app fails in a way that looks like the chart is broken.
+                      default: true
+                    allowEgressToAPIServer:
+                      type: boolean
+                      description: >-
+                        Let pods in this namespace reach the Kubernetes API.
+                        Any chart carrying an operator, a controller or an
+                        admission webhook needs this -- kube-prometheus-stack's
+                        cert job is the first thing that runs and the first
+                        thing that fails without it, and the error it prints
+                        ("dial tcp 10.112.0.1:443: i/o timeout") reads as a
+                        broken cluster rather than as policy. Scoped to the
+                        kube-apiserver entity, so it is not general egress.
+                      default: false
+                    allowEgressToInternet:
+                      type: boolean
+                      description: >-
+                        Let pods reach the world. Needed by anything that pulls
+                        at runtime; note that egress leaves via the management
+                        path, masqueraded, not across the fabric.
+                      default: false
+                    allowFrom:
+                      type: array
+                      description: >-
+                        Source CIDRs permitted to reach the exposed workload.
+                        This has to agree with the firewall zone policy and the
+                        leaf ACL before traffic actually flows -- three
+                        enforcement points, one intent.
+                      items:
+                        type: string
+                      default: []
+                    allowFromPorts:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          port:
+                            type: string
+                          protocol:
+                            type: string
+                            default: TCP
+                        required: [port]
+                      default: []
+                    workloadSelector:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      description: >-
+                        Endpoints the allowFrom rules apply to. Empty means
+                        every pod in the namespace.
+                      default: {}
+                  default: {}
+              required: [namespace]
+            status:
+              type: object
+              properties:
+                namespace:
+                  type: string
+                exposed:
+                  type: boolean

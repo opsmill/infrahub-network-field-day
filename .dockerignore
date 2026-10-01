@@ -108,3 +108,8 @@ cython_debug/
 # Project specific
 tests/
 *.save.yml
+
+# The lab. Neither image copies it, and ContainerLab writes its runtime state
+# (lab/clab-otternet/) as root at deploy time -- an unreadable file in the build
+# context fails `docker build .` outright, naming the file and not the cause.
+lab/

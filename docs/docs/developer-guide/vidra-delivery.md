@@ -49,7 +49,7 @@ merge, which is why no trigger definition was added.
 An application joins delivery by joining the target group. No cluster-side change is needed —
 a sync selects by artifact **name**, so it already covers every member of the group.
 
-**Those are the whole list, and that is enforced rather than assumed.** The lab repository's
+**Those are the whole list, and that is enforced rather than assumed.** The lab's
 bootstrap also applies `otternet-access`, which nothing in Infrahub models, and would apply
 `otternet-observability`. `invoke cluster` sets `OTTERNET_SKIP_OBSERVABILITY` so that one is never
 applied: two kube-prometheus-stack releases contend for the same CRDs. The handover deletes the
@@ -58,7 +58,7 @@ only applications a service object declares — a workload no proposed change ca
 exactly what this delivery path exists to rule out. `scripts/verify_bootstrap.sh` checks their
 absence and counts the applications, so a third one arriving from elsewhere fails too.
 
-:::warning Two files in the lab repository are now dead
+:::warning Two files in the lab are now dead
 `crossplane/apps/10-demo.yaml` and `crossplane/platform/10-peering.yaml` declare the same two
 resources Infrahub now owns. Re-applying either restores a second writer, and the two then fight over the resource.
 :::

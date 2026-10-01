@@ -1,0 +1,64 @@
+---
+# What the access broker is allowed to do.
+#
+# Unlike the providers in crossplane/providers/02-rbac.yaml, these are narrow,
+# and they are narrow because they can be: the portal touches exactly one kind
+# and the controller touches exactly one other. If the portal is ever
+# compromised, the worst it can do is request and approve access to things that
+# are already in the catalog -- it cannot deploy anything the catalog does not
+# describe, because the composition, not the portal, decides what an approved
+# request turns into.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otternet-access-portal
+rules:
+  # The portal creates, approves (patch) and revokes (delete) requests.
+  - apiGroups: ["otternet.lab"]
+    resources: ["appaccesses"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # ...and reads the firewall side so it can show whether the grant actually
+  # landed on the box, rather than only that Kubernetes accepted the request.
+  - apiGroups: ["otternet.lab"]
+    resources: ["firewallaccesses"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otternet-fw-controller
+rules:
+  - apiGroups: ["otternet.lab"]
+    resources: ["firewallaccesses"]
+    # patch on the object itself is for the finalizer, which is what makes
+    # "delete the object, lose the firewall rule" reliable rather than hopeful.
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["otternet.lab"]
+    resources: ["firewallaccesses/status"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otternet-access-portal
+subjects:
+  - kind: ServiceAccount
+    name: access-portal
+    namespace: otternet-access
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otternet-access-portal
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otternet-fw-controller
+subjects:
+  - kind: ServiceAccount
+    name: fw-controller
+    namespace: otternet-access
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otternet-fw-controller

@@ -1,0 +1,36 @@
+#!/bin/sh
+# Rendered by wan/render.py for {{ node }} -- do not edit.
+#
+# A plain end user: one address, one default route via its local router. No
+# routing protocol, because that is the point -- if this host can reach a DC
+# service, the whole WAN path did its job.
+set -eu
+log() { echo "[wan-init:{{ node }}] $*"; }
+
+waited=0
+while [ ! -e /sys/class/net/{{ interface }} ]; do
+    waited=$((waited + 1))
+    [ "$waited" -gt 240 ] && { log "FATAL: {{ interface }} never appeared"; exit 1; }
+    sleep 0.5
+done
+
+ip link set {{ interface }} mtu {{ mtu }}
+ip addr replace {{ address }} dev {{ interface }}
+ip link set {{ interface }} up
+
+{% if default_route %}
+# This host's tenant buys internet access, so it needs a route for everything,
+# not just for 10.0.0.0/8. Note the container's management default on eth0 is
+# replaced here: without that, "the internet" would be reachable through
+# docker rather than through the provider, and the demo would prove nothing.
+ip route replace default via {{ gateway }} dev {{ interface }}
+log "{{ interface }} -> {{ address }}, default via {{ gateway }} (internet customer)"
+{% else %}
+# Only the DC and the rest of this site go via the router; the container's
+# management default route on eth0 is left alone so image pulls keep working.
+# No default route: this host's tenant did not buy internet access, and the
+# absence is deliberate -- a packet to the internet has nowhere to go from the
+# very first hop.
+ip route replace 10.0.0.0/8 via {{ gateway }} dev {{ interface }}
+log "{{ interface }} -> {{ address }}, 10.0.0.0/8 via {{ gateway }}"
+{% endif %}

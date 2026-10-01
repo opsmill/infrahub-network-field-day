@@ -1,0 +1,140 @@
+---
+# How a FabricPeering becomes Cilium configuration.
+#
+# Four provider-kubernetes Objects, one per Cilium CRD. There is no Cilium
+# provider for Crossplane, and wrapping the CRDs in Objects is the standard way
+# to bring a controller that only speaks CRDs under Crossplane's management --
+# the Object is a managed resource in every ordinary sense: it reconciles
+# continuously, so hand-editing the CiliumBGPClusterConfig underneath is
+# reverted, which is exactly the property that makes the XR the source of truth.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: fabricpeering-cilium
+spec:
+  compositeTypeRef:
+    apiVersion: otternet.lab/v1alpha1
+    kind: FabricPeering
+  mode: Pipeline
+  pipeline:
+    - step: render-cilium-objects
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $spec := .observed.composite.resource.spec }}
+            {{- $name := .observed.composite.resource.metadata.name }}
+
+            ---
+            # Reusable peer settings shared by every leaf in the peering.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: peer-config
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumBGPPeerConfig
+                  metadata:
+                    name: {{ $name }}-leaf-peer
+                  spec:
+                    authSecretRef: {{ $spec.authSecretName }}
+                    ebgpMultihop: 1
+                    timers:
+                      connectRetryTimeSeconds: {{ $spec.timers.connectRetrySeconds }}
+                      holdTimeSeconds: {{ $spec.timers.holdTimeSeconds }}
+                      keepAliveTimeSeconds: {{ $spec.timers.keepAliveSeconds }}
+                    gracefulRestart:
+                      enabled: true
+                      restartTimeSeconds: 120
+                    families:
+                      - afi: ipv4
+                        safi: unicast
+                        advertisements:
+                          matchLabels:
+                            {{- toYaml $spec.advertisementSelector | nindent 28 }}
+
+            ---
+            # The peering itself: every selected node opens a session to every leaf.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cluster-config
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumBGPClusterConfig
+                  metadata:
+                    name: {{ $name }}-fabric
+                  spec:
+                    nodeSelector:
+                      matchLabels:
+                        {{- toYaml $spec.nodeSelector | nindent 24 }}
+                    bgpInstances:
+                      - name: fabric
+                        localASN: {{ $spec.localASN }}
+                        peers:
+                          {{- range $spec.peers }}
+                          - name: {{ .name }}
+                            peerASN: {{ .asn }}
+                            peerAddress: {{ .address }}
+                            peerConfigRef:
+                              name: {{ $name }}-leaf-peer
+                          {{- end }}
+
+            ---
+            # What the cluster says about itself, cluster-wide: the per-node pod
+            # CIDR and nothing else. Service VIPs are advertised per application
+            # by FabricApp, so no app is exposed to the fabric by accident.
+            #
+            # The leaves still police this with RM-CILIUM-IN, which accepts only
+            # 10.111.0.0/16 le 26 and 10.112.0.0/16 -- widen the advertisement
+            # here and watch the leaf refuse it. That the intent now comes from a
+            # Crossplane XR does not make it trusted.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: advertisement-podcidr
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumBGPAdvertisement
+                  metadata:
+                    name: {{ $name }}-podcidr
+                    labels:
+                      {{- toYaml $spec.advertisementSelector | nindent 22 }}
+                  spec:
+                    advertisements:
+                      - advertisementType: PodCIDR
+                        attributes:
+                          communities:
+                            standard:
+                              {{- toYaml $spec.podCIDRCommunities | nindent 30 }}
+
+            ---
+            # Status back onto the XR, so `kubectl get fabricpeering` reports
+            # how many sessions it is meant to be running. Emitting the composite
+            # itself is how function-go-templating writes XR status.
+            apiVersion: otternet.lab/v1alpha1
+            kind: FabricPeering
+            status:
+              peerCount: {{ len $spec.peers }}
+    - step: ready
+      functionRef:
+        name: function-auto-ready

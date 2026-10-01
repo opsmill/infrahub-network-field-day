@@ -1,6 +1,6 @@
 """Contract tests for the provider, WAN and branch technical layer.
 
-Everything outside the fabric that ``../lab/wan/tenants.yml`` holds today: the
+Everything outside the fabric that ``lab/wan/tenants.yml`` holds today: the
 ISP, its two PE roles, the internet autonomous system, each tenant site's
 attachment circuit and how it attaches, and the branch office's private
 circuit.

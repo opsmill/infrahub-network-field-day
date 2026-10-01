@@ -1,9 +1,9 @@
 """The handover has to cover every claim the lab's installer applies.
 
-`invoke cluster` runs the lab repository's `install-crossplane.sh` and then
+`invoke cluster` runs the lab's `install-crossplane.sh` and then
 deletes the claims it applied: the two Infrahub models, which Vidra re-delivers,
 and the two it does not, which stay gone. The list lives in `tasks.py` as
-`HANDOVER_DELETIONS` and the claims live in the lab repository, so the two drift
+`HANDOVER_DELETIONS` and the claims live in the lab, so the two drift
 silently -- a lab that adds a third application deploys it on every bootstrap
 and nothing here says so.
 
@@ -11,9 +11,9 @@ and nothing here says so.
 it, but only at the end of a twenty-minute rebuild. This asserts the same thing
 against the files.
 
-The lab repository is a sibling checkout rather than a dependency, so this skips
-when it is absent -- and fails, rather than passing quietly, when it is present
-and no claim can be parsed out of it. An empty set matching nothing is the
+The lab is committed under `lab/`, so this skips only when OTTERNET_LAB_DIR
+points somewhere without one -- and fails, rather than passing quietly, when it
+is present and no claim can be parsed out of it. An empty set matching nothing is the
 failure this test would otherwise become.
 """
 
@@ -38,7 +38,7 @@ CLAIM_GROUP = "otternet.lab/"
 
 
 def _lab_directory() -> Path | None:
-    """The lab checkout, or None -- it is a sibling repository, not a dependency."""
+    """The lab under lab/, or None when OTTERNET_LAB_DIR points somewhere without one."""
     try:
         return tasks.find_lab_directory()
     except SystemExit:
@@ -48,7 +48,7 @@ def _lab_directory() -> Path | None:
 def _claims_the_installer_applies() -> set[tuple[str, str]]:
     lab = _lab_directory()
     if lab is None:
-        pytest.skip("the sibling lab repository is not checked out beside this one")
+        pytest.skip("no lab found; OTTERNET_LAB_DIR points somewhere without otternet.clab.yml")
 
     installer = lab / "k8s/bootstrap/install-crossplane.sh"
     if not installer.is_file():
@@ -109,7 +109,7 @@ def test_the_lab_kube_prometheus_stack_is_never_applied_beside_infrahubs() -> No
     """
     lab = _lab_directory()
     if lab is None:
-        pytest.skip("the sibling lab repository is not checked out beside this one")
+        pytest.skip("no lab found; OTTERNET_LAB_DIR points somewhere without otternet.clab.yml")
     installer = (lab / "k8s/bootstrap/install-crossplane.sh").read_text()
     guarded = re.search(
         r'if \[\[ "\$\{OTTERNET_SKIP_OBSERVABILITY:-0\}" != "1" \]\]; then\s+'

@@ -1,0 +1,341 @@
+---
+# kube-prometheus-stack, on the fabric.
+#
+# This is the "real app" in the demo: an upstream chart of real substance --
+# Prometheus, Alertmanager, Grafana, kube-state-metrics, node-exporter, a
+# dozen CRDs and its own operator -- installed by Crossplane from the community
+# repo, with no manifests written here at all beyond the two policies the stack
+# needs to see the cluster.
+#
+# It is also the most useful thing to put on a BGP-advertised VIP, because it
+# closes the loop: Grafana is reachable from the *other* tenant, across the
+# firewall and over EVPN, and what it is showing you is the state of the
+# datapath that carried you there. The Prometheus instance scrapes Cilium and
+# Hubble, so the BGP session, the policy verdicts and the drops are all on the
+# dashboard you reached through them.
+apiVersion: otternet.lab/v1alpha1
+kind: FabricApp
+metadata:
+  name: otternet-observability
+spec:
+  namespace: otternet-observability
+  tenant: k8s-prod
+
+  expose:
+    # A /28 of its own: each app's fabric-facing prefix is predictable and
+    # cannot overlap another's. 10.112.240.64 is the first address in it, which
+    # is why Grafana's root_url below names that address.
+    #
+    # MOVED OFF 10.112.240.16/28, which this app held until an application
+    # requested through the portal was allocated the same block and Cilium
+    # refused both with `PoolConflict: cidr_overlap`. Infrahub's allocator
+    # decides what is free by reading its own IpamPrefix records, and the two
+    # apps THIS repository owns have none -- so it saw only the demo app's
+    # .0/28 and handed out the next block on top of Grafana. Changing the
+    # number here resolves that collision and does not close the gap: the next
+    # allocation will land on .32/28, which otternet-access holds. The durable fix
+    # is reserving the lab-owned blocks in Infrahub.
+    #
+    # .64/28 rather than the first free-LOOKING block: .48/28 is Kanboard's,
+    # claimed in the access portal's catalogue for an app that is not running
+    # until somebody asks for it. Nothing in the cluster shows that block as
+    # taken, so "the next free one" read off `kubectl` is wrong by one.
+    vipBlock: 10.112.240.64/28
+    serviceSelector:
+      otternet.lab/advertise: "true"
+
+  chart:
+    repository: https://prometheus-community.github.io/helm-charts
+    name: kube-prometheus-stack
+    version: "90.0.0"
+    values:
+      # ---- Grafana: the bit that goes on the fabric ------------------------
+      grafana:
+        adminPassword: otternet-lab-not-a-secret
+        # Keep Grafana off the control-plane node.
+        #
+        # Without this, the scheduler is free to put Prometheus and Grafana --
+        # the two heaviest pods here -- on the same node, and it chose
+        # k8s-node1, which also runs the k3s server and the API server. The
+        # kubelet reports the HOST's memory as the node's capacity, not the
+        # containerlab cgroup limit, so nothing at scheduling time notices that
+        # 2268Mi of pod limits have been placed inside a 2048MB container. They
+        # schedule, then the kernel OOM-kills whatever is inside -- and what
+        # dies is not necessarily the pod that caused it, so the symptom was
+        # Grafana's sidecars being OOMKilled while Grafana itself just never
+        # became ready.
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: node-role.kubernetes.io/control-plane
+                      operator: DoesNotExist
+        # Keeping Grafana and Prometheus apart is enforced from the Prometheus
+        # side below, so there is nothing more to say here.
+        service:
+          type: LoadBalancer
+          # Opts the service into this app's VIP pool and BGP advertisement.
+          labels:
+            otternet.lab/advertise: "true"
+          # Keeps the client IP intact so the CIDR policy below sees the real
+          # source, and means only nodes running Grafana advertise the VIP.
+          externalTrafficPolicy: Local
+        # Dashboard discovery, scoped to this namespace.
+        #
+        # searchNamespace: ALL is the tempting setting -- it would pick up
+        # dashboards shipped by anything else in the cluster -- but the two
+        # k8s-sidecar processes it produces then poll every namespace
+        # continuously, and on this host they were measured as the single
+        # largest CPU consumers on the node, ahead of k3s and Cilium, competing
+        # with Grafana's own startup on the same node. There are no dashboards
+        # outside this release to discover, so the cost bought nothing. Widen it
+        # deliberately if you add some.
+        sidecar:
+          dashboards:
+            enabled: true
+            searchNamespace: otternet-observability
+        grafana.ini:
+          server:
+            # Reached by IP from another tenant, not by DNS name.
+            root_url: "http://10.112.240.64/"
+        # 384Mi is not enough and the failure is confusing: Grafana registers
+        # every bundled datasource plugin before it opens its port, and that
+        # peak is well above its steady-state footprint. Under a tight limit it
+        # is OOMKilled part-way through, restarts, and starts again from the
+        # beginning -- so the logs show plugin registration slowing to about one
+        # plugin a minute (GC thrash) and then a restart, which reads as a slow
+        # host rather than as a memory limit. `kubectl get pod` showing
+        # OOMKilled between restarts is the only clear tell.
+        resources:
+          requests:
+            cpu: 50m
+            memory: 192Mi
+          limits:
+            memory: 768Mi
+        # Grafana registers every bundled datasource plugin before it starts
+        # serving, which on a host busy booting seven ceOS nodes takes well
+        # over the chart's default 30s probe budget. The pod is then killed
+        # mid-startup and restarts, which looks like a crash loop and is really
+        # just an impatient probe -- and while it churns, externalTrafficPolicy:
+        # Local means no node has a ready backend, so the VIP is withdrawn from
+        # BGP and the fabric-side demo fails for a reason that has nothing to do
+        # with the fabric.
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 10
+
+      # ---- Prometheus -------------------------------------------------------
+      prometheus:
+        service:
+          type: ClusterIP
+        prometheusSpec:
+          retention: 6h
+          # A lab host is not a monitoring cluster. Small, in-memory, and
+          # deliberately not asking for a PersistentVolume -- local-path would
+          # give it one, but a restart losing 6h of lab metrics costs nothing
+          # and a full disk costs the whole lab.
+          # 1500Mi was cargo-culted from a real cluster. This one scrapes 28
+          # targets and keeps 6h, and the limit has to fit inside the k3s node's
+          # own container memory limit alongside the kubelet and Cilium.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 250Mi
+            limits:
+              memory: 900Mi
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+            podAntiAffinity:
+              # Prometheus and Grafana are the two heavy pods; keep them apart
+              # so neither node has to hold both.
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: app.kubernetes.io/name
+                        operator: In
+                        values: [grafana]
+                  topologyKey: kubernetes.io/hostname
+          # Pick up ServiceMonitors from every namespace, not just those the
+          # chart labelled. Without this, anything added later is scraped only
+          # if it happens to carry the release label.
+          serviceMonitorSelectorNilUsesHelmValues: false
+          podMonitorSelectorNilUsesHelmValues: false
+          ruleSelectorNilUsesHelmValues: false
+
+          # Scrape Cilium and Hubble directly rather than via ServiceMonitors.
+          # The chart's own CRDs are what ServiceMonitors need, and the Cilium
+          # release predates this one -- enabling serviceMonitor in the Cilium
+          # chart would make Cilium's install depend on a CRD that only exists
+          # after this app is deployed. A plain scrape config has no such
+          # ordering problem.
+          additionalScrapeConfigs:
+            - job_name: cilium-agent
+              kubernetes_sd_configs:
+                - role: pod
+                  namespaces:
+                    names: [kube-system]
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_label_k8s_app]
+                  action: keep
+                  regex: cilium
+                - source_labels: [__meta_kubernetes_pod_ip]
+                  target_label: __address__
+                  replacement: "$1:9962"
+                - source_labels: [__meta_kubernetes_pod_node_name]
+                  target_label: node
+            - job_name: cilium-operator
+              kubernetes_sd_configs:
+                - role: pod
+                  namespaces:
+                    names: [kube-system]
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_label_io_cilium_app]
+                  action: keep
+                  regex: operator
+                - source_labels: [__meta_kubernetes_pod_ip]
+                  target_label: __address__
+                  replacement: "$1:9963"
+            - job_name: hubble
+              kubernetes_sd_configs:
+                - role: pod
+                  namespaces:
+                    names: [kube-system]
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_label_k8s_app]
+                  action: keep
+                  regex: cilium
+                - source_labels: [__meta_kubernetes_pod_ip]
+                  target_label: __address__
+                  replacement: "$1:9965"
+                - source_labels: [__meta_kubernetes_pod_node_name]
+                  target_label: node
+
+      alertmanager:
+        alertmanagerSpec:
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 192Mi
+
+      prometheusOperator:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 96Mi
+          limits:
+            memory: 256Mi
+
+      # node-exporter needs the host network and the host's /proc; that is what
+      # it is for. Left on because per-node metrics are the ones that make the
+      # fabric interfaces visible in Grafana.
+      nodeExporter:
+        enabled: true
+      kube-state-metrics:
+        resources:
+          requests:
+            cpu: 20m
+            memory: 48Mi
+          limits:
+            memory: 160Mi
+
+      # k3s does not expose these as scrapeable endpoints the way a kubeadm
+      # cluster does, and leaving them enabled produces a wall of permanently
+      # red targets that makes the demo look broken.
+      kubeControllerManager:
+        enabled: false
+      kubeScheduler:
+        enabled: false
+      kubeProxy:
+        enabled: false
+      kubeEtcd:
+        enabled: false
+
+  policy:
+    defaultDeny: true
+    allowDNS: true
+    allowIntraNamespace: true
+    # The operator, its admission-webhook cert job and Prometheus all talk to
+    # the API server.
+    allowEgressToAPIServer: true
+    # Grafana, from the app tenant, across the firewall. Port 3000 is the pod
+    # port -- the VIP's :80 is translated before policy is evaluated.
+    # Which networks outside the cluster may consume this app. This is the
+    # THIRD of three independent gates, and the only one owned by the
+    # application rather than by the network: the route has to exist, the
+    # firewall zone policy has to permit the session, and then this has to
+    # name the source. All three were needed to let the WAN and the branch
+    # reach Grafana -- the fabric and the firewall were already
+    # letting the packets through while Cilium was still dropping them, which
+    # is the demo working as intended rather than a misconfiguration.
+    allowFrom:
+      - 10.210.0.0/24     # the classic app tenant, across the firewall
+      - 10.60.0.0/16      # WAN customers, via the ISP and the border leaf
+      - 10.70.0.0/24      # the branch office, over its private circuit
+    allowFromPorts:
+      - port: "3000"
+        protocol: TCP
+    workloadSelector:
+      app.kubernetes.io/name: grafana
+
+  manifests:
+    # A monitoring stack's egress is, unavoidably, most of the cluster: the
+    # operator and Prometheus both need the API server, and scraping means
+    # reaching every pod and every node that exposes metrics. Stating it
+    # explicitly and narrowly-by-selector is better than turning default-deny
+    # off for the namespace, which is the other way this usually gets solved.
+    - apiVersion: cilium.io/v2
+      kind: CiliumNetworkPolicy
+      metadata:
+        name: allow-prometheus-scrape-egress
+      spec:
+        endpointSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values: [prometheus, prometheus-operator, kube-state-metrics]
+        egress:
+          - toEntities:
+              # Scraping means reaching pods in other namespaces and metrics
+              # endpoints on the nodes themselves. API-server access comes from
+              # policy.allowEgressToAPIServer above.
+              - cluster
+              - host
+              - remote-node
+    # Being scraped is ingress, and the targets that live in this namespace are
+    # already covered by allow-intra-namespace. This covers the reverse
+    # direction for the exporters that run on the host network, which Cilium
+    # sees as the host identity rather than as namespace members.
+    - apiVersion: cilium.io/v2
+      kind: CiliumNetworkPolicy
+      metadata:
+        name: allow-metrics-ingress
+      spec:
+        endpointSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values: [prometheus, alertmanager, grafana, kube-state-metrics]
+        ingress:
+          - fromEntities:
+              - host
+              - remote-node
+              - health

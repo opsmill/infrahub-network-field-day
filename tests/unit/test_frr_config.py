@@ -1,6 +1,6 @@
 """Golden-file tests for the WAN FRR render.
 
-The oracle is `../lab/wan/rendered/*/frr.conf` -- 448 lines the lab actually
+The oracle is `lab/wan/rendered/*/frr.conf` -- 448 lines the lab actually
 runs, written by a renderer this repository did not author. That makes equality
 the right assertion: a substring check would pass on a config with a missing BGP
 neighbour, which vtysh accepts and which never comes up, and avoiding exactly
@@ -21,6 +21,8 @@ model and the fixture cannot hide a rendering bug.
 from __future__ import annotations
 
 import json
+import subprocess  # noqa: S404 - one fixed-argv call to the committed renderer
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +31,7 @@ import pytest
 from transforms.frr_config import ROLE_TO_TEMPLATE, FrrConfig, FrrConfigError
 
 FIXTURES = Path("tests/unit/fixtures/frr")
-RENDERED = Path("../lab/wan/rendered")
+RENDERED = Path(__file__).resolve().parents[2] / "lab" / "wan/rendered"
 REPO_ROOT = Path(__file__).parents[2]
 
 DEVICES = (
@@ -47,9 +49,18 @@ def _fixture(device: str) -> dict[str, Any]:
 
 
 def _golden(device: str) -> str:
+    """The lab's own rendering of `device`, produced on demand.
+
+    `lab/wan/rendered/` is gitignored output of `lab/wan/render.py`, so a fresh
+    clone -- CI included -- has none. While the lab was a sibling repository this
+    skipped there, which meant the byte-for-byte claim was never checked in CI.
+    The renderer needs nothing this environment lacks, so render instead.
+    """
     path = RENDERED / device / "frr.conf"
     if not path.is_file():
-        pytest.skip("lab repo not checked out alongside this one")
+        subprocess.run(  # noqa: S603 - a fixed argv: this interpreter and a committed script
+            [sys.executable, str(RENDERED.parent / "render.py")], check=True, capture_output=True
+        )
     return path.read_text(encoding="utf-8")
 
 

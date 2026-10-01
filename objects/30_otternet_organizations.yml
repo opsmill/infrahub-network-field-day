@@ -14,7 +14,7 @@
 # tenant, with a site and a circuit like any other, but not a paying customer
 # and at a different trust level.
 #
-# Sourced from ../lab/wan/tenants.yml.
+# Sourced from lab/wan/tenants.yml.
 # ============================================================================
 apiVersion: infrahub.app/v1
 kind: Object

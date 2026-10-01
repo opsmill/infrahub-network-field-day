@@ -2,7 +2,7 @@
 # Helm values for otternet-metrics: kube-prometheus-stack 90.0.0 -- Prometheus,
 # Grafana and node-exporter -- on the fabric (cycle 034).
 #
-# Ported from the lab's own ../lab/crossplane/apps/20-observability.yaml, which
+# Ported from the lab's own lab/crossplane/apps/20-observability.yaml, which
 # solved most of what a lab host does to this chart. Every comment marked
 # (lab) is that file's measurement, kept because the problem is the same here.
 # What differs is ownership: this is an Infrahub service object, delivered by

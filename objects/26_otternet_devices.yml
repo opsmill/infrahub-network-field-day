@@ -57,7 +57,7 @@ spec:
       description: leaf-otternet-pod1-3-1 Management0
     # --- telemetry addresses for everything that is not a switch (cycle 034) -
     # The ContainerLab management addresses of the firewall, the FRR routers and
-    # the k3s nodes, taken from ../lab/otternet.clab.yml. A collector running in
+    # the k3s nodes, taken from lab/otternet.clab.yml. A collector running in
     # a pod reaches every device here, and cannot resolve a container name.
     #
     # Referenced as `telemetry_address`, never `mgmt_ip`: the reconciler reads

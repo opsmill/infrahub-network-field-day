@@ -1,0 +1,94 @@
+---
+# ============================================================================
+# Workload-facing ports.
+#
+# Edge ports are locked down as a matter of course: access mode, a single VLAN,
+# and portfast plus BPDU guard so a workload cannot influence spanning tree.
+#
+# NOTE: storm-control belongs here too and is what you would run on real
+# hardware, but cEOS-LAB has no dataplane policer for it -- EOS rejects the
+# command with "not supported on this hardware platform" and the whole config
+# replace fails. Re-add it when targeting physical switches.
+# ============================================================================
+port_profiles:
+  - profile: WORKLOAD_EDGE
+    mode: access
+    spanning_tree_portfast: edge
+    spanning_tree_bpduguard: enabled
+
+servers:
+  # ------------------------------------------------------- k3s cluster nodes
+  - name: k8s-node1
+    rack: K8S_POD
+    adapters:
+      - endpoint_ports: [eth1]
+        switch_ports: [Ethernet10]
+        switches: [k8s-leaf1]
+        profile: WORKLOAD_EDGE
+        vlans: "110"
+        description: k3s-server
+
+  - name: k8s-node2
+    rack: K8S_POD
+    adapters:
+      - endpoint_ports: [eth1]
+        switch_ports: [Ethernet10]
+        switches: [k8s-leaf2]
+        profile: WORKLOAD_EDGE
+        vlans: "110"
+        description: k3s-agent
+
+  - name: k8s-node3
+    rack: K8S_POD
+    adapters:
+      - endpoint_ports: [eth1]
+        switch_ports: [Ethernet11]
+        switches: [k8s-leaf2]
+        profile: WORKLOAD_EDGE
+        vlans: "110"
+        description: k3s-agent
+
+  # ------------------------------------------------- classic bare-metal hosts
+  - name: host-a
+    rack: APP_POD
+    adapters:
+      - endpoint_ports: [eth1]
+        switch_ports: [Ethernet10]
+        switches: [app-leaf1]
+        profile: WORKLOAD_EDGE
+        vlans: "210"
+        description: app-host
+
+  - name: host-b
+    rack: APP_POD
+    adapters:
+      - endpoint_ports: [eth1]
+        switch_ports: [Ethernet10]
+        switches: [app-leaf2]
+        profile: WORKLOAD_EDGE
+        vlans: "210"
+        description: app-host
+
+  # ----------------------------------------------- tenant cloud instances
+  # Bare metal or VMs belonging to a WAN tenant. Ordinary access ports; what
+  # makes them the tenant's is the VLAN, and therefore the VRF the SVI sits
+  # in. See TENANT_CLOUD in 10-network-services.yml.
+  - name: acme-cloud1
+    rack: APP_POD
+    adapters:
+      - endpoint_ports: [eth1]
+        switch_ports: [Ethernet11]
+        switches: [app-leaf1]
+        profile: WORKLOAD_EDGE
+        vlans: "310"
+        description: acme tenant cloud instance
+
+  - name: globex-cloud1
+    rack: APP_POD
+    adapters:
+      - endpoint_ports: [eth1]
+        switch_ports: [Ethernet11]
+        switches: [app-leaf2]
+        profile: WORKLOAD_EDGE
+        vlans: "320"
+        description: globex tenant cloud instance

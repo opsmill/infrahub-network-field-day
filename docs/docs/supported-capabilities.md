@@ -106,7 +106,8 @@ The schema still carries the roles and underlay choices the upstream examples us
 | Capability | Status | Notes |
 |------------|:------:|-------|
 | ContainerLab topology per fabric | ✅ | The `containerlab_topology` artifact renders every device and link the fabric owns; kinds, images, and interface mappings come from schema attributes. See [ContainerLab](./containerlab.md). |
-| Deploying the generated topology | ✅ | `ansible/deploy_clab.yml` stages the topology, EOS configs, and bind sources on a ContainerLab host and deploys them. The Semaphore template fetches and stages only — it does not deploy. |
+| The lab, in this repository | ✅ | `lab/otternet.clab.yml` is deployed as committed by `invoke lab` and configured from Infrahub by `invoke provision` and the reconciler. See [ContainerLab](./containerlab.md). |
+| Deploying the generated topology | ⬜ | The artifact is a reference render; nothing deploys it. The Ansible deployment path for it was removed with the upstream example lab. |
 | ISIS-LDP devices in the generated topology | ⬜ | The `p`, `pe`, and `rr` roles are excluded; their interface naming is not validated against ContainerLab. |
 
 ## Deployment

@@ -62,9 +62,6 @@ This brings up, in the background:
 | Neo4j Browser | `http://localhost:7474` | Graph database browser |
 | Prefect | `http://localhost:4200` | Task-manager UI — where generator, transform, and check runs show up |
 
-`invoke start` also creates `lab/clab-staging/` before compose runs, so the Semaphore container has a
-writable bind-mount source for [ContainerLab](./containerlab.md) files.
-
 Wait for services to become healthy. You can check with:
 
 ```bash
@@ -136,7 +133,7 @@ The stack is up but no devices exist yet — fabrics, pods, and racks are define
 | `uv run invoke init-semaphore` | Re-register the Semaphore project and templates (idempotent) |
 | `uv run invoke test` | Run the unit tests, the same set CI runs |
 | `uv run invoke test --integration` | Also run the integration tests, which start an Infrahub stack in Docker and take minutes |
-| `uv run invoke lint` | Ruff, yamllint, mypy, markdown and prose linting |
+| `uv run invoke lint` | Ruff, yamllint, mypy, markdown, and prose linting |
 | `uv run invoke format` | Apply Ruff formatting |
 
 `uv run invoke --list` shows the full set.

@@ -1,0 +1,346 @@
+---
+# ============================================================================
+# Tenants / VRFs / SVIs  (AVD 6.x renamed 5.x's `tenants` to `network_services`)
+#
+# Two tenants that deliberately cannot reach each other inside the fabric. The
+# only path between them is out of the border leaf and through the firewall,
+# which is what makes the security story demonstrable rather than decorative.
+# ============================================================================
+network_services:
+
+  # ------------------------------------------------------- Kubernetes tenant
+  - name: TENANT_K8S
+    mac_vrf_vni_base: 11000
+    vrfs:
+      - name: K8S_PROD
+        vrf_id: 110
+        vrf_vni: 110
+        description: Kubernetes production - Cilium peers BGP from the nodes
+        enable_mlag_ibgp_peering_vrfs: true
+        redistribute_connected: true
+        redistribute_static: true
+
+        svis:
+          - id: 110
+            name: K8S_NODES
+            tags: [k8s]
+            enabled: true
+            description: k3s node network
+            # Unique address per leaf so Cilium has two distinct BGP neighbours,
+            # plus a shared VARP gateway the nodes point their default route at.
+            # An anycast `ip_address_virtual` alone would make the BGP peer
+            # address ambiguous across the MLAG pair.
+            ip_virtual_router_addresses:
+              - 10.110.0.1
+            # NO ipv4_acl_in here on purpose: cEOS-LAB rejects `ip access-group`
+            # on a VLAN interface ("not supported on this hardware platform"),
+            # and uRPF on an SVI too. On real hardware the anti-spoofing filter
+            # belongs right here, at the access edge. In this lab it is enforced
+            # one hop later, outbound on the border leaf -- see ACL-K8S-ANTISPOOF
+            # in 20-security.yml.
+            nodes:
+              - node: k8s-leaf1
+                ip_address: 10.110.0.2/24
+              - node: k8s-leaf2
+                ip_address: 10.110.0.3/24
+
+        # Cilium BGP Control Plane peers from each k3s node and advertises the
+        # pod CIDR plus LoadBalancer VIPs. The inbound route-map is what keeps a
+        # compromised node from advertising anything it likes into the fabric.
+        bgp_peers:
+          - ip_address: 10.110.0.11
+            remote_as: 65401
+            nodes: [k8s-leaf1, k8s-leaf2]
+            description: k8s-node1-cilium
+            cleartext_password: "Otternet-Cilium"
+            send_community: all
+            next_hop_self: true
+            maximum_routes: 100
+            route_map_in: RM-CILIUM-IN
+            route_map_out: RM-FABRIC-TO-CILIUM
+          - ip_address: 10.110.0.12
+            remote_as: 65401
+            nodes: [k8s-leaf1, k8s-leaf2]
+            description: k8s-node2-cilium
+            cleartext_password: "Otternet-Cilium"
+            send_community: all
+            next_hop_self: true
+            maximum_routes: 100
+            route_map_in: RM-CILIUM-IN
+            route_map_out: RM-FABRIC-TO-CILIUM
+          - ip_address: 10.110.0.13
+            remote_as: 65401
+            nodes: [k8s-leaf1, k8s-leaf2]
+            description: k8s-node3-cilium
+            cleartext_password: "Otternet-Cilium"
+            send_community: all
+            next_hop_self: true
+            maximum_routes: 100
+            route_map_in: RM-CILIUM-IN
+            route_map_out: RM-FABRIC-TO-CILIUM
+
+        # Everything leaving the tenant is forced at the firewall.
+        static_routes:
+          - prefix: 0.0.0.0/0
+            next_hop: 10.250.110.2
+            nodes: [border-leaf1]
+
+        # Border-leaf handoff to the firewall's k8s-prod zone.
+        l3_interfaces:
+          - interfaces: [Ethernet10]
+            nodes: [border-leaf1]
+            ip_addresses: [10.250.110.1/30]
+            description: FW1_ge-0/0/0_ZONE-K8S-PROD
+            enabled: true
+            ipv4_acl_in: ACL-FROM-FIREWALL
+            ipv4_acl_out: ACL-K8S-ANTISPOOF
+
+  # ------------------------------------------- external: WAN and branch
+  # Everything that reaches the datacentre from outside it. Two VRFs, because
+  # a paying WAN customer and our own branch office are not the same trust
+  # level and should not be able to become each other's problem.
+  #
+  # Neither VRF has a route to the tenants. Both have a default route pointing
+  # at the firewall, so the ONLY way an external network reaches a DC service
+  # is out of the border leaf, through a firewall zone policy, and back in --
+  # exactly like the two internal tenants already do. Adding an external
+  # network therefore adds a firewall zone, not an exception.
+  #
+  # These VRFs exist on border-leaf1 only: there is nothing to stretch, and no
+  # VXLAN VNI, because no other leaf has a port in them.
+  - name: TENANT_EXTERNAL
+    mac_vrf_vni_base: 15000
+    vrfs:
+      # ---- WAN: transit customers via the ISP ----------------------------
+      - name: WAN
+        vrf_id: 50
+        vrf_vni: 50
+        description: ISP transit - WAN customers
+        redistribute_connected: true
+        redistribute_static: true
+
+        # The DC service prefix is originated INTO the WAN, pointing at the
+        # firewall. That is what tells the ISP where to send customer traffic,
+        # and it is a static route rather than a leak from K8S_PROD on purpose:
+        # a leak would create a path that bypasses the firewall.
+        static_routes:
+          - prefix: 10.112.240.0/24
+            next_hop: 10.250.150.2
+            nodes: [border-leaf1]
+          # Each tenant's cloud subnet, originated into the WAN pointing at the
+          # firewall, exactly like the shared service prefix above. That is what
+          # tells the ISP where to send tenant-bound traffic -- and because it
+          # points at the firewall rather than leaking from the tenant VRF,
+          # there is no path into a tenant's cloud that avoids a zone policy.
+          #
+          # Both are announced into the same WAN VRF, so isolation is NOT done
+          # here: it is done twice over, by the per-tenant import policy on
+          # isp-pe1 (which tenant learns which prefix) and by the vSRX zone
+          # policy (which source may open a session to it).
+          - prefix: 10.220.10.0/24
+            next_hop: 10.250.150.2
+            nodes: [border-leaf1]
+          - prefix: 10.220.20.0/24
+            next_hop: 10.250.150.2
+            nodes: [border-leaf1]
+
+        l3_interfaces:
+          - interfaces: [Ethernet12]
+            nodes: [border-leaf1]
+            ip_addresses: [10.250.50.1/30]
+            description: ISP_PE2_WAN_HANDOFF
+            enabled: true
+            ipv4_acl_in: ACL-FROM-WAN
+          - interfaces: [Ethernet14]
+            nodes: [border-leaf1]
+            ip_addresses: [10.250.150.1/30]
+            description: FW1_ZONE-WAN
+            enabled: true
+            ipv4_acl_in: ACL-FROM-FIREWALL
+
+        # eBGP to the ISP. RM-WAN-IN is the fabric's opinion of what the
+        # provider is allowed to tell us: customer prefixes only. Without it a
+        # provider mistake -- or a customer announcing a default route that the
+        # PE accepted -- becomes a datacentre outage.
+        bgp_peers:
+          - ip_address: 10.250.50.2
+            remote_as: 65500
+            nodes: [border-leaf1]
+            description: isp-pe2
+            send_community: all
+            maximum_routes: 1000
+            route_map_in: RM-WAN-IN
+            route_map_out: RM-DC-TO-EXTERNAL
+
+      # ---- BRANCH: our own office, private circuit -----------------------
+      - name: BRANCH
+        vrf_id: 70
+        vrf_vni: 70
+        description: Branch office - private circuit, no ISP in path
+        redistribute_connected: true
+        redistribute_static: true
+
+        static_routes:
+          - prefix: 10.112.240.0/24
+            next_hop: 10.250.170.2
+            nodes: [border-leaf1]
+          # Originated so the branch can be told a route to the node subnet.
+          # Still via the firewall -- the branch does not get a shortcut, it
+          # gets one more destination it is allowed to ask about.
+          - prefix: 10.110.0.0/24
+            next_hop: 10.250.170.2
+            nodes: [border-leaf1]
+
+        l3_interfaces:
+          - interfaces: [Ethernet13]
+            nodes: [border-leaf1]
+            ip_addresses: [10.250.70.1/30]
+            description: BRANCH_RTR_CIRCUIT
+            enabled: true
+            ipv4_acl_in: ACL-FROM-BRANCH
+          - interfaces: [Ethernet15]
+            nodes: [border-leaf1]
+            ip_addresses: [10.250.170.1/30]
+            description: FW1_ZONE-BRANCH
+            enabled: true
+            ipv4_acl_in: ACL-FROM-FIREWALL
+
+        bgp_peers:
+          - ip_address: 10.250.70.2
+            remote_as: 65030
+            nodes: [border-leaf1]
+            description: branch-rtr
+            send_community: all
+            maximum_routes: 100
+            route_map_in: RM-BRANCH-IN
+            route_map_out: RM-DC-TO-BRANCH
+
+  # -------------------------------------------------- tenant cloud instances
+  # A VRF per WAN tenant, holding that tenant's isolated compute in the
+  # datacentre -- bare metal, a VM, or anything else on an access port.
+  #
+  # These are the "isolated cloud instances" a direct internet customer also
+  # buys. Isolation is structural rather than policy: TENANT_ACME and
+  # TENANT_GLOBEX are separate VRFs with no route between them anywhere in the
+  # fabric, so there is no east-west path to filter in the first place. Each
+  # has a default route pointing at its own firewall zone, which is the only
+  # way in or out -- the same service-insertion pattern as every other VRF
+  # here, and the reason adding a tenant adds a zone rather than an exception.
+  #
+  # Adding a tenant: a VRF here, an SVI, a firewall handoff interface, a wire
+  # in otternet.clab.yml, a zone and policy in configs/fw/vsrx/junos.conf, and the
+  # `dc:` block in wan/customers.yml that makes isp-pe1 import it.
+  - name: TENANT_CLOUD
+    mac_vrf_vni_base: 13000
+    vrfs:
+      - name: TENANT_ACME
+        vrf_id: 310
+        vrf_vni: 310
+        description: acme - isolated cloud instances
+        enable_mlag_ibgp_peering_vrfs: true
+        redistribute_connected: true
+        redistribute_static: true
+
+        svis:
+          - id: 310
+            name: ACME_CLOUD
+            tags: [cloud]
+            enabled: true
+            description: acme tenant cloud instances
+            ip_virtual_router_addresses:
+              - 10.220.10.1
+            nodes:
+              - node: app-leaf1
+                ip_address: 10.220.10.2/24
+              - node: app-leaf2
+                ip_address: 10.220.10.3/24
+
+        # Everything out of this VRF goes to the firewall. There is no route to
+        # the other tenant, to the internal tenants, or to the WAN except back
+        # out through the zone policy.
+        static_routes:
+          - prefix: 0.0.0.0/0
+            next_hop: 10.250.10.2
+            nodes: [border-leaf1]
+
+        l3_interfaces:
+          - interfaces: [Ethernet16]
+            nodes: [border-leaf1]
+            ip_addresses: [10.250.10.1/30]
+            description: FW1_ge-0/0/4_ZONE-ACME-CLOUD
+            enabled: true
+            ipv4_acl_in: ACL-FROM-FIREWALL
+
+      - name: TENANT_GLOBEX
+        vrf_id: 320
+        vrf_vni: 320
+        description: globex - isolated cloud instances
+        enable_mlag_ibgp_peering_vrfs: true
+        redistribute_connected: true
+        redistribute_static: true
+
+        svis:
+          - id: 320
+            name: GLOBEX_CLOUD
+            tags: [cloud]
+            enabled: true
+            description: globex tenant cloud instances
+            ip_virtual_router_addresses:
+              - 10.220.20.1
+            nodes:
+              - node: app-leaf1
+                ip_address: 10.220.20.2/24
+              - node: app-leaf2
+                ip_address: 10.220.20.3/24
+
+        static_routes:
+          - prefix: 0.0.0.0/0
+            next_hop: 10.250.20.2
+            nodes: [border-leaf1]
+
+        l3_interfaces:
+          - interfaces: [Ethernet17]
+            nodes: [border-leaf1]
+            ip_addresses: [10.250.20.1/30]
+            description: FW1_ge-0/0/5_ZONE-GLOBEX-CLOUD
+            enabled: true
+            ipv4_acl_in: ACL-FROM-FIREWALL
+
+  # ------------------------------------------------------ classic app tenant
+  - name: TENANT_APP
+    mac_vrf_vni_base: 12000
+    vrfs:
+      - name: APP_PROD
+        vrf_id: 210
+        vrf_vni: 210
+        description: Classic bare-metal application tier
+        enable_mlag_ibgp_peering_vrfs: true
+        redistribute_connected: true
+        redistribute_static: true
+
+        svis:
+          - id: 210
+            name: APP_HOSTS
+            tags: [app]
+            enabled: true
+            description: Application host network
+            ip_virtual_router_addresses:
+              - 10.210.0.1
+            nodes:
+              - node: app-leaf1
+                ip_address: 10.210.0.2/24
+              - node: app-leaf2
+                ip_address: 10.210.0.3/24
+
+        static_routes:
+          - prefix: 0.0.0.0/0
+            next_hop: 10.250.210.2
+            nodes: [border-leaf1]
+
+        l3_interfaces:
+          - interfaces: [Ethernet11]
+            nodes: [border-leaf1]
+            ip_addresses: [10.250.210.1/30]
+            description: FW1_ge-0/0/1_ZONE-APP-PROD
+            enabled: true
+            ipv4_acl_in: ACL-FROM-FIREWALL
