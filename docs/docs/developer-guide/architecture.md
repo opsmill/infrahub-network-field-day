@@ -215,4 +215,4 @@ During migration, legacy fabric and pod pool relationships are still present and
 - Checks: [`checks/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/checks) — proposed-change validation, currently CloudVision.
 - Playbooks: [`ansible/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/ansible) — the tree Semaphore runs for EOS config deployment and ContainerLab staging.
 - Core library: [`src/solution_arista_avd/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/src/solution_arista_avd) — shared protocols, AVD utilities, sorting, addressing.
-- Service portal: [`service_catalog/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/service_catalog) — Streamlit UI that orchestrates the portal workflows.
+- Service portal: [`backstage/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/backstage) — the Backstage portal whose catalog provider generates one request template per service kind.

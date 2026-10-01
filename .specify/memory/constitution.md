@@ -194,15 +194,12 @@ breaks discovery and makes cross-references expensive to maintain.
 - **Platform**: Infrahub with Neo4j, PostgreSQL, Redis, and RabbitMQ.
 - **Infrahub image**: Build and local-stack workflows target
   `INFRAHUB_BASE_VERSION=1.10.6` unless a feature explicitly plans an upgrade.
-- **Core dependencies**: `pyavd>=6.4.0,<6.5.0`, `httpx>=0.28.1`, and
-  `streamlit-flow-component>=1.6.1`.
+- **Core dependencies**: `pyavd>=6.4.0,<6.5.0` and `httpx>=0.28.1`.
 - **Development dependencies**: `infrahub-sdk` with the `all` extra at
   version >=1.19.0,
   `infrahub-testcontainers>=1.3.0`, `invoke>=2.2.0`, `pytest>=8.4.1`,
   `pytest-asyncio>=1.0.0`, `ruff>=0.12.0`, `mypy>=1.17.1`, `rumdl>=0.2.54`,
   and `yamllint>=1.37.1`.
-- **Service portal dependencies**: the `catalog` dependency group owns Streamlit,
-  pandas, python-dotenv, and the catalog SDK constraint.
 - **Package manager**: `uv` with `hatchling` build backend for Python, and
   `pnpm` for the documentation site under `docs/`. npm and yarn MUST NOT be
   used, and only one JavaScript lockfile may exist.

@@ -1,60 +1,53 @@
 ---
 title: Regenerate a fabric
-description: Use the Fabric Design page to inspect and re-run the generator chain for a fabric.
+description: Re-run the AVD generator chain for a fabric on a branch, and know which stages are safe to repeat.
 audience: user
 sidebar_position: 4
 ---
 
 # Regenerate a fabric
 
-The Fabric Design page in the service portal is the interactive view of a fabric. From it you can inspect the topology and cabling, see fabric settings and EVPN tenants, and trigger a full regeneration of the fabric — devices, cabling, hostvars, and structured configs — from a single button.
+Regenerating a fabric means re-running the generator chain so the PyAVD hostvars, the structured configurations, and the artifacts rendered from them follow the data in Infrahub. `uv run invoke avd` is the front door. Run it on a branch, review the result as a proposed change, and merge.
 
-## Open the fabric design page
+The chain has two stages, and only one of them is safe to repeat:
 
-Navigate to **`http://localhost:8501`**. From the sidebar, open **Fabric View** (the page title is **Fabric Design View**).
+| Stage | Generators | Idempotent | When |
+|-------|------------|:----------:|------|
+| Topology | `generate-fabric`, `generate-pod`, `generate-rack` | **No — destructive on re-run** | `--topology`, build time only |
+| AVD | `generate-avd-device-hostvar`, `generate-avd-device-structured-config` | Yes | every run |
 
-## Pick branch and fabric
+## Regenerate on a branch
 
-- **Select Branch** (sidebar dropdown) — choose which Infrahub branch to view. For inspection, any branch is fine. For regeneration, use a non-default branch so the change is isolated and reviewable.
-- **Select Fabric** (main area) — choose the fabric to view, for example, `Fabric-L3LS-MultiPod-A`.
+```bash
+uv run invoke avd --branch my-change
+```
 
-## Tabs
+This creates the branch if it doesn't exist (or reuses it), runs the two AVD generators on it, and then asks Infrahub to re-render every artifact **on that branch**. Without the branch, artifact regeneration targets `main`, and `infrahubctl transform --branch X` would render your change while the stored artifact never moves.
 
-The page has four tabs:
+When it finishes, open a proposed change from `my-change` in the Infrahub UI and review it:
 
-| Tab | What it shows |
-|-----|---------------|
-| **Design Topology** | Hierarchical view of the fabric: pods, racks, devices. Useful to confirm the shape of the fabric before generating. |
-| **Cabling Topology** | Physical cabling map — every link between devices. Useful to spot missing or misrouted cabling. |
-| **Fabric Settings** | Underlay/overlay protocols, MTU, spanning-tree configuration. |
-| **EVPN Tenants** | Tenants associated with the fabric, their VRFs, SVIs, and L2 VLANs. |
+- **Data** — the regenerated `AvdHostvarFile` and `AvdStructuredConfigFile` nodes for every device whose input changed.
+- **Artifacts** — the re-rendered EOS configurations, device documentation, fabric documentation, and cabling plan.
 
-## Regenerate the fabric
+## Merge
 
-In the **Generate Fabric** section (typically above the tabs or in a side panel depending on your window size):
+Merge from the proposed change, or let the task do it:
 
-1. Accept the auto-generated **Branch name** (format `generate-<fabric-name>-<timestamp>`) or edit it.
-2. Click the **Generate** button (primary-styled).
+```bash
+uv run invoke avd --branch my-change --merge
+```
 
-The portal triggers the full generator chain — `generate-fabric` → `generate-pod` → `generate-rack` → `generate-avd-device-hostvar` → `generate-avd-device-structured-config` — on the named branch.
+`--merge` merges the branch and then **waits for the artifacts to render** on `main`. Generation is asynchronous, and an artifact that hasn't rendered yet still reports `Ready`, so the wait requires every artifact to be non-empty and stable across consecutive samples before it returns. Once merged, the deployment reconciler pushes the new configurations to the devices on its next cycle.
 
-While the chain runs, the portal shows progress. The full run typically takes a few minutes for a small fabric; longer for fabrics with many pods and racks.
+## Building a topology
 
-## What you get
+Use `--topology` only on an instance where the fabric hasn't been built yet, such as immediately after `invoke load`:
 
-When the run finishes, the portal creates a proposed change. Click **View Proposed Change** to review:
+```bash
+uv run invoke avd --branch build --topology --merge
+```
 
-- New or updated devices (if the fabric had none, or if pods/racks have been added since the last generation).
-- Updated cabling (if cabling changed).
-- Updated AVD artifacts for every device and the fabric itself.
-
-Review and merge as usual.
-
-## When to regenerate a fabric
-
-- After manually editing IP pools, fabric settings, or device templates that affect code paths in the generators.
-- After a failed partial run where some generators didn't complete — but **read
-  the warning below first**: only the two AVD stages are idempotent.
+A fresh load seeds objects but runs no generators, so there is no spine-to-leaf cabling. PyAVD then renders switches with no uplinks and no underlay or overlay BGP — about 155 lines for a spine instead of 239 — while every artifact still reports `Ready`. `--topology` adds the topology stage in front of the AVD stage to close that gap.
 
 :::danger The topology generators are destructive on a fabric that already has cabling
 `generate-fabric`, `generate-pod` and `generate-rack` are **not** idempotent.
@@ -68,28 +61,36 @@ idempotent and run on every `invoke avd`. Re-run those freely; build a topology
 on a fresh branch.
 :::
 
+## When to regenerate a fabric
+
+- After editing data the hostvars are built from — fabric settings, IP pools, interfaces, VRFs, SVIs — when nothing else has regenerated it.
+- After a failed partial run where one of the AVD generators didn't complete.
 - After upgrading the PyAVD version, if the structured config output format has changed.
+
+A service request doesn't need this. A proposed change runs `generate-avd-device-hostvar` (and through it the structured-config generator) in its own pipeline, and its artifact checks re-render the configurations, so a request's fabric consequence already shows in its proposed change.
 
 ## Inspecting without regenerating
 
-You don't need to regenerate to browse. Pick a branch and fabric and switch between the four tabs to answer questions like:
+You don't need to regenerate to look at a fabric. In the Infrahub UI, on any branch:
 
-- "Is `Fabric-L3LS-MultiPod-A` cabled consistently across pods?" → **Cabling Topology**.
-- "Which tenants are on `Fabric-L3LS-MultiPod-B`?" → **EVPN Tenants**.
-- "What MTU is configured for the underlay?" → **Fabric Settings**.
+- The fabric's **Artifacts** include the fabric documentation and the cabling plan — every link between devices.
+- Each switch's **Artifacts** include its rendered EOS configuration and device documentation.
+- The fabric object itself carries the underlay and overlay settings, and its EVPN tenants and SVIs are under **EVPN Services** in the menu.
 
-## If the service portal is unavailable
+See [Viewing Artifacts](../viewing-artifacts.md) for where each one lives.
 
-You can trigger the generator chain manually in the Infrahub UI:
+## Without the task
+
+You can trigger the same generators in the Infrahub UI:
 
 1. Create a branch.
 2. Open **Actions → Generator definitions**.
-3. Run **`generate-fabric`** and select the fabric.
-4. The chain cascades automatically via event triggers.
-5. Create a proposed change from the branch.
+3. Run **`generate-avd-device-hostvar`**, then **`generate-avd-device-structured-config`**. The structured-config generator reads the **stored** hostvar files, so it must follow.
+4. Create a proposed change from the branch; its checks re-render the artifacts.
 
-See [Provision Your First Fabric](../provision-first-fabric.md) for a step-by-step walkthrough of the same chain.
+See [Provision Your First Fabric](../provision-first-fabric.md) for a step-by-step walkthrough of the full chain, topology included.
 
 ## Source
 
-Service-portal implementation: [`service_catalog/pages/4_Fabric_View.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/service_catalog/pages/4_Fabric_View.py).
+- Task: `avd` in [`tasks.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tasks.py).
+- Generators: [`generators/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/generators).

@@ -17,7 +17,7 @@ spec:
 
     # The service layer. Until these existed, a service created on a branch was
     # expanded only because the PORTAL asked for it -- so a service created any
-    # other way (the Streamlit pages, the API, a human in the UI) sat unbuilt
+    # other way (the API, a human in the UI) sat unbuilt
     # until a proposed-change pipeline or a merge picked it up, and the branch
     # diff showed the request with none of its consequences.
     - name: run-network-segment-generator

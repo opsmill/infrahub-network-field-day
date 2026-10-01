@@ -1,6 +1,6 @@
 """Put a tenant onto a fabric.
 
-`3_Create_Tenant.py` in the portal wrote an `EvpnTenant` straight into the
+An earlier request form wrote an `EvpnTenant` straight into the
 graph. This generator sits under the request instead, so there is a record of
 who asked, a status, and something to withdraw.
 

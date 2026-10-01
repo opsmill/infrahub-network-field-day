@@ -179,7 +179,7 @@ def test_service_generic_carries_no_requested_by() -> None:
     `requested_by` pointed at a CoreGenericAccount and was meant to record the
     authenticated identity behind a request. Nothing ever wrote it: the
     generated Backstage forms drop every relationship whose peer starts with
-    `Core`, and neither the curated template nor the Streamlit pages set it
+    `Core`, and the curated template did not set it
     either, so it read null on every service object including the ones a real
     portal request created.
 
@@ -194,8 +194,7 @@ def test_service_generic_carries_no_requested_by() -> None:
     service = _generic(_load_yaml(SERVICE_SCHEMA), "Service", "Generic")
 
     assert "requested_by" not in _relationships(service), (
-        "requested_by is back; it needs a writer in the Backstage templates and the "
-        "Streamlit pages, or it reads null on every service object"
+        "requested_by is back; it needs a writer in the Backstage templates, or it reads null on every service object"
     )
 
 
