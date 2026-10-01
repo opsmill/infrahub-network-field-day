@@ -143,7 +143,7 @@ custom_structured_configuration_prefix_lists:
         action: permit 10.112.240.0/24 le 32
       # Each tenant's cloud subnet. Announcing both to the ISP is safe because
       # isp-pe1 decides per tenant which of them to import -- see
-      # RM-<TENANT>-IMPORT in wan/templates/isp-edge.frr.conf.j2. The DC's job
+      # RM-<TENANT>-IMPORT in wan/templates/isp-edge.srl.j2. The DC's job
       # is to say where they live, not who may reach them.
       - sequence: 20
         action: permit 10.220.10.0/24 le 32

@@ -92,10 +92,11 @@ queries:
   - name: crossplane_fabric_app
     file_path: "./transforms/crossplane_fabric_app.gql"
 
-  # The WAN's FRR configuration: one device plus the whole WAN context, because
-  # a provider edge's import policy is assembled from every tenant's services.
-  - name: frr_config
-    file_path: "./transforms/frr_config.gql"
+  # The WAN's SR Linux configuration: one device plus the whole WAN context,
+  # because a provider edge's import policy is assembled from every tenant's
+  # services.
+  - name: srl_config
+    file_path: "./transforms/srl_config.gql"
 
   # The perimeter firewall's Junos configuration
   - name: junos_config
@@ -416,9 +417,9 @@ python_transforms:
   - name: crossplane_fabric_app
     class_name: CrossplaneFabricAppTransform
     file_path: "./transforms/crossplane_fabric_app.py"
-  - name: frr_config
-    class_name: FrrConfig
-    file_path: "./transforms/frr_config.py"
+  - name: srl_config
+    class_name: SrlConfig
+    file_path: "./transforms/srl_config.py"
   - name: junos_config
     class_name: JunosConfig
     file_path: "./transforms/junos_config.py"
@@ -487,13 +488,6 @@ artifact_definitions:
     targets: "service_fabric_apps"
     transformation: "crossplane_fabric_app"
 
-  # The WAN's FRR configuration, one artifact per router. `text/plain` because
-  # the transform returns a str; a dict would make it application/json and wrap
-  # the config in JSON.
-  #
-  # `frr_routers` names its six members explicitly rather than deriving them
-  # from the device role, because cust-acme-dr-ce shares the `customer_edge`
-  # role and the lab renders no FRR config for it.
   # The perimeter firewall's WHOLE configuration (cycle 035): the reconciler
   # pushes it with `load override`, so anything it omits is deleted. Every line
   # of junos.conf except its 72 lines of top-level commentary -- `system` and
@@ -510,13 +504,22 @@ artifact_definitions:
     targets: "junos_firewalls"
     transformation: "junos_config"
 
-  - name: "frr_config"
-    artifact_name: "FRR Configuration"
+  # The WAN's SR Linux configuration, one artifact per router: flat `set`
+  # commands, which ContainerLab boots and the reconciler loads into a candidate
+  # as a replace of /interface, /network-instance and /routing-policy.
+  # `text/plain` because the transform returns a str; a dict would make it
+  # application/json and wrap the config in JSON.
+  #
+  # `srl_routers` names its six members explicitly rather than deriving them
+  # from the device role, because cust-acme-dr-ce shares the `customer_edge`
+  # role and runs no routing protocol at all.
+  - name: "srl_config"
+    artifact_name: "SR Linux Configuration"
     parameters:
       device: "name__value"
     content_type: "text/plain"
-    targets: "frr_routers"
-    transformation: "frr_config"
+    targets: "srl_routers"
+    transformation: "srl_config"
 
   # Cycle 034. Telegraf's whole configuration, as ONE Kubernetes ConfigMap that
   # Vidra's third sync delivers into the collector's namespace. `application/yaml`

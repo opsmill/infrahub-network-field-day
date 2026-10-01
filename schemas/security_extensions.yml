@@ -103,7 +103,7 @@ extensions:
         #     IpamIPAddress and to nothing under Dcim.
         #
         # PEER IS DcimFabricSwitch AND THAT IS LOAD BEARING. `DcimDevice` is
-        # this repository's WAN FRR routers: it would validate, load, and
+        # this repository's WAN routers: it would validate, load, and
         # resolve to nothing. `DcimGenericDevice` would resolve but admits the
         # firewall and the compute nodes, neither of which carries
         # avd_custom_hostvars.

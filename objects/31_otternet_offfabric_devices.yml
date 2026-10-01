@@ -12,7 +12,7 @@
 # THE WAN ROUTERS ARE PLAIN DcimDevice OBJECTS with the non-EOS roles added in
 # schemas/dcim_extensions.yml. None of those roles is in ROLE_TO_AVD_TYPE, and
 # none of these devices joins the avd_devices group — so pyAVD never sees them
-# and never tries to render EOS for an FRR router or a vSRX.
+# and never tries to render EOS for an SR Linux router or a vSRX.
 #
 # No rack is set: DcimDevice requires only a name, and none of this equipment
 # is in the datacentre. The customer-premises routers carry a location instead.
@@ -66,35 +66,35 @@ spec:
       role: isp_edge
       status: active
       rack_face: front
-      device_type: ["FRRouting", "FRR Container Router"]
-      platform: FRR
+      device_type: ["Nokia", "SR Linux IXR-D2L"]
+      platform: SRLinux
       member_of_groups:
-        - frr_routers
+        - srl_routers
     - name: isp-pe2
       telemetry_address: ["172.20.41.62/24", default]
       description: "Provider core; default VRF transit and the datacentre handoff"
       role: isp_core
       status: active
       rack_face: front
-      device_type: ["FRRouting", "FRR Container Router"]
-      platform: FRR
+      device_type: ["Nokia", "SR Linux IXR-D2L"]
+      platform: SRLinux
       member_of_groups:
-        - frr_routers
+        - srl_routers
     - name: internet-rtr
       telemetry_address: ["172.20.41.91/24", default]
       description: "AS 64500 border router"
       role: internet_edge
       status: active
       rack_face: front
-      device_type: ["FRRouting", "FRR Container Router"]
-      platform: FRR
+      device_type: ["Nokia", "SR Linux IXR-D2L"]
+      platform: SRLinux
       location:
         kind: LocationSite
         data:
           name: internet-edge
 
       member_of_groups:
-        - frr_routers
+        - srl_routers
     # ---- customer edge ---------------------------------------------------
     - name: cust-acme-ce
       telemetry_address: ["172.20.41.71/24", default]
@@ -102,14 +102,14 @@ spec:
       role: customer_edge
       status: active
       rack_face: front
-      device_type: ["FRRouting", "FRR Container Router"]
-      platform: FRR
+      device_type: ["Nokia", "SR Linux IXR-D2L"]
+      platform: SRLinux
       location:
         kind: LocationSite
         data:
           name: acme-hq
       member_of_groups:
-        - frr_routers
+        - srl_routers
     - name: cust-acme-dr-ce
       description: "acme dr CE; statically routed, no routing protocol at all"
       role: customer_edge
@@ -127,15 +127,15 @@ spec:
       role: customer_edge
       status: active
       rack_face: front
-      device_type: ["FRRouting", "FRR Container Router"]
-      platform: FRR
+      device_type: ["Nokia", "SR Linux IXR-D2L"]
+      platform: SRLinux
       location:
         kind: LocationSite
         data:
           name: globex-hq
 
       member_of_groups:
-        - frr_routers
+        - srl_routers
     # ---- the branch ------------------------------------------------------
     - name: branch-rtr
       telemetry_address: ["172.20.41.81/24", default]
@@ -143,12 +143,12 @@ spec:
       role: branch_router
       status: active
       rack_face: front
-      device_type: ["FRRouting", "FRR Container Router"]
-      platform: FRR
+      device_type: ["Nokia", "SR Linux IXR-D2L"]
+      platform: SRLinux
       location:
         kind: LocationSite
         data:
           name: branch-office
 
       member_of_groups:
-        - frr_routers
+        - srl_routers

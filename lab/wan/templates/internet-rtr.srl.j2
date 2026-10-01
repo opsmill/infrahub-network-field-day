@@ -1,0 +1,49 @@
+# Rendered by wan/render.py for {{ node }} -- do not edit.
+#
+# The internet, AS {{ isp.internet.asn }}.
+#
+# One router and one web server standing in for everything outside the
+# provider. It announces a default route to the ISP and accepts whatever
+# customer prefixes the ISP chooses to announce back -- which is the point of
+# the exercise: only tenants that bought internet access appear here.
+#
+# What this is NOT: there is no NAT anywhere in this lab, so this router holds
+# a route back to RFC1918 customer space, which a real internet plainly does
+# not. A production design gives the customer public addressing or NATs at the
+# provider edge. See docs/design.md, Internet access is a product.
+{% include "_system.srl.j2" %}
+{% include "_interfaces.srl.j2" %}
+#
+# Originate a default. A blackhole static gives BGP something to advertise --
+# without a matching route in the table, the export policy below has nothing
+# to accept and the customer never gets a default.
+set / network-instance default next-hop-groups group blackhole blackhole generate-icmp false
+set / network-instance default static-routes route 0.0.0.0/0 next-hop-group blackhole
+#
+# customer space the ISP announces to us
+set / routing-policy prefix-set PL-FROM-ISP prefix {{ isp.internet.customer_aggregate }} mask-length-range {{ isp.internet.customer_aggregate.split('/')[1] }}..24
+set / routing-policy policy RM-FROM-ISP statement 10 match prefix prefix-set PL-FROM-ISP
+set / routing-policy policy RM-FROM-ISP statement 10 action policy-result accept
+set / routing-policy policy RM-FROM-ISP default-action policy-result reject
+#
+# The default, plus our own LAN. On SR Linux an export policy that accepts a
+# static or local route is also what originates it, so this one policy does
+# the work of the two FRR `network` statements and the route-map that filtered
+# them.
+set / routing-policy prefix-set PL-TO-ISP prefix 0.0.0.0/0 mask-length-range exact
+set / routing-policy prefix-set PL-TO-ISP prefix {{ isp.internet.lan }} mask-length-range exact
+set / routing-policy policy RM-TO-ISP statement 10 match prefix prefix-set PL-TO-ISP
+set / routing-policy policy RM-TO-ISP statement 10 action policy-result accept
+set / routing-policy policy RM-TO-ISP default-action policy-result reject
+#
+set / network-instance default protocols bgp autonomous-system {{ isp.internet.asn }}
+set / network-instance default protocols bgp router-id {{ isp.internet.peering.peer }}
+set / network-instance default protocols bgp ebgp-default-policy import-reject-all false
+set / network-instance default protocols bgp ebgp-default-policy export-reject-all false
+set / network-instance default protocols bgp afi-safi ipv4-unicast admin-state enable
+set / network-instance default protocols bgp group provider peer-as {{ isp.asn }}
+set / network-instance default protocols bgp neighbor {{ isp.internet.peering.address | replace('/30','') }} peer-group provider
+set / network-instance default protocols bgp neighbor {{ isp.internet.peering.address | replace('/30','') }} description "{{ isp.internet.peering.node }} (provider)"
+set / network-instance default protocols bgp neighbor {{ isp.internet.peering.address | replace('/30','') }} import-policy [ RM-FROM-ISP ]
+set / network-instance default protocols bgp neighbor {{ isp.internet.peering.address | replace('/30','') }} export-policy [ RM-TO-ISP ]
+{% include "_cpm_acl.srl.j2" %}

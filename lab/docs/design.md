@@ -265,19 +265,28 @@ one behind globex gets `10.0.0.0/8` and nothing else.
 **There is no NAT anywhere, and that is the one dishonest part of this.**
 Customer LANs are RFC1918 and `internet-rtr` simply holds a route back to
 them, which a real internet does not. A production design assigns the customer
-public space or NATs at the provider edge; neither is modelled because the FRR
-image carries no `iptables` or `nft`, and the thing worth showing here is the
-routing policy — who gets a default route and whose prefixes get announced —
+public space or NATs at the provider edge; neither is modelled, because the
+thing worth showing here is the routing policy — who gets a default route and whose prefixes get announced —
 rather than address translation. Adding it later means one gateway node with a
 NAT ruleset, not a redesign.
 
-### Why FRR and not more ceOS
+### Why SR Linux and not more ceOS
 
 The ISP is not part of the fabric AVD builds, and nothing about being an Arista
-box makes the demo better. FRR is a real BGP implementation at ~200 MB, so the
-entire WAN layer — two PEs, two CEs, a branch router and three hosts — costs
-less than one additional ceOS node. On a host that was already at 22 GB of 30,
-that was the difference between building this and not.
+box makes the demo better. It was FRR at first -- a real BGP implementation at
+about 200 MB a router -- and moved to Nokia SR Linux (`ghcr.io/nokia/srlinux`,
+type `ixr-d2l`) for two reasons. SR Linux streams its own telemetry over gNMI,
+through the same OpenConfig paths the ceOS fabric answers, where FRR needed an
+`frr_exporter` sidecar per router and reported routing state only. And a second
+network OS with a full configuration model is what lets Infrahub show it
+renders more than one: the artifact for an SR Linux router is its whole routed
+configuration -- interfaces, VRFs and policy -- not a routing daemon's file
+beside a boot script.
+
+The cost is memory, about 2 GB a router against FRR's 200 MB, which the full
+profile now has room for. The SR Linux configuration reproduces FRR's routing
+behaviour route for route; where the two implementations differ the
+difference is in the template comments rather than the policy.
 
 It also keeps the boundary honest: the fabric is rendered by AVD from
 `avd/group_vars/`, the WAN is rendered by `wan/render.py` from
@@ -359,18 +368,20 @@ read as a diff is a change you can refuse.
 
 Two details worth knowing:
 
-- **`make wan-deploy` reloads, it does not restart.** It runs FRR's own
-  `frr-reload.py`, which diffs the running config against the file and applies
-  only the difference, so onboarding a customer does not bounce the BGP
-  sessions of the customers who were already there. `vtysh -f` would *merge*,
-  which is worse than useless here: a customer deleted from the model would
-  keep its VRF and its session.
-- **The renderer overwrites in place and never `rmtree`s.** The topology
-  bind-mounts `wan/rendered/<node>/frr.conf` straight into the container, so
-  deleting and recreating the file swaps the inode and leaves every running
-  router mounted on a file that no longer exists. Overwriting means a
-  re-render is immediately visible inside the container and the reload has
-  nothing to copy.
+- **`make wan-deploy` replaces the whole configuration, it does not restart.**
+  `config.cli` is the router's complete configuration, `/system` included,
+  opening with `delete /`. For each router the script loads it into one private,
+  named candidate and commits with `commit confirmed`. It accepts once gNMI and
+  SSH are listening again; otherwise SR Linux rolls the commit back. The commit
+  applies only the net difference, so onboarding a customer does not bounce
+  the BGP sessions of the customers who were already there, and a customer
+  deleted from the model loses its VRF and its session -- which a merge would
+  have left in place.
+- **The routers read `config.cli` once, at boot**, as a ContainerLab startup
+  configuration. After that only a push changes them. The hosts still
+  bind-mount their `init.sh`, which is why the renderer overwrites in place and
+  never `rmtree`s: recreating a bind-mounted file swaps the inode and leaves
+  the running container mounted on a file that no longer exists.
 
 ## Crossplane owns the platform, not just the apps
 

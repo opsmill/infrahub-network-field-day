@@ -20,14 +20,15 @@ import yaml
 
 from transforms.telemetry_collector_config import DISPATCH, FIREWALL, ROUTER, SERVER, SWITCH
 
-# measurement -> the device kinds it is rendered for. `system-resources` has no
-# FRR entry on purpose: frr_exporter's process series describe the exporter,
-# not the router.
+# measurement -> the device kinds it is rendered for. The WAN routers gained
+# `interface-counters` and `system-resources` when they moved to SR Linux: FRR's
+# exporter reported routing state only, and SR Linux streams all three over gNMI
+# through the same OpenConfig paths as the switches.
 CONTRACT: dict[str, set[str]] = {
-    "interface-counters": {SWITCH, FIREWALL},
+    "interface-counters": {SWITCH, ROUTER, FIREWALL},
     "bgp-neighbor-state": {SWITCH, ROUTER},
     "evpn-routes": {SWITCH},
-    "system-resources": {SWITCH, FIREWALL},
+    "system-resources": {SWITCH, ROUTER, FIREWALL},
     "security-sessions": {FIREWALL},
     "node-resources": {SERVER},
 }
@@ -55,7 +56,7 @@ def test_every_seeded_measurement_has_a_renderer_for_some_family() -> None:
 def test_every_seeded_profile_names_only_known_measurements_and_reaches_its_family() -> None:
     family_of_group = {
         "avd_devices": SWITCH,
-        "frr_routers": ROUTER,
+        "srl_routers": ROUTER,
         "junos_firewalls": FIREWALL,
         "kubernetes_nodes": SERVER,
     }
@@ -70,4 +71,4 @@ def test_every_seeded_profile_names_only_known_measurements_and_reaches_its_fami
 
 def test_the_seeded_profiles_reach_all_four_families() -> None:
     groups = {g for profile in _seeded("MonitoringProfile") for g in profile["device_groups"]}
-    assert groups >= {"avd_devices", "frr_routers", "junos_firewalls", "kubernetes_nodes"}
+    assert groups >= {"avd_devices", "srl_routers", "junos_firewalls", "kubernetes_nodes"}

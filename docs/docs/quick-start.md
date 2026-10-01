@@ -109,7 +109,7 @@ then the `OTTERNET_FABRIC` design (`20`–`28`): device types and templates, poo
 
 Open the Infrahub UI at **`http://localhost:8000`** and log in. You should see:
 
-- **Fabric Design & AVD → Device Catalogue → Manufacturers**: `Arista`, `FRRouting`, `Juniper`, and `Generic`.
+- **Fabric Design & AVD → Device Catalogue → Manufacturers**: `Arista`, `Nokia`, `Juniper`, and `Generic`.
 - **Data Centre Fabric → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
 - **Data Centre Fabric → Racks**: `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`.
 - **Data Centre Fabric → Switches**: the two spines and five leaves, with their pinned management addresses.

@@ -168,5 +168,5 @@ class TestGroups:
         """`objects/00_groups.yml` is what makes the inventory group itself, so a
         rename there silently produces an inventory with no firewall filter."""
         seeded = (Path(__file__).resolve().parents[2] / "objects/00_groups.yml").read_text(encoding="utf-8")
-        for group in (inv.GROUP_EOS, inv.GROUP_FRR, inv.GROUP_JUNOS):
+        for group in (inv.GROUP_EOS, inv.GROUP_SRL, inv.GROUP_JUNOS):
             assert f"name: {group}" in seeded, f"{group} is not seeded in objects/00_groups.yml"

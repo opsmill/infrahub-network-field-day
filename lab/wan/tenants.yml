@@ -7,9 +7,9 @@
 # routers from this one, with the same property: you change the model,
 # re-render, review the diff, then push.
 #
-#   make wan-build     render every FRR config offline -- no lab needed
+#   make wan-build     render every SR Linux config offline -- no lab needed
 #   git diff wan/rendered/
-#   make wan-deploy    push and reload, without restarting anything
+#   make wan-deploy    push and commit, without restarting anything
 #
 # ---------------------------------------------------------------------------
 # TENANT, NOT CUSTOMER
@@ -58,9 +58,8 @@ isp:
   # NOTE: no NAT anywhere. Customer LANs are RFC1918 and the internet router
   # simply holds a route back to them, which a real internet obviously does
   # not. A production design either assigns the customer public space or NATs
-  # at the edge; neither is modelled here because the FRR image has no
-  # iptables or nft, and the routing-policy story -- who gets a default route
-  # and who does not -- is what this is meant to show.
+  # at the edge; neither is modelled here, because the routing-policy story --
+  # who gets a default route and who does not -- is what this is meant to show.
   internet:
     asn: 64500
     router: internet-rtr
@@ -72,9 +71,9 @@ isp:
       # conflating them is how the internet router ends up waiting forever for
       # an interface that only exists on isp-pe2.
       node: isp-pe2
-      interface: eth3
+      interface: ethernet-1/3
       address: 10.52.0.1/30
-      router_interface: eth1
+      router_interface: ethernet-1/1
       peer: 10.52.0.2
     host:
       node: internet-host
@@ -82,7 +81,7 @@ isp:
       address: 198.51.100.10/24
       gateway: 198.51.100.1
     lan: 198.51.100.0/24
-    lan_interface: eth2
+    lan_interface: ethernet-1/2
     lan_address: 198.51.100.1/24
 
   # Customer-facing PE. Holds a VRF per customer.
@@ -90,7 +89,7 @@ isp:
     node: isp-pe1
     loopback: 10.50.0.1
     core:
-      interface: eth1
+      interface: ethernet-1/1
       address: 10.50.255.1/30
       peer: 10.50.255.2
 
@@ -99,12 +98,12 @@ isp:
     node: isp-pe2
     loopback: 10.50.0.2
     core:
-      interface: eth1
+      interface: ethernet-1/1
       address: 10.50.255.2/30
       peer: 10.50.255.1
     # eBGP to border-leaf1 in VRF WAN.
     dc:
-      interface: eth2
+      interface: ethernet-1/2
       address: 10.250.50.2/30
       peer: 10.250.50.1
       peer_asn: 65103
@@ -157,13 +156,13 @@ tenants:
         lan: 10.60.10.0/24
         pe:
           node: isp-pe1
-          interface: eth2
+          interface: ethernet-1/2
           address: 10.51.10.1/30
         ce:
           node: cust-acme-ce
-          wan_interface: eth1
+          wan_interface: ethernet-1/1
           wan_address: 10.51.10.2/30
-          lan_interface: eth2
+          lan_interface: ethernet-1/2
           lan_address: 10.60.10.1/24
         host:
           node: cust-acme-host
@@ -183,7 +182,7 @@ tenants:
         lan: 10.60.11.0/24
         pe:
           node: isp-pe1
-          interface: eth4
+          interface: ethernet-1/4
           address: 10.51.11.1/30
         ce:
           node: cust-acme-dr-ce
@@ -226,13 +225,13 @@ tenants:
         lan: 10.60.20.0/24
         pe:
           node: isp-pe1
-          interface: eth3
+          interface: ethernet-1/3
           address: 10.51.20.1/30
         ce:
           node: cust-globex-ce
-          wan_interface: eth1
+          wan_interface: ethernet-1/1
           wan_address: 10.51.20.2/30
-          lan_interface: eth2
+          lan_interface: ethernet-1/2
           lan_address: 10.60.20.1/24
         host:
           node: cust-globex-host
@@ -253,21 +252,23 @@ branch:
   lan: 10.70.0.0/24
   router:
     node: branch-rtr
-    dc_interface: eth1
+    dc_interface: ethernet-1/1
     dc_address: 10.250.70.2/30
     dc_peer: 10.250.70.1
     dc_peer_asn: 65103
     # The branch LAN is a switched segment, not a point-to-point link per host.
     # Three devices share 10.70.0.0/24 and have to reach each other directly --
     # guacd opens a VNC session to the desktop without that traffic ever leaving
-    # the site -- so the router's LAN ports are enslaved to a bridge it also
-    # addresses. This is what the switch built into a branch router does.
-    lan_bridge: br-branch
+    # the site -- so the router's LAN ports are bridged subinterfaces of one
+    # mac-vrf, routed through an IRB the router addresses. This is what the
+    # switch built into a branch router does.
+    lan_bridge: lan
+    lan_irb: irb0
     lan_address: 10.70.0.1/24
     lan_interfaces:
-      - eth2      # branch-host       (the original multitool test host)
-      - eth3      # branch-desktop    (the XFCE workstation)
-      - eth4      # branch-guacd      (the VNC gateway Guacamole drives)
+      - ethernet-1/2   # branch-host       (the original multitool test host)
+      - ethernet-1/3   # branch-desktop    (the XFCE workstation)
+      - ethernet-1/4   # branch-guacd      (the VNC gateway Guacamole drives)
   hosts:
     - node: branch-host
       interface: eth1
@@ -287,6 +288,13 @@ branch:
       interface: eth1
       address: 10.70.0.31/24
       gateway: 10.70.0.1
+
+# The routers' admin password, as a sha512-crypt hash -- never cleartext. The
+# SAME hash objects/22_otternet_management.yml gives NetworkLocalUser `admin`,
+# which is what Infrahub renders onto the SR Linux routers and the fabric
+# switches alike, so the whole lab shares one lab credential (`admin`).
+# tests/unit/test_srl_config.py holds the two copies equal.
+admin_password_hash: "$6$OtternetLab$9OUIc8rD9Tz1nLCqGCVqkB2Jc0hRbMwY0oFA4E4hmrcIUFo7/5n79zdOiNhJDnTnsmVg4t3MAZCcmlrYu6iln1"
 
 # MTU for every WAN interface. Matches what AVD configures on the border leaf;
 # containerlab creates these veths at 9500 and the mismatch is silent and

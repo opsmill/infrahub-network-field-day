@@ -115,7 +115,7 @@ spec:
             - branch
             - Arista
             - Juniper
-            - FRRouting
+            - Nokia
             - Generic
             - OTTERNET-ISP
             - OTTERNET-Internet

@@ -15,9 +15,12 @@ quiet:
   the commands were sent**.
 * ``_assert_eos_lifeline`` -- a replace that drops the management path commits
   successfully and takes the device off the network with it.
-* ``_assert_frr_lifeline`` -- ``frr-reload.py`` applies the difference between the
-  running configuration and the file, so an empty artifact is an instruction to
-  **delete everything the router is running**, not a no-op.
+* ``_assert_srl_lifeline`` -- an SR Linux push is a FULL replace (``delete /``
+  then the artifact), so an artifact without the management interface and VRF,
+  the gNMI and SSH servers and the admin password commits successfully and
+  **leaves the router unreachable or with no login**.
+* ``push_srl``'s commit-confirm -- a commit that passes the lifeline and still
+  breaks management is rejected at once, and one nobody confirms rolls back.
 * ``_assert_junos_lifeline`` -- the firewall push is a full ``load override``,
   so an artifact missing fxp0, the ssh/netconf services or the login this code
   authenticates as would commit a firewall nothing can reach.
@@ -37,10 +40,12 @@ from solution_arista_avd.deployment.devices import (
     ProvisionError,
     Target,
     _assert_eos_lifeline,  # noqa: PLC2701 - these guards are the point of this file
-    _assert_frr_lifeline,  # noqa: PLC2701
     _assert_junos_lifeline,  # noqa: PLC2701
+    _assert_srl_lifeline,  # noqa: PLC2701
     _eos_config_lines,  # noqa: PLC2701
     _junos_override_payload,  # noqa: PLC2701
+    push_srl,
+    srl_candidate_script,
 )
 
 if TYPE_CHECKING:
@@ -107,43 +112,136 @@ class TestEosLifeline:
         assert "management access" in message
 
 
-class TestFrrLifeline:
-    """The guard EOS had and FRR did not.
+SRL_LIFELINE = (
+    "delete /\n"
+    "set / system aaa authentication admin-user password $6$OtternetLab$hash\n"
+    "set / system ssh-server mgmt admin-state enable\n"
+    "set / system ssh-server mgmt network-instance mgmt\n"
+    "set / system grpc-server mgmt admin-state enable\n"
+    "set / system grpc-server mgmt network-instance mgmt\n"
+    "set / interface mgmt0 admin-state enable\n"
+    "set / interface mgmt0 subinterface 0 ipv4 dhcp-client\n"
+    "set / network-instance mgmt type ip-vrf\n"
+    "set / network-instance mgmt interface mgmt0.0\n"
+)
 
-    `frr-reload.py --reload` applies the difference between the running
-    configuration and the file, so an empty file means "delete everything the
-    router is running" rather than "change nothing". Artifact generation is
-    asynchronous and an artifact that has not rendered yet exists, reports
-    `Ready`, and is empty -- so a provision run at the wrong moment would erase
-    all six WAN routers and report success.
+
+class TestSrlLifeline:
+    """What must survive a FULL replace for the router to stay reachable and manageable.
+
+    An EMPTY artifact -- one that exists, reports `Ready` and has not rendered
+    yet -- would otherwise delete the router's whole configuration, management
+    and login included.
     """
 
     def test_a_real_configuration_passes(self) -> None:
-        _assert_frr_lifeline(_target("branch-rtr"), "frr defaults traditional\nhostname branch-rtr\n")
+        _assert_srl_lifeline(_target("branch-rtr"), SRL_LIFELINE + "set / interface lo0 admin-state enable\n")
 
     def test_an_empty_artifact_is_refused(self) -> None:
-        """The case that motivated it."""
         with pytest.raises(ProvisionError) as error:
-            _assert_frr_lifeline(_target("branch-rtr"), "")
-        assert "delete the running configuration" in str(error.value)
+            _assert_srl_lifeline(_target("branch-rtr"), "")
+        assert "unreachable" in str(error.value)
 
-    def test_a_whitespace_only_artifact_is_refused(self) -> None:
-        with pytest.raises(ProvisionError):
-            _assert_frr_lifeline(_target("branch-rtr"), "\n   \n")
-
-    def test_the_refusal_names_the_device(self) -> None:
+    @pytest.mark.parametrize(
+        "dropped",
+        [
+            "set / interface mgmt0 ",
+            "set / network-instance mgmt ",
+            "set / system grpc-server mgmt ",
+            "set / system ssh-server mgmt ",
+            "set / system aaa authentication admin-user password",
+        ],
+    )
+    def test_each_missing_element_is_refused(self, dropped: str) -> None:
+        config = "\n".join(line for line in SRL_LIFELINE.splitlines() if not line.startswith(dropped))
         with pytest.raises(ProvisionError) as error:
-            _assert_frr_lifeline(_target("isp-pe1"), "! only a comment\n")
+            _assert_srl_lifeline(_target("isp-pe1"), config)
         assert "isp-pe1" in str(error.value)
 
-    def test_a_router_running_no_bgp_is_still_allowed(self) -> None:
-        """`hostname` rather than `router bgp` is the marker on purpose.
+    def test_a_comment_naming_mgmt0_does_not_satisfy_it(self) -> None:
+        """The needles are whole commands, so prose about the lifeline is not the lifeline."""
+        commented = "\n".join(f"# {line}" for line in SRL_LIFELINE.splitlines())
+        with pytest.raises(ProvisionError):
+            _assert_srl_lifeline(_target(), commented)
 
-        Every FRR template emits a hostname; a future FRR device that runs no BGP
-        is entirely plausible, and a guard that refuses a legitimate
-        configuration is a worse failure than the one it prevents.
-        """
-        _assert_frr_lifeline(_target("mgmt-rtr"), "hostname mgmt-rtr\nip route 0.0.0.0/0 10.0.0.1\n")
+    def test_a_cleartext_password_does_not_satisfy_it(self) -> None:
+        """The needle ends in `$`: the admin password must be a crypt hash."""
+        config = SRL_LIFELINE.replace("password $6$OtternetLab$hash", "password admin")
+        with pytest.raises(ProvisionError, match="admin-user password"):
+            _assert_srl_lifeline(_target(), config)
+
+
+class TestSrlCandidateScript:
+    def test_the_whole_tree_is_deleted_before_the_artifact_is_set(self) -> None:
+        """`delete /` then the artifact, in ONE candidate: EOS's `rollback clean-config`."""
+        script = srl_candidate_script("infrahub-test-1", SRL_LIFELINE, commit=False).splitlines()
+
+        assert script[0] == "enter candidate private name infrahub-test-1"
+        assert script[1] == "delete /"
+        assert script.index("set / interface mgmt0 admin-state enable") > 1
+        assert script[-2:] == ["diff flat", "discard now"]
+
+    def test_a_push_commits_confirmed_and_a_comparison_does_not_commit(self) -> None:
+        push = srl_candidate_script("n", SRL_LIFELINE, commit=True).splitlines()
+        assert push[-1].startswith("commit confirmed timeout ")
+        assert "commit" not in srl_candidate_script("n", SRL_LIFELINE, commit=False)
+
+
+class _Docker:
+    """Stands in for `docker`: records each argv, answers like a router would."""
+
+    def __init__(self, *, commit_out: str, listening: str) -> None:
+        self.calls: list[list[str]] = []
+        self.commit_out = commit_out
+        self.listening = listening
+
+    def __call__(self, argv: list[str], **_: object) -> object:
+        import subprocess  # noqa: S404 - only CompletedProcess, to fake a docker answer
+
+        self.calls.append(argv)
+        if argv[:2] == ["docker", "inspect"]:
+            return subprocess.CompletedProcess(argv, 0, "true\n", "")
+        if argv[-1] == "sr_cli":
+            return subprocess.CompletedProcess(argv, 0, self.commit_out, "")
+        if "addr" in argv:
+            return subprocess.CompletedProcess(argv, 0, "3: mgmt0.0    inet 172.20.41.61/24 brd x\n", "")
+        if "ss" in argv:
+            return subprocess.CompletedProcess(argv, 0, self.listening, "")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    def tools(self) -> list[str]:
+        return [argv[-1] for argv in self.calls if "-d" in argv]
+
+
+COMMITTED = (
+    "Commit confirmed (automatic rollback in 2 minutes)\nAll changes have been committed. Leaving candidate mode.\n"
+)
+
+
+class TestSrlCommitConfirm:
+    def test_a_healthy_commit_is_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        docker = _Docker(commit_out=COMMITTED, listening="*:57400 *:80 0.0.0.0:22 \n")
+        monkeypatch.setattr("subprocess.run", docker)
+
+        assert "confirmed" in push_srl(_target("isp-pe1"), SRL_LIFELINE)
+        assert docker.tools() == ["tools system configuration confirmed-accept"]
+
+    def test_a_commit_that_breaks_gnmi_is_rejected_not_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Measured on the prototype: gNMI moved off 57400, rejected, rolled back."""
+        docker = _Docker(commit_out=COMMITTED, listening="*:57999 0.0.0.0:22 \n")
+        monkeypatch.setattr("subprocess.run", docker)
+
+        with pytest.raises(ProvisionError, match="rolled back"):
+            push_srl(_target("isp-pe1"), SRL_LIFELINE)
+        assert docker.tools() == ["tools system configuration confirmed-reject"]
+
+    def test_the_lifeline_runs_before_anything_is_sent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        docker = _Docker(commit_out=COMMITTED, listening="")
+        monkeypatch.setattr("subprocess.run", docker)
+
+        with pytest.raises(ProvisionError):
+            push_srl(_target("isp-pe1"), "delete /\n")
+        assert docker.calls == []
 
 
 LAB_HASH = "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71"

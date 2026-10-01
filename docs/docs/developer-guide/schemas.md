@@ -267,7 +267,7 @@ Since cycle 027 the equipment in this lab is modelled as four sibling node kinds
 | Kind | Holds | Rendered by |
 | --- | --- | --- |
 | `DcimFabricSwitch` | the fabric's spines, leaves and border leaves | pyAVD → EOS config |
-| `DcimDevice` | the WAN's FRR routers | `frr_config` |
+| `DcimDevice` | the WAN's SR Linux routers | `srl_config` |
 | `SecurityFirewall` | the perimeter firewall | `junos_config` |
 | `ComputePhysicalServer` | Kubernetes nodes, hosts, cloud instances | — |
 
@@ -286,7 +286,7 @@ An Arista EOS switch in the datacenter fabric. Inherits `Dcim.GenericDevice`, `D
 
 ### `DcimDevice` — `Dcim.Device`
 
-The WAN's FRR routers. Inherits `Dcim.GenericDevice`, `Dcim.PhysicalDevice`, and `CoreArtifactTarget`.
+The WAN's SR Linux routers. Inherits `Dcim.GenericDevice`, `Dcim.PhysicalDevice`, and `CoreArtifactTarget`.
 
 - **Attributes**: `name` (unique), `description`, `os_version`, `status`. Extensions: `role` (the six non-EOS roles below).
 - **Relationships**: `interfaces` → `DcimInterface`, `device_type` → `DcimDeviceType`, `platform` → `DcimPlatform`, `router_id` → `IpamIPAddress` (explicit rather than derived, because a customer edge's router ID is its LAN address and not a loopback), `asn` → `RoutingAsn`, plus routing relations (`bgp_peer_groups`, `bgp_neighbors`, `prefix_lists`, `route_maps`, `static_routes`).
@@ -393,7 +393,7 @@ The peer is the device *generic*, not `DcimDevice`, and that is deliberate. `Sec
 
 `route_name` is the "Route Description" field and is where a device's own per-route comment belongs.
 
-**Do not confuse this with `RoutingVrfStaticRoute` below.** They are separate kinds with separate identifiers: this one is device-level and reached through `DcimGenericDevice.static_routes`; that one is VRF-scoped, reached through `IpamVRF` and `WanSite`, and is what `transforms/frr_config.py` reads. `tests/unit/test_routing_schema_contract.py` pins both so a tidy-up cannot merge them.
+**Do not confuse this with `RoutingVrfStaticRoute` below.** They are separate kinds with separate identifiers: this one is device-level and reached through `DcimGenericDevice.static_routes`; that one is VRF-scoped, reached through `IpamVRF` and `WanSite`, and is what `transforms/srl_config.py` reads. `tests/unit/test_routing_schema_contract.py` pins both so a tidy-up cannot merge them.
 
 ### `RoutingVrfStaticRoute` — `Routing.VrfStaticRoute`
 

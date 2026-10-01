@@ -93,7 +93,7 @@ H = {"X-INFRAHUB-KEY": os.environ["INFRAHUB_API_TOKEN"]}
 A = os.environ["INFRAHUB_ADDRESS"]
 q = "{ CoreArtifact { edges { node { id name { value } } } } }"
 r = httpx.post(f"{A}/graphql/main", json={"query": q}, headers=H, timeout=60).json()
-names = {"AVD EOS Configuration", "FRR Configuration", "Junos Configuration"}
+names = {"AVD EOS Configuration", "SR Linux Configuration", "Junos Configuration"}
 print(sum(1 for e in r["data"]["CoreArtifact"]["edges"]
           if e["node"]["name"]["value"] in names
           and not httpx.get(f"{A}/api/artifact/{e['node']['id']}", headers=H, timeout=60).text.strip()))
@@ -103,9 +103,10 @@ check "$empty" "0" "configuration artifacts with content"
 
 stage "lab and devices"
 # 31 since the tooling cluster: `tool-node1` is a lab node like any other,
-# even though nothing in the fabric reaches it. 37 since cycle 034: six
-# frr_exporter sidecars, one per FRR router, are lab nodes too.
-check "$(docker ps -q --filter name=clab-otternet | wc -l)" "37" "lab nodes running"
+# even though nothing in the fabric reaches it. Cycle 034 added six
+# frr_exporter sidecars (37); the SR Linux re-platform removed them again,
+# because the routers stream their own telemetry over gNMI.
+check "$(docker ps -q --filter name=clab-otternet | wc -l)" "31" "lab nodes running"
 # Cycle 030 made the bootstrap's device step `invoke reconcile --converge`
 # rather than `invoke provision`, so the string this used to grep for is gone.
 grep -q "Every device is confirmed to match its rendered configuration" "$LOG/bootstrap.log" \

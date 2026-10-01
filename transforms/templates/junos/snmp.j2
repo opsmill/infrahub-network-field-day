@@ -4,9 +4,8 @@
 
    Conditional like `applications`: with no community modelled nothing renders,
    which is what keeps the artifact byte-identical to a device file that has no
-   stanza. Top level, so `_junos_replace_tagged` tags it `replace:` like every
-   other hierarchy the artifact emits -- and removing it from the model removes
-   it from the device.
+   stanza. The push is a full `load override`, so removing it from the model
+   removes it from the device.
 
    THE COMMUNITY IS BOUND TO `mgmt_junos`, because fxp0 sits in that instance
    under `management-instance` and every poll arrives there. Unbound -- or

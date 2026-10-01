@@ -2,7 +2,7 @@
 
 The fourth and last of the lab domains cycle 010 listed as hand-maintained. The
 fabric renders through PyAVD, Kubernetes and applications through Crossplane,
-the WAN through ``frr_config`` -- and the firewall, until now, not at all.
+the WAN through ``srl_config`` -- and the firewall, until now, not at all.
 
 THIS IS THE FIREWALL'S WHOLE CONFIGURATION, not a set of hierarchies. The
 reconciler pushes it with ``load override``, which replaces the running

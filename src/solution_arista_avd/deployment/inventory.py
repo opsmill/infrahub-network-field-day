@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 # `objects/00_groups.yml` seeds all three, so `nornir-infrahub` builds them from
 # each node's `member_of_groups` with nothing extra to configure.
 GROUP_EOS = "avd_devices"
-GROUP_FRR = "frr_routers"
+GROUP_SRL = "srl_routers"
 GROUP_JUNOS = "junos_firewalls"
 
 DEFAULT_WORKERS = 10

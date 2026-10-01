@@ -7,7 +7,7 @@ audience: user
 # ContainerLab
 
 [ContainerLab](https://containerlab.dev) runs the OTTERNET lab as containers: Arista cEOS for the
-fabric, FRR for the WAN, a vSRX firewall, k3s nodes, and the branch and tooling hosts.
+fabric, Nokia SR Linux for the WAN, a vSRX firewall, k3s nodes, and the branch and tooling hosts.
 
 ## The lab
 
@@ -28,9 +28,9 @@ address, and `invoke provision` (or the reconciler) then makes each one match it
 Two things `invoke lab` does before deploying, because ContainerLab refuses a topology with a missing
 bind path before starting any node:
 
-- It renders `lab/wan/render.py`. Every FRR router bind-mounts its boot configuration from
+- It renders `lab/wan/render.py`. Every SR Linux router boots from its `config.cli` in
   `lab/wan/rendered/`, which is generated and ignored by git.
-- It creates the tooling bridge and the FRR socket directories the topology binds.
+- It creates the tooling bridge the topology names.
 
 ContainerLab's runtime state, `lab/clab-otternet/`, and the k3s `kubeconfig` files under `lab/k8s/` are
 written at deploy time and ignored by git. From a git worktree, `invoke lab` still resolves to `lab/` in
