@@ -67,21 +67,20 @@ def main() -> int:
     step = next(s for s in template["spec"]["steps"] if s.get("id") == "create")
     mutation = step["input"]["query"]
 
-    # The values a requester would supply. `destination_vip` is two elements
-    # because IpamIPAddress is keyed that way -- if the template stops asking for
-    # both, this call fails, which is the point.
+    # What the create mutation must ask for: the grant's mandatory fields. The
+    # optional ones -- destination_vip, source_zone, source_address,
+    # source_site, ports, justification -- are separate steps, each guarded on
+    # the requester having filled it in, so the create no longer carries them.
+    # Requiring them here failed a portal that was correct (cycle 034).
     variables = {
         "requester": "verify@otternet.lab",
         "name": f"verify-{uuid.uuid4().hex[:8]}",
         "application": "otternet-demo",
-        "destination_vip": ["10.112.240.10/32", "default"],
-        "source_zone": "branch",
-        "source_address": "branch-users",
         "owner": "branch",
     }
     missing = [name for name in variables if f"${name}" not in mutation]
     if missing:
-        print(f"the template no longer asks for {missing}; update this check")
+        print(f"the template's create mutation no longer asks for {missing}; update this check")
         return 1
 
     gql(
