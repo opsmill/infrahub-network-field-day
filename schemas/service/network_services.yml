@@ -38,7 +38,7 @@ nodes:
     description: "A tenant network: a subnet, a VLAN, and a gateway in a VRF"
     label: Network Segment
     icon: mdi:lan
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget

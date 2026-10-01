@@ -22,7 +22,7 @@ Per-device artifacts (`AVD EOS Configuration`, `AVD Device Documentation`) are r
 
 ## Finding a device artifact
 
-1. In the Infrahub UI, open **Devices → All Devices**.
+1. In the Infrahub UI, open **Data Centre Fabric → Switches**.
 2. Click a device (for example `leaf-pod-A1-1`).
 3. Click the **Artifacts** tab on the device's detail page.
 4. You'll see rows for **AVD EOS Configuration** and **AVD Device Documentation**.
@@ -55,7 +55,7 @@ The fabric and device markdown documents include tables, topology descriptions, 
 
 ## Finding a fabric artifact
 
-1. Open **Fabric Design → Fabrics**.
+1. Open **Data Centre Fabric → Fabrics**.
 2. Click the fabric (`Fabric-L3LS-MultiPod-A`).
 3. Click the **Artifacts** tab.
 4. Open **AVD Fabric Documentation** or **ContainerLab Topology**.

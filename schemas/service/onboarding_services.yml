@@ -28,7 +28,7 @@ nodes:
     description: "A tenant's presence on a fabric: its EVPN tenant and VNI range"
     label: Tenant Onboarding
     icon: mdi:account-network
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget
@@ -91,7 +91,7 @@ nodes:
     description: "A request for a machine in a rack, cabled to its leaves"
     label: Server Placement
     icon: mdi:server-plus
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget

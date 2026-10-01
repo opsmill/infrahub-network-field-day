@@ -96,10 +96,10 @@ Open the Infrahub UI and check each of these lists is populated:
 
 | Menu | Expected |
 |------|----------|
-| Devices → Types & Models → Manufacturers | Arista, Dell, and others |
-| Devices → Types & Models → Device Types | Arista models (7050-CX3, etc.) |
-| Fabric Design → Fabrics | `Fabric-L3LS-MultiPod-A` and `Fabric-L3LS-MultiPod-B` |
-| IPAM → Prefixes | supernet and per-fabric pools |
+| Fabric Design & AVD → Device Catalogue → Manufacturers | Arista, Dell, and others |
+| Fabric Design & AVD → Device Catalogue → Device Types | Arista models (7050-CX3, etc.) |
+| Data Centre Fabric → Fabrics | `Fabric-L3LS-MultiPod-A` and `Fabric-L3LS-MultiPod-B` |
+| IP Addressing & VLANs → Prefixes | supernet and per-fabric pools |
 
 If any are empty, seed data did not load.
 

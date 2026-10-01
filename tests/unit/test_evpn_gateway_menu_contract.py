@@ -16,9 +16,12 @@ def _menu() -> dict[str, Any]:
 
 
 def _evpn_services_items() -> list[dict[str, Any]]:
-    menu = _menu()
+    # The EVPN group sits inside the fabric section rather than at the top
+    # level, so it is found by identity wherever it is nested.
     evpn_menu = next(
-        item for item in menu["spec"]["data"] if item["namespace"] == "Evpn" and item["name"] == "EvpnMenu"
+        item
+        for item in _menu_items(_menu()["spec"]["data"])
+        if item["namespace"] == "Evpn" and item["name"] == "EvpnMenu"
     )
     return evpn_menu["children"]["data"]
 
@@ -59,7 +62,7 @@ def test_domains_menu_item_exists_once_under_evpn_services() -> None:
 def test_existing_evpn_services_items_are_preserved() -> None:
     items_by_kind = {item["kind"]: item["label"] for item in _evpn_services_items()}
 
-    assert items_by_kind["EvpnTenant"] == "Tenants"
+    assert items_by_kind["EvpnTenant"] == "EVPN Tenants"
     assert items_by_kind["EvpnSvi"] == "SVIs"
     assert items_by_kind["EvpnL2Vlan"] == "L2 VLANs"
     assert items_by_kind["EvpnDomain"] == "Domains"

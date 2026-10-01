@@ -82,7 +82,7 @@ The full chain typically takes a few minutes depending on fabric size.
 
 ## Step 4 — Verify devices exist
 
-Once all tasks complete, open **Devices → All Devices** in the menu. You should see devices with roles:
+Once all tasks complete, open **Data Centre Fabric → Switches** in the menu. You should see devices with roles:
 
 - `super_spine` — top of the fabric
 - `spine` — one per pod

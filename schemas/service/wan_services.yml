@@ -30,7 +30,7 @@ nodes:
     description: "A tenant's VPN across the provider edge"
     label: Tenant L3VPN
     icon: mdi:lan-connect
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget
@@ -88,7 +88,7 @@ nodes:
     description: "The internet-access product, bought per tenant"
     label: Internet Access
     icon: mdi:web-check
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget
@@ -136,7 +136,7 @@ nodes:
     description: "A tenant's isolated compute in the datacentre"
     label: Tenant Cloud
     icon: mdi:cloud-lock
-    include_in_menu: true
+    include_in_menu: false
     inherit_from:
       - ServiceGeneric
       - GeneratorTarget

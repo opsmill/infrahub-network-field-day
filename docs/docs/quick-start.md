@@ -108,10 +108,10 @@ then the `OTTERNET_FABRIC` design (`20`–`28`): device types and templates, poo
 
 Open the Infrahub UI at **`http://localhost:8000`** and log in. You should see:
 
-- **Devices → Types & Models → Manufacturers**: Arista, Dell, and other manufacturers.
-- **Fabric Design → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
-- **Locations → Racks**: pre-defined racks per pod.
-- **IPAM → Prefixes**: the fabric supernet and per-fabric prefix pools.
+- **Fabric Design & AVD → Device Catalogue → Manufacturers**: Arista, Dell, and other manufacturers.
+- **Data Centre Fabric → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
+- **Data Centre Fabric → Racks**: pre-defined racks per pod.
+- **IP Addressing & VLANs → Prefixes**: the fabric supernet and per-fabric prefix pools.
 
 If you don't see these, re-run `uv run invoke load` or see [Common Issues](./troubleshooting.md).
 
@@ -130,7 +130,7 @@ The stack is up but no devices exist yet — fabrics, pods, and racks are define
 | `uv run invoke restart --component=infrahub-server` | Restart a specific service |
 | `uv run invoke load` | Re-run the full load sequence |
 | `uv run invoke load-schema` | Reload schemas only |
-| `uv run invoke load-menu` | Reload UI menus only |
+| `uv run invoke load-menu` | Reload UI menus only, deleting entries `menus/` no longer declares |
 | `uv run invoke init-semaphore` | Re-register the Semaphore project and templates (idempotent) |
 | `uv run invoke test` | Run the unit tests, the same set CI runs |
 | `uv run invoke test --integration` | Also run the integration tests, which start an Infrahub stack in Docker and take minutes |
