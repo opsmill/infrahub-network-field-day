@@ -35,10 +35,3 @@ __pycache__/
 
 # WAN generated output (rebuild with: make wan-build)
 wan/rendered/
-
-# FRR daemon sockets, shared between each router and its frr_exporter sidecar.
-# The directories themselves are committed (each holds a .gitkeep): ContainerLab
-# verifies every bind path before starting any node and refuses the topology if
-# one is missing, where plain Docker would have created it.
-wan/run/*/*
-!wan/run/*/.gitkeep

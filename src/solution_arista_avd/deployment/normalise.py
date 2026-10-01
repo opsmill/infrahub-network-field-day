@@ -1,20 +1,19 @@
 """Turn a device's raw comparison output into "does this device need pushing?".
 
 **This module is why the reconciler is safe to run.** Phase 0 measured all three
-comparators against the running lab and found that two of them report a
-non-empty difference against an artifact the device already matches:
+comparators against the running lab and found that two of them reported a
+non-empty difference against an artifact the device already matched:
 
-* **FRR** reports ``neighbor <addr> activate``, ``service
-  integrated-vtysh-config`` and ``line vty`` every time, because the artifact
-  states them and ``show running-config`` never echoes them back -- the first is
-  FRR's default for IPv4 unicast, the other two are file directives rather than
-  running state.
+* **FRR** reported ``neighbor <addr> activate``, ``service
+  integrated-vtysh-config`` and ``line vty`` every time. That family is gone:
+  the WAN re-platformed onto SR Linux, whose own ``diff flat`` is empty for an
+  in-sync router -- measured on all six, see ``normalise_srl``.
 * **Junos** reports changed lines every time: the eleven zone-pair blocks in a
   different order, and the artifact's comment blocks round-tripping.
 
 Read as-is, that means "this device differs", and a reconciler acting on it
-replaces the configuration of every FRR router and the firewall **on every cycle,
-forever**, while every log line says success.
+replaces the firewall's configuration **on every cycle, forever**, while every
+log line says success.
 
 So: ``differs`` is computed from ``normalise(...)``, never from the raw text.
 
@@ -40,84 +39,43 @@ from __future__ import annotations
 import re
 
 # --------------------------------------------------------------------------
-# FRR
+# SR Linux
 # --------------------------------------------------------------------------
 
-# `frr-reload.py --test` prints sections, NOT `+`/`-` prefixed lines. A parser
-# written against diff prefixes returns "no differences" for a device that has
-# genuinely changed -- a false negative that reads exactly like success.
-_FRR_SECTION = re.compile(r"^Lines To (Add|Delete)\s*$")
-_FRR_RULE = re.compile(r"^=+\s*$")
-
-# Suppressed, with the reason each one is not evidence of drift.
-_FRR_SUPPRESSED = (
-    # Activation for IPv4 unicast is FRR's default, so the running configuration
-    # omits it while the artifact states it explicitly. Verified against
-    # branch-rtr: `show running-config` carries remote-as, description and
-    # route-map for the same neighbour, but never `activate`.
-    re.compile(r"^\s*neighbor \S+ activate\s*$"),
-    # A configuration-file directive. It is not running state and never appears
-    # in `show running-config`.
-    re.compile(r"^\s*service integrated-vtysh-config\s*$"),
-    # Same: vtysh writes it into the file, the running configuration has no
-    # equivalent to compare against.
-    re.compile(r"^\s*line vty\s*$"),
-)
-
-# Block openers whose presence is only ever context. They are dropped when
-# nothing survives inside them; kept when something does.
-_FRR_SCAFFOLD = (
-    # `router bgp <asn>` and its per-VRF form. The VRF variant is spelled out
-    # because leaving it off is not a cosmetic miss: on a provider edge every
-    # customer VRF carries its own `neighbor ... activate`, so the suppressed
-    # inner line leaves an unsuppressed wrapper behind and the device reports a
-    # difference forever. Found on isp-pe1 by the fail-noisy rule doing its job.
-    re.compile(r"^\s*router bgp \d+( vrf \S+)?\s*$"),
-    re.compile(r"^\s*address-family \S+ \S+\s*$"),
-)
-
-_FRR_TERMINATOR = re.compile(r"^\s*(exit|end)\s*$")
+# The one line sr_cli prints when a comparison leaves candidate mode. Status,
+# never configuration. A comparison never commits, so the "committed" variant is
+# deliberately NOT here: seen in a comparison it means something went wrong,
+# and it counts. Everything else printed is a `diff flat` line and counts.
+_SRL_STATUS = (re.compile(r"^All changes have been discarded\. Leaving candidate mode\.\s*$"),)
 
 
-def _frr_significant(section: list[str]) -> list[str]:
-    """Drop suppressed lines, then any scaffolding they leave empty."""
-    kept: list[str] = []
-    # Walk backwards so a scaffold line can see whether anything survived after
-    # it at a deeper indent.
-    survived_deeper: dict[int, bool] = {}
-    for raw in reversed(section):
-        if not raw.strip() or _FRR_TERMINATOR.match(raw):
-            continue
-        depth = len(raw) - len(raw.lstrip())
-        if any(pattern.match(raw) for pattern in _FRR_SUPPRESSED):
-            continue
-        if any(pattern.match(raw) for pattern in _FRR_SCAFFOLD) and not any(
-            deeper for at, deeper in survived_deeper.items() if at > depth
-        ):
-            continue
-        kept.append(raw.rstrip())
-        survived_deeper[depth] = True
-        survived_deeper = {at: v for at, v in survived_deeper.items() if at <= depth or v}
-    return list(reversed(kept))
+def normalise_srl(raw: str) -> list[str]:
+    """Significant lines from the candidate's `diff flat` of a FULL replace.
 
+    **No suppression at all**, like EOS and unlike the FRR it replaced. The
+    comparison empties a candidate with `delete /`, rebuilds it from the whole
+    artifact -- /system included -- and asks the router for `diff flat`, so the
+    router compares intent against its entire running configuration itself.
+    Measured on all six prototype routers straight after booting the full
+    artifact: nothing but the status line. And the other way: hand edits inside
+    /system and outside it show as exactly the lines that undo them, and a moved
+    artifact as exactly its two changed lines out of roughly nine hundred
+    (tests/unit/fixtures/deployment/srl_*).
 
-def normalise_frr(raw: str) -> list[str]:
-    """Significant lines from `frr-reload.py --test` output.
+    A value change is printed as a single `insert` of the new value, not a
+    delete-and-insert pair, so the line count of a diff is not a count of
+    changed leaves.
 
-    Exit status is deliberately not consulted anywhere: `--test` returns 0
-    whether or not the configuration matches (measured, research R2).
+    Unrecognised output counts, per the fail-noisy rule. The comparator raises
+    before this is reached when sr_cli exits non-zero -- an aborted candidate
+    prints no diff, and an empty diff must never come from a candidate that did
+    not load.
     """
-    section: list[str] = []
-    collecting = False
-    for line in raw.splitlines():
-        if _FRR_SECTION.match(line):
-            collecting = True
-            continue
-        if _FRR_RULE.match(line):
-            continue
-        if collecting:
-            section.append(line)
-    return _frr_significant(section)
+    return [
+        line.rstrip()
+        for line in raw.splitlines()
+        if line.strip() and not any(pattern.match(line.strip()) for pattern in _SRL_STATUS)
+    ]
 
 
 # --------------------------------------------------------------------------
@@ -209,7 +167,7 @@ def normalise_eos(raw: str) -> list[str]:
 
 NORMALISERS = {
     "AVD EOS Configuration": normalise_eos,
-    "FRR Configuration": normalise_frr,
+    "SR Linux Configuration": normalise_srl,
     "Junos Configuration": normalise_junos,
 }
 

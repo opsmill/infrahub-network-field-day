@@ -908,7 +908,7 @@
                             ]
                           },
                           "name": {
-                            "value": "frr_routers"
+                            "value": "srl_routers"
                           }
                         }
                       }
@@ -928,7 +928,21 @@
                       {
                         "node": {
                           "name": {
+                            "value": "interface-counters"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "name": {
                             "value": "bgp-neighbor-state"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "name": {
+                            "value": "system-resources"
                           }
                         }
                       }

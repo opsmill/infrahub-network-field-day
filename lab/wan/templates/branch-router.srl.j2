@@ -1,0 +1,26 @@
+# Rendered by wan/render.py for {{ node }} -- do not edit.
+#
+# Branch office router, AS {{ branch.asn }}.
+#
+# The branch peers straight with border-leaf1 over a private circuit -- no ISP
+# in the path at all. That is why it gets its own VRF on the border leaf and
+# its own firewall zone: it is a different trust level from a WAN customer, and
+# the policy on the firewall is what expresses that.
+{% include "_system.srl.j2" %}
+{% include "_interfaces.srl.j2" %}
+#
+set / routing-policy prefix-set PL-OUR-LAN prefix {{ branch.lan }} mask-length-range exact
+set / routing-policy policy RM-TO-DC statement 10 match prefix prefix-set PL-OUR-LAN
+set / routing-policy policy RM-TO-DC statement 10 action policy-result accept
+set / routing-policy policy RM-TO-DC default-action policy-result reject
+#
+set / network-instance default protocols bgp autonomous-system {{ branch.asn }}
+set / network-instance default protocols bgp router-id {{ branch.loopback }}
+set / network-instance default protocols bgp ebgp-default-policy import-reject-all false
+set / network-instance default protocols bgp ebgp-default-policy export-reject-all false
+set / network-instance default protocols bgp afi-safi ipv4-unicast admin-state enable
+set / network-instance default protocols bgp group dc peer-as {{ branch.router.dc_peer_asn }}
+set / network-instance default protocols bgp neighbor {{ branch.router.dc_peer }} peer-group dc
+set / network-instance default protocols bgp neighbor {{ branch.router.dc_peer }} description "border-leaf1 (VRF BRANCH)"
+set / network-instance default protocols bgp neighbor {{ branch.router.dc_peer }} export-policy [ RM-TO-DC ]
+{% include "_cpm_acl.srl.j2" %}

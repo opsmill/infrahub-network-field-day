@@ -444,29 +444,22 @@ than a kill. If you tighten either, expect this back.
 
 ## Internet-bound traffic goes nowhere, but the policy looks right
 
-The tenant has a default route, the prefix lists are correct, BGP is up, and a
+The tenant has a default route, the prefix sets are correct, BGP is up, and a
 `curl` to the internet still times out. Check where the packet actually goes
 before touching any policy:
 
 ```bash
-docker exec clab-otternet-isp-pe2 vtysh -c "show ip route 0.0.0.0/0"
-# via 172.20.41.1, eth0   <-- the MANAGEMENT default, not the BGP one
+docker exec clab-otternet-isp-pe2 \
+  sr_cli -d "show network-instance default ipv4 route 0.0.0.0/0"
+# bgp, via 10.52.0.2 -- the internet router
 ```
 
-containerlab gives every node a default route via `eth0` to the management
-bridge, and a kernel default beats a BGP-learned one. Internet traffic then
-leaves through the management interface, which looks exactly like a routing
-policy failure and is not one — the policy is fine, the route is simply never
-used.
-
-The rendered `init.sh` for every WAN router removes it at boot for this reason.
-If a router still has one, it did not run its init:
-
-```bash
-docker exec clab-otternet-isp-pe1 ip route show default
-docker logs clab-otternet-isp-pe1 | tail
-make wan-build && make wan-deploy     # re-render, then reload
-```
+Under FRR this was the classic trap: containerlab gives every node a default
+route via `eth0` to the management bridge, a kernel default beats a
+BGP-learned one, and internet traffic left through the management interface.
+SR Linux keeps management in its own network instance, `mgmt`, so its default
+cannot compete with the `default` instance's -- if the route above is missing,
+it is BGP or policy, not the management network.
 
 Hosts keep their management default deliberately, except hosts behind a tenant
 that bought internet access — those get a real default via their CE instead,
@@ -474,27 +467,21 @@ or the demo would prove nothing.
 
 ## A policy change did not take effect
 
-`make wan-deploy` runs FRR's `frr-reload.py`, which applies configuration but
-does not re-evaluate routes already in the table against a changed inbound
-route-map. The config is right, `show running-config` proves it, and the route
-is still missing or still present:
+First prove the change reached the router at all. `make wan-deploy` reports a
+router whose commit was refused, but a router that was never pushed still runs
+its boot configuration:
 
 ```bash
-docker exec clab-otternet-isp-pe2 vtysh -c "show running-config" | grep PL-INTERNET-IN
-# the new prefix list is there...
-docker exec clab-otternet-isp-pe2 vtysh -c "show bgp ipv4 unicast" | grep 198.51
-# ...but the prefix is not
-```
-
-Force a route refresh:
-
-```bash
-docker exec clab-otternet-isp-pe2 vtysh -c "clear bgp ipv4 unicast * soft"
+docker exec clab-otternet-isp-pe2 \
+  sr_cli -d "info flat routing-policy prefix-set PL-INTERNET-IN"
+# the new prefix should be there
+docker exec clab-otternet-isp-pe2 \
+  sr_cli -d "show network-instance default protocols bgp routes ipv4 summary" | grep 198.51
 ```
 
 Check the far end too. An inbound policy cannot accept what the neighbour never
-sent: if a prefix is missing after a soft clear, look at the *sender's*
-outbound route-map before widening the receiver's inbound one.
+sent: if a prefix is missing, look at the *sender's* export policy before
+widening the receiver's import one.
 
 ## A tenant cannot reach its own cloud, or reaches another tenant's
 
@@ -507,7 +494,8 @@ docker exec clab-otternet-app-leaf1 Cli -p 15 -c "show ip route vrf TENANT_ACME 
 # into the wrong VRF or not at all (see the APP_LEAFS tag filter below)
 
 # 2. the PE -- does this tenant's VRF even learn the prefix?
-docker exec clab-otternet-isp-pe1 vtysh -c "show ip route vrf CUST_ACME" | grep 10.220
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "show network-instance CUST_ACME ipv4 route" | grep 10.220
 # acme should see 10.220.10.0/24 and NOT 10.220.20.0/24
 
 # 3. the firewall
@@ -534,10 +522,10 @@ succeeds, and the symptom is a cloud host with no gateway.
 
 ### A WAN router has no config at all
 
-The topology bind-mounts `wan/rendered/<node>/frr.conf` straight into the
-container. If nothing has been rendered, containerlab creates a *directory*
-where the file should be and FRR starts with no config — which looks like a
-broken image rather than a missing build step.
+Each router boots from `wan/rendered/<node>/config.cli`, a ContainerLab startup
+configuration that is gitignored generated output. `invoke lab` and
+`make deploy` both render it first; a deploy run any other way on a fresh
+clone has nothing to boot from.
 
 ```bash
 ls wan/rendered/                       # empty or missing?
@@ -547,53 +535,66 @@ make wan-deploy
 
 `make preflight` fails on this rather than warning, for the same reason.
 
+**The router booted, but half of its configuration is missing** -- no
+management interface, no addresses, part of the routing policy. That is the
+quote trap: sr_cli tokenises quotes before it recognises a `#` comment, so one
+apostrophe in a comment swallows every line up to the next quote, and those
+lines are never applied. Nothing errors. `wan/render.py` and Infrahub's
+`srl_config` both refuse to emit such a comment; a hand-edited file is the way
+back in.
+
+```bash
+grep -nE "^\s*#.*['\"]" wan/rendered/*/config.cli     # must print nothing
+```
+
 ### A customer's BGP session will not come up
 
 Work outwards from the wire:
 
 ```bash
-docker exec clab-otternet-cust-acme-ce ip -br addr show          # is eth1 addressed?
-docker exec clab-otternet-cust-acme-ce ping -c2 10.51.10.1       # can it see the PE?
-docker exec clab-otternet-isp-pe1 vtysh -c 'show bgp vrf CUST_ACME ipv4 unicast summary'
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "info flat network-instance CUST_ACME interface *"  # ethernet-1/2.0 in the VRF?
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "show network-instance CUST_ACME protocols bgp neighbor"
 ```
 
 Two failure modes specific to this design:
 
-**The PE interface is not in the customer's VRF.** The VRF device has to exist
-*before* FRR reads its config — zebra configures interfaces but does not create
-VRFs — which is why the rendered `init.sh` is the container's entrypoint rather
-than a post-boot exec. If it did not run, the `vrf` stanzas were silently
-dropped and the session has nowhere to live:
+**The PE port is not in the customer's VRF.** Which VRF a provider-edge port
+belongs to is derived when the configuration renders -- the port whose subnet
+holds a site's attachment address belongs to that site's tenant. A port whose
+tenant's L3VPN is decommissioned is rendered `admin-state disable` and in no
+network instance at all, deliberately, rather than falling into `default`.
+
+**The session is up and nothing is exchanged.** Leaking needs both halves:
+the importing VRF's `inter-instance-policies` import policy *and* the exporting
+instance's `LEAKABLE` export policy. Then a leaked route reaches BGP only
+through `bgp rib-management table ipv4-unicast route-table-import`. Each
+missing half fails silently, with every session established:
 
 ```bash
-docker exec clab-otternet-isp-pe1 ip -br link show type vrf      # CUST_* present?
-docker exec clab-otternet-isp-pe1 ip -br link show master CUST_ACME   # eth2 enslaved?
-docker logs clab-otternet-isp-pe1 | grep wan-init
-```
-
-**bgpd is not running.** The FRR image ships `bgpd=no`, and the failure is
-quiet: `vtysh` accepts `router bgp` and keeps no sessions.
-
-```bash
-docker exec clab-otternet-isp-pe1 vtysh -c 'show daemons'
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "info flat network-instance default inter-instance-policies"
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "info flat network-instance default protocols bgp rib-management"
 ```
 
 ### A customer can see another customer
 
-The import route-map is missing or not matching. Both customers' prefixes are
-legitimately in the provider's default table, so this route-map is the only
+The tenant's import policy is missing or too wide. Every customer's prefixes
+are legitimately in the provider's default instance, so this policy is the only
 thing separating them:
 
 ```bash
-docker exec clab-otternet-isp-pe1 vtysh -c 'show running-config' \
-  | grep -A4 'vrf CUST_ACME'
-# expect BOTH:
-#   import vrf default
-#   import vrf route-map RM-DC-SERVICES-ONLY
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "info flat routing-policy policy RM-ACME-IMPORT"
+# statements 10, 20 and 30, each matching origin-network-instance default
+# and one prefix-set, and a default action of reject
 ```
 
-If only `import vrf default` is present, every customer has the whole provider
-table. Re-render and re-deploy; `make verify` asserts the negative directly.
+A policy that accepts everything from `default` hands every customer the whole
+provider table. Re-render and re-deploy; `make verify` asserts the negative
+directly.
 
 ### A customer cannot reach a DC service
 
@@ -603,8 +604,9 @@ next:
 
 ```bash
 # 1. Does the customer even have a route?
-docker exec clab-otternet-cust-acme-ce vtysh -c 'show ip route 10.112.240.0/24'
-#    no route -> RM-DC-SERVICES-ONLY on isp-pe1, or RM-DC-TO-EXTERNAL on the
+docker exec clab-otternet-cust-acme-ce \
+  sr_cli -d "show network-instance default ipv4 route 10.112.240.0/24"
+#    no route -> RM-ACME-IMPORT on isp-pe1, or RM-DC-TO-EXTERNAL on the
 #    border leaf, or the static route in VRF WAN that originates it
 
 # 2. Did the DC accept the customer's prefix back?
@@ -894,7 +896,8 @@ Remember there are three gates, not one. The firewall is only the second:
 
 ```bash
 # 1. does the branch have a route to the VIP at all?
-docker exec clab-otternet-branch-rtr vtysh -c "show ip route 10.112.240.0/24"
+docker exec clab-otternet-branch-rtr \
+  sr_cli -d "show network-instance default ipv4 route 10.112.240.0/24"
 # 2. the firewall (above)
 # 3. Cilium, at the pod
 kubectl -n <app namespace> get cnp

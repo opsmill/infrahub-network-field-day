@@ -28,10 +28,12 @@ node() { docker exec "clab-otternet-$1" sh -c "$2"; }
 
 running() { docker ps --format '{{.Names}}' | grep -qx "clab-otternet-$1"; }
 
-# vtysh on a WAN router. Note the stderr filter: FRR complains about a missing
-# /etc/frr/vtysh.conf on every invocation and it means nothing, but it lands in
-# the middle of the output being matched.
-frr()  { docker exec "clab-otternet-$1" vtysh -c "$2" 2>/dev/null; }
+# sr_cli on a WAN router, one command, no candidate. Route lookups are anchored
+# with `^<prefix>` below because SR Linux prints the table header -- which names
+# the network instance -- even when the prefix is absent.
+srl()  { docker exec "clab-otternet-$1" sr_cli -d "$2" 2>/dev/null; }
+# A BGP neighbour of $1 in network instance $3 matching $2 that is established.
+srl_peer() { srl "$1" "show network-instance ${3:-default} protocols bgp neighbor" | grep -E "$2" | grep established; }
 
 # The lab has one firewall, a Junos vSRX, and the branch baseline permits the
 # access portal and nothing else -- so a branch user reaching an arbitrary DC
@@ -171,17 +173,17 @@ fi
 hdr "ISP, WAN customers and the branch"
 if running isp-pe1 && running isp-pe2; then
     check "the ISP core session between both PEs is established" \
-          "10\.50\.255\.2" bash -c 'docker exec clab-otternet-isp-pe1 vtysh -c "show bgp ipv4 unicast summary" 2>/dev/null | grep -E "^10\.50\.255\.2" | grep -v never'
+          "10\.50\.255\.2" srl_peer isp-pe1 "10\.50\.255\.2"
     check "isp-pe2 peers with the DC border leaf" \
-          "10\.250\.50\.1" bash -c 'docker exec clab-otternet-isp-pe2 vtysh -c "show bgp ipv4 unicast summary" 2>/dev/null | grep -E "^10\.250\.50\.1" | grep -v never'
+          "10\.250\.50\.1" srl_peer isp-pe2 "10\.250\.50\.1"
 
     # Every customer's eBGP session, and what it is allowed to learn.
     for c in acme globex; do
         if running "cust-$c-ce"; then
             check "customer $c has an established session to the ISP" \
-                  "65500" bash -c "docker exec clab-otternet-cust-$c-ce vtysh -c 'show bgp ipv4 unicast summary' 2>/dev/null | grep -E '^10\.51\.' | grep -v never"
+                  "65500" srl_peer "cust-$c-ce" "10\.51\."
             check "customer $c learned the DC service prefix" \
-                  "10\.112\.240\.0/24" frr "cust-$c-ce" "show bgp ipv4 unicast"
+                  "10\.112\.240\.0/24" srl "cust-$c-ce" "show network-instance default protocols bgp routes ipv4 summary"
         fi
     done
 
@@ -189,18 +191,18 @@ if running isp-pe1 && running isp-pe2; then
     # table -- they have to, or the DC could not route back -- so this passing
     # is entirely down to the import route-map on isp-pe1.
     if running cust-acme-ce && running cust-globex-ce; then
-        if frr cust-acme-ce "show ip route 10.60.20.0/24" | grep -q "10.60.20.0/24"; then
-            bad "customer isolation" "cust-acme has a route to cust-globex's LAN -- the provider is transiting between customers, check RM-DC-SERVICES-ONLY on isp-pe1"
+        if srl cust-acme-ce "show network-instance default ipv4 route 10.60.20.0/24" | grep -q "^10.60.20.0/24"; then
+            bad "customer isolation" "cust-acme has a route to cust-globex's LAN -- the provider is transiting between customers, check RM-ACME-IMPORT and RM-GLOBEX-IMPORT on isp-pe1"
         else
             ok "customer isolation: acme has no route to globex's LAN"
         fi
-        if frr cust-globex-ce "show ip route 10.60.10.0/24" | grep -q "10.60.10.0/24"; then
+        if srl cust-globex-ce "show network-instance default ipv4 route 10.60.10.0/24" | grep -q "^10.60.10.0/24"; then
             bad "customer isolation" "cust-globex has a route to cust-acme's LAN"
         else
             ok "customer isolation: globex has no route to acme's LAN"
         fi
         # A customer must not learn DC internals either.
-        if frr cust-acme-ce "show ip route 10.111.0.0/16" | grep -q "10.111"; then
+        if srl cust-acme-ce "show network-instance default ipv4 route 10.111.0.0/16" | grep -q "^10.111"; then
             bad "DC internals leaked" "a WAN customer learned the pod CIDR -- check RM-DC-TO-EXTERNAL on border-leaf1"
         else
             ok "a WAN customer never learns the DC pod CIDR"
@@ -232,11 +234,11 @@ fi
 
 if running branch-rtr; then
     check "the branch router peers with the border leaf directly" \
-          "65103" bash -c 'docker exec clab-otternet-branch-rtr vtysh -c "show bgp ipv4 unicast summary" 2>/dev/null | grep -E "^10\.250\.70\.1" | grep -v never'
+          "65103" srl_peer branch-rtr "10\.250\.70\.1"
     check "the branch learned the DC service prefix" \
-          "10\.112\.240\.0/24" frr branch-rtr "show bgp ipv4 unicast"
+          "10\.112\.240\.0/24" srl branch-rtr "show network-instance default protocols bgp routes ipv4 summary"
     # The branch must not be reachable from, or able to reach, the WAN.
-    if frr branch-rtr "show ip route 10.60.0.0/16" | grep -q "10.60"; then
+    if srl branch-rtr "show network-instance default ipv4 route 10.60.0.0/16" | grep -q "^10.60"; then
         bad "branch isolation" "the branch has a route to WAN customer space"
     else
         ok "the branch has no route to WAN customer space"
@@ -340,12 +342,12 @@ hdr "Tenants: multi-site, isolated cloud, internet as a product"
 if running isp-pe1; then
     # ---- one VRF per tenant, both sites inside it ------------------------
     check "acme's two sites share one VRF on the PE" \
-          "10\.60\.11\.0/24" frr isp-pe1 "show ip route vrf CUST_ACME"
+          "10\.60\.11\.0/24" srl isp-pe1 "show network-instance CUST_ACME ipv4 route"
     check "the statically routed site is redistributed, not peered" \
-          "static" frr isp-pe1 "show ip route vrf CUST_ACME 10.60.11.0/24"
+          "static" srl isp-pe1 "show network-instance CUST_ACME ipv4 route 10.60.11.0/24"
     # acme/dr has no BGP session at all -- if one appears, the site kind in
     # wan/tenants.yml and the rendered config have diverged.
-    if frr isp-pe1 "show bgp vrf CUST_ACME ipv4 unicast summary" | grep -q "10.51.11.2"; then
+    if srl isp-pe1 "show network-instance CUST_ACME protocols bgp neighbor" | grep -q "10.51.11.2"; then
         bad "acme/dr attachment" "there is a BGP session to the dr CE, but that site is kind: static -- re-render with make wan-build"
     else
         ok "acme/dr has no BGP session, as a static site should not"
@@ -353,18 +355,18 @@ if running isp-pe1; then
 
     # ---- per-tenant import policy ----------------------------------------
     check "acme's VRF learns acme's cloud subnet" \
-          "10\.220\.10\.0/24" frr isp-pe1 "show ip route vrf CUST_ACME"
-    if frr isp-pe1 "show ip route vrf CUST_ACME" | grep -q "10.220.20.0/24"; then
+          "10\.220\.10\.0/24" srl isp-pe1 "show network-instance CUST_ACME ipv4 route"
+    if srl isp-pe1 "show network-instance CUST_ACME ipv4 route" | grep -q "10.220.20.0/24"; then
         bad "tenant cloud isolation" "acme's VRF has a route to GLOBEX's cloud subnet -- RM-ACME-IMPORT is too wide"
     else
         ok "acme's VRF has no route to globex's cloud"
     fi
-    if frr isp-pe1 "show ip route vrf CUST_GLOBEX" | grep -q "10.220.10.0/24"; then
+    if srl isp-pe1 "show network-instance CUST_GLOBEX ipv4 route" | grep -q "10.220.10.0/24"; then
         bad "tenant cloud isolation" "globex's VRF has a route to ACME's cloud subnet -- RM-GLOBEX-IMPORT is too wide"
     else
         ok "globex's VRF has no route to acme's cloud"
     fi
-    if frr isp-pe1 "show ip route vrf CUST_GLOBEX" | grep -qE "10\.60\.1[01]\.0/24"; then
+    if srl isp-pe1 "show network-instance CUST_GLOBEX ipv4 route" | grep -qE "10\.60\.1[01]\.0/24"; then
         bad "tenant isolation" "globex's VRF has a route to an acme site -- the tenants are leaking into each other"
     else
         ok "globex's VRF has no route to any acme site"
@@ -372,8 +374,8 @@ if running isp-pe1; then
 
     # ---- internet as a product -------------------------------------------
     check "acme's VRF has a default route (it bought internet)" \
-          "0\.0\.0\.0/0" frr isp-pe1 "show ip route vrf CUST_ACME"
-    if frr isp-pe1 "show ip route vrf CUST_GLOBEX 0.0.0.0/0" | grep -qE "^[KCSB>*]|via"; then
+          "0\.0\.0\.0/0" srl isp-pe1 "show network-instance CUST_ACME ipv4 route"
+    if srl isp-pe1 "show network-instance CUST_GLOBEX ipv4 route 0.0.0.0/0" | grep -q "^0\.0\.0\.0/0"; then
         bad "internet product" "globex has a default route in its VRF but did not buy internet access -- check RM-GLOBEX-IMPORT"
     else
         ok "globex has NO default route, because it did not buy internet"
@@ -382,8 +384,8 @@ fi
 
 if running internet-rtr; then
     check "the internet learns acme's prefixes from the provider" \
-          "10\.60\.10\.0/24" frr internet-rtr "show bgp ipv4 unicast"
-    if frr internet-rtr "show bgp ipv4 unicast" | grep -q "10.60.20.0/24"; then
+          "10\.60\.10\.0/24" srl internet-rtr "show network-instance default protocols bgp routes ipv4 summary"
+    if srl internet-rtr "show network-instance default protocols bgp routes ipv4 summary" | grep -q "10.60.20.0/24"; then
         bad "internet announcement" "globex's prefix is in the internet's table -- RM-INTERNET-OUT on isp-pe2 is announcing a tenant that did not buy transit"
     else
         ok "globex's prefix is NOT announced to the internet"

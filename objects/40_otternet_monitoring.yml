@@ -81,18 +81,22 @@ spec:
         - avd_devices
       measurements:
         - evpn-routes
-    # BGP only. frr_exporter reports FRR's routing state, not the router's CPU
-    # or memory -- its process_* series describe the exporter itself -- so
-    # `system-resources` has no honest source on this family and the renderer
-    # has no entry for it.
+    # Interfaces, BGP and the control plane, the same three the fabric is
+    # watched for. Under FRR this was BGP only: frr_exporter reported routing
+    # state and nothing else, its process_* series describing the exporter
+    # itself. SR Linux streams all three over gNMI natively, through the same
+    # OpenConfig paths the EOS switches answer -- so the series arrive under the
+    # same names and every fabric panel covers the WAN with no second query.
     - name: wan-routing
-      description: "The WAN's FRR routers: BGP sessions and prefixes"
+      description: "The WAN's SR Linux routers: interfaces, BGP and the control plane"
       collector: otternet-telegraf
       interval_seconds: 30
       device_groups:
-        - frr_routers
+        - srl_routers
       measurements:
+        - interface-counters
         - bgp-neighbor-state
+        - system-resources
     - name: perimeter
       description: "The firewall: interfaces, sessions and the control plane"
       collector: otternet-telegraf

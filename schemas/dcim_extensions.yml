@@ -33,7 +33,7 @@ nodes:
 extensions:
   nodes:
     - kind: DcimDevice
-      # The WAN's FRR routers, since cycle 027. The fabric's EOS switches are
+      # The WAN's routers (FRR until the SR Linux re-platform), since cycle 027. The fabric's EOS switches are
       # DcimFabricSwitch; anything that must see BOTH should peer the
       # DcimGenericDevice generic, not either concrete kind.
       attributes:
@@ -42,7 +42,7 @@ extensions:
         # This one carries the roles pyAVD NEVER renders. They are deliberately
         # ABSENT from ROLE_TO_AVD_TYPE in src/solution_arista_avd/avd.py:
         # get_avd_type raises ValueError on an unmapped role, and that loud
-        # failure is the behaviour we want for an FRR router. Mapping one would
+        # failure is the behaviour we want for an SR Linux router. Mapping one would
         # let a non-EOS device be rendered as EOS, which is silently wrong.
         #
         # There is deliberately no `firewall` value: the marketplace security

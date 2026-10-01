@@ -10,8 +10,8 @@ the normalised output, never the raw text.** Two of the three families report a
 difference against an artifact the device already matches -- see `normalise`.
 
 Each comparison leaves the device exactly as it found it: the EOS session is
-aborted, the Junos candidate is rolled back, and `frr-reload.py --test` never
-applies anything. Nothing here commits.
+aborted, the Junos candidate is rolled back, and the SR Linux candidate is
+discarded. Nothing here commits.
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ from solution_arista_avd.deployment.normalise import normalise
 # else alone.
 SESSION_PREFIX = "infrahub-reconcile-"
 
-FRR_STAGE_DIR = "/tmp/infrahub-reconcile"  # noqa: S108 - inside the node's own container
 JUNOS_STAGE = "/tmp/infrahub-reconcile.conf"  # noqa: S108 - inside the node's own container
 JUNOS_REMOTE = "/var/tmp/infrahub-reconcile.conf"  # noqa: S108 - on the vSRX
 
@@ -134,25 +133,32 @@ def _dexec(target: dv.Target, argv: list[str], stdin: str | None = None) -> subp
     )
 
 
-def compare_frr(target: dv.Target, config: str) -> str:
-    """The router's own view of what applying the artifact would change.
+def compare_srl(target: dv.Target, config: str) -> str:
+    """The router's own `diff flat` of the artifact, loaded as a FULL replace, against running.
 
-    Staged into a directory this service owns rather than over
-    `/etc/frr/frr.conf`, which the lab bind-mounts read-only.
+    The same candidate script the push runs, ending in `discard now` instead of
+    `commit confirmed`, so the comparison measures exactly what a push would do.
 
-    The return code is deliberately ignored: `--test` exits 0 whether or not the
-    configuration matches.
+    **A non-zero exit is never "in sync".** sr_cli stops at the first error and
+    prints nothing more -- no diff -- so an artifact SR Linux cannot parse
+    would otherwise read as an empty difference. It raises instead, after
+    clearing the candidate the abort leaves behind.
     """
     if not dv.container_running(target.container):
         raise dv.ProvisionError(f"{target.device}: container {target.container} is not running")
+    dv.assert_srl_lifeline(target, config)
 
-    _dexec(target, ["mkdir", "-p", FRR_STAGE_DIR])
-    _dexec(target, ["sh", "-c", f"cat > {FRR_STAGE_DIR}/frr.conf"], stdin=config)
-    result = _dexec(
-        target,
-        ["python3", "/usr/lib/frr/frr-reload.py", "--test", "--confdir", FRR_STAGE_DIR, f"{FRR_STAGE_DIR}/frr.conf"],
-    )
-    return result.stdout or ""
+    name = dv.srl_candidate_name("reconcile")
+    result = dv.srl_run(target, dv.srl_candidate_script(name, config, commit=False))
+    out = result.stdout or ""
+    if result.returncode != 0 or "All changes have been discarded" not in out:
+        dv.srl_clear_candidate(target, name)
+        detail = ((result.stderr or "") + out).strip().splitlines()
+        raise dv.ProvisionError(
+            f"{target.device}: the candidate never loaded, so the comparison is meaningless: "
+            f"{' / '.join(detail[-3:]) if detail else 'no output'}"
+        )
+    return out
 
 
 def compare_junos(target: dv.Target, config: str) -> str:
@@ -204,7 +210,7 @@ def compare_junos(target: dv.Target, config: str) -> str:
 
 COMPARATORS = {
     dv.ARTIFACT_EOS: compare_eos,
-    dv.ARTIFACT_FRR: compare_frr,
+    dv.ARTIFACT_SRL: compare_srl,
     dv.ARTIFACT_JUNOS: compare_junos,
 }
 
@@ -250,3 +256,36 @@ def sweep_junos(target: dv.Target) -> bool:
         return False
     result = dv.vsrx_cli(target, "configure exclusive\nrollback 0\nexit\nexit\n")
     return "error" not in (result.stdout or "").lower()
+
+
+def sweep_srl(target: dv.Target) -> list[str]:
+    """Clear named candidates this service left behind.
+
+    A run that sr_cli aborts -- a parse error, a refused commit -- exits without
+    leaving candidate mode, and the named candidate outlives the session.
+    SR Linux holds at most ten. Only this service's prefix is touched.
+    """
+    if not dv.container_running(target.container):
+        return []
+    listed = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "docker",
+            "exec",
+            target.container,
+            "sr_cli",
+            "-d",
+            "info from state system configuration candidate *",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    names = [
+        line.split()[1]
+        for line in (listed.stdout or "").splitlines()
+        if line.strip().startswith("candidate ") and line.split()[1].startswith(dv.SRL_CANDIDATE_PREFIX)
+    ]
+    for name in names:
+        dv.srl_clear_candidate(target, name)
+    return names

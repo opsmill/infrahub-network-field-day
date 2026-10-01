@@ -126,7 +126,7 @@ class TestFirewallCadence:
         assert due == [0, 4, 8]
 
     def test_every_other_family_is_compared_every_cycle(self) -> None:
-        for artifact in (dv.ARTIFACT_EOS, dv.ARTIFACT_FRR):
+        for artifact in (dv.ARTIFACT_EOS, dv.ARTIFACT_SRL):
             target = _target("d", artifact)
             assert all(_due(target, cycle) for cycle in range(FIREWALL_EVERY * 2))
 
@@ -136,19 +136,27 @@ class TestFirewallCadence:
         targets = [
             _target("fw1", dv.ARTIFACT_JUNOS),
             _target("leaf-1", dv.ARTIFACT_EOS),
-            _target("rtr-1", dv.ARTIFACT_FRR),
+            _target("rtr-1", dv.ARTIFACT_SRL),
         ]
         assert _order(targets)[-1].device == "fw1"
 
 
 class TestDiffersIsNormalised:
     def test_an_empty_normalised_result_means_in_sync(self) -> None:
-        c = Comparison(target=_target("d", dv.ARTIFACT_FRR), raw="Lines To Add\nline vty\n", normalised=[])
+        c = Comparison(
+            target=_target("d", dv.ARTIFACT_SRL),
+            raw="All changes have been discarded. Leaving candidate mode.\n",
+            normalised=[],
+        )
         assert c.differs is False
 
     def test_raw_output_never_decides(self) -> None:
-        """The raw text is non-empty for an in-sync FRR router and firewall."""
-        c = Comparison(target=_target("d", dv.ARTIFACT_FRR), raw="", normalised=["ip route 1.2.3.0/24 Null0"])
+        """The raw text is non-empty for an in-sync firewall, and was for FRR."""
+        c = Comparison(
+            target=_target("d", dv.ARTIFACT_SRL),
+            raw="",
+            normalised=["insert / network-instance default static-routes route 1.2.3.0/24"],
+        )
         assert c.differs is True
 
 

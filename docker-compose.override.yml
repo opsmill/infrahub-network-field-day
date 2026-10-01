@@ -252,7 +252,7 @@ services:
   #   * `network_mode: host` -- the fabric switches are reached over eAPI at
   #     their ContainerLab management addresses (172.20.41.0/24), which are on
   #     the host's docker network rather than the Infrahub compose network.
-  #   * the Docker socket -- the FRR routers and the firewall have no address
+  #   * the Docker socket -- the SR Linux routers and the firewall have no address
   #     modelled at all and are reached through `docker exec` on their
   #     containers, because Infrahub's names for them and ContainerLab's names
   #     do not match. Mounting the socket is effectively root on the host. For a

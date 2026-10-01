@@ -1,0 +1,4 @@
+delete / interface ethernet-1/1 description
+insert / system ssh-server mgmt-netconf port 830
+insert / system logging buffer messages rotate 3
+All changes have been discarded. Leaving candidate mode.

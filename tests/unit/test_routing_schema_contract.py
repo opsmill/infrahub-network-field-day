@@ -24,7 +24,7 @@ WHAT THIS PINS, AND WHY EACH CLAUSE EARNS ITS PLACE:
   relationship by inheriting the generic. Declaring it in both places is two
   declarations of one identifier.
 * **`RoutingVrfStaticRoute` is a different kind.** VRF-scoped, reached through
-  ``WanSite``, and read by ``transforms/frr_config.py``. The two are easy to
+  ``WanSite``, and read by ``transforms/srl_config.py``. The two are easy to
   confuse and a tidy-up that merged them would break the WAN render.
 * **The uniqueness constraint is load-bearing beyond display.** The
   `backfill-structured-config` generator saves with ``allow_upsert=True``,
@@ -216,7 +216,7 @@ def test_only_the_static_route_peers_the_device_generic() -> None:
 
 
 def test_vrf_static_route_is_untouched() -> None:
-    """`frr_config` reads this one through WanSite. They are not the same kind."""
+    """`srl_config` reads this one through WanSite. They are not the same kind."""
     schema = _load_yaml(VRF_SERVICES_SCHEMA)
     node = _node(schema, "Routing", "VrfStaticRoute")
 

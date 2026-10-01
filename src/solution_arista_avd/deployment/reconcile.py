@@ -124,6 +124,8 @@ def sweep(targets: list[dv.Target]) -> list[str]:
         try:
             if target.artifact_name == dv.ARTIFACT_EOS:
                 cleared.extend(f"{target.device}:{name}" for name in cmp.sweep_eos(target))
+            elif target.artifact_name == dv.ARTIFACT_SRL:
+                cleared.extend(f"{target.device}:{name}" for name in cmp.sweep_srl(target))
             elif target.artifact_name == dv.ARTIFACT_JUNOS and cmp.sweep_junos(target):
                 cleared.append(f"{target.device}:lock")
         except Exception as error:  # noqa: BLE001 - a failed sweep must not stop the cycle

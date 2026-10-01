@@ -4,7 +4,7 @@ The WAN service layer names technical objects rather than creating them, which
 is why no generator sits beneath it. The cost of that design is that **every one
 of its references is unverified**: a service can name another tenant's circuit,
 another tenant's VRF, or a zone governing a different routing domain, and the
-model loads, the FRR configuration renders, and nothing errors.
+model loads, the SR Linux configuration renders, and nothing errors.
 
 This is the WAN's equivalent of `zone-advertisement` on the fabric leg, and it
 guards the lab's central claim. `schemas/service/wan_services.yml` says the

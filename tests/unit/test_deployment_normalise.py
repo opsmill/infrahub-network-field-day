@@ -16,10 +16,17 @@ Both halves matter and neither is sufficient alone:
   alongside it, which is the same reason this repository never trusts an
   artifact's `Ready` status.
 
-The defect these tests exist to prevent: FRR and Junos report a non-empty
-difference against an artifact the device already matches, so a reconciler
-reading raw output replaces the configuration of every FRR router and the
-firewall on every cycle, forever, logging success throughout.
+The defect these tests exist to prevent: Junos reports a non-empty difference
+against an artifact the device already matches -- as FRR did before the WAN
+moved to SR Linux -- so a reconciler reading raw output replaces the firewall's
+configuration on every cycle, forever, logging success throughout.
+
+The SR Linux fixtures (`srl_*`) come from a throwaway six-router prototype, not
+the lab, which still ran FRR when they were captured. Each is the router's own
+`diff flat` of the WHOLE artifact loaded as a FULL replace (`delete /` first):
+`_clean_<router>` straight after booting from it, `srl_drifted` branch-rtr after
+hand edits inside /system and outside it, and `srl_changed` the artifact moving
+while isp-pe1 stands still.
 """
 
 from __future__ import annotations
@@ -31,8 +38,8 @@ import pytest
 from solution_arista_avd.deployment.normalise import (
     normalise,
     normalise_eos,
-    normalise_frr,
     normalise_junos,
+    normalise_srl,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "deployment"
@@ -48,26 +55,14 @@ class TestInSyncDevicesAreSilent:
     def test_eos_in_sync_normalises_to_empty(self) -> None:
         assert normalise_eos(_fixture("eos_clean.diff")) == []
 
-    def test_frr_in_sync_normalises_to_empty(self) -> None:
-        """The raw output is NOT empty -- that is the point.
-
-        An in-sync FRR router reports `neighbor <addr> activate`,
-        `service integrated-vtysh-config` and `line vty` every single time.
-        """
-        raw = _fixture("frr_clean.txt")
-        assert "Lines To Add" in raw, "fixture should carry the real non-empty output"
-        assert normalise_frr(raw) == []
-
-    def test_frr_provider_edge_with_vrfs_normalises_to_empty(self) -> None:
-        """A provider edge carries `router bgp <asn> vrf <NAME>` per customer.
-
-        Captured from isp-pe1. The first version of the scaffold rule matched
-        only the bare `router bgp <asn>`, so each VRF wrapper survived its
-        suppressed contents and the device reported a difference on every cycle
-        forever. The live dry run surfaced it because an unrecognised line counts
-        as a difference -- which is the whole point of the fail-noisy rule.
-        """
-        assert normalise_frr(_fixture("frr_vrf_clean.txt")) == []
+    @pytest.mark.parametrize(
+        "router", ["isp-pe1", "isp-pe2", "internet-rtr", "cust-acme-ce", "cust-globex-ce", "branch-rtr"]
+    )
+    def test_srl_in_sync_normalises_to_empty(self, router: str) -> None:
+        """No suppression rule is needed for this: the router prints only its status line."""
+        raw = _fixture(f"srl_clean_{router}.txt")
+        assert raw.strip(), "the fixture must hold real output, not nothing"
+        assert normalise_srl(raw) == []
 
     def test_junos_in_sync_normalises_to_empty(self) -> None:
         """An in-sync firewall reports 55 changed lines. Also the point."""
@@ -101,10 +96,26 @@ class TestRealChangesSurvive:
         assert result
         assert any("probe-marker" in line for line in result)
 
-    def test_frr_control_line_survives(self) -> None:
-        result = normalise_frr(_fixture("frr_control.txt"))
-        assert result
-        assert any("10.255.255.0/24" in line for line in result)
+    def test_srl_drift_on_the_device_survives_inside_system_too(self) -> None:
+        """Three hand edits on branch-rtr, two of them in /system, the artifact unchanged.
+
+        The full replace is what makes the /system ones visible at all: the old
+        subtree replace never compared /system. The diff is what a push would do
+        to undo them -- put the logging rotation and the NETCONF port back, drop
+        the description.
+        """
+        assert normalise_srl(_fixture("srl_drifted.txt")) == [
+            "delete / interface ethernet-1/1 description",
+            "insert / system ssh-server mgmt-netconf port 830",
+            "insert / system logging buffer messages rotate 3",
+        ]
+
+    def test_srl_a_moved_artifact_survives(self) -> None:
+        """Intent changed by a route and a description; exactly those two lines, out of ~900."""
+        assert normalise_srl(_fixture("srl_changed.txt")) == [
+            "insert / network-instance CUST_ACME static-routes route 10.60.99.0/24 next-hop-group acme-dr",
+            'insert / network-instance default protocols bgp neighbor 10.50.255.2 description "isp-pe2 (core link)"',
+        ]
 
     def test_junos_control_line_survives(self) -> None:
         """The control injects a real static route, NOT a comment.
@@ -122,9 +133,16 @@ class TestRealChangesSurvive:
 class TestFailNoisy:
     """An unrecognised line must count as a difference (FR-011a)."""
 
-    def test_an_unknown_frr_line_is_not_suppressed(self) -> None:
-        raw = "Lines To Add\n============\nip route 192.0.2.0/24 Null0\n"
-        assert normalise_frr(raw) == ["ip route 192.0.2.0/24 Null0"]
+    def test_an_unknown_srl_line_is_not_suppressed(self) -> None:
+        raw = "Warning: something unforeseen\nAll changes have been discarded. Leaving candidate mode.\n"
+        assert normalise_srl(raw) == ["Warning: something unforeseen"]
+
+    def test_a_commit_line_in_a_comparison_counts(self) -> None:
+        """Only the discard line is status. A comparison never commits, so anything
+        saying it did is unrecognised -- and counts, rather than being explained away."""
+        assert normalise_srl("Commit confirmed (automatic rollback in 2 minutes)\n") == [
+            "Commit confirmed (automatic rollback in 2 minutes)"
+        ]
 
     def test_an_unknown_junos_line_is_not_suppressed(self) -> None:
         raw = "[edit security]\n+   some-new-stanza {\n"
@@ -139,32 +157,8 @@ class TestFailNoisy:
             normalise("IOS-XR Configuration", "anything")
 
 
-class TestExitStatusIsNeverConsulted:
-    def test_frr_differences_are_found_despite_a_zero_exit(self) -> None:
-        """`frr-reload.py --test` returns 0 whether or not the config matches.
-
-        The control fixture was captured from a run that exited 0 and had a real
-        difference. Nothing in this module may look at a return code.
-        """
-        assert normalise_frr(_fixture("frr_control.txt"))
-
-
 class TestSuppressionReasons:
     """Each suppression is here for a stated reason. These pin the reasons."""
-
-    def test_frr_neighbour_activate_is_suppressed(self) -> None:
-        raw = "Lines To Add\n============\nrouter bgp 65030\n address-family ipv4 unicast\n  neighbor 10.0.0.1 activate\n exit\nexit\n"
-        assert normalise_frr(raw) == []
-
-    def test_frr_scaffolding_is_kept_when_something_real_is_inside_it(self) -> None:
-        """Dropping an empty `router bgp` is right; dropping a populated one hides drift."""
-        raw = (
-            "Lines To Add\n============\nrouter bgp 65030\n address-family ipv4 unicast\n"
-            "  neighbor 10.0.0.1 activate\n  redistribute static\n exit\nexit\n"
-        )
-        result = normalise_frr(raw)
-        assert any("redistribute static" in line for line in result)
-        assert any("router bgp" in line for line in result)
 
     def test_junos_zone_pair_reordering_is_suppressed(self) -> None:
         raw = "[edit security policies]\n!    from-zone wan to-zone branch { ... }\n"

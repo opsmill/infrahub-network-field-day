@@ -383,7 +383,7 @@ def test_display_properties_match_dcim_device() -> None:
 # re-derived, not carried forward.
 # ---------------------------------------------------------------------------
 
-# Every GraphQL root that names a device kind. `frr_config` is deliberately
+# Every GraphQL root that names a device kind. `srl_config` is deliberately
 # absent: its two roots target routers and must not move (C10).
 EXPECTED_QUERY_ROOTS = {
     "generators/avd_device_hostvar.gql": 1,
@@ -440,16 +440,17 @@ def test_the_six_query_roots_target_the_fabric_switch() -> None:
         assert found == expected, f"{path}: expected {expected} DcimFabricSwitch roots, found {found}"
 
 
-def test_frr_config_query_is_untouched() -> None:
+def test_srl_config_query_is_untouched() -> None:
     """C10. The file that "change every DcimDevice" would break.
 
-    Its targets are the WAN's routers, which keep the kind. Asserted explicitly
-    rather than left to review, because the obvious wrong way to do this cycle
-    is a global replace.
+    Its targets are the WAN's routers, which keep the kind -- through the SR Linux
+    re-platform as well, which changed their platform and not their kind (this
+    was `frr_config.gql`). Asserted explicitly rather than left to review,
+    because the obvious wrong way to do this cycle is a global replace.
     """
-    text = _text("transforms/frr_config.gql")
-    assert text.count("DcimDevice(") == 2, "frr_config.gql must keep both DcimDevice roots"
-    assert "DcimFabricSwitch" not in text, "frr_config renders routers; the switch kind has no place in it"
+    text = _text("transforms/srl_config.gql")
+    assert text.count("DcimDevice(") == 2, "srl_config.gql must keep both DcimDevice roots"
+    assert "DcimFabricSwitch" not in text, "srl_config renders routers; the switch kind has no place in it"
 
 
 def test_every_fragment_site_has_a_disposition() -> None:

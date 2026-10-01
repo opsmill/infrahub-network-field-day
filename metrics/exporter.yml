@@ -33,7 +33,7 @@ service_discovery:
 metrics:
   kind:
     # No `status` here: the generic has none. Group membership is what tells
-    # the families apart -- avd_devices, frr_routers, junos_firewalls,
+    # the families apart -- avd_devices, srl_routers, junos_firewalls,
     # kubernetes_nodes -- and it renders as a comma-joined label.
     - kind: DcimGenericDevice
       include: [name, member_of_groups]

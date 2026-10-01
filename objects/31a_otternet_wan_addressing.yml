@@ -14,7 +14,7 @@
 # an interface as a string and an address inside an English sentence. Cycle 010
 # forbade exactly that -- assumption 4, "free-text CIDRs are the failure mode
 # this model exists to remove", and SC-008. Nothing read those fields at the
-# time, so nothing caught it. The FRR renderer reads them, which is what turns
+# time, so nothing caught it. The router renderer reads them, which is what turns
 # a wart into a defect.
 #
 # The filename is load-bearing. Interfaces hang off the devices in file 31, and
@@ -36,61 +36,61 @@ kind: Object
 spec:
   kind: InterfacePhysical
   data:
-    - name: eth1
+    - name: ethernet-1/1
       device: isp-pe1
       role: core
       mtu: 9214
       status: active
       description: "iBGP core link"
-    - name: eth1
+    - name: ethernet-1/1
       device: isp-pe2
       role: core
       mtu: 9214
       status: active
       description: "iBGP core link"
-    - name: eth2
+    - name: ethernet-1/2
       device: isp-pe2
       role: peering
       mtu: 9214
       status: active
       description: "border-leaf1, VRF WAN"
-    - name: eth3
+    - name: ethernet-1/3
       device: isp-pe2
       role: upstream
       mtu: 9214
       status: active
       description: "internet transit, provider side"
-    - name: eth1
+    - name: ethernet-1/1
       device: internet-rtr
       role: peering
       mtu: 9214
       status: active
       description: "internet transit, AS 64500 side"
-    - name: eth2
+    - name: ethernet-1/2
       device: internet-rtr
       role: access
       mtu: 9214
       status: active
       description: "internet LAN"
-    - name: eth2
+    - name: ethernet-1/2
       device: isp-pe1
       role: cust
       mtu: 9214
       status: active
       description: "acme/hq provider side"
-    - name: eth1
+    - name: ethernet-1/1
       device: cust-acme-ce
       role: upstream
       mtu: 9214
       status: active
       description: "acme/hq customer side"
-    - name: eth2
+    - name: ethernet-1/2
       device: cust-acme-ce
       role: access
       mtu: 9214
       status: active
       description: "acme/hq LAN"
-    - name: eth4
+    - name: ethernet-1/4
       device: isp-pe1
       role: cust
       mtu: 9214
@@ -108,39 +108,57 @@ spec:
       mtu: 9214
       status: active
       description: "acme/dr LAN"
-    - name: eth3
+    - name: ethernet-1/3
       device: isp-pe1
       role: cust
       mtu: 9214
       status: active
       description: "globex/hq provider side"
-    - name: eth1
+    - name: ethernet-1/1
       device: cust-globex-ce
       role: upstream
       mtu: 9214
       status: active
       description: "globex/hq customer side"
-    - name: eth2
+    - name: ethernet-1/2
       device: cust-globex-ce
       role: access
       mtu: 9214
       status: active
       description: "globex/hq LAN"
-    - name: eth1
+    - name: ethernet-1/1
       device: branch-rtr
       role: upstream
       mtu: 9214
       status: active
       description: "private fibre to border-leaf1"
-    - name: br-branch
+    # The branch LAN's three switch ports. No address: `l2_mode: access` is what
+    # makes srl_config render each as a bridged subinterface of the LAN mac-vrf,
+    # which irb0 below routes. Under FRR these existed only in a boot script.
+    - name: ethernet-1/2
       device: branch-rtr
       role: access
+      l2_mode: access
       mtu: 9214
       status: active
-      description: "branch LAN bridge"
+      description: "branch LAN port: branch-host"
+    - name: ethernet-1/3
+      device: branch-rtr
+      role: access
+      l2_mode: access
+      mtu: 9214
+      status: active
+      description: "branch LAN port: branch-desktop"
+    - name: ethernet-1/4
+      device: branch-rtr
+      role: access
+      l2_mode: access
+      mtu: 9214
+      status: active
+      description: "branch LAN port: branch-guacd"
 
 ---
-# The three loopbacks. Virtual, and flagged `loopback` so the /32 a renderer
+# The three loopbacks and the branch IRB. Loopbacks are flagged `loopback` so the /32 a renderer
 # announces is identifiable without inferring it from the interface name.
 # cust-acme-dr-ce has none: it runs no routing protocol, so it has no router id
 # to carry.
@@ -149,17 +167,27 @@ kind: Object
 spec:
   kind: InterfaceVirtual
   data:
-    - name: lo
+    - name: lo0
       device: isp-pe1
       role: loopback
       status: active
       description: "isp-pe1 loopback / router id"
-    - name: lo
+    - name: lo0
       device: isp-pe2
       role: loopback
       status: active
       description: "isp-pe2 loopback / router id"
-    - name: lo
+    # The branch LAN gateway: the routed face of the LAN mac-vrf. It replaced
+    # `br-branch`, an InterfacePhysical standing in for a Linux bridge; an IRB
+    # is virtual, and a kind cannot be changed in place, so
+    # scripts/migrate_wan_srlinux.py deletes the old object before this loads.
+    - name: irb0
+      device: branch-rtr
+      role: access
+      mtu: 9214
+      status: active
+      description: "branch LAN gateway (irb of the LAN mac-vrf)"
+    - name: lo0
       device: branch-rtr
       role: loopback
       status: active
@@ -187,84 +215,84 @@ spec:
       interface:
         kind: InterfaceVirtual
         data:
-          name: lo
+          name: lo0
           device: isp-pe1
     - address: 10.50.255.1/30
       description: "iBGP core link"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth1
+          name: ethernet-1/1
           device: isp-pe1
     - address: 10.50.0.2/32
       description: "isp-pe2 loopback / router id"
       interface:
         kind: InterfaceVirtual
         data:
-          name: lo
+          name: lo0
           device: isp-pe2
     - address: 10.50.255.2/30
       description: "iBGP core link"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth1
+          name: ethernet-1/1
           device: isp-pe2
     - address: 10.250.50.2/30
       description: "border-leaf1, VRF WAN"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth2
+          name: ethernet-1/2
           device: isp-pe2
     - address: 10.52.0.1/30
       description: "internet transit, provider side"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth3
+          name: ethernet-1/3
           device: isp-pe2
     - address: 10.52.0.2/30
       description: "internet transit, AS 64500 side"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth1
+          name: ethernet-1/1
           device: internet-rtr
     - address: 198.51.100.1/24
       description: "internet LAN"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth2
+          name: ethernet-1/2
           device: internet-rtr
     - address: 10.51.10.1/30
       description: "acme/hq provider side"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth2
+          name: ethernet-1/2
           device: isp-pe1
     - address: 10.51.10.2/30
       description: "acme/hq customer side"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth1
+          name: ethernet-1/1
           device: cust-acme-ce
     - address: 10.60.10.1/24
       description: "acme/hq LAN"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth2
+          name: ethernet-1/2
           device: cust-acme-ce
     - address: 10.51.11.1/30
       description: "acme/dr provider side"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth4
+          name: ethernet-1/4
           device: isp-pe1
     - address: 10.51.11.2/30
       description: "acme/dr customer side"
@@ -285,42 +313,42 @@ spec:
       interface:
         kind: InterfacePhysical
         data:
-          name: eth3
+          name: ethernet-1/3
           device: isp-pe1
     - address: 10.51.20.2/30
       description: "globex/hq customer side"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth1
+          name: ethernet-1/1
           device: cust-globex-ce
     - address: 10.60.20.1/24
       description: "globex/hq LAN"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth2
+          name: ethernet-1/2
           device: cust-globex-ce
     - address: 10.70.255.1/32
       description: "branch loopback / router id"
       interface:
         kind: InterfaceVirtual
         data:
-          name: lo
+          name: lo0
           device: branch-rtr
     - address: 10.250.70.2/30
       description: "private fibre to border-leaf1"
       interface:
         kind: InterfacePhysical
         data:
-          name: eth1
+          name: ethernet-1/1
           device: branch-rtr
     - address: 10.70.0.1/24
-      description: "branch LAN bridge"
+      description: "branch LAN gateway"
       interface:
-        kind: InterfacePhysical
+        kind: InterfaceVirtual
         data:
-          name: br-branch
+          name: irb0
           device: branch-rtr
 
 ---

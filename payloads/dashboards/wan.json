@@ -1,7 +1,7 @@
 {
   "uid": "otternet-wan",
   "title": "OTTERNET / WAN routing",
-  "description": "The FRR routers, through frr_exporter, as the wan-routing profile selects.",
+  "description": "The SR Linux routers, over gNMI, as the wan-routing profile selects. The series are the OpenConfig ones the fabric switches report, filtered to kind DcimDevice.",
   "tags": [
     "otternet",
     "telemetry",
@@ -20,7 +20,7 @@
     {
       "id": 1,
       "type": "bargauge",
-      "title": "BGP peers up per router",
+      "title": "BGP sessions established per router",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -38,7 +38,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (device) (frr_bgp_peer_state == 1)",
+          "expr": "count by (device) (bgp_neighbor_session_state_code{kind=\"DcimDevice\"} == 6)",
           "instant": true,
           "range": false,
           "legendFormat": "{{device}}"
@@ -53,7 +53,7 @@
     {
       "id": 2,
       "type": "timeseries",
-      "title": "Prefixes received",
+      "title": "Sessions not established",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -71,10 +71,76 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (device, peer) (frr_bgp_peer_prefixes_received_count_total)",
+          "expr": "bgp_neighbor_session_state_code{kind=\"DcimDevice\"} != 6",
           "instant": false,
           "range": true,
-          "legendFormat": "{{device}} <- {{peer}}"
+          "legendFormat": "{{device}} -> {{neighbor_address}} ({{name}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Interface throughput (bits/s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name) (rate(interface_counters_in_octets{kind=\"DcimDevice\", name=~\"ethernet-.*\"}[2m]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Control-plane CPU (%)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (device) (cpu_instant{kind=\"DcimDevice\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}}"
         }
       ],
       "fieldConfig": {

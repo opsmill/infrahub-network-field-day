@@ -33,12 +33,16 @@ spec:
     # The k3s nodes, so a monitoring profile can name them the way it names the
     # other three device families. Nothing generates from this group.
     - name: kubernetes_nodes
-    # Artifact target group for the WAN's FRR configuration. Membership is
+    # Artifact target group for the WAN's SR Linux configuration. Membership is
     # EXPLICIT, not derived from the device role: cust-acme-dr-ce is also a
     # `customer_edge`, but it runs no routing protocol and the lab renders no
-    # FRR config for it, so a role-derived group would produce a seventh
+    # router config for it, so a role-derived group would produce a seventh
     # artifact with nothing in it.
-    - name: frr_routers
+    #
+    # Was `frr_routers`. scripts/migrate_wan_srlinux.py renames the existing
+    # group in place, which keeps its members; loading this name onto a graph
+    # that still holds the old one would create a second, empty group.
+    - name: srl_routers
     # Artifact target for the perimeter firewall's Junos configuration. One
     # member, and a group rather than a direct target because an artifact
     # definition cannot point at an object.

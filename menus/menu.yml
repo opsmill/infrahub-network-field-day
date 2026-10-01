@@ -239,7 +239,7 @@ spec:
             icon: "mdi:tag-outline"
 
     # --------- WAN ---------
-    # The provider network outside the fabric: FRR routers, the circuits
+    # The provider network outside the fabric: SR Linux routers, the circuits
     # between them, and how each customer site attaches.
     - namespace: Wan
       name: WanMenu
