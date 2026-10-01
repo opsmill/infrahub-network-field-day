@@ -41,8 +41,8 @@ for the entity itself.
 Every generator resolves designs through the same `GeneratorMixin` helper:
 
 ```python
-# Which super-spines should this fabric have?
-template_id, quantity = self.device_design_for(fabric_node.device_designs, "super_spine")
+# How many spines should this pod have, and from which template?
+template_id, quantity = self.device_design_for(pod_node.device_designs, "spine")
 ```
 
 `device_design_for` returns `(template_id, quantity)`, or `(None, 0)` when the
@@ -54,7 +54,7 @@ Which role each tier reads:
 
 | Generator | Container | Design roles read |
 | --- | --- | --- |
-| `FabricGenerator` | `NetworkFabric` | `super_spine` |
+| `FabricGenerator` | `NetworkFabric` | `super_spine` (a fabric-level tier; `OTTERNET_FABRIC` declares none) |
 | `PodGenerator` | `NetworkPod` | `spine` |
 | `RackGenerator` | `LocationRack` | `leaf`, `l2leaf` |
 
@@ -64,10 +64,10 @@ A generator also reads the *upstream* container's designs to decide whether its
 prerequisites exist yet, so a partially generated fabric defers instead of
 producing a half-cabled topology:
 
-- `PodGenerator` reads the fabric's `super_spine` design. If the fabric expects
-  super-spines but they do not all exist yet, the pod generator waits rather
-  than cabling spines to an incomplete super-spine layer. A fabric with no
-  `super_spine` design skips super-spine uplinks entirely.
+- `PodGenerator` reads the fabric's own design. If the fabric declares a tier
+  above the spines and its devices do not all exist yet, the pod generator waits
+  rather than cabling spines to an incomplete tier. `OTTERNET_FABRIC` declares
+  no such tier, so its spines get no uplinks at all.
 - `RackGenerator` reads the pod's `spine` design and compares it to the spines
   that exist, applying the same rule before cabling leaves upward.
 
@@ -92,8 +92,10 @@ parent as well as on the target.
    - `mgmt_pool` for management addresses
    - `asn_pool` for BGP autonomous systems
    - `node_id_pool` for unique device identifiers
-2. Create super-spine devices from the fabric's `super_spine` device design
-3. Assign loopback IPs to super-spines
+2. Create the devices of the fabric's own device design, if it has one.
+   `OTTERNET_FABRIC` has none, so this step creates nothing.
+3. Reset `avd_hostvars_ready` and update each pod's checksum, which is what
+   triggers `PodGenerator`
 
 **Query**: `generate_fabric.gql`
 
@@ -122,8 +124,9 @@ query FabricGenerator($fabric_id: String!) {
 
 **Actions**:
 
-1. Create spine devices from the pod's `spine` device design
-2. Link spines to super-spines
+1. Create (or reconcile, by name) spine devices from the pod's `spine` device
+   design — `spine-otternet-pod1-1` and `-2`
+2. Link spines to the fabric-level tier, when the fabric declares one
 3. Allocate loopback IPs from pod pools
 4. Set BGP ASN and node IDs
 
@@ -653,8 +656,9 @@ continues the cascade with `CoreGeneratorDefinitionRun` targeted to the unchange
 node IDs. This keeps repeated fabric runs from faking checksum churn while still
 reaching pod, rack, hostvar, and structured-config generation.
 
-The fabric generator skips direct continuation for the fabric-role pod because
-that pod is owned by `FabricGenerator` for super-spine creation. Pod generation
+The fabric generator skips direct continuation for a pod whose role is `fabric`,
+because that pod holds the devices `FabricGenerator` itself creates.
+`OTTERNET_FABRIC` has no such pod; `otternet-pod1` is an ordinary pod. Pod generation
 uses the same pattern for racks: changed racks rely on checksum-trigger saves;
 unchanged racks are scheduled directly.
 
@@ -681,14 +685,21 @@ that generator in `.infrahub.yml`. Every generator here is parameterised by `nam
 the target object's name, not its ID:
 
 ```bash
-uv run infrahubctl generator generate-fabric name=Fabric-L3LS-MultiPod-A --branch <branch-name>
-uv run infrahubctl generator generate-pod name=Pod-A2 --branch <branch-name>
-uv run infrahubctl generator generate-rack name=Rack-A2-1 --branch <branch-name>
-uv run infrahubctl generator generate-avd-device-hostvar name=leaf-pod-a2-1-1 --branch <branch-name>
+uv run infrahubctl generator generate-fabric name=OTTERNET_FABRIC --branch <branch-name>
+uv run infrahubctl generator generate-pod name=otternet-pod1 --branch <branch-name>
+uv run infrahubctl generator generate-rack name=K8S_LEAFS --branch <branch-name>
+uv run infrahubctl generator generate-avd-device-hostvar name=leaf-otternet-pod1-1-1 --branch <branch-name>
 
 # List the generators the repository defines
 uv run infrahubctl generator --list
 ```
+
+:::warning
+The first three are **destructive** against a fabric that is already cabled: `generate-pod`
+deletes the spines' leaf-facing ports that the racks are cabled to, and `generate-rack` then
+fails. Run them only on a freshly loaded instance. The AVD generators are idempotent and safe to
+re-run; `uv run invoke avd --branch <branch-name>` runs both and regenerates the artifacts.
+:::
 
 `backfill-structured-config` is the exception: its parameter is the artifact name
 (`artifact__name__value`), still passed as `name=`.

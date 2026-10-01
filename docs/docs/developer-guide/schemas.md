@@ -200,7 +200,7 @@ The "adding a device role" checklist in `AGENTS.md` applies to fabric roles only
 Top-level container for a datacenter fabric. Inherits `Network.BuildingBlock` and `CoreArtifactTarget`; parents `NetworkPod`.
 
 - **Attributes**: `name` (unique), `index`, interface-sorting methods, `mgmt_gateway`, `avd_hostvars_ready`. L3LS attributes (via `l3ls_extensions.yml`): `underlay_routing_protocol` (`ebgp`/`ospf`), `overlay_routing_protocol` (`ebgp`/`ibgp`), `p2p_uplinks_mtu`, `spanning_tree_mode`, `virtual_router_mac`, EVPN/underlay/MLAG passwords, `anta_enabled`.
-- **Relationships**: `device_designs` -> `NetworkFabricDeviceDesign` (super-spine sizing), `fabric_ip_pools` -> `CoreResourcePool`, `uplink_pool` / `vtep_pool` / `loopback_pool` / `dci_pool` -> `CoreIPPrefixPool`, `asn_pool` / `node_id_pool` -> `CoreNumberPool`, `mgmt_pool` -> `CoreIPAddressPool`, `avd_evpn` -> `AvdEvpn`, `dns_servers` / `ntp_servers` / `local_users` -> management kinds. `fabric_ip_pools` is the preferred source for Management, Loopback, Loopback VTEP, Fabric Point-to-Point, DCI, and Fabric Supernet pools. Legacy fabric pool relationships remain optional fallback inputs during migration.
+- **Relationships**: `device_designs` -> `NetworkFabricDeviceDesign` (sizing for a tier above the spines; `OTTERNET_FABRIC` declares none), `fabric_ip_pools` -> `CoreResourcePool`, `uplink_pool` / `vtep_pool` / `loopback_pool` / `dci_pool` -> `CoreIPPrefixPool`, `asn_pool` / `node_id_pool` -> `CoreNumberPool`, `mgmt_pool` -> `CoreIPAddressPool`, `avd_evpn` -> `AvdEvpn`, `dns_servers` / `ntp_servers` / `local_users` -> management kinds. `fabric_ip_pools` is the preferred source for Management, Loopback, Loopback VTEP, Fabric Point-to-Point, DCI, and Fabric Supernet pools. Legacy fabric pool relationships remain optional fallback inputs during migration.
 
 ### `NetworkPod` — `Network.Pod`
 
@@ -219,35 +219,34 @@ Normalized description of the devices a container should produce, defined in `de
 
 - **`NetworkDeviceDesign`** (generic): `role` (`super_spine`, `spine`, `leaf`, `l2leaf`), `device_quantity` (Number ≥ 1), and `device_template` → `CoreObjectTemplate` (cardinality one; `on_delete: no-action`, so the shared template survives a design deletion). `role` is authoritative for generation.
 - **Concrete nodes**, each inheriting the generic and parented by one container:
-  - `NetworkFabricDeviceDesign` → parent `NetworkFabric` (super-spine designs)
+  - `NetworkFabricDeviceDesign` → parent `NetworkFabric` (fabric-level tier designs, role `super_spine`)
   - `NetworkPodDeviceDesign` → parent `NetworkPod` (spine designs)
   - `NetworkRackDeviceDesign` → parent `LocationRack` (leaf / l2leaf designs)
 - **Ownership**: each container's `device_designs` is a `Component` (many, `on_delete: cascade`) — deleting the container deletes its designs; the templates are untouched.
 - **Identity**: a design is unique per `(container, role)`; `human_friendly_id` is `"<container-name>__<role>"`. "None of a role" is the **absence** of a design (replacing `amount_of_*: 0`).
 
-In seed data, designs are nested under their container. A rack with an MLAG leaf
-pair and a single L2 leaf looks like this (from `objects/10a_l3ls_multipod_rack.yml`):
+In seed data, designs are nested under their container. The rack holding the
+Kubernetes MLAG leaf pair looks like this (from `objects/25_otternet_racks.yml`):
 
 ```yaml
-- name: "Rack-A2-1"
+- name: "K8S_LEAFS"
   index: 1
   rack_type: compute
-  pod: Pod-A2
-  parent: "Hall-A1"
+  pod: otternet-pod1
+  parent: "Hall-OTTERNET"
+  mlag: true
   device_designs:
     data:
       - role: leaf
         device_quantity: 2
-        device_template: leaf-switch-compute
-      - role: l2leaf
-        device_quantity: 1
-        device_template: l2leaf-switch
+        device_template: otternet-leaf-switch
   member_of_groups: ["racks"]
 ```
 
-Omit a role's entry to get none of that device type — a rack with no `l2leaf`
-design gets no L2 leaves. Fabric and pod designs follow the same shape with
-`role: super_spine` and `role: spine` respectively.
+Omit a role's entry to get none of that device type — none of the three
+`OTTERNET_FABRIC` racks has an `l2leaf` design, so the fabric has no L2 leaves.
+A pod design follows the same shape with `role: spine` (see `otternet-pod1` in
+`objects/23_otternet_fabric.yml`). `OTTERNET_FABRIC` itself carries no design.
 
 Adding a new device design for a supported role is data, not a schema change. Device designs are the only source of device sizing: the fabric, pod, and rack generators read `device_designs` exclusively, and the legacy paired fields they replaced (`amount_of_super_spines` / `super_spine_switch_template`, `amount_of_spines` / `spine_switch_template`, `amount_of_leafs` / `leaf_switch_template`, `amount_of_l2leafs` / `l2leaf_switch_template`) no longer exist in the schema.
 

@@ -38,7 +38,7 @@ The schema still carries the roles and underlay choices the upstream examples us
 
 | Capability | Status | Notes |
 |------------|:------:|-------|
-| Generate a full fabric (Fabric → Pod → Rack → Device) from a design | ✅ | Super-spines, spines, and leaves are created from device templates — no per-device host_vars authored manually. |
+| Generate a full fabric (Fabric → Pod → Rack → Device) from a design | ✅ | Spines and leaves are created, or reconciled by name, from device templates — no per-device host_vars authored manually. A fabric-level tier above the spines is also supported; `OTTERNET_FABRIC` declares none. |
 | Cable devices together automatically | ✅ | Uplinks and device-to-device links created by the generators. |
 | Regenerate idempotently | ✅ | Checksum-based change detection skips work when nothing changed; re-running is safe. |
 
