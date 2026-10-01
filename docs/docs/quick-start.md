@@ -134,8 +134,9 @@ The stack is up but no devices exist yet — fabrics, pods, and racks are define
 | `uv run invoke load-schema` | Reload schemas only |
 | `uv run invoke load-menu` | Reload UI menus only |
 | `uv run invoke init-semaphore` | Re-register the Semaphore project and templates (idempotent) |
-| `uv run invoke test` | Run the test suite, then Ruff and mypy |
-| `uv run invoke lint` | Ruff, yamllint, and mypy |
+| `uv run invoke test` | Run the unit tests, the same set CI runs |
+| `uv run invoke test --integration` | Also run the integration tests, which start an Infrahub stack in Docker and take minutes |
+| `uv run invoke lint` | Ruff, yamllint, mypy, markdown and prose linting |
 | `uv run invoke format` | Apply Ruff formatting |
 
 `uv run invoke --list` shows the full set.

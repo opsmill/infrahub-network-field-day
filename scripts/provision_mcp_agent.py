@@ -47,6 +47,8 @@ from pathlib import Path
 from infrahub_sdk import Config, InfrahubClientSync
 from infrahub_sdk.exceptions import GraphQLError
 
+from solution_arista_avd.envfile import read_env, upsert_env
+
 REPO = Path(__file__).resolve().parents[1]
 ENV_FILE = REPO / ".env"
 
@@ -67,23 +69,16 @@ GLOBAL_PERMISSIONS = [
 
 
 def read_env_password() -> str:
-    if not ENV_FILE.exists():
-        return ""
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        if line.startswith(f"{PASSWORD_VAR}="):
-            return line.split("=", 1)[1].strip()
-    return ""
+    return read_env(ENV_FILE, PASSWORD_VAR)
 
 
 def write_env_password(password: str) -> None:
-    lines = ENV_FILE.read_text(encoding="utf-8").splitlines() if ENV_FILE.exists() else []
-    lines = [line for line in lines if not line.startswith(f"{PASSWORD_VAR}=")]
-    lines += [
-        "",
-        "# The MCP server's Infrahub account, written by scripts/provision_mcp_agent.py.",
-        f"{PASSWORD_VAR}={password}",
-    ]
-    ENV_FILE.write_text("\n".join(lines).lstrip("\n") + "\n", encoding="utf-8")
+    upsert_env(
+        ENV_FILE,
+        PASSWORD_VAR,
+        password,
+        "The MCP server's Infrahub account, written by scripts/provision_mcp_agent.py.",
+    )
 
 
 def admin_client() -> InfrahubClientSync:

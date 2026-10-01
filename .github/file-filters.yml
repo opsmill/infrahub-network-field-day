@@ -10,10 +10,14 @@ documentation: &documentation
 documentation_all:
   - *documentation
 
+# Not only Python: the unit tests also pin the Jinja templates the transforms
+# render and the payloads seeded into applications, neither of which is YAML.
 python: &python
   - '**/*.py'
   - 'pyproject.toml'
   - 'uv.lock'
+  - 'transforms/templates/**'
+  - 'payloads/**'
 
 python_all:
   - *python
