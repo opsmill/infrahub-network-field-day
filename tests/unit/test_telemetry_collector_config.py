@@ -242,3 +242,19 @@ def test_options_telegraf_1_40_refuses_are_not_rendered() -> None:
     assert conf["agent"]["snmp_translator"] == "gosmi"
     assert all("translator" not in block for block in conf["inputs"]["snmp"])
     assert all("field" not in m for e in conf["processors"]["enum"] for m in e["mapping"])
+
+
+def test_node_exporter_series_get_the_infrahub_device_name_back() -> None:
+    """node-exporter's own `device` label is the interface, and Telegraf never
+    overwrites a label a metric already has -- measured as 29 "devices" from
+    three nodes. Each node gets a rename (device -> interface) ordered before
+    an override (device = its Infrahub name), matched on its scrape URL."""
+    conf = _conf(_render()[0])
+    renames = conf["processors"]["rename"]
+    overrides = conf["processors"]["override"]
+    assert len(renames) == len(overrides) == 3
+    for rename, override in zip(renames, overrides, strict=True):
+        assert rename["order"] < override["order"]
+        assert rename["tagpass"]["url"] == override["tagpass"]["url"]
+        assert rename["replace"][0] == {"tag": "device", "dest": "interface"}
+    assert sorted(o["tags"]["device"] for o in overrides) == ["k8s-node1", "k8s-node2", "k8s-node3"]

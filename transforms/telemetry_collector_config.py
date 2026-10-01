@@ -376,6 +376,7 @@ class TelemetryCollectorConfig(InfrahubTransform):
                 "    [processors.enum.mapping.value_mappings]",
                 *_kv("      ", BGP_STATE_CODES),
             ]
+        lines += self._identity_processors(watches)
         rendered_inputs = 0
         for watch in watches:
             block = self._input_block(collector, watch)
@@ -409,6 +410,42 @@ class TelemetryCollectorConfig(InfrahubTransform):
             msg = f"collector {collector!r}: rendered configuration is not valid TOML: {exc}"
             raise TelemetryCollectorConfigError(msg) from exc
         return conf
+
+    @staticmethod
+    def _identity_processors(watches: list[Watch]) -> list[str]:
+        """Give node-exporter series their Infrahub device name back.
+
+        node-exporter labels its own series `device` -- the interface,
+        `eth0`, `eth1` -- and Telegraf never overwrites a label a metric
+        already carries with an input's `tags`. So every node's series arrived
+        with the interface name where the node's name belongs, measured as 29
+        "devices" from three nodes. Per node, the incoming label is moved to
+        `interface` and `device` is then set to the name Infrahub has, matched
+        on the scrape URL that identifies the node. `order` matters: the
+        rename must run before the override.
+        """
+        lines: list[str] = []
+        for watch in watches:
+            if watch.device.kind != SERVER:
+                continue
+            url = f"http://{watch.device.address}:{NODE_EXPORTER_PORT}/metrics"
+            lines += [
+                "",
+                f"# {watch.device.name}: node-exporter's own `device` label is the interface",
+                "[[processors.rename]]",
+                *_kv("  ", {"order": 1, "namepass": ["prometheus"]}),
+                "  [processors.rename.tagpass]",
+                *_kv("    ", {"url": [url]}),
+                "  [[processors.rename.replace]]",
+                *_kv("    ", {"tag": "device", "dest": "interface"}),
+                "[[processors.override]]",
+                *_kv("  ", {"order": 2, "namepass": ["prometheus"]}),
+                "  [processors.override.tagpass]",
+                *_kv("    ", {"url": [url]}),
+                "  [processors.override.tags]",
+                *_kv("    ", {"device": watch.device.name}),
+            ]
+        return lines
 
     @staticmethod
     def _tags(collector: str, watch: Watch, table: str) -> list[str]:
