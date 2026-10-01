@@ -432,6 +432,24 @@ Three measured facts about the device side:
   literal `__typename: "DcimInterface"` that no node reports, so every endpoint parsed as the
   fieldless fallback and the link series came out empty with nothing raised. Use concrete kinds.
 
+Four things the first rebuilds with it measured, each of which cost an afternoon:
+
+- **Never `kubectl patch` a Helm-managed object, even to test a fix.** The patch takes
+  field ownership (`kubectl-patch` in `managedFields`), and every later Helm upgrade then
+  fails `conflict occurred while applying object ... conflict with "kubectl-patch"` --
+  visible only in the Release's status. Recovery: drop that `managedFields` entry, delete
+  the failed release secret so provider-helm retries, then restart the Deployment, because
+  the failed upgrade already moved its config checksum.
+- **With `policy_default_deny: false`, every `allow-*` flag must be off too.** The
+  composition renders a CiliumNetworkPolicy per true flag, and any policy selecting a pod
+  makes that direction deny-by-default for it -- Prometheus could reach nothing off its own
+  node until all four were off.
+- **fw1's TCP MSS is sized for the VXLAN fabric behind it**, `9214 - 50 - 20 - 20 = 9124`,
+  not for its own interface. At 9138 every full-size segment died inside the fabric and
+  Grafana's shell loaded while its JavaScript never arrived.
+- **A k3s node is one CPU** (`cpu.max 100000 100000`), so a busy Grafana starves on it.
+  The dashboards refresh each minute rather than every 30 seconds for that reason.
+
 **The exporter reads as `metrics-exporter`, never `admin` or `agent`.** It is built from a pinned
 upstream commit, because none is published, and runs on host port 8002, because 8001 is
 `infrahub-mcp`. `invoke metrics-exporter` provisions the account and starts it, and the bootstrap
