@@ -213,6 +213,44 @@ kube-state-metrics:
     limits:
       memory: 160Mi
 
+# THE BIGGEST COST IN THIS PROMETHEUS IS NOT THE LAB, it is k3s. Its kubelet
+# endpoint also serves the embedded API server's and etcd's request
+# histograms, so the kubelet job alone carried 151k series and the API server
+# another 45k -- of 224k in total, against 5.5k for all device telemetry --
+# and Prometheus sat at 754Mi of its 900Mi limit (cycle 034, measured). No
+# dashboard here reads those buckets; they are dropped at scrape time. The
+# request totals and counters stay.
+kubelet:
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        regex: "(apiserver|etcd|workqueue|apiextensions|aggregator)_.*_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "(authentication|authorization|rest_client|watch_cache|kubernetes_feature)_.*_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_(request_body_size|response_sizes|watch_events_sizes|watch_cache).*"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "etcd_request_duration_seconds.*"
+        action: drop
+kubeApiServer:
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        regex: "(apiserver|etcd|workqueue|apiextensions|aggregator)_.*_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "(authentication|authorization|rest_client|watch_cache|kubernetes_feature)_.*_bucket"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "apiserver_(request_body_size|response_sizes|watch_events_sizes|watch_cache).*"
+        action: drop
+      - sourceLabels: [__name__]
+        regex: "etcd_request_duration_seconds.*"
+        action: drop
+
 # (lab) k3s does not expose these as scrapeable endpoints the way kubeadm does,
 # and leaving them on paints a wall of permanently red targets.
 kubeControllerManager:
