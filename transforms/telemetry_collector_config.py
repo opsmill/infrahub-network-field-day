@@ -519,6 +519,10 @@ class TelemetryCollectorConfig(InfrahubTransform):
                         # occasionally timed out at 5s with one retry.
                         "timeout": "10s",
                         "retries": 2,
+                        # The tag naming the agent; "source" is the value every
+                        # plugin now uses, and the old default makes Telegraf
+                        # log a deprecation warning on each start.
+                        "agent_host_tag": "source",
                     },
                 ),
                 *self._tags(collector, watch, "inputs.snmp"),
