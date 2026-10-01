@@ -61,6 +61,25 @@ def compose_cmd() -> str:
     )
 
 
+def infrahub_version() -> str:
+    """The Infrahub release this project targets: the Dockerfile's `ARG` default.
+
+    That line is the one source. The compose files keep a literal fallback for a
+    bare `docker compose` run, and tests/unit/test_pinned_versions.py fails
+    when any of those fallbacks disagrees with it.
+    """
+    dockerfile = compose_root() / "Dockerfile"
+    for line in dockerfile.read_text(encoding="utf-8").splitlines():
+        if line.startswith("ARG INFRAHUB_BASE_VERSION="):
+            return line.split("=", 1)[1].strip()
+    msg = f"{dockerfile} declares no ARG INFRAHUB_BASE_VERSION default"
+    raise RuntimeError(msg)
+
+
+# Every compose command below inherits this, so `invoke` builds and runs the
+# version the Dockerfile names; an exported INFRAHUB_BASE_VERSION still wins.
+os.environ.setdefault("INFRAHUB_BASE_VERSION", infrahub_version())
+
 INFRAHUB_ADDRESS = os.getenv("INFRAHUB_ADDRESS", "http://localhost:8000")
 
 os.environ.setdefault("INFRAHUB_USERNAME", "admin")

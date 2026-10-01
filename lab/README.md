@@ -185,7 +185,7 @@ make setup
 This builds a self-contained virtualenv. It does **not** use the system Python
 or Ansible, deliberately: AVD 6.x supports ansible-core 2.16–2.20 and this host
 runs 2.21 on Python 3.14, which AVD refuses. `make setup` pins Python 3.12 and
-`ansible-core<2.21` inside `lab/.venv`.
+`ansible-core==2.20.9`, with `pyavd[ansible]==6.4.0`, inside `lab/.venv`.
 
 ---
 

@@ -34,7 +34,7 @@ kubectl get nodes >/dev/null 2>&1 || die "cannot reach the cluster with $KUBECON
 # before spending five minutes watching packages fail to unpack.
 say "Checking in-cluster networking (ClusterIP, DNS, egress)"
 kubectl -n kube-system delete pod xp-preflight --ignore-not-found >/dev/null 2>&1 || true
-if ! kubectl -n kube-system run xp-preflight --image=busybox:1.36 --restart=Never \
+if ! kubectl -n kube-system run xp-preflight --image=busybox:1.36.1 --restart=Never \
         --command --quiet --rm -i --timeout=120s -- sh -c '
             nc -z -w 5 "${API:-10.112.0.1}" 443 || { echo "FAIL: API ClusterIP unreachable from a pod"; exit 1; }
             nslookup xpkg.crossplane.io. >/dev/null 2>&1 || { echo "FAIL: external DNS does not resolve from a pod"; exit 1; }

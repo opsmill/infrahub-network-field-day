@@ -4,7 +4,7 @@
 # is on containerlab's management bridge, which pods on the fabric have no route
 # to. Sharing the node's network namespace puts the controller on that bridge
 # the same way any real automation host would be.
-FROM python:3.12-slim
+FROM python:3.12.14-slim
 
 # paramiko is the only dependency. Everything else -- the Kubernetes client, the
 # JSON, the retry loop -- is stdlib, which keeps this image small enough to

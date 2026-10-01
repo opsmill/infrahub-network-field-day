@@ -277,7 +277,7 @@ north-south demo never touches any of them.
 anything. To check them by hand:
 
 ```bash
-kubectl run otternet-net-check --image=busybox:1.36 --restart=Never --rm -i \
+kubectl run otternet-net-check --image=busybox:1.36.1 --restart=Never --rm -i \
     --command -- sh -c '
       nc -z -w 5 10.112.0.1 443   && echo "API ClusterIP OK"
       nslookup xpkg.crossplane.io. >/dev/null && echo "external DNS OK"
@@ -954,7 +954,7 @@ there is no host-side interface to capture on for a node-to-leaf link.
 For an in-cluster shell, run a throwaway pod:
 
 ```bash
-kubectl run otternet-debug --image=nicolaka/netshoot:latest --restart=Never \
+kubectl run otternet-debug --image=nicolaka/netshoot:v0.16 --restart=Never \
     --command -- sleep 900
 kubectl exec otternet-debug -- curl -sS http://<target>/
 kubectl delete pod otternet-debug --force --grace-period=0

@@ -80,7 +80,7 @@ topology:
       image: ceos:4.36.0.1F
       startup-config: configs/__clabNodeName__.cfg
     linux:
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
 
   nodes:
     host-a:

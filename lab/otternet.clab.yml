@@ -31,7 +31,7 @@ topology:
         CLAB_MGMT_VRF: MGMT
         INTFTYPE: eth
     linux:
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
 
   nodes:
     # ------------------------------------------------------------------ spines
@@ -306,7 +306,7 @@ topology:
 
     cust-acme-host:
       kind: linux
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
       mgmt-ipv4: 172.20.41.72
       memory: 256MB
       binds:
@@ -332,7 +332,7 @@ topology:
 
     cust-globex-host:
       kind: linux
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
       mgmt-ipv4: 172.20.41.74
       memory: 256MB
       binds:
@@ -348,7 +348,7 @@ topology:
     # wan/customers.yml "TENANT, NOT CUSTOMER".
     cust-acme-dr-ce:
       kind: linux
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
       mgmt-ipv4: 172.20.41.75
       memory: 256MB
       binds:
@@ -359,7 +359,7 @@ topology:
 
     cust-acme-dr-host:
       kind: linux
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
       mgmt-ipv4: 172.20.41.76
       memory: 256MB
       binds:
@@ -391,7 +391,7 @@ topology:
     # customer reach the internet" is one curl.
     internet-host:
       kind: linux
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
       mgmt-ipv4: 172.20.41.92
       memory: 256MB
       binds:
@@ -407,7 +407,7 @@ topology:
     # other, and the only way in is through a vSRX zone policy.
     acme-cloud1:
       kind: linux
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
       mgmt-ipv4: 172.20.41.93
       memory: 256MB
       binds:
@@ -418,7 +418,7 @@ topology:
 
     globex-cloud1:
       kind: linux
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
       mgmt-ipv4: 172.20.41.94
       memory: 256MB
       binds:
@@ -449,7 +449,7 @@ topology:
 
     branch-host:
       kind: linux
-      image: ghcr.io/srl-labs/network-multitool
+      image: ghcr.io/srl-labs/network-multitool:v0.10.0
       mgmt-ipv4: 172.20.41.82
       memory: 256MB
       binds:
