@@ -1,77 +1,80 @@
 ---
 title: Add a network segment
-description: Create a VRF, VLAN, and SVI on a fabric using the service portal.
+description: Request a subnet, VLAN, and gateway SVI on a fabric through the service portal.
 audience: user
 sidebar_position: 1
 ---
 
 # Add a network segment
 
-Creates a new EVPN network segment — a VRF, a VLAN, and an SVI — on a target fabric. The workflow runs on its own branch, regenerates hostvars and structured configs, and opens a proposed change for review.
+A network segment is the three technical objects a tenant network is made of: an `IpamPrefix`, an `IpamVLAN`, and an `EvpnSvi` giving it a gateway in a VRF. You don't create those yourself. You request one `ServiceNetworkSegment`, and the `generate-network-segment` generator allocates the next free subnet and VLAN ID from the segment pools and builds the three objects on the request's branch.
 
 Prerequisites:
 
 - A running stack with seed data loaded ([Quick Start](../quick-start.md)).
 - A provisioned fabric with devices and artifacts ([Provision Your First Fabric](../provision-first-fabric.md)).
-- At least one EVPN tenant. If none exist, create one using [Create a Tenant](./create-tenant.md) first.
+- The VRF the gateway lives in must already exist. The segment selects a VRF; it doesn't create one.
 
 ## Open the service portal
 
-Navigate to **`http://localhost:8501`**. From the sidebar, open **Add Network Segment**.
+From the branch desktop, open **`https://10.90.0.11:32001`** and sign in through Dex, for example as `alice@otternet.lab`. The certificate is self-signed; see [The service portal](../service-portal.md) for why, and for the one-time Infrahub sign-in every portal user needs.
+
+Open the catalogue and choose the **Network Segment (generated)** template. It's generated from the `ServiceNetworkSegment` schema, so its fields are the kind's own attributes and relationships.
 
 ## Fill the form
 
-The form has two columns:
+Leave **What do you want to do?** on **Request a new service**. The fields come from `schemas/service/network_services.yml` and the service generic:
 
-| Left column | Right column |
-|-------------|--------------|
-| **Segment Name** — free text, for example, `web-services` | **VRF Name** — free text; leave blank to reuse an existing VRF |
-| **Tenant** — dropdown of existing EVPN tenants | **VRF VNI** — number (1–16777215), default `100` |
-| **VLAN ID** — number (1–4094), default `100` | **L2 Domain** — dropdown of available L2 domains |
-| **Gateway IP (CIDR)** — for example, `10.10.100.1/24` | **Target Fabric** — dropdown of fabrics |
+| Field | Required | Notes |
+|-------|:--------:|-------|
+| **Name** | ✅ | Unique across every service kind. The VLAN and the SVI take this name, so an existing VLAN of the same name is refused rather than adopted. |
+| **Owner** | ✅ | The organization ordering the segment. |
+| **Tenant** | ✅ | Who the segment is for. |
+| **VRF** | ✅ | The routing domain the gateway lives in. |
+| **Fabric** | ✅ | Which fabric carries the segment. |
+| **AVD Tags** | ✅ | Which leaves carry the segment, for example `k8s` or `app`. Must match a rack's tags, or the SVI renders on no switch. |
+| **Prefix Length** | ✅ | Size of the subnet to allocate; defaults to `24`. |
+| **VLAN ID** | | Leave empty to allocate the next free ID from the segment pool. That's the normal case. |
+| **Description**, **Subnet Pool**, **VLAN Pool** | | Optional. The pools are resolved by role when left empty. |
 
-All fields are required except VRF Name (blank = use existing VRF, see below).
+The subnet, the VLAN, and the SVI aren't on the form, because the generator allocates them.
 
 ## Submit
 
-Click **Create Network Segment**. The portal performs these steps in order, showing progress:
+The template then:
 
-1. **Create branch** named `add-segment-<segment-name>`.
-2. **Create the VLAN** (`IpamVLAN`) on the chosen L2 domain.
-3. **Create the VRF** (`IpamVRF`) under the chosen tenant — only if you filled in VRF Name.
-4. **Create the SVI** (`EvpnSvi`) linking the VLAN to the VRF with the specified gateway.
-5. **Run the AVD pipeline** — hostvars and structured configs regenerate for affected devices. This can take a few minutes.
-6. **Create a proposed change** summarising the segment.
+1. **Creates a branch** named `implement_<name>`.
+2. **Creates the `ServiceNetworkSegment`** on that branch, in the `service_network_segments` group that `generate-network-segment` targets.
+3. **Waits for the generators.** The `created` event rule in `triggers.yml` runs `generate-network-segment`, which allocates the subnet and VLAN ID and creates the prefix, VLAN, and SVI.
+4. **Opens a proposed change** from the branch into `main`.
 
-When complete, you'll see a **View Proposed Change** button — click it to open the proposed change in the Infrahub UI.
-
-:::note
-If you left **VRF Name** blank, the SVI step is skipped and a warning is shown. You'll need to link the VLAN to an existing VRF manually in the Infrahub UI before the segment is usable.
-:::
+When it finishes, the output links to the proposed change in Infrahub, the segment in the catalogue, and the segment in Infrahub.
 
 ## Review and merge
 
 In the proposed change:
 
-1. Inspect the **Data** tab — see the three new objects (VLAN, VRF, SVI).
-2. Inspect the **Artifacts** tab — the AVD EOS configurations for devices on the target fabric should have updated to include the new VLAN, VRF, and SVI.
+1. Inspect the **Data** tab — the segment, plus the prefix, VLAN, and SVI its generator created.
+2. Inspect the **Artifacts** tab — the proposed change's pipeline runs `generate-avd-device-hostvar` and the structured-config generator, and its artifact checks re-render the EOS configurations. The leaves matching the segment's AVD tags should gain the VLAN and the SVI; the others should be unchanged.
 3. Approve and **Merge** when the updated configs look correct.
 
-Once merged, the segment exists on `main`, and Ansible inventories built from Infrahub include the new config on the next deployment.
+Once merged, the segment exists on `main`, and the deployment reconciler pushes the new configuration to the switches on its next cycle.
 
-## If the service portal is unavailable
+## Without the portal
 
-You can do the same workflow in the Infrahub UI by creating the objects manually on a branch:
+An operator can make the same request in the Infrahub UI or with `infrahubctl`:
 
 1. Create a branch.
-2. Create an `IpamVLAN` on the target L2 domain.
-3. Create an `IpamVRF` under the target tenant.
-4. Create an `EvpnSvi` linking the two, with the gateway IP.
-5. Run **`generate-avd-device-hostvar`** (per device) and **`generate-avd-device-structured-config`** (per fabric) from **Actions → Generator definitions**.
-6. Create a proposed change from the branch.
+2. Create a `ServiceNetworkSegment` on it with the fields above, as a member of the `service_network_segments` group. The `created` event rule runs `generate-network-segment` on the branch.
+3. Optionally run `uv run invoke avd --branch <branch>` to regenerate hostvars, structured configs, and artifacts on the branch before review.
+4. Open a proposed change from the branch.
+
+To withdraw a segment, set its **Status** to `decommissioning` on a branch. No event rule watches that update, so run the generator yourself (`uv run infrahubctl generator generate-network-segment --branch <branch>`) or let the proposed change's pipeline run it; it deletes the subnet, VLAN, and SVI and releases both pools.
 
 See also [Common Issues](../troubleshooting.md) if a step fails.
 
 ## Source
 
-Service-portal implementation: [`service_catalog/pages/1_Create_Segment.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/service_catalog/pages/1_Create_Segment.py).
+- Service kind: [`schemas/service/network_services.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/service/network_services.yml).
+- Generator: [`generators/generate_network_segment.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_network_segment.py).
+- Request template generation: [`backstage/plugins/infrahub-backend/src/provider.ts`](https://github.com/opsmill/infrahub-arista-avd/blob/main/backstage/plugins/infrahub-backend/src/provider.ts).

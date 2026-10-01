@@ -1,71 +1,71 @@
 ---
 title: Create a tenant
-description: Create an EVPN tenant with a MAC VRF VNI base allocation for one or more fabrics.
+description: Onboard a tenant onto a fabric, with an EVPN tenant and a MAC VRF VNI base derived for it.
 audience: user
 sidebar_position: 3
 ---
 
 # Create a tenant
 
-Creates a new EVPN tenant. A tenant is a logical container that network segments (VLANs, VRFs, SVIs) are attached to. Each tenant has a **MAC VRF VNI base** — VLAN VNIs are then computed as `base + VLAN ID`, giving every segment a unique VNI without manual allocation.
+Puts a tenant onto a fabric. You request one `ServiceTenantOnboarding`; its generator, `generate-tenant-onboarding`, creates the `EvpnTenant` that is the fabric's view of the organization, and gives it a **MAC VRF VNI base**. The tenant's L2 VLAN VNIs are allocated upward from that base, so every segment gets a unique VNI without manual allocation.
 
 Prerequisites:
 
 - A running stack with seed data loaded ([Quick Start](../quick-start.md)).
 - At least one provisioned fabric ([Provision Your First Fabric](../provision-first-fabric.md)).
+- The `OrganizationTenant` you're adding must already exist.
 
 ## Open the service portal
 
-Navigate to **`http://localhost:8501`**. From the sidebar, open **Create Tenant**.
+From the branch desktop, open **`https://10.90.0.11:32001`** and sign in through Dex, for example as `alice@otternet.lab`. See [The service portal](../service-portal.md) for the self-signed certificate and the one-time Infrahub sign-in every portal user needs.
+
+Open the catalogue and choose the **Tenant Onboarding (generated)** template. It's generated from the `ServiceTenantOnboarding` schema, so its fields are the kind's own attributes and relationships.
 
 ## Fill the form
 
-| Field | Description |
-|-------|-------------|
-| **Tenant Name** | Free text, for example, `ACME-Corp`. |
-| **MAC VRF VNI Base** | Number (1–16,777,000), default `20000`. VLAN VNI = base + VLAN ID, so pick a base that leaves enough headroom. `20000` supports VLANs 1–4094 without overlapping another base of `25000`, for example. |
-| **Target Fabrics** | Multi-select of existing fabrics. The tenant is associated with every fabric you select; network segments can then be created on any of them. Defaults to the first fabric. |
+Leave **What do you want to do?** on **Request a new service**. The fields come from `schemas/service/onboarding_services.yml` and the service generic:
+
+| Field | Required | Notes |
+|-------|:--------:|-------|
+| **Name** | ✅ | The service's name, unique across every service kind. |
+| **Owner** | ✅ | The organization ordering the onboarding. |
+| **Organization** | ✅ | Who the tenant is. The EVPN tenant is the fabric's view of them. |
+| **Fabric** | ✅ | The fabric the tenant is joining. |
+| **Description** | | Optional. |
+
+The EVPN tenant and the VNI base aren't on the form, because the generator creates and derives them.
 
 ## Submit
 
-Click **Create Tenant**. The portal performs:
+The template then:
 
-1. **Create branch** named `add-tenant-<tenant-name>`.
-2. **Create the tenant** (`EvpnTenant`) with the chosen VNI base and linked fabrics.
-3. **Run the AVD pipeline** — hostvars and structured configs regenerate for devices on the selected fabrics. This can take a few minutes on larger fabrics.
-4. **Create a proposed change** summarising the tenant.
+1. **Creates a branch** named `implement_<name>`.
+2. **Creates the `ServiceTenantOnboarding`** on that branch, in the `service_tenant_onboardings` group that `generate-tenant-onboarding` targets.
+3. **Waits for the generators.** The `created` event rule in `triggers.yml` runs `generate-tenant-onboarding`, which creates the `EvpnTenant` with its derived VNI base.
+4. **Opens a proposed change** from the branch into `main`.
 
-Click **View Proposed Change** when done.
+When it finishes, the output links to the proposed change in Infrahub, the onboarding in the catalogue, and the onboarding in Infrahub.
 
 ## Review and merge
 
-The tenant itself doesn't add device-level configuration (no VRFs or VLANs have been created yet), so the updated AVD artifacts may be near-identical to before. The tenant becomes useful once you add network segments under it (see [Add a Network Segment](./add-network-segment.md)).
+The tenant itself doesn't add device-level configuration (no VRFs or VLANs exist under it yet), so the re-rendered AVD artifacts may be identical to before. The tenant becomes useful once you add network segments for it (see [Add a Network Segment](./add-network-segment.md)).
 
 Merge the proposed change to promote the tenant to `main`.
 
-## Picking a VNI base
+## How the VNI base is chosen
 
-If you'll only have one tenant ever, `20000` is fine.
+The base is derived, not taken from a pool. A number pool hands out consecutive integers, so two tenants would get bases one apart and their VNI ranges would overlap almost entirely — with no error anywhere, the fabric would bridge the two tenants together.
 
-For multiple tenants, reserve non-overlapping ranges:
+Instead, the generator takes the lowest free multiple of 1000 at or above `11000`. The lab's tenants sit at `11000`, `12000`, `13000`, and `15000`, so the next onboarding gets `14000`: the derivation fills gaps rather than only appending.
 
-| Tenant | Base | Effective range (assuming VLANs 1–4094) |
-|--------|------|-----------------------------------------|
-| tenant-a | 20000 | 20001 – 24094 |
-| tenant-b | 25000 | 25001 – 29094 |
-| tenant-c | 30000 | 30001 – 34094 |
+## Without the portal
 
-This avoids VNI collisions across tenants on the same fabric.
+An operator can make the same request in the Infrahub UI or with `infrahubctl`: create a branch, create a `ServiceTenantOnboarding` on it with the fields above as a member of the `service_tenant_onboardings` group, and open a proposed change. The `created` event rule runs the generator on the branch, exactly as it does for a portal request.
 
-## If the service portal is unavailable
-
-In the Infrahub UI:
-
-1. Create a branch.
-2. Create an `EvpnTenant` object. Set `name`, `mac_vrf_vni_base`, and link to the target fabrics.
-3. Run **`generate-avd-device-hostvar`** (per device on each target fabric) and **`generate-avd-device-structured-config`** (per fabric).
-4. Open a proposed change from the branch.
+To withdraw a tenant, set the onboarding's **Status** to `decommissioning` and re-run the generator. It deletes the EVPN tenant, and refuses while VRFs still reference it.
 
 ## Source
 
-Service-portal implementation: [`service_catalog/pages/3_Create_Tenant.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/service_catalog/pages/3_Create_Tenant.py).
+- Service kind: [`schemas/service/onboarding_services.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/service/onboarding_services.yml).
+- Generator: [`generators/generate_tenant_onboarding.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_tenant_onboarding.py).
+- Request template generation: [`backstage/plugins/infrahub-backend/src/provider.ts`](https://github.com/opsmill/infrahub-arista-avd/blob/main/backstage/plugins/infrahub-backend/src/provider.ts).

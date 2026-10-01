@@ -134,7 +134,7 @@ The schema still carries the roles and underlay choices the upstream examples us
 
 | Capability | Status | Notes |
 |------------|:------:|-------|
-| Self-service portal (Streamlit) for guided provisioning | ✅ | Alongside the Infrahub Web UI, GraphQL API, and MCP. |
+| Self-service portal (Backstage) for guided provisioning | ✅ | One generated request template per service kind, in the tooling cluster; alongside the Infrahub Web UI, GraphQL API, and MCP. |
 | Branches, proposed changes, approvals, full lineage | ✅ | Standard Infrahub platform change management. |
 | Approval rules that vary by service type | ⬜ | You can require approvals, but per-service approval rules are on the roadmap. |
 

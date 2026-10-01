@@ -19,7 +19,6 @@ The failure modes below are the ones you'll hit most often. If your problem isn'
 
 - `http://localhost:8000` doesn't respond.
 - `uv run invoke load` fails with connection errors.
-- Service portal at `http://localhost:8501` loads but shows `Unable to fetch data from Infrahub`.
 
 ### Diagnose
 
@@ -183,34 +182,6 @@ markers point elsewhere:
 
 See [CloudVision Validation](./cloudvision.md) for the full behaviour and
 [Checks](./developer-guide/checks.md) for how to run the check directly.
-
-## Service portal is down but Infrahub is up
-
-### Symptoms
-
-- `http://localhost:8000` works.
-- `http://localhost:8501` returns connection refused or a blank page.
-
-### Fix
-
-Restart the service portal container:
-
-```bash
-uv run invoke restart --component=service-catalog
-```
-
-The compose service is named `service-catalog`; `--component` takes a compose service name, which
-you can list with:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml config --services
-```
-
-If the portal is unavailable and you need to complete a workflow, you can do most operations directly in the Infrahub UI:
-
-- **Add Network Segment** — create `IpamVLAN`, `IpamVRF`, and `EvpnSvi` objects manually in the UI on a branch, then run the hostvars and structured-config generators.
-- **Create Tenant** — create an `EvpnTenant` object in the UI.
-- **Add Server** — create a `ComputePhysicalServer` linked to a compute rack, then re-run the generator chain.
 
 ## Generators take longer than expected
 

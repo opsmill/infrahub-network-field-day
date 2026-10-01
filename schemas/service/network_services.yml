@@ -13,7 +13,7 @@ version: "1.0"
 # TENANT_ACME -- and all three were written out by hand, three times, in three
 # different object files.
 #
-# THE PORTAL REQUESTS ONE OF THESE. `service_catalog/pages/1_Create_Segment.py`
+# THE PORTAL REQUESTS ONE OF THESE. An earlier request form
 # used to write `IpamVLANCreate`, `IpamVRFCreate` and `EvpnSviCreate` straight
 # into the graph -- no record of who asked, no status, no approval, nothing to
 # withdraw, and no `avd_tags`, so every SVI it created rendered on no switch at

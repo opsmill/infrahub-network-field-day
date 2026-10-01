@@ -40,7 +40,7 @@ flowchart LR
 - **Generate a complete fabric from a design** — define topology parameters and addressing pools; generators create all super-spines, spines, and leaves, allocate loopback, interconnect, and management addresses, BGP ASNs, and node IDs, and cable devices together automatically.
 - **Render EOS device configurations and documentation** — PyAVD runs inside Infrahub workers and produces EOS CLI configurations, per-device and fabric-level Markdown documentation, and a cabling plan CSV as downloadable artifacts.
 - **Make incremental day-two changes** — edit the design and regenerate; checksum-based idempotency applies changes only to affected objects; branch-aware pools prevent collisions across parallel work.
-- **Give other teams access to network data** — the fabric is queryable through the Infrahub Web UI, GraphQL API, and MCP interface; the Streamlit service portal provides guided workflows for stakeholders without API or CLI access.
+- **Give other teams access to network data** — the fabric is queryable through the Infrahub Web UI, GraphQL API, and MCP interface; the [service portal](./service-portal.md) lets stakeholders without API or CLI access request services; every request is a branch with a proposed change.
 - **Track and review every change** — all changes run through Infrahub branches and proposed changes, with a full diff before any change reaches a device.
 
 ## How to use it
@@ -91,12 +91,12 @@ flowchart LR
   - ANTA test catalogs (generation is included; test execution on the roadmap)
   - Computed interface descriptions
 - **Seed data** — a ready-to-run starting point. `invoke load` populates Infrahub immediately with the manufacturer, cEOS-LAB device type, device profiles and templates, addressing and number pools, and the `OTTERNET_FABRIC` design with its pod, racks, switches, tenants and VRFs.
-- **Service portal** — a Streamlit application for self-service day-2 operations. Every operation creates a branch and opens a proposed change for review.
-  - Add a network segment (VRF, VLAN, SVI)
-  - Provision a server into a rack
-  - Create an EVPN tenant
-  - Fabric Design visualization (topology, cabling, settings, EVPN tenants)
-- **Stack** — Docker Compose bundling everything needed to run locally: Infrahub with PyAVD, the service portal, a bundled Ansible runner for device deployment, and Neo4j.
+- **Service portal** — a Backstage portal in the tooling cluster for self-service day-2 requests. Every request creates a branch, creates one service object, lets its generator build the technical objects, and opens a proposed change for review.
+  - Request a network segment (subnet, VLAN, gateway SVI)
+  - Place a server into a rack
+  - Onboard a tenant onto a fabric
+  - Expose an application and grant access to it
+- **Stack** — Docker Compose bundling everything needed to run locally: Infrahub with PyAVD, a bundled Ansible runner for device deployment, and Neo4j.
 
 ## Best practices
 

@@ -88,7 +88,7 @@ await client.execute_graphql(
 )
 ```
 
-See the service portal implementation in [`service_catalog/utils/api.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/service_catalog/utils/api.py) (`run_avd_pipeline()` and related helpers) for a working example.
+See `_trigger_generator()` in [`src/solution_arista_avd/generator.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/src/solution_arista_avd/generator.py) for a working example scoped to node IDs, and the two `CoreGeneratorDefinitionRun` steps in [`backstage/catalog/exposed-app-with-access.yaml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/backstage/catalog/exposed-app-with-access.yaml) for a whole-group run with `wait_until_completion: true`.
 
 ## Missing structured config
 

@@ -396,9 +396,8 @@ EXPECTED_QUERY_ROOTS = {
 # Per-file fragment counts after the split. Pinned exactly, in both kinds, so a
 # retarget that drops a fragment instead of moving it fails here.
 #
-# `... on DcimDevice` survives in exactly ONE file: the service portal's
-# interface view, which legitimately shows routers, servers and switches side by
-# side and needs a fragment for each.
+# `... on DcimDevice` survives in NO file here. The one that did was the Streamlit
+# portal's interface view, removed with the portal.
 EXPECTED_FRAGMENTS = {
     "transforms/containerlab_topology.gql": {"DcimDevice": 0, "DcimFabricSwitch": 2},
     "transforms/cabling_plan.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},
@@ -409,7 +408,6 @@ EXPECTED_FRAGMENTS = {
     "generators/generate_fabric_peering.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},
     "checks/fabric_pool_check.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},
     "checks/peering_consistency_check.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},
-    "service_catalog/pages/4_Fabric_View.py": {"DcimDevice": 2, "DcimFabricSwitch": 3},
 }
 
 # The sites no fragment grep reaches: Python comparing a kind as a string.

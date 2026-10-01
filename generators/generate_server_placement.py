@@ -1,6 +1,6 @@
 """Put a machine in a rack and let the fabric cable it.
 
-`2_Add_Server.py` in the portal created a `ComputePhysicalServer` straight in
+An earlier request form created a `ComputePhysicalServer` straight in
 the graph. This generator sits under the request instead, so a machine arrives
 with a record of who asked for it, a status, and something to withdraw.
 

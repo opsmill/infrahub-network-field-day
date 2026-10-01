@@ -75,10 +75,10 @@ and nothing to explain why.
 
 ## What this does not yet do
 
-The **service portal still authenticates as the admin token**, so a request it writes is
-attributed to that service account rather than to the person who asked. `final_url` does not
-carry the token: the UI keeps it and does a client-side redirect, so the portal cannot ride
-Infrahub's flow. See the portal notes in `service_catalog/` for where that stands.
+The **portal still authenticates as one service token**. Writes are attributed to the person
+who asked through the mutation `context` (see AGENTS.md), but reads and authorization are the
+service account's: `final_url` does not carry the token -- the UI keeps it and does a
+client-side redirect -- so the portal cannot ride Infrahub's flow.
 
 ## Backstage
 

@@ -70,26 +70,19 @@ Key docs to read before larger changes:
 - AVD transforms render artifacts from the stored files: EOS config, device docs,
   fabric docs, cabling plan, ANTA catalog, and computed interface descriptions.
 - PyAVD is version-sensitive; the project targets `pyavd>=6.4.0,<6.5.0`.
-- **There are two portals, with two audiences.** Backstage, in the tooling cluster, is the one
-  BRANCH USERS reach — see the section below. The Streamlit app in `service_catalog/` is the
-  host-side one, published on 8501 and reachable only from the management network: the
-  firewall permits the branch to 32001, 32556 and 8000 and nothing else. Both create the same
-  service objects, so a change to a service kind touches both.
-- **They reference relationships differently, and that is why only one of them broke.** The
-  Streamlit pages pass Infrahub **ids**, taken from a selectbox they populated; Backstage's
-  generated templates pass **hfids**, because a typed field has no id to offer and a picker
-  yields a name. So a peer whose `human_friendly_id` has two elements — `IpamIPAddress`,
-  `IpamPrefix` — was fatal to the generated templates and invisible to Streamlit. Neither is
-  wrong; know which one you are looking at before assuming a bug is shared.
-- The Streamlit portal is for day-2 workflows; every workflow operates on an
-  Infrahub branch and produces a proposed change for review. **Every page now creates exactly
-  one service object and lets a generator build the technical ones.** They used to write
-  `IpamVLAN`, `IpamVRF`, `EvpnSvi`, `EvpnTenant` and `ComputePhysicalServer` directly, which is
-  the inversion the service layer exists to fix — and which also meant forms asked the requester
-  for VLAN ids, VNI bases and gateway CIDRs, the three things they are least able to answer.
-  `create_service` in `service_catalog/utils/api.py` is the one helper they share; it resolves
-  the target group explicitly, because a service outside its generator's group is created and
-  then silently never built.
+- **There is one request portal: Backstage, in the tooling cluster** — see the section below.
+  The Streamlit app that used to sit beside it on host port 8501 was removed; it duplicated
+  every request form, drifted from the schema (its application page never sent the mandatory
+  chart fields), and two of its pages were never reachable from its own navigation. Every
+  request creates exactly one service object on a branch and lets a generator build the
+  technical ones, which is the inversion the service layer exists to fix: forms do not ask the
+  requester for VLAN ids, VNI bases or gateway CIDRs, the three things they are least able to
+  answer. Operators who need something the portal does not offer use the Infrahub UI or
+  `infrahubctl` on a branch; the event rules in `triggers.yml` build it the same way.
+- **Backstage's generated templates pass relationships as hfids**, because a typed field has
+  no id to offer and a picker yields a name. So a peer whose `human_friendly_id` has two
+  elements — `IpamIPAddress`, `IpamPrefix` — needs both, and a picker's value is an entity ref
+  (`component:default/<name>`) to resolve with `catalog:fetch`, never a name to use directly.
 
 ## The tooling cluster, and the one Dex
 
@@ -210,8 +203,8 @@ proposed change whether or not the fabric changed.
 
 **`generate-avd-device-hostvar` is `execute_in_proposed_change: true`, which is
 what makes every OTHER request path show its fabric consequence.** The curated
-template runs the AVD pass itself, but the nine generated templates, both
-Streamlit portals, the Infrahub UI and `infrahubctl` all stop at the service's
+template runs the AVD pass itself, but the nine generated templates, the
+Infrahub UI and `infrahubctl` all stop at the service's
 own generator. With the flag false the hostvar generator ran on no trigger and in
 no pipeline, so those paths produced a proposed change with changed JSON and no
 configuration — and because `generate-avd-device-structured-config` reads the
@@ -474,12 +467,11 @@ from the WAN kinds: leaving `vlan_id` or the subnet empty is the normal case, an
 `generate-network-segment` takes the next free one from `OTTERNET-Segment-VLAN-Pool` and
 `OTTERNET-Segment-Subnet-Pool`.
 
-`service_catalog/pages/1_Create_Segment.py` is the request path. It creates a single
-`ServiceNetworkSegment` on a branch and opens a proposed change; the generator builds the three
-technical objects on merge. It previously wrote `IpamVLAN`, `IpamVRF` and `EvpnSvi` itself — no
-requester, no status, nothing to withdraw, and **no `avd_tags`, so every SVI it created rendered
-on no switch**. The form now asks for a size and a set of tags, labelled with the racks each tag
-selects, and refuses an empty tag list rather than defaulting it.
+The portal's generated `ServiceNetworkSegment` template is the request path. It creates a single
+segment on a branch and opens a proposed change; the generator builds the three technical objects.
+An earlier form wrote `IpamVLAN`, `IpamVRF` and `EvpnSvi` itself — no requester, no status, nothing
+to withdraw, and **no `avd_tags`, so every SVI it created rendered on no switch**, which is why
+`avd_tags` is mandatory on the kind.
 
 **Resource pools are branch-agnostic and their resources are not**, which is worth knowing before
 testing one on a branch. `CoreIPPrefixPool` and `CoreNumberPool` carry `branch: agnostic`, so a pool
@@ -839,8 +831,7 @@ HFID is not in fact duplicated.
 
 `triggers.yml` fires each service generator on `created`, scoped to
 `other_branches`. Until that existed a service was expanded only because the PORTAL
-asked for it, so one created any other way — the Streamlit pages, the API, a human in the
-UI — sat unbuilt, and the branch diff showed a request with none of its consequences.
+asked for it, so one created any other way — the API, a human in the UI — sat unbuilt, and the branch diff showed a request with none of its consequences.
 That reads as "nothing happened" rather than "not built yet".
 
 **The point is that the proposed change carries the outcome before anyone merges it.** The
@@ -1433,7 +1424,6 @@ uv run invoke stop
 uv run invoke destroy
 uv run invoke restart
 uv run invoke restart --component=infrahub-server
-uv run invoke restart --component=service-catalog
 uv run invoke load
 uv run invoke load-schema
 uv run invoke load-menu

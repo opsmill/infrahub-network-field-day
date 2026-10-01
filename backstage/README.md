@@ -1,7 +1,6 @@
 # Otter-net service portal
 
-A Backstage portal over Infrahub, and an alternative front end to this demo's
-Streamlit app. The catalog is Infrahub's data rather than a copy of it, and a
+A Backstage portal over Infrahub, and this demo's only request portal. The catalog is Infrahub's data rather than a copy of it, and a
 request submitted here opens a branch and a proposed change.
 
 Run it from the repository root:

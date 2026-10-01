@@ -57,10 +57,11 @@ This brings up, in the background:
 | Service | URL | Purpose |
 |---------|-----|---------|
 | Infrahub UI | `http://localhost:8000` | Main web interface |
-| Service Portal | `http://localhost:8501` | Streamlit self-service portal |
 | Semaphore | `http://localhost:3000` | Ansible automation runner |
 | Neo4j Browser | `http://localhost:7474` | Graph database browser |
 | Prefect | `http://localhost:4200` | Task-manager UI — where generator, transform, and check runs show up |
+
+The service portal isn't part of this stack. It runs in the tooling cluster, which `uv run invoke tooling` deploys, and is reached from the branch desktop at `https://10.90.0.11:32001`. See [The service portal](./service-portal.md).
 
 Wait for services to become healthy. You can check with:
 

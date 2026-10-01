@@ -26,6 +26,11 @@ ignore: |
   /lab/avd/intended
   # ContainerLab runtime state; generated on deploy and git-ignored.
   /lab/clab-*
+  # The k3s kubeconfigs, written at deploy time and git-ignored. yamllint does
+  # not read .gitignore, so without this `invoke lint` fails on any host with
+  # the lab up.
+  /lab/k8s/.kubeconfig
+  /lab/k8s/.kubeconfig-tooling
   # Local git worktrees. Excluded through .git/info/exclude rather than
   # .gitignore, so they are invisible to git and visible to yamllint -- which
   # made `invoke lint` fail on hundreds of findings in files nobody here wrote.

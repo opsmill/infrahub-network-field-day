@@ -40,7 +40,7 @@ Hostnames come from the generators (`spine-{pod}-{index}`, `leaf-{pod}-{rack_ind
 - **Generate a complete fabric from a design** — define topology parameters and addressing pools; generators create all super-spines, spines, and leaves, allocate loopback, interconnect, and management addresses, BGP ASNs, and node IDs, and cable devices together automatically.
 - **Render EOS device configurations and documentation** — PyAVD runs inside Infrahub workers and produces EOS CLI configurations, per-device and fabric-level Markdown documentation, and a cabling plan CSV as downloadable artifacts.
 - **Make incremental day-two changes** — edit the design and regenerate; checksum-based idempotency applies changes only to affected objects; branch-aware pools prevent collisions across parallel work.
-- **Give other teams access to network data** — the fabric is queryable through the Infrahub Web UI, GraphQL API, and MCP interface; the Streamlit service portal provides guided workflows for stakeholders without API or CLI access.
+- **Give other teams access to network data** — the fabric is queryable through the Infrahub Web UI, GraphQL API, and MCP interface; the Backstage service portal lets stakeholders without API or CLI access request services; every request is a branch with a proposed change.
 - **Track and review every change** — all changes run through Infrahub branches and proposed changes, with a full diff before any change reaches a device.
 
 ## How It Works
@@ -73,7 +73,7 @@ uv run invoke start
 uv run invoke load
 ```
 
-Open the Infrahub UI at `http://localhost:8000` and the service portal at `http://localhost:8501`.
+Open the Infrahub UI at `http://localhost:8000`. The service portal runs in the tooling cluster, at `https://10.90.0.11:32001` from the branch desktop, once `uv run invoke tooling` (or `uv run invoke bootstrap`) has deployed it; see [The service portal](docs/docs/service-portal.md).
 
 Then follow [Provision Your First Fabric](docs/docs/provision-first-fabric.md) to run the generator chain and reach rendered EOS artifacts.
 
@@ -109,12 +109,12 @@ After `invoke load` completes and you run the generator chain on a fabric:
   - ANTA test catalogs — generation ships; test execution is on the roadmap
   - Computed interface descriptions
 - **Seed data** — the manufacturer, cEOS-LAB device type, interface profiles and device templates, addressing and number pools (loopback, VTEP, interconnect, MLAG, management, ASN, node ID), and the `OTTERNET_FABRIC` design: one pod, three leaf racks, the seven switches with their pinned identity, four tenants over six VRFs, and the workload endpoints.
-- **Service portal** — Streamlit application with guided day-2 workflows:
-  - Add network segment (VRF, VLAN, SVI)
-  - Provision server into a rack
-  - Create EVPN tenant
-  - Fabric Design visualization (topology, cabling, settings, EVPN)
-- **Stack** — Docker Compose extending Infrahub 1.10.6 with PyAVD. Includes Infrahub UI, service portal, Semaphore (bundled Ansible runner for deployment), and Neo4j.
+- **Service portal** — Backstage, in the tooling cluster, with one generated request template per service kind:
+  - Network segment (subnet, VLAN, and gateway SVI, allocated from pools)
+  - Server placement into a rack, cabled to its leaves
+  - Tenant onboarding onto a fabric
+  - Exposed applications and access grants
+- **Stack** — Docker Compose extending Infrahub 1.10.6 with PyAVD. Includes Infrahub UI, Semaphore (bundled Ansible runner for deployment), and Neo4j.
 
 | File | What it does |
 |------|-------------|
@@ -124,8 +124,8 @@ After `invoke load` completes and you run the generator chain on a fabric:
 | `transforms/` | Python and Jinja2 transforms (EOS config, docs, cabling plan, ANTA catalog, interface descriptions) |
 | `objects/` | Seed YAML (manufacturers, device types, pools, profiles, templates, fabrics, racks, VLANs) |
 | `triggers.yml` | Event trigger rules wiring schema changes to generator runs |
-| `service_catalog/` | Streamlit service portal |
-| `docker-compose.yml` | Stack definition; docker-compose.override.yml adds the portal and Semaphore |
+| `backstage/` | Backstage service portal, deployed into the tooling cluster |
+| `docker-compose.yml` | Stack definition; docker-compose.override.yml adds Semaphore and the lab's supporting services |
 | `Dockerfile` | Custom Infrahub image with PyAVD |
 | `tasks.py` | Invoke task definitions (build, start, stop, load, lint, test) |
 
