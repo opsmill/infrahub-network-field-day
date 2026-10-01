@@ -11,16 +11,16 @@
   "schemaVersion": 39,
   "version": 1,
   "editable": false,
-  "refresh": "30s",
+  "refresh": "1m",
   "time": {
     "from": "now-1h",
     "to": "now"
   },
   "panels": [
     {
-      "id": 1,
-      "type": "table",
-      "title": "Intended sessions not established",
+      "id": 7,
+      "type": "stat",
+      "title": "Intended BGP sessions",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -28,8 +28,141 @@
       "gridPos": {
         "x": 0,
         "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(otternet_intended_bgp_neighbor)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "Every session Infrahub's intent says should exist, from the stored structured configs and the modelled WAN neighbours.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Intended but not established",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(otternet_intended_bgp_neighbor unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") or label_replace(frr_bgp_peer_state == 1, \"peer_address\", \"$1\", \"peer\", \"(.*)\"))) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "0 is healthy. Anything else is a session Infrahub intends that the device does not report as established.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Established but never intended",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count((label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") or label_replace(frr_bgp_peer_state == 1, \"peer_address\", \"$1\", \"peer\", \"(.*)\")) unless on (device, peer_address) otternet_intended_bgp_neighbor) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "0 is healthy. Anything else is a session up on a device that no intent explains.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Which sessions are down",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
         "w": 12,
-        "h": 8
+        "h": 6
       },
       "targets": [
         {
@@ -44,9 +177,11 @@
           "format": "table"
         }
       ],
-      "description": "Sessions Infrahub configures that the device does not report as established. Empty is healthy.",
+      "description": "Sessions Infrahub configures that the device does not report as established.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "noValue": "All intended sessions are established"
+        },
         "overrides": []
       },
       "options": {}
@@ -54,16 +189,16 @@
     {
       "id": 2,
       "type": "table",
-      "title": "Established sessions Infrahub never intended",
+      "title": "Which sessions are unexplained",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 12,
-        "y": 0,
+        "y": 4,
         "w": 12,
-        "h": 8
+        "h": 6
       },
       "targets": [
         {
@@ -80,7 +215,9 @@
       ],
       "description": "The other half: a session up on the device that no intent explains.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "noValue": "Every established session is intended"
+        },
         "overrides": []
       },
       "options": {}
@@ -95,7 +232,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -130,7 +267,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 8,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -162,8 +299,8 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 0,
-        "y": 16,
+        "x": 18,
+        "y": 0,
         "w": 6,
         "h": 4
       },
@@ -194,9 +331,9 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 6,
-        "y": 16,
-        "w": 18,
+        "x": 0,
+        "y": 18,
+        "w": 24,
         "h": 4
       },
       "targets": [
