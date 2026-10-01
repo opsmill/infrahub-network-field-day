@@ -35,10 +35,11 @@ LAB_TENANTS = Path(__file__).resolve().parents[2] / "lab" / "wan/tenants.yml"
 
 IPV4 = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
 
-# The branch router's switch ports. Bridged into br-branch so the branch
-# desktop, host and Guacamole gateway can reach each other; they carry no
-# addresses and appear in no FRR config. Spec assumption 3.
-BRANCH_ACCESS_PORTS = {"eth2", "eth3", "eth4"}
+# The branch router's switch ports. Bridged into the LAN mac-vrf so the branch
+# desktop, host and Guacamole gateway can reach each other. They carry no
+# address -- and since the SR Linux re-platform they ARE modelled, because the
+# rendered configuration now owns them where an FRR boot script used to.
+BRANCH_ACCESS_PORTS = {"ethernet-1/2", "ethernet-1/3", "ethernet-1/4"}
 
 
 def _docs(path: Path) -> list[dict[str, Any]]:
@@ -59,7 +60,7 @@ def _lab() -> dict[str, Any]:
 
 
 def _lab_interfaces() -> set[tuple[str, str]]:
-    """Every (device, interface) the lab expects, minus the bridged ports."""
+    """Every (device, interface) the lab expects, the bridged ports included."""
     lab = _lab()
     isp, branch = lab["isp"], lab["branch"]
     found: set[tuple[str, str]] = set()
@@ -67,7 +68,7 @@ def _lab_interfaces() -> set[tuple[str, str]]:
     for key in ("edge", "core"):
         entry = isp[key]
         node = entry["node"]
-        found.add((node, "lo"))
+        found.add((node, "lo0"))
         found.add((node, entry["core"]["interface"]))
         if "dc" in entry:
             found.add((node, entry["dc"]["interface"]))
@@ -86,9 +87,10 @@ def _lab_interfaces() -> set[tuple[str, str]]:
 
     router_entry = branch["router"]
     node = router_entry["node"]
-    found.add((node, "lo"))
+    found.add((node, "lo0"))
     found.add((node, router_entry["dc_interface"]))
-    found.add((node, router_entry["lan_bridge"]))
+    found.add((node, router_entry["lan_irb"]))
+    found.update((node, port) for port in router_entry["lan_interfaces"])
     return found
 
 
@@ -139,17 +141,33 @@ def test_every_seeded_interface_exists_in_the_lab() -> None:
 
 
 def test_every_lab_interface_is_seeded() -> None:
-    """Nothing is missed, except the bridged branch ports (assumption 3)."""
+    """Nothing is missed."""
     missing = _lab_interfaces() - _seeded_interfaces()
 
     assert missing == set(), f"interfaces in the lab but not seeded: {sorted(missing)}"
 
 
-def test_the_bridged_branch_ports_are_deliberately_absent() -> None:
-    """They carry no address and appear in no FRR config -- plumbing, not intent."""
-    seeded = _seeded_interfaces()
+def test_the_bridged_branch_ports_are_access_ports_without_addresses() -> None:
+    """`l2_mode: access` is what srl_config reads to bridge them; an address would make them routed."""
+    ports = {e["name"]: e for e in _data(ADDRESSING_FILE, "InterfacePhysical") if e["device"] == "branch-rtr"}
+    addressed = {
+        a["interface"]["data"]["name"]
+        for a in _data(ADDRESSING_FILE, "IpamIPAddress")
+        if a["interface"]["data"]["device"] == "branch-rtr"
+    }
 
-    assert not {("branch-rtr", port) for port in BRANCH_ACCESS_PORTS} & seeded
+    for port in BRANCH_ACCESS_PORTS:
+        assert ports[port]["l2_mode"] == "access"
+        assert port not in addressed
+
+
+def test_the_branch_gateway_is_a_virtual_irb() -> None:
+    """The routed face of the LAN mac-vrf is virtual; the old br-branch was a physical stand-in."""
+    virtual = {(e["device"], e["name"]) for e in _data(ADDRESSING_FILE, "InterfaceVirtual")}
+    physical = {(e["device"], e["name"]) for e in _data(ADDRESSING_FILE, "InterfacePhysical")}
+
+    assert ("branch-rtr", "irb0") in virtual
+    assert ("branch-rtr", "br-branch") not in physical | virtual
 
 
 def test_address_transcription_matches_the_lab_in_both_directions() -> None:
@@ -176,7 +194,7 @@ def test_interfaces_carry_the_labs_mtu() -> None:
 
 def test_loopbacks_are_virtual_and_flagged() -> None:
     """So an announced /32 is identifiable without inferring it from a name."""
-    loopbacks = _data(ADDRESSING_FILE, "InterfaceVirtual")
+    loopbacks = [e for e in _data(ADDRESSING_FILE, "InterfaceVirtual") if e["name"] == "lo0"]
 
     assert {entry["device"] for entry in loopbacks} == {"isp-pe1", "isp-pe2", "branch-rtr"}
     assert all(entry["role"] == "loopback" for entry in loopbacks)
@@ -425,7 +443,7 @@ def test_half_the_router_ids_are_not_loopbacks() -> None:
     mismatched router-id still forms a session -- so the error would be silent.
     """
     loopback_addresses = {
-        a["address"] for a in _data(ADDRESSING_FILE, "IpamIPAddress") if a["interface"]["data"]["name"] == "lo"
+        a["address"] for a in _data(ADDRESSING_FILE, "IpamIPAddress") if a["interface"]["data"]["name"] == "lo0"
     }
     seeded = {d["name"]: d["router_id"][0] for d in _data(ADDRESSING_FILE, "DcimDevice")}
     not_loopbacks = {name for name, addr in seeded.items() if addr not in loopback_addresses}

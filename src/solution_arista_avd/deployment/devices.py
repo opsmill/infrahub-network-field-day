@@ -13,7 +13,7 @@ Three device families, three delivery paths, because the lab gives them three
 different front doors:
 
     DcimFabricSwitch  AVD EOS Configuration  eAPI over the management network
-    DcimDevice        FRR Configuration      docker exec + frr-reload.py
+    DcimDevice        SR Linux Configuration docker exec + sr_cli candidate
     SecurityFirewall  Junos Configuration    docker exec + ssh to the vSRX VM
 
 **The switches are addressed by IP, the others by name, and that is deliberate.**
@@ -21,10 +21,16 @@ Infrahub calls the switches `leaf-otternet-pod1-1-1`; ContainerLab calls the sam
 box `k8s-leaf1`. There is no renaming layer, so matching them by name is not
 possible -- but every switch carries a `mgmt_ip` that equals its ContainerLab
 management address, so eAPI reaches them without knowing the lab's name for
-them. The FRR routers and the firewall have no address modelled at all, and
-their Infrahub names *do* equal their ContainerLab node names, so they are
-reached through the container instead. Each family uses the identifier it
+them. The SR Linux routers and the firewall are not reached by address -- the
+address they carry is the telemetry collector's, which the push path never
+reads -- and their Infrahub names *do* equal their ContainerLab node names, so they
+are reached through the container instead. Each family uses the identifier it
 actually has.
+
+The SR Linux path replaced FRR's `frr-reload.py` in the WAN re-platform. It is
+the one part of this module written rather than lifted, and every claim in its
+comments was measured on a throwaway six-router prototype rather than on the
+lab, which kept running FRR until the cutover.
 """
 
 from __future__ import annotations
@@ -56,13 +62,13 @@ VSRX_USERNAME = os.getenv("OTTERNET_VSRX_USERNAME", "admin")
 VSRX_PASSWORD = os.getenv("OTTERNET_VSRX_PASSWORD", "admin@123")
 
 ARTIFACT_EOS = "AVD EOS Configuration"
-ARTIFACT_FRR = "FRR Configuration"
+ARTIFACT_SRL = "SR Linux Configuration"
 ARTIFACT_JUNOS = "Junos Configuration"
 
 # Which artifact each family is rendered into, and the short name --kind takes.
 KINDS = {
     "eos": ARTIFACT_EOS,
-    "frr": ARTIFACT_FRR,
+    "srl": ARTIFACT_SRL,
     "junos": ARTIFACT_JUNOS,
 }
 
@@ -294,37 +300,6 @@ EOS_LIFELINE = (
 )
 
 
-# The FRR equivalent, and the gap it closes is the more dangerous of the two.
-#
-# `frr-reload.py --reload` computes the difference between the running
-# configuration and the file it is given, so an EMPTY file is not a no-op: it is
-# an instruction to delete everything the router is running. Artifact generation
-# is asynchronous and an artifact that has not rendered yet exists, reports
-# `Ready`, and is empty -- so `invoke provision --kind frr` run at the wrong
-# moment would erase all six routers and report success.
-#
-# EOS was already protected: its lifeline names the management interface, so an
-# empty artifact fails the check. Junos is protected by the shape of `load
-# replace`, which only touches hierarchies the file actually tags. FRR had
-# nothing.
-#
-# `hostname` rather than `router bgp`, deliberately. Every one of the five FRR
-# templates emits `hostname {{ node }}`, while a future FRR device that runs no
-# BGP is entirely plausible -- and a guard that refuses a legitimate
-# configuration is a worse failure than the one it prevents.
-FRR_LIFELINE = ("hostname",)
-
-
-def _assert_frr_lifeline(target: Target, config: str) -> None:
-    missing = [needle for needle in FRR_LIFELINE if needle not in config]
-    if missing:
-        raise ProvisionError(
-            f"{target.device}: refusing to reload -- the artifact is missing "
-            f"{', '.join(repr(m) for m in missing)}, and frr-reload would read that as "
-            "an instruction to delete the running configuration"
-        )
-
-
 def _assert_eos_lifeline(target: Target, config: str) -> None:
     missing = [needle for needle in EOS_LIFELINE if needle not in config]
     if missing:
@@ -334,77 +309,175 @@ def _assert_eos_lifeline(target: Target, config: str) -> None:
         )
 
 
-def push_frr(target: Target, config: str) -> str:
-    """Reload an FRR router onto the rendered configuration.
+# The SR Linux equivalent, and the gap it closes is the same one FRR had.
+#
+# A push deletes /interface, /network-instance and /routing-policy in the
+# candidate and re-sets them from the artifact, so an EMPTY artifact is not a
+# no-op: it is an instruction to delete every interface, every VRF and every
+# policy -- the management interface and the management VRF included, which is
+# how the reconciler's own gNMI collector and every operator reach the box.
+# Artifact generation is asynchronous and an artifact that has not rendered yet
+# exists, reports `Ready`, and is empty.
+#
+# So the lifeline names the management interface and the management VRF, like
+# EOS_LIFELINE does, rather than something every artifact happens to contain.
+# An artifact carrying both cannot strand the router; one missing either
+# would, and is refused before anything is sent.
+SRL_LIFELINE = (
+    "set / interface mgmt0 ",
+    "set / network-instance mgmt ",
+)
 
-    `frr-reload.py` computes the difference between the running configuration and
-    the file and applies only that, which is what makes this safe to re-run while
-    the lab carries traffic: adding a tenant does not bounce the BGP sessions of
-    the tenants already there. `vtysh -f` would MERGE instead, quietly leaving a
-    removed tenant's VRF and session in place.
+# The three subtrees a push owns. Everything else -- /system above all, where
+# the credentials, the TLS profile and the gNMI and JSON-RPC servers live -- is
+# never deleted and never set.
+SRL_OWNED_SUBTREES = (
+    "delete / interface *",
+    "delete / network-instance *",
+    "delete / routing-policy",
+)
 
-    The configuration is staged in a directory of our own rather than written
-    over /etc/frr/frr.conf, because the lab bind-mounts that file
-    read-only -- writing to it fails with "device or resource busy", and
-    succeeding would mean this repository silently editing a sibling
-    repository's working tree.
+# Lines in an artifact that would reach outside those three subtrees. The one
+# exception is the host name, which is identity rather than configuration the
+# replace owns: setting it is a merge, never a delete.
+_SRL_ALLOWED_OUTSIDE = ("set / system name host-name ",)
+_SRL_OWNED_PREFIXES = ("set / interface ", "set / network-instance ", "set / routing-policy ")
 
-    `--confdir` points at that staging directory for a specific reason. At the
-    end of a reload frr-reload.py runs `vtysh write` unless the file it was given
-    *is* `<confdir>/frr.conf`, and that write fails on the read-only mount -- the
-    reload having already succeeded, so the device is correct and the run reports
-    failure. Naming the staging directory as the confdir makes the two paths
-    equal, so the persistence step is skipped deliberately rather than attempted
-    and failed. Skipping it is right: /etc/frr belongs to the lab, and
-    the durable copy of this configuration is the artifact in Infrahub.
+SRL_CANDIDATE_PREFIX = "infrahub-"
+
+
+def _assert_srl_lifeline(target: Target, config: str) -> None:
+    missing = [needle.strip() for needle in SRL_LIFELINE if needle not in config]
+    if missing:
+        raise ProvisionError(
+            f"{target.device}: refusing to replace the configuration -- the artifact is missing "
+            f"{', '.join(repr(m) for m in missing)}, so the commit would delete the management "
+            "interface the router is reached by"
+        )
+
+
+def _assert_srl_scope(target: Target, config: str) -> None:
+    """Every command must stay inside the subtrees the replace owns.
+
+    A `delete` in the artifact, or a `set / system ...` beyond the host name,
+    would act outside what the push is entitled to change -- the credentials
+    live under /system. The renderer emits neither; this makes it impossible
+    for a renderer bug to start doing so quietly.
     """
-    _assert_frr_lifeline(target, config)
+    for number, line in enumerate(config.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith(_SRL_OWNED_PREFIXES) or stripped.startswith(_SRL_ALLOWED_OUTSIDE):
+            continue
+        raise ProvisionError(
+            f"{target.device}: refusing to push -- line {number} reaches outside "
+            f"/interface, /network-instance and /routing-policy: {stripped[:120]}"
+        )
+
+
+def srl_candidate_script(name: str, config: str, *, commit: bool) -> str:
+    """The sr_cli script that loads the artifact as a REPLACE, then diffs.
+
+    One private, named candidate: the three owned subtrees are deleted, the
+    artifact re-sets them, and `diff flat` is the router's own comparison of the
+    result against running. `commit now` makes it so; `discard now` leaves the
+    router exactly as it was.
+
+    Deleting and re-setting in one candidate is what makes this a replace
+    without churn: the commit applies only the NET difference, so an unchanged
+    tenant's BGP session is not touched. Measured on the prototype -- a
+    description change committed this way left every session's uptime running.
+    """
+    return "\n".join(
+        [
+            f"enter candidate private name {name}",
+            *SRL_OWNED_SUBTREES,
+            config.rstrip("\n"),
+            "diff flat",
+            "commit now" if commit else "discard now",
+            "",
+        ]
+    )
+
+
+def srl_run(target: Target, script: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603
+        ["docker", "exec", "-i", target.container, "sr_cli"],  # noqa: S607
+        input=script,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=180,
+    )
+
+
+def srl_clear_candidate(target: Target, name: str) -> None:
+    """Remove a named candidate a failed run left behind.
+
+    sr_cli stops at the first error -- a parse error or a refused commit -- and
+    exits non-zero WITHOUT leaving candidate mode, so the named candidate
+    survives the session. SR Linux holds at most ten; a comparator that fails
+    often enough would otherwise remove the ability to configure the router.
+    """
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "docker",
+            "exec",
+            target.container,
+            "sr_cli",
+            "-d",
+            f"tools system configuration candidate {name} clear",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+
+def srl_candidate_name(purpose: str) -> str:
+    return f"{SRL_CANDIDATE_PREFIX}{purpose}-{int(time.time() * 1000)}"
+
+
+def push_srl(target: Target, config: str) -> str:
+    """Replace an SR Linux router's owned subtrees with the rendered configuration.
+
+    **`docker exec sr_cli`, not gNMI Set or JSON-RPC, deliberately.** All three
+    can replace; only sr_cli takes the artifact exactly as rendered -- the same
+    flat `set` commands ContainerLab boots from -- so what is pushed is what the
+    proposed change showed, with no translation layer to drift. It also needs
+    no credential and no address: the FRR routers were reached by container
+    name, and so are these, which keeps `mgmt_ip` meaning "push over eAPI"
+    (AGENTS.md, cycle 027) and keeps the collector's address out of the reconciler
+    (tests/unit/test_deployment_inventory_targets.py).
+
+    **sr_cli aborts at the first error and commits nothing.** A malformed line
+    or a commit SR Linux refuses (a policy naming a prefix-set that is gone)
+    leaves running untouched and the process exiting 1 -- measured both ways.
+    Both are reported as failures, and the candidate the abort strands is
+    cleared.
+
+    Nothing is saved to startup. The durable copy of this configuration is the
+    artifact, exactly as it was for FRR; a restarted container boots its
+    ContainerLab startup configuration and the next cycle converges it.
+    """
+    _assert_srl_lifeline(target, config)
+    _assert_srl_scope(target, config)
 
     if not _container_running(target.container):
         raise ProvisionError(f"{target.device}: container {target.container} is not running")
 
-    staged_dir = "/tmp/infrahub-frr"  # noqa: S108 - inside the node's own container
-    staged = f"{staged_dir}/frr.conf"
-    write = subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "docker",
-            "exec",
-            "-i",
-            target.container,
-            "sh",
-            "-c",
-            f"mkdir -p {staged_dir} && cat > {staged}",
-        ],
-        input=config,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if write.returncode != 0:
-        raise ProvisionError(f"{target.device}: could not stage the configuration: {write.stderr.strip()}")
-
-    reload_result = subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "docker",
-            "exec",
-            target.container,
-            "/usr/lib/frr/frr-reload.py",
-            "--reload",
-            "--stdout",
-            "--confdir",
-            staged_dir,
-            staged,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if reload_result.returncode != 0:
-        detail = (reload_result.stderr or reload_result.stdout).strip().splitlines()
+    name = srl_candidate_name("push")
+    result = srl_run(target, srl_candidate_script(name, config, commit=True))
+    output = (result.stdout or "") + (result.stderr or "")
+    if result.returncode != 0 or "All changes have been committed" not in output:
+        srl_clear_candidate(target, name)
+        detail = [line for line in output.strip().splitlines() if line.strip()]
         tail = " / ".join(detail[-3:]) if detail else "no output"
-        raise ProvisionError(f"{target.device}: frr-reload failed: {tail}")
+        raise ProvisionError(f"{target.device}: sr_cli refused the configuration: {tail}")
 
-    return f"reloaded in {target.container}"
+    return f"committed in {target.container}"
 
 
 def push_junos(target: Target, config: str) -> str:
@@ -674,7 +747,7 @@ def _assert_junos_scope(target: Target, config: str) -> None:
 
 PUSHERS = {
     ARTIFACT_EOS: push_eos,
-    ARTIFACT_FRR: push_frr,
+    ARTIFACT_SRL: push_srl,
     ARTIFACT_JUNOS: push_junos,
 }
 
@@ -722,7 +795,8 @@ def provision(targets: list[Target], branch: str, dry_run: bool) -> int:
 
 eos_config_lines = _eos_config_lines
 assert_eos_lifeline = _assert_eos_lifeline
-assert_frr_lifeline = _assert_frr_lifeline
+assert_srl_lifeline = _assert_srl_lifeline
+assert_srl_scope = _assert_srl_scope
 assert_junos_scope = _assert_junos_scope
 junos_replace_tagged = _junos_replace_tagged
 container_running = _container_running

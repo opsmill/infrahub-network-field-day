@@ -2,9 +2,13 @@
 # Push the rendered WAN configs onto the running ISP / customer / branch routers.
 #
 # The WAN's equivalent of `make avd-deploy`: wan/render.py produces the intended
-# config, this makes the devices match it. Reload rather than restart, so a
-# customer being added does not bounce the BGP sessions of the customers that
-# were already there -- which is the whole reason to have a reload path at all.
+# config, this makes the devices match it. A candidate REPLACE rather than a
+# restart, so a customer being added does not bounce the BGP sessions of the
+# customers that were already there -- the commit applies only the net change.
+#
+# This is the lab's own push, for working on the lab without Infrahub. Once
+# Infrahub runs the lab, its reconciler pushes the identical file the same way
+# (src/solution_arista_avd/deployment/devices.py, push_srl).
 set -euo pipefail
 
 LAB="${OTTERNET_LAB:-otternet}"
@@ -31,13 +35,8 @@ for dir in "$RENDERED"/*/; do
         continue
     fi
 
-    # No copying: the topology bind-mounts wan/rendered/<node>/ into the
-    # container, and render.py overwrites those files in place, so the node can
-    # already see the new config. Trying to `docker cp` onto them fails anyway
-    # -- "device or resource busy" -- because they are read-only bind mounts.
-
-    # Hosts have no routing daemon; re-running their init script is idempotent.
-    if [[ ! -f "$dir/frr.conf" ]]; then
+    # Hosts have no routing stack; re-running their init script is idempotent.
+    if [[ ! -f "$dir/config.cli" ]]; then
         if docker exec "$container" sh /opt/init.sh >/dev/null 2>&1; then
             ok "$node (host addressing)"
             pushed=$((pushed + 1))
@@ -48,16 +47,28 @@ for dir in "$RENDERED"/*/; do
         continue
     fi
 
-    # frr-reload.py computes the difference between the running config and the
-    # file and applies only that. `vtysh -f` would MERGE, which quietly leaves
-    # a removed customer's VRF and BGP session in place -- so a customer you
-    # deleted from tenants.yml would still be connected.
-    if out=$(docker exec "$container" /usr/lib/frr/frr-reload.py \
-                --reload --stdout /etc/frr/frr.conf 2>&1); then
+    # SR Linux: delete the three subtrees the file owns and re-set them from it,
+    # in ONE private candidate, then commit. That is a replace -- a tenant removed
+    # from tenants.yml is removed from the router -- and only the net difference
+    # is applied. /system (credentials, gNMI, TLS) is never touched.
+    #
+    # sr_cli stops at the first error and commits nothing, but leaves its named
+    # candidate behind; it is cleared on failure so ten bad runs cannot use up
+    # the router's candidate slots.
+    candidate="wan-deploy-$$"
+    if out=$({
+            echo "enter candidate private name $candidate"
+            echo "delete / interface *"
+            echo "delete / network-instance *"
+            echo "delete / routing-policy"
+            cat "$dir/config.cli"
+            echo "commit now"
+        } | docker exec -i "$container" sr_cli 2>&1) && grep -q "All changes have been committed" <<<"$out"; then
         ok "$node"
         pushed=$((pushed + 1))
     else
-        warn "$node reload failed:"
+        docker exec "$container" sr_cli -d "tools system configuration candidate $candidate clear" >/dev/null 2>&1 || true
+        warn "$node commit failed:"
         printf '%s\n' "$out" | tail -8 | sed 's/^/          /'
         failed=$((failed + 1))
     fi

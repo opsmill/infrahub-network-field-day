@@ -7,7 +7,8 @@
 #   OTTERNET_CEOS_IMAGE   ceOS image tag                  (default ceos:4.36.0.1F)
 #   OTTERNET_CEOS_MEMORY  per-switch memory limit         (default 2048MB, 'lite' uses 1536MB)
 #   OTTERNET_VSRX_IMAGE   firewall image                  (built by make fw-image)
-#   OTTERNET_FRR_IMAGE    ISP / CE / branch router image  (default frr 10.2.1)
+#   OTTERNET_SRL_IMAGE    ISP / CE / branch router image  (default srlinux 26.7.2)
+#   OTTERNET_SRL_MEMORY   per-router memory limit         (default 2048MB)
 #   OTTERNET_DESKTOP_IMAGE   branch workstation image     (built by make desktop-image)
 #   OTTERNET_GUACD_IMAGE     guacd image                  (default guacamole/guacd:1.5.5)
 #   OTTERNET_GUACAMOLE_IMAGE Guacamole web image          (default guacamole/guacamole:1.5.5)
@@ -30,6 +31,15 @@ topology:
         # route there. It lines up exactly with AVD's mgmt_interface_vrf default.
         CLAB_MGMT_VRF: MGMT
         INTFTYPE: eth
+    # The WAN's six routers. A ContainerLab-native kind, so the startup
+    # configuration each names is applied by ContainerLab itself on top of the
+    # image's defaults -- and the same file is what Infrahub's srl_config
+    # renders and the reconciler pushes. ixr-d2l because it is the smallest
+    # fixed-port chassis that boots in about ninety seconds on this host.
+    nokia_srlinux:
+      image: ${OTTERNET_SRL_IMAGE:=ghcr.io/nokia/srlinux:26.7.2}
+      type: ixr-d2l
+      memory: ${OTTERNET_SRL_MEMORY:=2048MB}
     linux:
       image: ghcr.io/srl-labs/network-multitool:v0.10.0
 
@@ -242,66 +252,39 @@ topology:
       labels: {role: k8s-agent, tier: workload}
 
     # ------------------------------------------------------------------- ISP
-    # AS 65500. Two FRR routers rather than ceOS, deliberately: this is a
-    # transit provider, not part of the Arista fabric AVD builds, and at ~200MB
-    # each the whole WAN layer costs less than one more ceOS node.
+    # AS 65500. Two SR Linux routers rather than ceOS, deliberately: this is a
+    # transit provider, not part of the Arista fabric AVD builds, and a second
+    # network OS is what lets the lab show Infrahub rendering more than one.
+    # They replaced FRR containers, which streamed no telemetry of their own.
     #
     # Customer separation is VRF-per-customer on the edge PE with no MPLS (see
     # docs/design.md "The WAN"). The customer VRFs and the leaking that lets
     # them reach DC services -- and stops them reaching each other -- all live on
     # isp-pe1; isp-pe2 is plain transit to the DC.
     #
-    # frr.conf and the VRF setup are RENDERED from wan/customers.yml, not written
-    # by hand: `make wan-build`. The entrypoint is ours because FRR must find the
-    # VRF devices already present when it reads its config -- zebra configures
-    # interfaces but does not create VRFs.
+    # config.cli is RENDERED from wan/tenants.yml, not written by hand: `make
+    # wan-build`. Infrahub renders the identical file as the router's `SR Linux
+    # Configuration` artifact, which is what keeps them running afterwards.
     isp-pe1:
-      kind: linux
-      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      kind: nokia_srlinux
       mgmt-ipv4: 172.20.41.61
-      memory: 256MB
-      binds:
-        - wan/rendered/isp-pe1/frr.conf:/etc/frr/frr.conf:ro
-        - wan/rendered/isp-pe1/daemons:/etc/frr/daemons:ro
-        - wan/rendered/isp-pe1/init.sh:/opt/init.sh:ro
-        # Shared with isp-pe1-exporter, which reads the daemons' sockets.
-        - wan/run/isp-pe1:/var/run/frr
-      entrypoint: /bin/bash
-      cmd: /opt/init.sh
+      startup-config: wan/rendered/isp-pe1/config.cli
       labels: {role: isp-pe, tier: wan}
 
     isp-pe2:
-      kind: linux
-      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      kind: nokia_srlinux
       mgmt-ipv4: 172.20.41.62
-      memory: 256MB
-      binds:
-        - wan/rendered/isp-pe2/frr.conf:/etc/frr/frr.conf:ro
-        - wan/rendered/isp-pe2/daemons:/etc/frr/daemons:ro
-        - wan/rendered/isp-pe2/init.sh:/opt/init.sh:ro
-        # Shared with isp-pe2-exporter, which reads the daemons' sockets.
-        - wan/run/isp-pe2:/var/run/frr
-      entrypoint: /bin/bash
-      cmd: /opt/init.sh
+      startup-config: wan/rendered/isp-pe2/config.cli
       labels: {role: isp-pe, tier: wan}
 
     # -------------------------------------------------------- WAN customers
     # Each customer is a CE router plus one host. Adding another is an entry in
-    # wan/customers.yml plus a node and two links here -- see
+    # wan/tenants.yml plus a node and two links here -- see
     # docs/verifying.md "Onboarding a WAN customer".
     cust-acme-ce:
-      kind: linux
-      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      kind: nokia_srlinux
       mgmt-ipv4: 172.20.41.71
-      memory: 256MB
-      binds:
-        - wan/rendered/cust-acme-ce/frr.conf:/etc/frr/frr.conf:ro
-        - wan/rendered/cust-acme-ce/daemons:/etc/frr/daemons:ro
-        - wan/rendered/cust-acme-ce/init.sh:/opt/init.sh:ro
-        # Shared with cust-acme-ce-exporter, which reads the daemons' sockets.
-        - wan/run/cust-acme-ce:/var/run/frr
-      entrypoint: /bin/bash
-      cmd: /opt/init.sh
+      startup-config: wan/rendered/cust-acme-ce/config.cli
       labels: {role: customer-ce, tier: wan, customer: acme}
 
     cust-acme-host:
@@ -316,18 +299,9 @@ topology:
       labels: {role: customer-host, tier: wan, customer: acme}
 
     cust-globex-ce:
-      kind: linux
-      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      kind: nokia_srlinux
       mgmt-ipv4: 172.20.41.73
-      memory: 256MB
-      binds:
-        - wan/rendered/cust-globex-ce/frr.conf:/etc/frr/frr.conf:ro
-        - wan/rendered/cust-globex-ce/daemons:/etc/frr/daemons:ro
-        - wan/rendered/cust-globex-ce/init.sh:/opt/init.sh:ro
-        # Shared with cust-globex-ce-exporter, which reads the daemons' sockets.
-        - wan/run/cust-globex-ce:/var/run/frr
-      entrypoint: /bin/bash
-      cmd: /opt/init.sh
+      startup-config: wan/rendered/cust-globex-ce/config.cli
       labels: {role: customer-ce, tier: wan, customer: globex}
 
     cust-globex-host:
@@ -343,9 +317,9 @@ topology:
 
     # ---- acme's second site: statically routed, no protocol at all --------
     # The same tenant as cust-acme-ce, attached a different way. There is no
-    # FRR on this CE: it is a multitool with addresses, ip_forward and a
+    # routing stack on this CE: it is a multitool with addresses, ip_forward and a
     # default route, and the PE holds a matching static for its LAN. See
-    # wan/customers.yml "TENANT, NOT CUSTOMER".
+    # wan/tenants.yml "TENANT, NOT CUSTOMER".
     cust-acme-dr-ce:
       kind: linux
       image: ghcr.io/srl-labs/network-multitool:v0.10.0
@@ -373,18 +347,9 @@ topology:
     # provider. Tenants that buy internet access get a default route pointed
     # at this; tenants that do not, do not -- which is the entire product.
     internet-rtr:
-      kind: linux
-      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      kind: nokia_srlinux
       mgmt-ipv4: 172.20.41.91
-      memory: 256MB
-      binds:
-        - wan/rendered/internet-rtr/frr.conf:/etc/frr/frr.conf:ro
-        - wan/rendered/internet-rtr/daemons:/etc/frr/daemons:ro
-        - wan/rendered/internet-rtr/init.sh:/opt/init.sh:ro
-        # Shared with internet-rtr-exporter, which reads the daemons' sockets.
-        - wan/run/internet-rtr:/var/run/frr
-      entrypoint: /bin/bash
-      cmd: /opt/init.sh
+      startup-config: wan/rendered/internet-rtr/config.cli
       labels: {role: internet-router, tier: internet}
 
     # network-multitool serves HTTP on :80 out of the box, so "can this
@@ -433,18 +398,9 @@ topology:
     # its own firewall zone. Branch users reach DC services without their
     # traffic ever entering the ISP.
     branch-rtr:
-      kind: linux
-      image: ${OTTERNET_FRR_IMAGE:=quay.io/frrouting/frr:10.2.1}
+      kind: nokia_srlinux
       mgmt-ipv4: 172.20.41.81
-      memory: 256MB
-      binds:
-        - wan/rendered/branch-rtr/frr.conf:/etc/frr/frr.conf:ro
-        - wan/rendered/branch-rtr/daemons:/etc/frr/daemons:ro
-        - wan/rendered/branch-rtr/init.sh:/opt/init.sh:ro
-        # Shared with branch-rtr-exporter, which reads the daemons' sockets.
-        - wan/run/branch-rtr:/var/run/frr
-      entrypoint: /bin/bash
-      cmd: /opt/init.sh
+      startup-config: wan/rendered/branch-rtr/config.cli
       labels: {role: branch-router, tier: branch}
 
     branch-host:
@@ -575,82 +531,6 @@ topology:
         - ip route replace 10.0.0.0/8 via 10.210.0.1 dev eth1
       labels: {role: host, tier: workload}
 
-    # ------------------------------------------------- FRR telemetry sidecars
-    # One frr_exporter per FRR router, for the telemetry collector the Infrahub
-    # repository configures. FRR has no telemetry API of its own in this image
-    # -- no SNMP module, no gNMI -- and frr_exporter reads the daemons' vty
-    # sockets, so each sidecar shares its router's network namespace (it
-    # answers on the router's own management address, port 9342) and its
-    # /var/run/frr through the bind above.
-    #
-    # One exporter process reads one socket directory, so there is one sidecar
-    # per router rather than one for all six. That also keeps the scrape target
-    # structural: a router's telemetry is at the router's address, so nothing
-    # has to pair a router with a port and nothing can pair them wrongly.
-    #
-    # Root, because FRR's sockets are frr:frrvty 0770 and the image runs as
-    # nobody. Which of its collectors' series are KEPT is decided in Infrahub,
-    # by the monitoring profiles, and rendered into Telegraf's configuration.
-    isp-pe1-exporter:
-      kind: linux
-      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
-      network-mode: container:isp-pe1
-      user: "0"
-      binds:
-        - wan/run/isp-pe1:/var/run/frr
-      cmd: --frr.socket.dir-path=/var/run/frr
-      labels: {role: telemetry-sidecar, tier: wan}
-
-    isp-pe2-exporter:
-      kind: linux
-      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
-      network-mode: container:isp-pe2
-      user: "0"
-      binds:
-        - wan/run/isp-pe2:/var/run/frr
-      cmd: --frr.socket.dir-path=/var/run/frr
-      labels: {role: telemetry-sidecar, tier: wan}
-
-    cust-acme-ce-exporter:
-      kind: linux
-      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
-      network-mode: container:cust-acme-ce
-      user: "0"
-      binds:
-        - wan/run/cust-acme-ce:/var/run/frr
-      cmd: --frr.socket.dir-path=/var/run/frr
-      labels: {role: telemetry-sidecar, tier: wan}
-
-    cust-globex-ce-exporter:
-      kind: linux
-      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
-      network-mode: container:cust-globex-ce
-      user: "0"
-      binds:
-        - wan/run/cust-globex-ce:/var/run/frr
-      cmd: --frr.socket.dir-path=/var/run/frr
-      labels: {role: telemetry-sidecar, tier: wan}
-
-    branch-rtr-exporter:
-      kind: linux
-      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
-      network-mode: container:branch-rtr
-      user: "0"
-      binds:
-        - wan/run/branch-rtr:/var/run/frr
-      cmd: --frr.socket.dir-path=/var/run/frr
-      labels: {role: telemetry-sidecar, tier: wan}
-
-    internet-rtr-exporter:
-      kind: linux
-      image: ${OTTERNET_FRR_EXPORTER_IMAGE:=tynany/frr_exporter:v1.12.0}
-      network-mode: container:internet-rtr
-      user: "0"
-      binds:
-        - wan/run/internet-rtr:/var/run/frr
-      cmd: --frr.socket.dir-path=/var/run/frr
-      labels: {role: telemetry-sidecar, tier: wan}
-
   links:
     # ---- leaf uplinks: every leaf dual-homed to both spines -----------------
     - endpoints: ["spine1:eth1", "k8s-leaf1:eth1"]
@@ -722,25 +602,25 @@ topology:
     # isp-pe1 faces the customers, isp-pe2 faces the DC, and the link between
     # them carries only the default VRF -- the per-customer VRFs terminate on
     # pe1, which is where leaking (and therefore isolation) is enforced.
-    - endpoints: ["isp-pe1:eth1", "isp-pe2:eth1"]     # ISP core, default VRF
-    - endpoints: ["isp-pe2:eth2", "border-leaf1:eth12"]  # ISP -> DC, VRF WAN
+    - endpoints: ["isp-pe1:ethernet-1/1", "isp-pe2:ethernet-1/1"]     # ISP core, default VRF
+    - endpoints: ["isp-pe2:ethernet-1/2", "border-leaf1:eth12"]  # ISP -> DC, VRF WAN
 
     # ---- customer attachments ----------------------------------------------
     # One wire per customer into the edge PE. The PE end is enslaved to that
     # customer's VRF, which is the whole basis of the separation.
-    - endpoints: ["cust-acme-ce:eth1", "isp-pe1:eth2"]
-    - endpoints: ["cust-globex-ce:eth1", "isp-pe1:eth3"]
-    - endpoints: ["cust-acme-host:eth1", "cust-acme-ce:eth2"]
-    - endpoints: ["cust-globex-host:eth1", "cust-globex-ce:eth2"]
+    - endpoints: ["cust-acme-ce:ethernet-1/1", "isp-pe1:ethernet-1/2"]
+    - endpoints: ["cust-globex-ce:ethernet-1/1", "isp-pe1:ethernet-1/3"]
+    - endpoints: ["cust-acme-host:eth1", "cust-acme-ce:ethernet-1/2"]
+    - endpoints: ["cust-globex-host:eth1", "cust-globex-ce:ethernet-1/2"]
 
     # acme's second site. Same tenant, same VRF on the PE, different kind of
     # attachment -- so hq and dr reach each other with nothing leaked.
-    - endpoints: ["cust-acme-dr-ce:eth1", "isp-pe1:eth4"]
+    - endpoints: ["cust-acme-dr-ce:eth1", "isp-pe1:ethernet-1/4"]
     - endpoints: ["cust-acme-dr-host:eth1", "cust-acme-dr-ce:eth2"]
 
     # ---- the internet, on the far side of the core PE ----------------------
-    - endpoints: ["internet-rtr:eth1", "isp-pe2:eth3"]
-    - endpoints: ["internet-host:eth1", "internet-rtr:eth2"]
+    - endpoints: ["internet-rtr:ethernet-1/1", "isp-pe2:ethernet-1/3"]
+    - endpoints: ["internet-host:eth1", "internet-rtr:ethernet-1/2"]
 
     # ---- tenant cloud instances, on ordinary access ports ------------------
     - endpoints: ["app-leaf1:eth11", "acme-cloud1:eth1"]
@@ -748,12 +628,12 @@ topology:
 
     # ---- branch office private circuit -------------------------------------
     # Straight into the border leaf, bypassing the ISP entirely.
-    - endpoints: ["branch-rtr:eth1", "border-leaf1:eth13"]  # branch -> DC, VRF BRANCH
+    - endpoints: ["branch-rtr:ethernet-1/1", "border-leaf1:eth13"]  # branch -> DC, VRF BRANCH
 
     # ---- branch LAN ---------------------------------------------------------
-    # eth2/eth3/eth4 on branch-rtr are ports on br-branch, not three separate
-    # subnets -- see wan/customers.yml. That is what lets guacd open a VNC
+    # ethernet-1/2-4 on branch-rtr are bridged ports of one mac-vrf, not three
+    # separate subnets -- see wan/tenants.yml. That is what lets guacd open a VNC
     # session straight to the desktop without the router forwarding it.
-    - endpoints: ["branch-host:eth1", "branch-rtr:eth2"]
-    - endpoints: ["branch-desktop:eth1", "branch-rtr:eth3"]
-    - endpoints: ["branch-guacd:eth1", "branch-rtr:eth4"]
+    - endpoints: ["branch-host:eth1", "branch-rtr:ethernet-1/2"]
+    - endpoints: ["branch-desktop:eth1", "branch-rtr:ethernet-1/3"]
+    - endpoints: ["branch-guacd:eth1", "branch-rtr:ethernet-1/4"]

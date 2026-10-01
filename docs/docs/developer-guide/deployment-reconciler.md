@@ -70,7 +70,7 @@ someone edited a switch by hand.
 | Family | Mechanism | Leaves behind |
 | --- | --- | --- |
 | `DcimFabricSwitch` | `configure session` + `show session-config … diffs` | session aborted |
-| `DcimDevice` (FRR) | `frr-reload.py --test` | nothing; staging dir only |
+| `DcimDevice` (SR Linux) | private candidate: delete owned subtrees, set the artifact, `diff flat`, `discard now` | candidate discarded; one stranded by an abort is cleared |
 | `SecurityFirewall` | `load replace` + `show \| compare` | candidate rolled back |
 
 Nothing in the comparison path commits.
@@ -95,22 +95,26 @@ state is written afterwards in the caller's coroutine.
 
 ## The normalisation layer, and why it exists
 
-**Two of the three families report a difference against an artifact the device already
-matches.** Measured against this lab:
+**One of the three families reports a difference against an artifact the device already
+matches.** Measured against this lab, and for SR Linux against a six-router prototype:
 
 | Family | An in-sync device reports |
 | --- | --- |
 | EOS | nothing |
-| FRR | `neighbor <addr> activate`, `service integrated-vtysh-config`, `line vty` |
+| SR Linux | nothing but `All changes have been discarded. Leaving candidate mode.` |
 | Junos | zone-pair ordering and comment round-tripping |
 
-FRR states things in the artifact that `show running-config` never echoes back — `activate` is
-the default for IPv4 unicast, the other two are file directives rather than running state.
+SR Linux needs no suppression because the comparison is the router's own: the artifact is
+loaded as a replace in a private candidate and `diff flat` compares it with running. The FRR
+routers it replaced did need three suppressions, for lines the artifact stated and `show
+running-config` never echoed back. A non-zero exit from `sr_cli` is never read as in sync: an
+aborted candidate prints no diff at all, so the comparator raises instead.
+
 Junos reports the eleven zone-pair blocks in a different order (no object carries their order,
 and Junos matches on zone rather than position) and its comment blocks round-tripping.
 
 Read raw, all of that means "this device differs." A reconciler acting on it replaces the
-configuration of every FRR router and the firewall **on every cycle, forever**, while every log
+firewall's configuration **on every cycle, forever**, while every log
 line says success.
 
 `differs` is therefore computed from normalised output, never raw text. Three rules govern
@@ -207,7 +211,7 @@ Credentials are supplied by environment variable only — never baked into an im
 or written into Infrahub.
 
 The compose service additionally needs `network_mode: host` (the switches are on the
-ContainerLab management network) and the Docker socket (the FRR routers and the firewall have
+ContainerLab management network) and the Docker socket (the SR Linux routers and the firewall have
 no address modelled and are reached by container name). Mounting the Docker socket is
 effectively root on the host.
 

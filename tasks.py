@@ -99,7 +99,7 @@ LAB_TOPOLOGY = "otternet.clab.yml"
 # Image variables the topology interpolates. ContainerLab runs under sudo, which
 # scrubs the environment, so they have to be named to survive.
 CLAB_ENV_PASSTHROUGH = (
-    "OTTERNET_CEOS_IMAGE,OTTERNET_CEOS_MEMORY,OTTERNET_VSRX_IMAGE,OTTERNET_FRR_IMAGE,OTTERNET_GUACAMOLE_IMAGE"
+    "OTTERNET_CEOS_IMAGE,OTTERNET_CEOS_MEMORY,OTTERNET_VSRX_IMAGE,OTTERNET_SRL_IMAGE,OTTERNET_GUACAMOLE_IMAGE"
 )
 
 # Markdown authored by this project. Vendored agent content (.agents, .claude,
@@ -589,7 +589,7 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
     terminate: an artifact whose content genuinely did not change never moves,
     which is most of them on most merges.
     """
-    names = ("AVD EOS Configuration", "FRR Configuration", "Junos Configuration")
+    names = ("AVD EOS Configuration", "SR Linux Configuration", "Junos Configuration")
     headers = {"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")}
     query = "{CoreArtifact{edges{node{id name{value}checksum{value}}}}}"
     print(" - Waiting for the rendered artifacts to carry content")
@@ -635,7 +635,7 @@ def find_lab_directory(explicit: str = "") -> Path:
 
     The main checkout rather than this one, for the reason `compose_root` gives:
     there is one lab, and its runtime state -- ContainerLab's `clab-otternet/`,
-    the k3s kubeconfigs, the FRR socket directories -- lives under its directory.
+    the k3s kubeconfigs -- lives under its directory.
     A worktree resolving to its own copy would deploy a second set of bind paths
     and read kubeconfigs that were never written. Set OTTERNET_LAB_DIR to
     override.
@@ -712,34 +712,6 @@ def _fabric_mgmt_addresses() -> list[str]:
     return addresses
 
 
-def _ensure_socket_directories(lab_path: Path, topology: Path) -> list[Path]:
-    """Create every `wan/run/<router>` bind source the topology names.
-
-    Each FRR router shares its daemon sockets with an frr_exporter sidecar
-    through a bind of `wan/run/<router>`. ContainerLab verifies every bind path
-    before it starts any node, and refuses the whole topology over one that is
-    missing -- `Failed to verify bind path: stat .../wan/run/branch-rtr: no such
-    file or directory` -- where plain Docker would have created it. The lab
-    commits the directories, so this matters only for a checkout that lost them,
-    and it costs nothing.
-    """
-    import yaml
-
-    created: list[Path] = []
-    nodes = (yaml.safe_load(topology.read_text(encoding="utf-8")) or {}).get("topology", {}).get("nodes", {})
-    for node in nodes.values():
-        for bind in (node or {}).get("binds", []) or []:
-            source = str(bind).split(":", 1)[0]
-            if source.startswith("wan/run/"):
-                path = lab_path / source
-                if not path.is_dir():
-                    path.mkdir(parents=True, exist_ok=True)
-                    created.append(path)
-    if created:
-        print(f" - Created {len(created)} FRR socket director{'y' if len(created) == 1 else 'ies'} the sidecars bind")
-    return created
-
-
 @task(
     help={
         "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
@@ -758,8 +730,8 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     The fabric comes up **unconfigured on purpose**. The cEOS nodes are given no
     `startup-config` -- only `CLAB_MGMT_VRF` and a management address -- so they
     boot reachable and empty, which is exactly the state `invoke provision` then
-    fills from Infrahub. The firewall and the FRR routers boot from the lab's
-    own files and are re-provisioned from Infrahub the same way.
+    fills from Infrahub. The firewall and the SR Linux routers boot from the
+    lab's own files and are re-provisioned from Infrahub the same way.
 
     Run `invoke provision` next.
     """
@@ -793,12 +765,11 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
         print(" - Ensuring the tooling bridge exists")
         ctx.run(shlex.quote(str(bridge)), pty=True)
 
-    _ensure_socket_directories(lab_path, topology)
-
-    # THE WAN'S BOOT CONFIGURATION, RENDERED BEFORE THE DEPLOY. Every FRR router
-    # bind-mounts lab/wan/rendered/<node>/{frr.conf,daemons,init.sh}, which is
-    # gitignored generated output -- so on a fresh clone the topology is refused
-    # for a missing bind path before any node starts. The lab's own Makefile
+    # THE WAN'S BOOT CONFIGURATION, RENDERED BEFORE THE DEPLOY. Every SR Linux
+    # router names lab/wan/rendered/<node>/config.cli as its startup-config, and
+    # every WAN host bind-mounts an init.sh beside it -- gitignored generated
+    # output, so on a fresh clone the topology is refused for a missing file
+    # before any node starts. The lab's own Makefile
     # renders it in `make deploy`; this drives ContainerLab directly, so it has to
     # as well. The renderer needs only Jinja and YAML, which this environment
     # already has, and it is idempotent.
@@ -821,7 +792,7 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
         "branch": "Infrahub branch to read artifacts from. Omit to use main.",
         "dry-run": "List what would be pushed without changing any device.",
         "only": "Provision a single device by its Infrahub name.",
-        "kind": "Provision one family only: eos, frr, or junos.",
+        "kind": "Provision one family only: eos, srl, or junos.",
     }
 )
 def provision(ctx: Context, branch: str = "", dry_run: bool = False, only: str = "", kind: str = "") -> None:
@@ -830,8 +801,8 @@ def provision(ctx: Context, branch: str = "", dry_run: bool = False, only: str =
 
     The second half of the bring-up: `invoke lab` gives every device management
     connectivity, and this makes each one match the artifact Infrahub rendered
-    for it -- EOS switches over eAPI, the firewall and the FRR routers through
-    their containers.
+    for it -- EOS switches over eAPI, the firewall and the SR Linux routers
+    through their containers.
 
     Re-run it whenever the model changes. Each push is a replace, not a merge, so
     removing something from the model removes it from the device.
@@ -1201,6 +1172,12 @@ def _observability_secrets(ctx: Context, kubeconfig: Path) -> None:
             {
                 "GNMI_USERNAME": os.getenv("OTTERNET_EOS_USERNAME", "admin"),
                 "GNMI_PASSWORD": os.getenv("OTTERNET_EOS_PASSWORD", "admin"),
+                # The SR Linux routers' gNMI account: the image's own admin,
+                # which ContainerLab leaves in place. A second pair rather than
+                # one shared login, because the two families ship different
+                # defaults and neither configuration models credentials.
+                "SRL_GNMI_USERNAME": os.getenv("OTTERNET_SRL_USERNAME", "admin"),
+                "SRL_GNMI_PASSWORD": os.getenv("OTTERNET_SRL_PASSWORD", "NokiaSrl1!"),
             },
         )
         print("   otternet-telemetry: telemetry-credentials")

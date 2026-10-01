@@ -18,7 +18,7 @@ version: "1.0"
 # L3VPN it attaches to.
 #
 # Unlike the Kubernetes services, none of these is a CoreArtifactTarget: they
-# render through device-scoped artifacts (FRR on the PE and CE, EOS on the
+# render through device-scoped artifacts (SR Linux on the PE and CE, EOS on the
 # fabric), not through a cluster manifest.
 #
 # SERVICE LAYER.

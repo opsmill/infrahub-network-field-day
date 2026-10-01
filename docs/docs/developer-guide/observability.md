@@ -18,11 +18,10 @@ to what it is configured with is.
 | Telegraf (`otternet-telemetry`) | k3s, namespace `otternet-telemetry` | Vidra, from the `Crossplane FabricApp` artifact |
 | Telegraf's configuration (`telegraf-intent` ConfigMap) | k3s, namespace `otternet-telemetry` | Vidra's third sync, from the `Telemetry Collector Configuration` artifact |
 | Infrahub exporter | compose, beside Infrahub, host port 8002 | `invoke metrics-exporter` |
-| `frr_exporter`, one per FRR router | the lab topology, sharing each router's network namespace | ContainerLab |
 | Grafana's Dex client | `tooling/10-dex.yaml` | `invoke tooling` |
 | Grafana's and Telegraf's Secrets | k3s | `invoke cluster` |
 
-The exporter, the sidecars, the Dex client and the Secrets sit outside Infrahub for a reason each:
+The exporter, the Dex client and the Secrets sit outside Infrahub for a reason each:
 
 - **The exporter** has no published image or chart.
 - **The sidecars** must share a router's filesystem, and the topology belongs to the lab.
@@ -65,14 +64,16 @@ Three kinds, in `schemas/monitoring.yml`:
 
 - **`telegraf.conf`**: every input, chosen by device kind:
   - EOS: gNMI on port 6030 in VRF `MGMT`
-  - FRR: `frr_exporter` on port 9342
+  - SR Linux: gNMI on port 57400, TLS (self-signed per lab, so not verified), through the same
+    OpenConfig paths as EOS -- so the series names and labels match and fabric panels cover
+    the WAN unchanged
   - Junos: SNMP v2c
   - k3s nodes: node-exporter on port 9100
 
   Every input is tagged from the graph with device, kind, role, rack, pod, and profile.
 - **`intended.prom`**: what Infrahub intends, read back by Telegraf so dashboards can compare it
   with what is observed:
-  - **BGP sessions**: for switches, from each one's stored structured config; for the FRR routers,
+  - **BGP sessions**: for switches, from each one's stored structured config; for the SR Linux routers,
     from their modelled neighbours.
   - **Cabled links and the interfaces expected up**: from `NetworkLink`.
 
@@ -98,8 +99,9 @@ renderer is pinned against:
   said otherwise.
 - **Junos**: a top-level `snmp` stanza from `SecurityFirewall.snmp_community` and `snmp_clients`.
   gNMI/JTI would live under `system`, which the push path refuses by design.
-- **FRR**: nothing in `frr.conf`. The image has no SNMP or gNMI module, so a sidecar reads the
-  daemons' sockets.
+- **SR Linux**: nothing in the artifact. ContainerLab enables the gNMI server and OpenConfig in
+  `/system`, which the push never touches. The `frr_exporter` sidecars the FRR routers needed
+  are gone with them.
 
 **The SNMP community is the one credential-like value in an artifact.** The device must receive it
 in its configuration whatever the model does. It is read-only, bound to `mgmt_junos` (fxp0's

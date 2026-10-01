@@ -156,7 +156,7 @@ extensions:
           description: "MLAG Domain this LAG is used as peer link"
           order_weight: 1800
     # MLAG pairs two fabric leaves. Cycle 027 moved this to DcimFabricSwitch
-    # with the other eleven fabric-only fields; an FRR router has no MLAG.
+    # with the other eleven fabric-only fields; a WAN router has no MLAG.
     - kind: DcimFabricSwitch
       relationships:
         - name: mlag_domain

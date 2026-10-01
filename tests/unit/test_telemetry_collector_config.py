@@ -115,7 +115,7 @@ def test_two_renders_are_byte_identical() -> None:
 
 
 def test_every_family_is_collected_exactly_as_modelled() -> None:
-    """7 switches, 6 FRR routers, the firewall and 3 k3s nodes -- and no collector."""
+    """7 switches, 6 SR Linux routers, the firewall and 3 k3s nodes -- and no collector."""
     assert _kinds(_conf(_render()[0])) == Counter(
         {"DcimFabricSwitch": 7, "DcimDevice": 6, "SecurityFirewall": 1, "ComputePhysicalServer": 3}
     )
@@ -132,7 +132,7 @@ def test_a_device_with_no_address_is_skipped_and_said_so() -> None:
     out, _ = _render(data)
     conf_text = out["manifest"]["data"]["telegraf.conf"]
     assert "# skipped: branch-rtr (DcimDevice) has no address to collect from" in conf_text
-    assert "branch-rtr" not in {b["tags"]["device"] for b in _conf(out)["inputs"]["prometheus"]}
+    assert "branch-rtr" not in {b["tags"]["device"] for b in _conf(out)["inputs"]["gnmi"]}
 
 
 # ---------------------------------------------------------------------------
@@ -165,9 +165,9 @@ def test_a_measurement_a_family_cannot_report_is_skipped_visibly() -> None:
     data = _data()
     for profile in _profiles(data):
         if profile["name"]["value"] == "wan-routing":
-            profile["measurements"]["edges"].append({"node": {"name": {"value": "system-resources"}}})
+            profile["measurements"]["edges"].append({"node": {"name": {"value": "evpn-routes"}}})
     text = _render(data)[0]["manifest"]["data"]["telegraf.conf"]
-    assert "# skipped: wan-routing/system-resources on isp-pe1 (DcimDevice)" in text
+    assert "# skipped: wan-routing/evpn-routes on isp-pe1 (DcimDevice)" in text
 
 
 def test_an_unknown_measurement_is_refused() -> None:
@@ -179,14 +179,37 @@ def test_an_unknown_measurement_is_refused() -> None:
 
 def test_credentials_are_references_and_tags_come_from_the_graph() -> None:
     conf = _conf(_render()[0])
-    switch = conf["inputs"]["gnmi"][0]
+    switch = next(b for b in conf["inputs"]["gnmi"] if b["tags"]["kind"] == "DcimFabricSwitch")
     assert switch["username"] == "${GNMI_USERNAME}"
     assert switch["password"] == "${GNMI_PASSWORD}"  # noqa: S105 -- a reference, not a password
     assert set(switch["tags"]) >= {"collector", "device", "kind", "profile", "role", "rack", "pod"}
     assert switch["addresses"][0].endswith(":6030")
     assert conf["inputs"]["snmp"][0]["agents"] == ["udp://172.20.41.31:161"]
-    frr = {b["tags"]["device"]: b for b in conf["inputs"]["prometheus"] if b["tags"]["kind"] == "DcimDevice"}
-    assert frr["isp-pe1"]["urls"] == ["http://172.20.41.61:9342/metrics"]
+    routers = {b["tags"]["device"]: b for b in conf["inputs"]["gnmi"] if b["tags"]["kind"] == "DcimDevice"}
+    assert routers["isp-pe1"]["addresses"] == ["172.20.41.61:57400"]
+    assert routers["isp-pe1"]["username"] == "${SRL_GNMI_USERNAME}"
+    assert routers["isp-pe1"]["password"] == "${SRL_GNMI_PASSWORD}"  # noqa: S105 -- a reference, not a password
+    assert routers["isp-pe1"]["tls_enable"] is True
+    assert "tls_enable" not in switch, "EOS gNMI is plaintext on 6030; only SR Linux's server is TLS"
+    assert not any(b["tags"]["kind"] == "DcimDevice" for b in conf["inputs"].get("prometheus", []))
+
+
+def test_routers_subscribe_to_the_same_openconfig_paths_as_switches() -> None:
+    """Same paths, same series names: the fabric dashboards cover the WAN unchanged.
+
+    Measured with Telegraf 1.40 against SR Linux 26.7: all four answered, and
+    `bgp_neighbor_session_state_code` carried `neighbor_address` and the network
+    instance as `name`, as EOS does.
+    """
+    conf = _conf(_render()[0])
+    paths: dict[str, set[str]] = {}
+    for block in conf["inputs"]["gnmi"]:
+        paths.setdefault(block["tags"]["kind"], set()).update(
+            (s["name"], s["origin"], s["path"]) for s in block["subscription"]
+        )
+    assert paths["DcimDevice"] == paths["DcimFabricSwitch"] - {
+        sub for sub in paths["DcimFabricSwitch"] if sub[0] == "bgp_afi_safi"
+    }
 
 
 # ---------------------------------------------------------------------------

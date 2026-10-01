@@ -166,32 +166,34 @@ This is the check worth dwelling on, because it is pure route policy:
 
 ```bash
 make wan-customers      # each customer VRF's table on the edge PE
-docker exec clab-otternet-cust-acme-ce vtysh -c 'show ip route 10.60.20.0/24'
-# % Network not in table
+docker exec clab-otternet-cust-acme-ce \
+  sr_cli -d "show network-instance default ipv4 route 10.60.20.0/24"
+# the table header, and no 10.60.20.0/24 line
 ```
 
 Both customers' prefixes **are** in the provider's default table — look:
 
 ```bash
-docker exec clab-otternet-isp-pe1 vtysh -c 'show bgp ipv4 unicast' | grep 10.60
-# 10.60.10.0/24 and 10.60.20.0/24, both present
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "show network-instance default ipv4 route" | grep 10.60
+# 10.60.10.0/24, 10.60.11.0/24 and 10.60.20.0/24, each leaked from its VRF
 ```
 
 They have to be, or the datacentre could not route back to either. The only
-thing stopping each customer from being handed the other's route is the import
-route-map:
+thing stopping each customer from being handed the other's route is the
+inter-instance import policy on its VRF:
 
 ```bash
-docker exec clab-otternet-isp-pe1 vtysh -c 'show running-config' \
-  | grep -A3 'vrf CUST_ACME' | grep import
-#   import vrf default
-#   import vrf route-map RM-DC-SERVICES-ONLY
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "info flat network-instance CUST_ACME inter-instance-policies"
+# import-policy [ RM-ACME-IMPORT ], export-policy [ LEAKABLE ]
 ```
 
-To watch it fail, take the route-map out of
-`wan/templates/isp-edge.frr.conf.j2`, then `make wan-build && make wan-deploy`
-— the two customers can now route to each other through the provider, and
-`make verify` says so.
+`RM-ACME-IMPORT` accepts only the shared DC services, acme's cloud subnet and
+the default route, each matched on `origin-network-instance default`. To watch
+it fail, widen it in `wan/templates/isp-edge.srl.j2`, then `make wan-build &&
+make wan-deploy` — the two customers can now route to each other through the
+provider, and `make verify` says so.
 
 ### Onboarding a customer
 
@@ -208,15 +210,17 @@ eBGP session and the new route-maps before anything is pushed. Then:
 make wan-deploy
 ```
 
-That reloads FRR rather than restarting it, so the customers who were already
-connected keep their sessions. Confirm with the uptime column in
+That commits a replace in one candidate rather than restarting anything, so
+the customers who were already connected keep their sessions. Confirm with the uptime column in
 `make wan-bgp` — the existing sessions should not have reset.
 
 ### The branch is more trusted than a customer, in routing not just policy
 
 ```bash
-docker exec clab-otternet-branch-rtr   vtysh -c 'show ip route' | grep -c 10.110  # 1
-docker exec clab-otternet-cust-acme-ce vtysh -c 'show ip route' | grep -c 10.110  # 0
+docker exec clab-otternet-branch-rtr \
+  sr_cli -d "show network-instance default ipv4 route" | grep -c 10.110  # 1
+docker exec clab-otternet-cust-acme-ce \
+  sr_cli -d "show network-instance default ipv4 route" | grep -c 10.110  # 0
 
 docker exec clab-otternet-branch-host    ping -c2 10.110.0.11    # works
 docker exec clab-otternet-cust-acme-host ping -c2 10.110.0.11    # no route
@@ -381,10 +385,12 @@ docker exec clab-otternet-cust-acme-dr-host ping -c2 10.60.10.10  # dr -> hq
 Confirm the dr site really is static — there is no session for it:
 
 ```bash
-docker exec clab-otternet-isp-pe1 vtysh -c "show bgp vrf CUST_ACME ipv4 unicast summary"
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "show network-instance CUST_ACME protocols bgp neighbor"
 # one neighbour only: 10.51.10.2 (hq). Nothing for 10.51.11.2.
-docker exec clab-otternet-isp-pe1 vtysh -c "show ip route vrf CUST_ACME 10.60.11.0/24"
-# via static, redistributed into the VRF
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "show network-instance CUST_ACME ipv4 route 10.60.11.0/24"
+# route type static, put into the BGP table by BGP-TABLE-CUST_ACME
 ```
 
 ### Isolated cloud instances
@@ -408,7 +414,8 @@ Three independent gates make that true, and it is worth seeing each:
 docker exec clab-otternet-border-leaf1 Cli -p 15 -c "show ip route vrf TENANT_ACME"
 
 # 2. the PE: globex's VRF never learns acme's cloud prefix
-docker exec clab-otternet-isp-pe1 vtysh -c "show ip route vrf CUST_GLOBEX" | grep 10.220
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "show network-instance CUST_GLOBEX ipv4 route" | grep 10.220
 # only 10.220.20.0/24
 
 # 3. the firewall: the permit names acme's sites, and there is no equivalent
@@ -431,9 +438,12 @@ globex fails at the first hop, not at a firewall — there is simply no default
 route in its VRF, and no route back to it on the internet either:
 
 ```bash
-docker exec clab-otternet-isp-pe1 vtysh -c "show ip route vrf CUST_ACME 0.0.0.0/0"    # present
-docker exec clab-otternet-isp-pe1 vtysh -c "show ip route vrf CUST_GLOBEX 0.0.0.0/0"  # absent
-docker exec clab-otternet-internet-rtr vtysh -c "show bgp ipv4 unicast" | grep 10.60.
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "show network-instance CUST_ACME ipv4 route 0.0.0.0/0"    # present
+docker exec clab-otternet-isp-pe1 \
+  sr_cli -d "show network-instance CUST_GLOBEX ipv4 route 0.0.0.0/0"  # absent
+docker exec clab-otternet-internet-rtr \
+  sr_cli -d "show network-instance default protocols bgp routes ipv4 summary" | grep 10.60.
 # acme's two site prefixes only; globex is never announced
 ```
 
@@ -470,10 +480,12 @@ make guac
 The desktop is `10.70.0.20` on the branch LAN. Guacamole's web front end is on
 the management network with its port published; the half that speaks VNC
 (`guacd`, `10.70.0.31`) is on the branch LAN, so the session itself crosses the
-site network. You can watch it do that:
+site network. You can watch it do that on the router port facing the desktop,
+which is a bridged member of the LAN mac-vrf (`e1-3` is `ethernet-1/3` in the
+container's own namespace):
 
 ```bash
-docker exec clab-otternet-branch-rtr tcpdump -ni br-branch tcp port 5901
+docker exec clab-otternet-branch-rtr tcpdump -ni e1-3 tcp port 5901
 ```
 
 ### Prove the door is shut before you knock
@@ -492,7 +504,8 @@ by `RM-DC-TO-BRANCH` — so this is the firewall denying the session, not the
 fabric failing to route. Confirm which:
 
 ```bash
-docker exec clab-otternet-branch-rtr vtysh -c "show ip route 10.112.240.16"
+docker exec clab-otternet-branch-rtr \
+  sr_cli -d "show network-instance default ipv4 route 10.112.240.16"
 make fw-log | grep deny
 ```
 

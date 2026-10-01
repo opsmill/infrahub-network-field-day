@@ -113,7 +113,7 @@ The branch office behind `branch-rtr` is a switched LAN, not a single host:
   │  branch-desktop   .20   XFCE + VNC │◄─ VNC ─┐  └──────────┬───────────┘
   │  branch-guacd     .31   guacd      │────────┘             │ mgmt net
   └───────────┬────────────────────────┘                 branch-guac
-              │ br-branch, ports eth2/3/4              (web front end,
+              │ mac-vrf lan, ethernet-1/2-4 + irb0     (web front end,
         branch-rtr  AS 65030                            no LAN interface)
               │ private circuit, VRF BRANCH
         border-leaf1 ──► fw1 zone branch ──► zone k8s-prod
@@ -142,7 +142,7 @@ or a site adds a zone rather than an exception.
 | Tenant cloud subnets | `10.220.<tenant id>.0/24` (acme `10`, globex `20`) |
 | Tenant cloud handoffs | `10.250.<tenant id>.0/30` to the firewall |
 | The internet | AS 64500, peering `10.52.0.0/30`, host network `198.51.100.0/24` |
-| Branch LAN | `10.70.0.0/24` on `br-branch`, gateway `.1`, host `.10`, desktop `.20`, guacd `.31`, router loopback `10.70.255.1` |
+| Branch LAN | `10.70.0.0/24` on mac-vrf `lan`, gateway `.1` on `irb0`, host `.10`, desktop `.20`, guacd `.31`, router loopback `10.70.255.1` |
 | Firewall handoffs | `10.250.110.0/30` k8s, `10.250.210.0/30` app, `10.250.150.0/30` wan, `10.250.170.0/30` branch |
 | External handoffs | `10.250.50.0/30` (ISP↔DC), `10.250.70.0/30` (branch↔DC) |
 
@@ -162,8 +162,8 @@ docker import cEOS-lab-4.36.0.1F.tar ceos:4.36.0.1F
 cgroups v1, and this box is cgroups v2. `make preflight` checks this.
 
 Everything else is either already here or pulled automatically, including
-FRR (`quay.io/frrouting/frr`) for the ISP, customer and branch routers, and the
-Guacamole images for the branch gateway.
+Nokia SR Linux (`ghcr.io/nokia/srlinux:26.7.2`) for the ISP, customer and
+branch routers, and the Guacamole images for the branch gateway.
 
 The two VM firewalls need images their vendors do not redistribute, both built
 locally from a qcow2 in `/images`:
@@ -232,9 +232,10 @@ is no second copy to drift out of sync; `deploy-lite` uses containerlab's
 | `make deploy-lite` | 5 switches, k8s pod + border | ~30 GB |
 
 Both include the ISP, its two customers, and the branch office in full — router,
-desktop and Guacamole gateway. The WAN devices are FRR and multitool containers
-rather than more ceOS, about 1.5 GB for the lot, which is why they are not a
-size of their own; the branch is there because the access demo lives on it.
+desktop and Guacamole gateway. The six WAN routers are SR Linux and the hosts
+are multitool containers. SR Linux is not small -- about 2 GB per router, set by
+`OTTERNET_SRL_MEMORY` -- so the WAN now costs about as much as three more ceOS
+nodes; the branch is there because the access demo lives on it.
 
 **Both need CPU virtualization.** The firewall is a VM, and there is no
 container-firewall fallback, so a host without `vmx`/`svm` cannot run this lab
@@ -397,25 +398,26 @@ docker exec clab-otternet-cust-acme-host curl -sS http://10.112.240.16/api/healt
 **...and cannot reach each other.** This is the sharpest thing in the WAN,
 because it is a route-policy property and nothing else. Both customers'
 prefixes are in the ISP's default table — they have to be, or the DC could not
-route back — so the only reason acme cannot see globex is the import route-map
-on `isp-pe1`:
+route back — so the only reason acme cannot see globex is the inter-instance
+import policy on `isp-pe1`:
 
 ```bash
 make wan-customers                                    # each VRF's table
-docker exec clab-otternet-cust-acme-ce vtysh -c 'show ip route 10.60.20.0/24'
-# % Network not in table
+docker exec clab-otternet-cust-acme-ce \
+  sr_cli -d "show network-instance default ipv4 route 10.60.20.0/24"
+# the table header, and no 10.60.20.0/24 line
 ```
 
-Delete `import vrf route-map RM-DC-SERVICES-ONLY` from
-`wan/templates/isp-edge.frr.conf.j2`, re-render, re-deploy, and the two
-customers can suddenly route to each other through the provider.
+Widen `RM-ACME-IMPORT` in `wan/templates/isp-edge.srl.j2` to accept anything
+from the default instance, re-render, re-deploy, and the two customers can
+suddenly route to each other through the provider.
 
 **Onboarding a customer is a diff, not a procedure.** Add an entry to
 `wan/tenants.yml`, add its two nodes and two links to the topology, then:
 
 ```bash
 make wan-build && git diff wan/rendered/     # see exactly what will change
-make wan-deploy                              # reload, no session bounced
+make wan-deploy                              # commit, no session bounced
 ```
 
 **Three independent parties each bound what a customer may do.** The ISP bounds
@@ -425,8 +427,10 @@ customer never even learns a route to the pod CIDR or the node subnet, so
 reaching them is not something the firewall has to refuse:
 
 ```bash
-docker exec clab-otternet-cust-acme-ce vtysh -c 'show ip route' | grep -c 10.111  # 0
-docker exec clab-otternet-branch-rtr   vtysh -c 'show ip route' | grep -c 10.110  # 1
+docker exec clab-otternet-cust-acme-ce \
+  sr_cli -d "show network-instance default ipv4 route" | grep -c 10.111  # 0
+docker exec clab-otternet-branch-rtr \
+  sr_cli -d "show network-instance default ipv4 route" | grep -c 10.110  # 1
 ```
 
 That asymmetry is the branch office being a different trust level from a
@@ -489,7 +493,7 @@ lab/
 │   └── intended/               generated — configs and documentation
 ├── wan/                        the ISP, its customers and the branch office
 │   ├── tenants.yml           the data model — edit this to onboard a customer
-│   ├── templates/              Jinja2 for FRR configs and VRF setup
+│   ├── templates/              Jinja2 for SR Linux configs and host init scripts
 │   ├── render.py               model -> wan/rendered/ (offline, no lab needed)
 │   └── rendered/               generated — one directory per WAN device
 ├── configs/
@@ -544,7 +548,10 @@ each fails differently enough to be its own debugging session. See
 
 Deployed and validated on this host with ceOS 4.36.0.1F, Junos 22.3R1.11,
 FRR 10.2.1 and Cilium 1.18.6. `make verify` reports **108 passed, 0 failed**,
-covering:
+covering the list below. That run predates the WAN moving to SR Linux 26.7.2;
+since then the WAN and tenant sections of `verify.sh` have passed (23 of 23)
+against a standalone six-router SR Linux prototype with a stand-in border leaf,
+and the full count has not been re-measured on this topology:
 
 - 5/5 underlay BGP and 5/5 EVPN overlay sessions, MLAG Active and consistent
 - symmetric IRB: the firewall handoff learned as an EVPN type-5 route
@@ -891,44 +898,47 @@ for exactly that reason — the script existed, the shell was just somewhere
 else. Wrap such a variable in a subshell (`( $(AVD) … )`) and use absolute
 paths for scripts. Same family of problem as the `make -n` one below.
 
-**You cannot `docker cp` onto a bind-mounted file** — it fails with
-`device or resource busy`. The WAN configs are bind-mounted into each router,
-so pushing a new one by copying does not work. What does work is overwriting
-the file on the host *in place*: the container sees the change immediately,
-and the push step only has to tell FRR to re-read it.
+**The routers read `config.cli` once, at boot.** ContainerLab applies a `.cli`
+startup configuration on top of the image defaults when the node is created;
+editing the file afterwards changes nothing on a running router. `make
+wan-deploy` is what makes a running router match it. The hosts are different:
+they still bind-mount `init.sh`, and `docker cp` onto a bind-mounted file fails
+with `device or resource busy` -- so `wan/render.py` overwrites in place and
+never `rmtree`s its output, which would leave every running host mounted on a
+file that no longer exists.
 
-**Which means the renderer must never `rmtree` its output directory.** Deleting
-and recreating `wan/rendered/<node>/frr.conf` replaces the inode, and every
-running router is left mounted on a file that no longer exists — with no error
-anywhere. `wan/render.py` overwrites in place and prunes only the directories
-of nodes that have left the data model.
+**A push is a replace, done in one candidate.** `wan-deploy` opens a private
+named candidate, deletes `/interface *`, `/network-instance *` and
+`/routing-policy`, sets the rendered file, and commits. The commit applies only
+the net difference, so an unchanged tenant's session is not bounced, and a
+tenant removed from `tenants.yml` is removed from the router. `/system` is
+never touched: the credentials, the TLS profile and the gNMI server live there.
+The file therefore restates `mgmt0` and the `mgmt` network instance exactly as
+ContainerLab writes them; without them the commit would delete management.
 
-**The FRR image ships `bgpd=no`.** A stock `frrouting/frr` container runs zebra
-and routes nothing, and the failure is quiet in the worst way: `vtysh` accepts
-`router bgp`, reports no error, and keeps no sessions. The rendered `daemons`
-file turns it on. Check with `vtysh -c 'show daemons'`.
+**sr_cli tokenises quotes before it recognises a comment.** One apostrophe in a
+`#` line swallows every following line up to the next quote, and those lines
+are never applied -- with no error, on a router that boots "successfully". It
+was measured here as a router missing its management interface, every address
+and half its routing policy. No comment in a template may carry `'` or `"`;
+`wan/render.py` refuses to write one that does.
 
-**FRR cannot create a VRF.** zebra will configure an interface *inside* a VRF,
-but the VRF device has to exist before FRR reads its config — otherwise the
-`vrf` stanzas are silently dropped and every customer session has nowhere to
-live. That is why each WAN router's entrypoint is a rendered `init.sh` that
-creates the VRFs and enslaves the interfaces before exec'ing FRR, rather than
-a containerlab post-boot `exec`.
+**Route leaking needs both halves, and either alone fails silently.** A tenant
+VRF importing from `default` gets nothing unless `default` also exports its
+routes as leakable (`inter-instance-policies ... export-policy [ LEAKABLE ]`),
+and a leaked route sits in the route table but not in BGP unless
+`bgp rib-management table ipv4-unicast route-table-import` names a policy that
+takes it -- at which point that policy is also the only way a loopback or a
+static route enters BGP. Both failures were measured with every session up.
 
-**Validate FRR configs with FRR, before deploying.**
-`vtysh -C -f <file>` parses a config and reports errors without applying
-anything, in a throwaway container:
+**sr_cli stops at the first error and commits nothing.** A malformed line or a
+commit SR Linux refuses (a policy naming a prefix-set that is gone) leaves the
+running configuration untouched and exits non-zero -- but it leaves the named
+candidate behind, and a router holds at most ten. `wan-deploy` clears its
+candidate on failure.
 
-```bash
-docker run --rm --entrypoint vtysh \
-  -v "$PWD/wan/rendered/isp-pe1/frr.conf:/tmp/frr.conf:ro" \
-  quay.io/frrouting/frr:10.2.1 -C -f /tmp/frr.conf
-```
-
-It caught two invented commands in the templates here (`frrouting-version`,
-and a `seq` on a prefix-list `description`) that would each have produced a
-router that came up with part of its policy missing. Ignore the
-`/etc/frr/vtysh.conf` complaint, which appears on every invocation.
+**`ip-mtu` defaults to 1500 on every subinterface**, whatever the port carries.
+Each routed subinterface states 9214, matching the border leaf.
 
 **ICMP to a LoadBalancer VIP does not work, and the error is misleading.**
 

@@ -32,9 +32,19 @@ Two things this refuses rather than renders:
   device visibly not watched.
 
 No credential is rendered except the firewall's SNMP community, which the device
-itself receives in its configuration. gNMI's username and password are
-``${GNMI_USERNAME}`` and ``${GNMI_PASSWORD}``, substituted by Telegraf from the
-Secret ``invoke cluster`` creates.
+itself receives in its configuration. gNMI's usernames and passwords are
+``${GNMI_USERNAME}``/``${GNMI_PASSWORD}`` for the EOS switches and
+``${SRL_GNMI_USERNAME}``/``${SRL_GNMI_PASSWORD}`` for the SR Linux routers,
+substituted by Telegraf from the Secret ``invoke cluster`` creates.
+
+**The WAN routers and the fabric switches are subscribed through the same
+OpenConfig paths**, so their series arrive under the same names --
+``bgp_neighbor_session_state_code``, ``interface_counters_*``, ``cpu_*``,
+``memory_*`` -- with the same labels. Measured with Telegraf 1.40 against an
+SR Linux 26.7 router: every one of the four subscriptions answered, and the BGP
+series carries ``neighbor_address`` and the network instance as ``name`` exactly
+as EOS does. A dashboard written for the fabric therefore covers the WAN without
+a second query, which is what replacing frr_exporter bought.
 """
 
 from __future__ import annotations
@@ -56,9 +66,16 @@ ROUTER = "DcimDevice"
 FIREWALL = "SecurityFirewall"
 SERVER = "ComputePhysicalServer"
 KINDS = (SWITCH, ROUTER, FIREWALL, SERVER)
+# The kinds collected over gNMI. Everything else is SNMP (the firewall) or a
+# Prometheus scrape (the k3s nodes' node-exporter).
+GNMI_KINDS = (SWITCH, ROUTER)
 
 GNMI_PORT = 6030
-FRR_EXPORTER_PORT = 9342
+# SR Linux's gNMI server in the management network instance, as ContainerLab
+# configures it: TLS with the per-lab `clab-profile` certificate, which is
+# self-signed and regenerated on every deploy -- so it is encrypted and not
+# verified, rather than pinned to a certificate that will not survive a redeploy.
+SRL_GNMI_PORT = 57400
 NODE_EXPORTER_PORT = 9100
 SNMP_PORT = 161
 PROMETHEUS_LISTEN = ":9273"
@@ -102,20 +119,24 @@ _JNX_SESSIONS = (
     [("jnxJsSPUMonitoringCurrentFlowSession", ".1.3.6.1.4.1.2636.3.39.1.12.1.1.1.6", False)],
 )
 
+_OC_INTERFACES = ("interface_counters", "openconfig", "/interfaces/interface/state/counters")
+_OC_BGP = (
+    "bgp_neighbor",
+    "openconfig",
+    "/network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/state",
+)
+_OC_CPU = ("cpu", "openconfig", "/components/component/cpu/utilization/state")
+_OC_MEMORY = ("memory", "openconfig", "/components/component/state/memory")
+
 DISPATCH: dict[str, dict[str, Any]] = {
     "interface-counters": {
-        SWITCH: [("interface_counters", "openconfig", "/interfaces/interface/state/counters")],
+        SWITCH: [_OC_INTERFACES],
+        ROUTER: [_OC_INTERFACES],
         FIREWALL: [_IF_TABLE],
     },
     "bgp-neighbor-state": {
-        SWITCH: [
-            (
-                "bgp_neighbor",
-                "openconfig",
-                "/network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/state",
-            )
-        ],
-        ROUTER: ["frr_bgp_peer_*"],
+        SWITCH: [_OC_BGP],
+        ROUTER: [_OC_BGP],
     },
     # The OpenConfig per-AFI prefix counts rather than an EOS-native Sysdb path:
     # stable across EOS releases, and the leaves' l2vpn-evpn neighbours report
@@ -130,10 +151,8 @@ DISPATCH: dict[str, dict[str, Any]] = {
         ],
     },
     "system-resources": {
-        SWITCH: [
-            ("cpu", "openconfig", "/components/component/cpu/utilization/state"),
-            ("memory", "openconfig", "/components/component/state/memory"),
-        ],
+        SWITCH: [_OC_CPU, _OC_MEMORY],
+        ROUTER: [_OC_CPU, _OC_MEMORY],
         FIREWALL: [_JNX_OPERATING],
     },
     "security-sessions": {
@@ -363,7 +382,7 @@ class TelemetryCollectorConfig(InfrahubTransform):
             "[[outputs.prometheus_client]]",
             *_kv("  ", {"listen": PROMETHEUS_LISTEN, "metric_version": 2, "expiration_interval": "180s"}),
         ]
-        if any(w.device.kind == SWITCH and "bgp-neighbor-state" in w.measurements for w in watches):
+        if any(w.device.kind in GNMI_KINDS and "bgp-neighbor-state" in w.measurements for w in watches):
             # OpenConfig reports a session's state as a STRING, and Prometheus
             # keeps numbers only, so without this the one field "intended but
             # down" is computed from would be dropped on the way out.
@@ -469,16 +488,28 @@ class TelemetryCollectorConfig(InfrahubTransform):
         interval = f"{watch.interval}s"
         specs = [spec for m in measurements for spec in DISPATCH[m][device.kind]]
 
-        if device.kind == SWITCH:
+        if device.kind in GNMI_KINDS:
+            if device.kind == SWITCH:
+                target: dict[str, Any] = {
+                    "addresses": [f"{device.address}:{GNMI_PORT}"],
+                    "username": "${GNMI_USERNAME}",
+                    "password": "${GNMI_PASSWORD}",
+                }
+            else:
+                target = {
+                    "addresses": [f"{device.address}:{SRL_GNMI_PORT}"],
+                    "username": "${SRL_GNMI_USERNAME}",
+                    "password": "${SRL_GNMI_PASSWORD}",
+                    "tls_enable": True,
+                    "insecure_skip_verify": True,
+                }
             block = [
                 f"# {device.name}: {', '.join(measurements)}",
                 "[[inputs.gnmi]]",
                 *_kv(
                     "  ",
                     {
-                        "addresses": [f"{device.address}:{GNMI_PORT}"],
-                        "username": "${GNMI_USERNAME}",
-                        "password": "${GNMI_PASSWORD}",
+                        **target,
                         "redial": "10s",
                         "path_guessing_strategy": "subscription",
                     },
@@ -536,7 +567,7 @@ class TelemetryCollectorConfig(InfrahubTransform):
                     block += ["    [[inputs.snmp.table.field]]", *_kv("      ", entry)]
             return block
 
-        port = FRR_EXPORTER_PORT if device.kind == ROUTER else NODE_EXPORTER_PORT
+        port = NODE_EXPORTER_PORT
         return [
             f"# {device.name}: {', '.join(measurements)}",
             "[[inputs.prometheus]]",

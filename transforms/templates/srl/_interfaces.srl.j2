@@ -1,0 +1,75 @@
+#
+# ---- interfaces -----------------------------------------------------------
+# Addresses are part of the configuration now. Under FRR a boot script set them
+# and the routing daemon never knew; SR Linux owns its interfaces, so a port the
+# model no longer has is removed by the next push rather than left addressed.
+#
+# `ip-mtu` is stated on every routed subinterface because SR Linux defaults it
+# to 1500 whatever the port can carry, and the border leaf runs jumbo frames.
+# The mismatch is silent and expensive: ping works, sessions establish, bulk
+# transfers stall forever.
+#
+# A port rendered `disable` is a customer port whose tenant has been withdrawn.
+# It is shut and left out of every network instance rather than falling into
+# the default one, where its subnet would sit in the provider table.
+{% for i in interfaces %}
+{% if not i.enabled %}
+set / interface {{ i.name }} admin-state disable
+{% else %}
+set / interface {{ i.name }} admin-state enable
+set / interface {{ i.name }} subinterface 0 admin-state enable
+{% if i.bridge %}
+set / interface {{ i.name }} subinterface 0 type bridged
+{% else %}
+set / interface {{ i.name }} subinterface 0 ip-mtu {{ i.mtu }}
+set / interface {{ i.name }} subinterface 0 ipv4 admin-state enable
+set / interface {{ i.name }} subinterface 0 ipv4 address {{ i.address }}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% for b in bridges %}
+# {{ b.irb }} is the routed face of mac-vrf {{ b.name }}: the address the LAN
+# uses as its gateway.
+set / interface {{ b.irb }} admin-state enable
+set / interface {{ b.irb }} subinterface 0 admin-state enable
+set / interface {{ b.irb }} subinterface 0 ip-mtu {{ b.mtu }}
+set / interface {{ b.irb }} subinterface 0 ipv4 admin-state enable
+set / interface {{ b.irb }} subinterface 0 ipv4 address {{ b.address }}
+{% endfor %}
+{% if loopback %}
+set / interface lo0 admin-state enable
+set / interface lo0 subinterface 0 admin-state enable
+set / interface lo0 subinterface 0 ipv4 admin-state enable
+set / interface lo0 subinterface 0 ipv4 address {{ loopback }}/32
+{% endif %}
+#
+# ---- network instances ----------------------------------------------------
+set / network-instance default type default
+set / network-instance default admin-state enable
+{% for i in interfaces if i.enabled and not i.vrf and not i.bridge %}
+set / network-instance default interface {{ i.name }}.0
+{% endfor %}
+{% for b in bridges %}
+set / network-instance default interface {{ b.irb }}.0
+{% endfor %}
+{% if loopback %}
+set / network-instance default interface lo0.0
+{% endif %}
+{% for v in vrfs %}
+set / network-instance {{ v.name }} type ip-vrf
+set / network-instance {{ v.name }} admin-state enable
+{% for i in interfaces if i.enabled and i.vrf == v.name %}
+set / network-instance {{ v.name }} interface {{ i.name }}.0
+{% endfor %}
+{% endfor %}
+{% for b in bridges %}
+# A site LAN is a shared segment. Without the mac-vrf each host would sit on its
+# own point-to-point link and two devices in the same subnet could not reach
+# each other without the router proxy-ARPing for them.
+set / network-instance {{ b.name }} type mac-vrf
+set / network-instance {{ b.name }} admin-state enable
+{% for i in interfaces if i.bridge == b.name %}
+set / network-instance {{ b.name }} interface {{ i.name }}.0
+{% endfor %}
+set / network-instance {{ b.name }} interface {{ b.irb }}.0
+{% endfor %}

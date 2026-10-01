@@ -15,9 +15,12 @@ quiet:
   the commands were sent**.
 * ``_assert_eos_lifeline`` -- a replace that drops the management path commits
   successfully and takes the device off the network with it.
-* ``_assert_frr_lifeline`` -- ``frr-reload.py`` applies the difference between the
-  running configuration and the file, so an empty artifact is an instruction to
-  **delete everything the router is running**, not a no-op.
+* ``_assert_srl_lifeline`` -- an SR Linux push deletes ``/interface``,
+  ``/network-instance`` and ``/routing-policy`` and re-sets them from the
+  artifact, so an artifact without the management interface and VRF commits
+  successfully and **takes the router off the management network**.
+* ``_assert_srl_scope`` -- a line outside those three subtrees would reach
+  ``/system``, where the credentials live.
 * ``_assert_junos_scope`` -- a ``system`` stanza in the artifact would make the
   push overwrite the firewall's credentials with whatever the model holds.
 * ``_junos_replace_tagged`` -- without the ``replace:`` tags the load stops being
@@ -34,10 +37,12 @@ from solution_arista_avd.deployment.devices import (
     ProvisionError,
     Target,
     _assert_eos_lifeline,  # noqa: PLC2701 - these guards are the point of this file
-    _assert_frr_lifeline,  # noqa: PLC2701
     _assert_junos_scope,  # noqa: PLC2701
+    _assert_srl_lifeline,  # noqa: PLC2701
+    _assert_srl_scope,  # noqa: PLC2701
     _eos_config_lines,  # noqa: PLC2701
     _junos_replace_tagged,  # noqa: PLC2701
+    srl_candidate_script,
 )
 
 LIFELINE = "interface Management0\nmanagement api http-commands\nvrf MGMT\n"
@@ -101,43 +106,79 @@ class TestEosLifeline:
         assert "management access" in message
 
 
-class TestFrrLifeline:
-    """The guard EOS had and FRR did not.
+SRL_LIFELINE = (
+    "set / interface mgmt0 admin-state enable\n"
+    "set / interface mgmt0 subinterface 0 ipv4 dhcp-client\n"
+    "set / network-instance mgmt type ip-vrf\n"
+    "set / network-instance mgmt interface mgmt0.0\n"
+)
 
-    `frr-reload.py --reload` applies the difference between the running
-    configuration and the file, so an empty file means "delete everything the
-    router is running" rather than "change nothing". Artifact generation is
-    asynchronous and an artifact that has not rendered yet exists, reports
-    `Ready`, and is empty -- so a provision run at the wrong moment would erase
-    all six WAN routers and report success.
+
+class TestSrlLifeline:
+    """The SR Linux equivalent of the EOS guard, and of the FRR one before it.
+
+    The push replaces the three subtrees it owns, so an EMPTY artifact -- one
+    that exists, reports `Ready` and has not rendered yet -- would delete every
+    interface the router has, the management interface included.
     """
 
     def test_a_real_configuration_passes(self) -> None:
-        _assert_frr_lifeline(_target("branch-rtr"), "frr defaults traditional\nhostname branch-rtr\n")
+        _assert_srl_lifeline(_target("branch-rtr"), SRL_LIFELINE + "set / interface lo0 admin-state enable\n")
 
     def test_an_empty_artifact_is_refused(self) -> None:
-        """The case that motivated it."""
         with pytest.raises(ProvisionError) as error:
-            _assert_frr_lifeline(_target("branch-rtr"), "")
-        assert "delete the running configuration" in str(error.value)
+            _assert_srl_lifeline(_target("branch-rtr"), "")
+        assert "management interface" in str(error.value)
 
-    def test_a_whitespace_only_artifact_is_refused(self) -> None:
-        with pytest.raises(ProvisionError):
-            _assert_frr_lifeline(_target("branch-rtr"), "\n   \n")
-
-    def test_the_refusal_names_the_device(self) -> None:
+    @pytest.mark.parametrize("dropped", ["set / interface mgmt0 ", "set / network-instance mgmt "])
+    def test_each_missing_half_is_refused(self, dropped: str) -> None:
+        config = "\n".join(line for line in SRL_LIFELINE.splitlines() if not line.startswith(dropped))
         with pytest.raises(ProvisionError) as error:
-            _assert_frr_lifeline(_target("isp-pe1"), "! only a comment\n")
+            _assert_srl_lifeline(_target("isp-pe1"), config)
         assert "isp-pe1" in str(error.value)
 
-    def test_a_router_running_no_bgp_is_still_allowed(self) -> None:
-        """`hostname` rather than `router bgp` is the marker on purpose.
+    def test_a_comment_naming_mgmt0_does_not_satisfy_it(self) -> None:
+        """The needle is a `set` command, so prose about the lifeline is not the lifeline."""
+        with pytest.raises(ProvisionError):
+            _assert_srl_lifeline(_target(), "# interface mgmt0 and network-instance mgmt are the lifeline\n")
 
-        Every FRR template emits a hostname; a future FRR device that runs no BGP
-        is entirely plausible, and a guard that refuses a legitimate
-        configuration is a worse failure than the one it prevents.
-        """
-        _assert_frr_lifeline(_target("mgmt-rtr"), "hostname mgmt-rtr\nip route 0.0.0.0/0 10.0.0.1\n")
+
+class TestSrlScope:
+    def test_the_rendered_shape_passes(self) -> None:
+        _assert_srl_scope(
+            _target(),
+            "# a comment\n\nset / system name host-name isp-pe1\n"
+            + SRL_LIFELINE
+            + "set / routing-policy policy X default-action policy-result reject\n",
+        )
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "set / system aaa authentication admin-user password x",
+            "delete / interface ethernet-1/1",
+            "set / system gnmi-server admin-state disable",
+            "commit now",
+        ],
+    )
+    def test_anything_outside_the_owned_subtrees_is_refused(self, line: str) -> None:
+        with pytest.raises(ProvisionError, match="reaches outside"):
+            _assert_srl_scope(_target(), SRL_LIFELINE + line + "\n")
+
+
+class TestSrlCandidateScript:
+    def test_the_owned_subtrees_are_deleted_before_the_artifact_is_set(self) -> None:
+        """Delete-then-set in ONE candidate is what makes it a replace without churn."""
+        script = srl_candidate_script("infrahub-test-1", SRL_LIFELINE, commit=False).splitlines()
+
+        assert script[0] == "enter candidate private name infrahub-test-1"
+        assert script[1:4] == ["delete / interface *", "delete / network-instance *", "delete / routing-policy"]
+        assert script.index("set / interface mgmt0 admin-state enable") > 3
+        assert script[-2:] == ["diff flat", "discard now"]
+
+    def test_a_push_commits_and_a_comparison_does_not(self) -> None:
+        assert srl_candidate_script("n", SRL_LIFELINE, commit=True).splitlines()[-1] == "commit now"
+        assert "commit now" not in srl_candidate_script("n", SRL_LIFELINE, commit=False)
 
 
 class TestJunosScope:

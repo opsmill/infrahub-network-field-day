@@ -22,7 +22,7 @@ version: "1.0"
 #
 # An interface as a string and an address inside an English sentence. Cycle 010
 # forbade exactly that (assumption 4, SC-008); nothing read those fields at the
-# time, so nothing caught it. An FRR renderer reads them, which is what makes
+# time, so nothing caught it. The WAN router renderer reads them, which is what makes
 # it a defect rather than a wart.
 #
 # ONE RELATIONSHIP IS ENOUGH. `InterfaceLayer3` already carries `ip_addresses`,

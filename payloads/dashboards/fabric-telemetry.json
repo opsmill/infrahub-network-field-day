@@ -71,7 +71,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(otternet_intended_bgp_neighbor unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") or label_replace(frr_bgp_peer_state == 1, \"peer_address\", \"$1\", \"peer\", \"(.*)\"))) or vector(0)",
+          "expr": "count(otternet_intended_bgp_neighbor unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"))) or vector(0)",
           "instant": true,
           "range": false
         }
@@ -121,7 +121,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count((label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") or label_replace(frr_bgp_peer_state == 1, \"peer_address\", \"$1\", \"peer\", \"(.*)\")) unless on (device, peer_address) otternet_intended_bgp_neighbor) or vector(0)",
+          "expr": "count((label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\")) unless on (device, peer_address) otternet_intended_bgp_neighbor) or vector(0)",
           "instant": true,
           "range": false
         }
@@ -171,7 +171,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "otternet_intended_bgp_neighbor unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") or label_replace(frr_bgp_peer_state == 1, \"peer_address\", \"$1\", \"peer\", \"(.*)\"))",
+          "expr": "otternet_intended_bgp_neighbor unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"))",
           "instant": true,
           "range": false,
           "format": "table"
@@ -207,7 +207,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") or label_replace(frr_bgp_peer_state == 1, \"peer_address\", \"$1\", \"peer\", \"(.*)\")) unless on (device, peer_address) otternet_intended_bgp_neighbor",
+          "expr": "(label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\")) unless on (device, peer_address) otternet_intended_bgp_neighbor",
           "instant": true,
           "range": false,
           "format": "table"

@@ -291,14 +291,14 @@ prometheus-forward: ## Port-forward Prometheus to localhost:19090
 wan-build: ## Render every ISP / customer / branch config offline (no lab needed)
 	$(CURDIR)/$(VENV)/python $(CURDIR)/wan/render.py
 
-wan-deploy: ## Push rendered WAN configs and reload FRR in place
+wan-deploy: ## Push rendered WAN configs onto the SR Linux routers in place
 	$(WAN_DEPLOY)
 
 wan-bgp: ## BGP state from every WAN router
-	@for n in isp-pe1 isp-pe2 cust-acme-ce cust-globex-ce branch-rtr; do
+	@for n in isp-pe1 isp-pe2 internet-rtr cust-acme-ce cust-globex-ce branch-rtr; do
 		if docker ps --format '{{.Names}}' | grep -qx "clab-$(LAB)-$$n"; then
 			printf '\n\033[1m--- %s ---\033[0m\n' "$$n"
-			docker exec "clab-$(LAB)-$$n" vtysh -c "show bgp ipv4 unicast summary" 2>/dev/null | grep -vE '^$$' || true
+			docker exec "clab-$(LAB)-$$n" sr_cli -d "show network-instance * protocols bgp neighbor" 2>/dev/null | grep -E '^\| ' || true
 		fi
 	done
 
@@ -307,7 +307,7 @@ wan-tenants: ## What each tenant can and cannot see, from the ISP edge
 print('\n'.join('%s %s %s %s' % (t['vrf'], t['name'], t['dc']['subnet'], 'internet' if t['internet'] else 'no-internet') for t in d['tenants']))" \
 	| while read vrf name cloud net; do
 		printf '\n\033[1m--- %s (%s, cloud %s, %s) ---\033[0m\n' "$$name" "$$vrf" "$$cloud" "$$net"
-		docker exec clab-$(LAB)-isp-pe1 vtysh -c "show bgp vrf $$vrf ipv4 unicast" 2>/dev/null | tail -n +7
+		docker exec clab-$(LAB)-isp-pe1 sr_cli -d "show network-instance $$vrf ipv4 route" 2>/dev/null | grep -E '^[0-9]'
 	done
 	@printf '\n\033[1mWhat to look for\033[0m\n'
 	@printf '  every tenant: its own sites, and 10.112.240.0/24 (shared DC services)\n'
@@ -319,8 +319,8 @@ print('\n'.join('%s %s %s %s' % (t['vrf'], t['name'], t['dc']['subnet'], 'intern
 # memory and in the docs history.
 wan-customers: wan-tenants ## Alias for wan-tenants
 
-wan-console-%: ## vtysh on a WAN router, e.g. make wan-console-isp-pe1
-	docker exec -it clab-$(LAB)-$* vtysh
+wan-console-%: ## sr_cli on a WAN router, e.g. make wan-console-isp-pe1
+	docker exec -it clab-$(LAB)-$* sr_cli
 
 ## ---------------------------------------------------------------- checks ----
 

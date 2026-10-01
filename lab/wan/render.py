@@ -7,15 +7,17 @@ before anything is pushed, and CI can check it with no lab running at all.
 
     make wan-build      # render into wan/rendered/
     git diff wan/rendered/
-    make wan-deploy     # push and reload
+    make wan-deploy     # push and commit
 
-Writes wan/rendered/<node>/{frr.conf,daemons,init.sh}. The topology
-bind-mounts those paths directly, so rendering IS the source of truth for what
-a node will run -- there is no second copy to drift.
+Writes wan/rendered/<router>/config.cli for the six SR Linux routers, and
+wan/rendered/<host>/init.sh for the plain Linux hosts and the statically
+routed CE. The topology names those paths directly, so rendering IS the source
+of truth for what a node will boot -- there is no second copy to drift.
 """
 
 from __future__ import annotations
 
+import re
 import shutil
 import stat
 import sys
@@ -41,7 +43,7 @@ def env() -> Environment:
     # StrictUndefined: a typo in the data model must fail the render, not
     # silently emit a config with a blank where an IP should be. A BGP neighbor
     # line with an empty address is accepted by vtysh and never comes up.
-    # No autoescape: the output is FRR configuration, where an HTML-escaped `<`
+    # No autoescape: the output is router configuration, where an HTML-escaped `<`
     # or `&` would be a corrupt config rather than a safe one.
     return Environment(  # noqa: S701
         loader=FileSystemLoader(TEMPLATES),
@@ -60,6 +62,22 @@ def write(path: Path, content: str, executable: bool = False) -> None:
     print(f"  {path.relative_to(WAN_DIR.parent)}")
 
 
+_PORT = re.compile(r"^ethernet-(\d+)/(\d+)$")
+
+
+def port_key(name: str) -> tuple[int, int, int, str]:
+    """SR Linux's own port order: ethernet-1/2 before ethernet-1/10.
+
+    Infrahub stores no authoring order, so the order interfaces appear in is
+    defined here and repeated, identically, by `transforms/srl_config.py`. A
+    plain string sort would put ethernet-1/10 before ethernet-1/2.
+    """
+    match = _PORT.match(name)
+    if match:
+        return (0, int(match.group(1)), int(match.group(2)), name)
+    return (1, 0, 0, name)
+
+
 def render_router(
     e: Environment,
     node: str,
@@ -71,21 +89,40 @@ def render_router(
     mtu: int,
     bridges: list[dict] | None = None,
 ) -> None:
-    d = OUT / node
-    write(d / "frr.conf", e.get_template(template).render(node=node, **ctx))
-    write(d / "daemons", e.get_template("daemons.j2").render(node=node))
-    write(
-        d / "init.sh",
-        e.get_template("init.sh.j2").render(
-            node=node,
-            interfaces=interfaces,
-            vrfs=vrfs,
-            loopback=loopback,
-            mtu=mtu,
-            bridges=bridges or [],
-        ),
-        executable=True,
+    """One SR Linux router: a single file of flat `set` commands.
+
+    The file is both the ContainerLab startup configuration (a `.cli` file is
+    applied on top of the image's defaults at boot) and exactly what Infrahub's
+    `srl_config` transform renders, so the lab and the artifact cannot drift.
+    There is no init script any more: SR Linux owns its interfaces and VRFs,
+    which FRR could not.
+    """
+    # The FRR era's three files, if this checkout rendered them. Left behind
+    # they would be harmless and misleading: nothing reads them any more.
+    for leftover in ("frr.conf", "daemons", "init.sh"):
+        (OUT / node / leftover).unlink(missing_ok=True)
+    for interface in interfaces:
+        interface.setdefault("mtu", mtu)
+        interface.setdefault("enabled", True)
+    for bridge in bridges or []:
+        bridge.setdefault("mtu", mtu)
+    content = e.get_template(template).render(
+        node=node,
+        interfaces=sorted(interfaces, key=lambda i: port_key(i["name"])),
+        vrfs=vrfs,
+        loopback=loopback,
+        mtu=mtu,
+        bridges=bridges or [],
+        **ctx,
     )
+    # sr_cli tokenises quotes BEFORE it recognises a `#` comment, so a single
+    # apostrophe in a comment swallows every line up to the next quote and those
+    # lines are never applied -- with no error. Measured: the management
+    # interface, every address and half the routing policy silently missing.
+    quoted = [line for line in content.splitlines() if line.lstrip().startswith("#") and ("'" in line or '"' in line)]
+    if quoted:
+        raise SystemExit(f"{node}: a comment carries a quote character, which sr_cli would misparse: {quoted[0]!r}")
+    write(OUT / node / "config.cli", content)
 
 
 def render_host(e: Environment, host: dict, mtu: int, default_route: bool = False) -> None:
@@ -140,11 +177,11 @@ def main() -> int:  # noqa: C901 - one linear pass per node family
     # still happily bind-mount and boot.
     #
     # Deliberately NOT a wholesale rmtree of wan/rendered/. The topology
-    # bind-mounts these exact files into the running containers, and deleting
-    # and recreating them replaces the inode, which leaves every running router
-    # mounted on a file that no longer exists. Overwriting in place means a
-    # re-render is immediately visible inside the container, so `make
-    # wan-deploy` only has to tell FRR to re-read it.
+    # bind-mounts the hosts' init scripts into running containers, and deleting
+    # and recreating them replaces the inode, which leaves every running host
+    # mounted on a file that no longer exists. Overwriting in place keeps them
+    # current. The routers' config.cli is read once, at boot; after that
+    # `make wan-deploy` is what makes a running router match it.
     expected = {isp["edge"]["node"], isp["core"]["node"], branch["router"]["node"]}
     expected.update(h["node"] for h in branch["hosts"])
     if "internet" in isp:
@@ -182,7 +219,7 @@ def main() -> int:  # noqa: C901 - one linear pass per node family
     render_router(
         e,
         isp["edge"]["node"],
-        "isp-edge.frr.conf.j2",
+        "isp-edge.srl.j2",
         {"isp": isp, "tenants": tenants},
         interfaces=[
             {
@@ -224,7 +261,7 @@ def main() -> int:  # noqa: C901 - one linear pass per node family
     render_router(
         e,
         isp["core"]["node"],
-        "isp-core.frr.conf.j2",
+        "isp-core.srl.j2",
         {"isp": isp, "tenants": tenants},
         interfaces=core_interfaces,
         vrfs=[],
@@ -238,7 +275,7 @@ def main() -> int:  # noqa: C901 - one linear pass per node family
         render_router(
             e,
             net["router"],
-            "internet-rtr.frr.conf.j2",
+            "internet-rtr.srl.j2",
             {"isp": isp},
             interfaces=[
                 {
@@ -262,7 +299,7 @@ def main() -> int:  # noqa: C901 - one linear pass per node family
                 render_router(
                     e,
                     site["ce"]["node"],
-                    "customer-ce.frr.conf.j2",
+                    "customer-ce.srl.j2",
                     {"isp": isp, "tenant": t, "site": site},
                     interfaces=[
                         {
@@ -298,13 +335,14 @@ def main() -> int:  # noqa: C901 - one linear pass per node family
             render_host(e, host, mtu)
 
     # ---- branch ----
-    # The LAN side is a bridge with every branch-facing port enslaved to it, so
-    # the site behaves like one switched segment rather than a set of /30s.
+    # The LAN side is a mac-vrf with every branch-facing port bridged into it
+    # and an IRB routing it, so the site behaves like one switched segment
+    # rather than a set of /30s.
     rtr = branch["router"]
     render_router(
         e,
         rtr["node"],
-        "branch-router.frr.conf.j2",
+        "branch-router.srl.j2",
         {"branch": branch},
         interfaces=[
             {"name": rtr["dc_interface"], "address": rtr["dc_address"], "vrf": None, "bridge": None},
@@ -313,7 +351,7 @@ def main() -> int:  # noqa: C901 - one linear pass per node family
                 for name in rtr["lan_interfaces"]
             ],
         ],
-        bridges=[{"name": rtr["lan_bridge"], "address": rtr["lan_address"]}],
+        bridges=[{"name": rtr["lan_bridge"], "irb": rtr["lan_irb"], "address": rtr["lan_address"]}],
         vrfs=[],
         loopback=branch["loopback"],
         mtu=mtu,

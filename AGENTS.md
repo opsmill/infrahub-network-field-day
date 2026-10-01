@@ -56,7 +56,7 @@ Key docs to read before larger changes:
 - Data model hierarchy: `NetworkFabric` -> `NetworkPod` -> `LocationRack` ->
   `DcimFabricSwitch` -> `DcimInterface` / `NetworkLink` / `IpamIPAddress`.
 - **Four device kinds exist, and they are siblings.** `DcimFabricSwitch` is
-  the fabric's EOS switches, `DcimDevice` the WAN's FRR routers,
+  the fabric's EOS switches, `DcimDevice` the WAN's SR Linux routers,
   `SecurityFirewall` the perimeter firewall, `ComputePhysicalServer` the hosts
   and Kubernetes nodes. All four inherit `DcimGenericDevice`; none inherits
   another, because Infrahub inheritance targets generics and these are nodes.
@@ -400,7 +400,7 @@ Seven things look like oversights and are not:
   first render. So the branch is dropped at the pod until a grant adds `10.70.0.0/24`.
 - **The new address field is `telemetry_address`, never `mgmt_ip`.** To the reconciler,
   `mgmt_ip` means "push over eAPI" (`reach = target.mgmt_ip or target.container`), and cycle 027
-  holds it on `DcimFabricSwitch` alone. The FRR routers, fw1 and the k3s nodes needed an address a
+  holds it on `DcimFabricSwitch` alone. The WAN routers, fw1 and the k3s nodes needed an address a
   pod can reach, and `test_deployment_inventory_targets.py` pins that the reconciler never reads
   the new one.
 - **The collector relationship is `monitoring_profiles`, not `profiles`.** Every node already has
@@ -427,9 +427,13 @@ Three measured facts about the device side:
 - **gNMI was off on every switch.** ContainerLab's boot template enables it, and provisioning's
   `rollback clean-config` removed it. It is back through `avd_custom_hostvars` and the lab's
   `group_vars`, with the golden files regenerated.
-- **FRR 10.2 to 10.5 ship no SNMP and no gNMI module** (checked on the official images), so each
-  router gets an `frr_exporter` sidecar in the lab topology. Re-platforming the WAN on SR Linux
-  is the named follow-up.
+- **The WAN routers stream over gNMI natively since the SR Linux re-platform**, and through the
+  SAME OpenConfig paths as the switches, so the series arrive under the same names and labels
+  (`bgp_neighbor_session_state_code{neighbor_address,name}`, `interface_counters_*`, `cpu_*`,
+  `memory_*`) and every fabric panel covers the WAN with no second query. Port 57400, TLS with
+  ContainerLab's per-lab self-signed `clab-profile`, so `insecure_skip_verify`; credentials are
+  `${SRL_GNMI_USERNAME}`/`${SRL_GNMI_PASSWORD}` from the same Secret. FRR 10.2-10.5 shipped no
+  SNMP and no gNMI module, which is why the `frr_exporter` sidecars existed; they are gone.
 - **The return-type generator mistypes a fragment on a generic.** `... on DcimInterface` becomes a
   literal `__typename: "DcimInterface"` that no node reports, so every endpoint parsed as the
   fieldless fallback and the link series came out empty with nothing raised. Use concrete kinds.
@@ -570,14 +574,14 @@ everything else.
 | `ServiceServerPlacement` | its generator deletes the machine and its cabling |
 | `ServiceFabricApp` | its generator returns the VIP block, if it allocated it |
 | `ServiceFabricPeering` | its generator deletes the sessions **the service recorded** |
-| `ServiceL3vpn`, `ServiceTenantCloud`, `ServiceInternetAccess` | `frr_config` renders them as though absent |
+| `ServiceL3vpn`, `ServiceTenantCloud`, `ServiceInternetAccess` | `srl_config` renders them as though absent |
 
 `decommissioning` withdraws rather than waiting, because the alternative is a window in which
 the intent is withdrawn and the router still carries the route — which is the window the state
 exists to close.
 
-**The WAN half was safe to change precisely because it is pinned.** `frr_config` is held
-byte-for-byte against `lab/wan/rendered/*/frr.conf`, and filtering a status nothing currently
+**The WAN half was safe to change precisely because it is pinned.** `srl_config` is held
+byte-for-byte against `lab/wan/rendered/*/config.cli`, and filtering a status nothing currently
 carries is a no-op — so the existing assertions proved the change altered nothing, and a new test
 holds a decommissioned service's output against the *removal* of that service rather than merely
 asserting it changed.
@@ -679,22 +683,55 @@ to know before changing it:
 Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
 `containerlab_topology`, `cv_workspace_submission_webhook_payload`, `crossplane_fabric_peering`,
-`crossplane_fabric_app`, `frr_config`, `junos_config`, and `telemetry_collector_config`.
+`crossplane_fabric_app`, `srl_config`, `junos_config`, and `telemetry_collector_config`.
 
-`frr_config` renders the WAN's FRR configuration — the two ISP provider-edge routers, the
+`srl_config` renders the WAN's SR Linux configuration — the two ISP provider-edge routers, the
 internet router, the two customer edges and the branch router — as one `text/plain` artifact per
-device, targeting the `frr_routers` group. It is the half of the lab PyAVD does not cover, and
-it is held byte-for-byte against `lab/wan/rendered/*/frr.conf` by
-`tests/unit/test_frr_config.py`. Two things to know before changing it:
+device (`SR Linux Configuration`), targeting the `srl_routers` group. It is the half of the lab
+PyAVD does not cover, and it is held byte-for-byte against `lab/wan/rendered/*/config.cli` by
+`tests/unit/test_srl_config.py` — files that were BOOTED on a six-router prototype and passed
+the WAN reachability matrix. It replaced `frr_config`. Things to know before changing it:
 
 - It reads the **service** layer as well as the technical one. A provider edge's per-tenant
   import route-map is assembled from `ServiceL3vpn.dc_service_prefixes`,
   `ServiceTenantCloud.prefix` and whether a `ServiceInternetAccess` exists. That is the
   documented exception to "renderers read technical objects" — the provider edge's policy *is*
   the service intent.
-- Its templates are ported from `lab/wan/templates/` with exactly one line changed, the
-  provenance header. Every comment is deliberate; they are most of the teaching value of those
-  configs.
+- Its templates are copies of `lab/wan/templates/*.srl.j2` with exactly one line changed, the
+  provenance header, and `test_the_templates_are_the_labs_with_one_line_changed` holds every
+  line. Every comment is deliberate; they are most of the teaching value of those configs.
+- **The output is flat `set` commands, and it is three things at once**: the ContainerLab
+  startup configuration (a `.cli` file applied on top of the image defaults), what the
+  reconciler loads to compare, and what it commits. It owns `/interface`, `/network-instance`
+  and `/routing-policy` — a push deletes all three and re-sets them in ONE candidate, so it is a
+  replace that applies only the net change — and never `/system`, where the credentials and the
+  gNMI server live. So the management interface and VRF are IN the artifact, and the lifeline
+  refuses one without them.
+- **No quote characters in a comment, ever.** sr_cli tokenises quotes before it recognises `#`,
+  so one apostrophe swallows every line up to the next quote and those lines are never applied
+  — measured: a router booted with no management interface, no addresses and half its policy,
+  and nothing errored. `assert_comments_unquoted` refuses such a render, and `render.py` too.
+- **Route leaking needs BOTH halves, and each half alone fails silently.** An inter-instance
+  import policy leaks nothing unless the SOURCE instance marks routes leakable with an
+  inter-instance export policy (`LEAKABLE`) — measured: every session up, every tenant VRF
+  empty. And a leaked route reaches the route table, not BGP, so nothing advertises it until
+  `bgp rib-management table ipv4-unicast route-table-import` takes it in — measured: the core
+  learned a loopback and nothing else. Once `rib-management` is configured it is the ONLY way a
+  non-BGP route enters BGP, so the loopback and the static sites are named there too: the
+  `BGP-TABLE-*` policies are exactly FRR's `network`, `redistribute static` and `import vrf`.
+- **It renders interfaces, which `frr_config` never did** — a boot script used to own them. A
+  provider-edge port's VRF is derived (the port whose subnet holds a site's attachment
+  address), and a `cust` port whose tenant is withdrawn is rendered SHUT, never left to fall
+  into the default instance with the tenant's subnet in the provider table.
+- **The routers' interfaces carry native names** (`ethernet-1/N`, `lo0`, `irb0`), the precedent
+  the fabric set with `Ethernet1` against ContainerLab's `eth1`. A graph loaded before the
+  re-platform holds `eth*`/`lo`, and an object load cannot rename — the HFID is `[device, name]`,
+  so it would create a second interface beside each old one, which `srl_config` would render
+  under a name SR Linux rejects. `scripts/migrate_wan_srlinux.py` renames in place first (and
+  renames the `frr_routers` group, keeping its members); `--phase post` then removes the FRR
+  platform, device type, manufacturer and artifacts once nothing references them. One thing it
+  measured: **on a branch, a `name__value` filter also matched a node's PRE-rename value** —
+  `frr_routers` returned the renamed group — so the script re-checks every name it filters on.
 
 `junos_config` renders the perimeter firewall's Junos configuration as one `text/plain` artifact
 targeting the `junos_firewalls` group. Three things to know:
@@ -969,15 +1006,17 @@ coroutine. `test_the_nornir_layer_never_touches_infrahub` asserts that by walkin
 imports rather than trusting the comment. The firewall is never parallelised — its comparison
 takes an exclusive lock, so it runs alone after the fabric.
 
-**Read `deployment/normalise.py` before changing anything in this package.** Two of the three
-device families report a difference against an artifact the device already matches:
+**Read `deployment/normalise.py` before changing anything in this package.** One of the three
+device families reports a difference against an artifact the device already matches:
 
-- **FRR** reports `neighbor <addr> activate`, `service integrated-vtysh-config` and `line vty`
-  every time — the artifact states them and `show running-config` never echoes them back.
 - **Junos** reports changed lines every time: zone-pair ordering and comment round-tripping.
+- **SR Linux does not**, which is why its normaliser suppresses nothing: the comparison loads
+  the artifact as a replace in a private candidate and asks for `diff flat`, so the router
+  compares intent against running itself, and all six printed nothing but the status line
+  after boot. (FRR, before it, reported three lines on every in-sync router.)
 
-Read raw, that means "differs," and the reconciler would replace the configuration of every FRR
-router and the firewall on every cycle forever while logging success. `differs` is therefore computed
+Read raw, Junos's output means "differs," and the reconciler would replace the firewall's
+configuration on every cycle forever while logging success. `differs` is therefore computed
 from normalised output, never raw text, and the rules are an **allowlist** — anything
 unrecognised counts as a difference, so a gap causes an unnecessary push rather than a missed
 one. `tests/unit/test_deployment_normalise.py` holds real captured device output for both the
@@ -1001,19 +1040,23 @@ Three things worth knowing before debugging it:
   agree, and it is hand-maintained. `SecurityZone` on a firewall interface became optional in
   `schemas/security/security.yml` to allow this: a deliberate change to the upstream contract,
   because a management interface is in no zone.
-- **`frr-reload.py --test` returns `0` whether or not the configuration matches**, and its
-  output is `Lines To Add` / `Lines To Delete` sections rather than `+`/`-` prefixes. A parser
-  written against diff prefixes reports "no differences" for a device that has genuinely
-  changed.
-- **An empty FRR artifact is an instruction to erase the router**, because the reload applies
-  the difference between the running configuration and the file. Artifact generation is
-  asynchronous and an unrendered artifact exists, reports `Ready`, and is empty — so a
-  provision run at the wrong moment would wipe all six WAN routers and report success. EOS was
-  already protected by `_assert_eos_lifeline` and Junos by the shape of `load replace`, which
-  only touches hierarchies the file tags; FRR had nothing until `_assert_frr_lifeline`. It keys
-  on `hostname`, which every FRR template emits, rather than on `router bgp` — a future FRR
-  device running no BGP is plausible, and a guard that refuses a legitimate configuration is a
-  worse failure than the one it prevents.
+- **sr_cli stops at the first error, commits nothing, and leaves its candidate behind.** A
+  parse error or a refused commit exits 1 with running untouched — measured both — but the
+  named candidate survives the session and SR Linux holds ten. The pusher and comparator clear
+  it on failure and `sweep_srl` clears any `infrahub-*` leftovers each cycle. An aborted
+  comparison prints NO diff, so a non-zero exit raises rather than reading as in sync.
+- **An empty SR Linux artifact is an instruction to erase the router**, because the push deletes
+  the three owned subtrees before setting the file — management interface included. Artifact
+  generation is asynchronous and an unrendered artifact exists, reports `Ready`, and is empty.
+  `_assert_srl_lifeline` refuses any artifact lacking a `set / interface mgmt0` and a
+  `set / network-instance mgmt` command, the same shape as `_assert_eos_lifeline`; `_assert_srl_scope`
+  refuses any line outside the three subtrees (the host name excepted), so a renderer bug
+  cannot reach `/system`.
+- **The routers are pushed with `docker exec sr_cli`, not gNMI Set or JSON-RPC**: only sr_cli
+  takes the artifact exactly as rendered, and it needs no credential and no address, which
+  keeps `mgmt_ip` meaning eAPI and the collector's `telemetry_address` out of the reconciler.
+  Nothing is saved to startup; a restarted router boots its ContainerLab startup file and the
+  next cycle converges it, as FRR did.
 - **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load replace` does
   nothing, and `show | compare` comes back empty — which reads exactly like "in sync."
 
@@ -1244,10 +1287,10 @@ renders a topology from Infrahub. The fabric comes up unconfigured on purpose:
 the cEOS nodes are given no `startup-config`, only `CLAB_MGMT_VRF` and a
 management address, so they boot reachable and empty. The lab resolves to
 `lab/` in the **main** checkout, even from a git worktree, because there is one
-lab and its runtime state (`clab-otternet/`, the kubeconfigs, the FRR socket
-directories) lives under its directory; set `OTTERNET_LAB_DIR` to override.
-It renders `lab/wan/render.py` first, because every FRR router bind-mounts that
-gitignored output and ContainerLab refuses a missing bind path.
+lab and its runtime state (`clab-otternet/`, the kubeconfigs) lives under its
+directory; set `OTTERNET_LAB_DIR` to override. It renders `lab/wan/render.py`
+first, because every SR Linux router boots from that gitignored output
+(`wan/rendered/<node>/config.cli`) and ContainerLab refuses a missing file.
 
 `invoke provision` then makes each device match its artifact. Three families,
 three routes in, because the lab gives them three different front doors:
@@ -1255,15 +1298,15 @@ three routes in, because the lab gives them three different front doors:
 | Kind | Artifact | Route | Mechanism |
 | --- | --- | --- | --- |
 | `DcimFabricSwitch` | AVD EOS Configuration | `mgmt_ip`, eAPI | config session + `rollback clean-config` |
-| `DcimDevice` | FRR Configuration | container name | `frr-reload.py --reload` |
+| `DcimDevice` | SR Linux Configuration | container name | `sr_cli` candidate: delete owned subtrees, set, commit |
 | `SecurityFirewall` | Junos Configuration | container name | `load replace` + `commit confirmed` |
 
 **The switches are reached by address and the rest by name, deliberately.**
 Infrahub calls a switch `leaf-otternet-pod1-1-1` and ContainerLab calls the same box
 `k8s-leaf1`; there is no renaming layer, so names cannot match them. Their
-`mgmt_ip` does equal the lab's management address, so eAPI needs no name. The FRR
-routers and the firewall have no address modelled at all, but their Infrahub
-names *are* their ContainerLab node names.
+`mgmt_ip` does equal the lab's management address, so eAPI needs no name. The SR
+Linux routers and the firewall are not pushed by address (theirs is the
+collector's), and their Infrahub names *are* their ContainerLab node names.
 
 Every push is a replace, not a merge, so deleting something from the model
 deletes it from the device. Three things are worth knowing before changing
@@ -1422,7 +1465,7 @@ pyAVD never renders, and they are deliberately absent from `ROLE_TO_AVD_TYPE` (t
 no `firewall` value at all: a firewall is a `SecurityFirewall`):
 
 - `get_avd_type` raises `ValueError` for an unmapped role. That loud failure is the
-  wanted behaviour here; mapping one would instead let a firewall or an FRR router be
+  wanted behaviour here; mapping one would instead let a firewall or an SR Linux router be
   rendered as an EOS switch, which fails silently.
 - Devices with these roles must never join the `avd_devices` group, which is the only
   path into the AVD hostvar generator. Membership is set in one place,
@@ -1482,7 +1525,7 @@ uv run invoke lab                       # deploy lab/'s topology with management
 uv run invoke lab --destroy             # tear it down
 uv run invoke provision                 # push every rendered artifact onto the running devices
 uv run invoke provision --dry-run       # ... showing what would be pushed, changing nothing
-uv run invoke provision --kind eos      # ... one family only: eos, frr, or junos
+uv run invoke provision --kind eos      # ... one family only: eos, srl, or junos
 uv run invoke reconcile --converge      # cycle until every device is confirmed (the bootstrap path)
 uv run invoke reconcile --once          # a single reconcile cycle
 uv run invoke reconcile --dry-run --branch X  # report differences, change nothing

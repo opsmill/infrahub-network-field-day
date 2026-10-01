@@ -1,0 +1,116 @@
+# Rendered by wan/render.py for {{ node }} -- do not edit.
+#
+# ISP DC-facing PE, AS {{ isp.asn }}. Default network instance only -- plain transit.
+#
+# Customer VRFs terminate on isp-pe1, so by the time routes reach here they are
+# ordinary unicast routes in one table. That is the trade for not running MPLS:
+# one hop of the provider carries customer traffic without per-customer
+# separation, which is honest for a lab and would not be acceptable in a real
+# carrier core. See docs/design.md, The WAN.
+{% include "_management.srl.j2" %}
+{% include "_interfaces.srl.j2" %}
+#
+# ---- what we accept from the datacentre --------------------------------
+# The DC is a peer, not an authority: accept the service prefixes it is
+# supposed to announce and nothing else. A misconfigured border leaf cannot
+# black-hole the provider.
+{% for p in isp.dc_service_prefixes %}
+set / routing-policy prefix-set PL-DC-IN prefix {{ p }} mask-length-range exact
+{% endfor %}
+{% for t in tenants %}
+set / routing-policy prefix-set PL-DC-IN prefix {{ t.dc.subnet }} mask-length-range exact
+{% endfor %}
+set / routing-policy policy RM-DC-IN statement 10 match prefix prefix-set PL-DC-IN
+set / routing-policy policy RM-DC-IN statement 10 action policy-result accept
+set / routing-policy policy RM-DC-IN default-action policy-result reject
+#
+# ---- what we announce to the datacentre --------------------------------
+# Customer prefixes only. The own infrastructure addresses of the provider are
+# not the business of the DC.
+{% for t in tenants %}
+{% for site in t.sites %}
+# {{ t.name }}/{{ site.name }}
+set / routing-policy prefix-set PL-DC-OUT prefix {{ site.lan }} mask-length-range exact
+{% endfor %}
+{% endfor %}
+set / routing-policy policy RM-DC-OUT statement 10 match prefix prefix-set PL-DC-OUT
+set / routing-policy policy RM-DC-OUT statement 10 action policy-result accept
+set / routing-policy policy RM-DC-OUT default-action policy-result reject
+{% if isp.internet is defined %}
+#
+# ---- the internet ------------------------------------------------------
+# Accept a default route, plus the one prefix that is actually out there.
+#
+# The specific prefix was a ContainerLab artefact under FRR, where a kernel
+# default via the management interface beat a BGP-learned one. SR Linux keeps
+# management in its own network instance, so that cannot happen here; the
+# prefix is still accepted because removing it would change what the provider
+# carries, and this re-platform changes no routing behaviour.
+#
+# The product story is unaffected: tenants still get, or do not get, a DEFAULT
+# route, and that is what decides whether they can reach any of this.
+set / routing-policy prefix-set PL-INTERNET-IN prefix 0.0.0.0/0 mask-length-range exact
+set / routing-policy prefix-set PL-INTERNET-IN prefix {{ isp.internet.lan }} mask-length-range exact
+set / routing-policy policy RM-INTERNET-IN statement 10 match prefix prefix-set PL-INTERNET-IN
+set / routing-policy policy RM-INTERNET-IN statement 10 action policy-result accept
+set / routing-policy policy RM-INTERNET-IN default-action policy-result reject
+#
+# Announce only the sites of tenants that actually bought internet access.
+# This is the outbound half of the product: the prefixes of globex are in the
+# table of this router and are deliberately not advertised, so nothing on the
+# internet has a route back to it even by accident.
+{% set ns2 = namespace(any=false) %}
+{% for t in tenants if t.internet %}
+{% for site in t.sites %}
+# {{ t.name }}/{{ site.name }}
+set / routing-policy prefix-set PL-INTERNET-OUT prefix {{ site.lan }} mask-length-range exact
+{% set ns2.any = true %}
+{% endfor %}
+{% endfor %}
+{% if ns2.any %}
+set / routing-policy policy RM-INTERNET-OUT statement 10 match prefix prefix-set PL-INTERNET-OUT
+set / routing-policy policy RM-INTERNET-OUT statement 10 action policy-result accept
+{% else %}
+# No tenant buys internet access, so nothing is announced: the policy is its
+# default action alone.
+{% endif %}
+set / routing-policy policy RM-INTERNET-OUT default-action policy-result reject
+{% endif %}
+#
+# ---- what the edge is told ----------------------------------------------
+# Our loopback, plus everything BGP has learned -- the services and clouds of
+# the DC, and the default from the internet.
+set / routing-policy prefix-set PL-LOOPBACK prefix {{ isp.core.loopback }}/32 mask-length-range exact
+set / routing-policy policy EXPORT-TO-EDGE statement 10 match prefix prefix-set PL-LOOPBACK
+set / routing-policy policy EXPORT-TO-EDGE statement 10 action policy-result accept
+set / routing-policy policy EXPORT-TO-EDGE statement 20 match protocol bgp
+set / routing-policy policy EXPORT-TO-EDGE statement 20 action policy-result accept
+set / routing-policy policy EXPORT-TO-EDGE default-action policy-result reject
+#
+set / network-instance default protocols bgp autonomous-system {{ isp.asn }}
+set / network-instance default protocols bgp router-id {{ isp.core.loopback }}
+set / network-instance default protocols bgp ebgp-default-policy import-reject-all false
+set / network-instance default protocols bgp ebgp-default-policy export-reject-all false
+set / network-instance default protocols bgp afi-safi ipv4-unicast admin-state enable
+set / network-instance default protocols bgp group core peer-as {{ isp.asn }}
+set / network-instance default protocols bgp neighbor {{ isp.core.core.peer }} peer-group core
+set / network-instance default protocols bgp neighbor {{ isp.core.core.peer }} description "isp-pe1 (edge)"
+{% if isp.internet is defined %}
+# next-hop-self towards pe1 covers the default route too, so the edge PE
+# resolves it via the core link rather than via an internet address it has no
+# route to.
+{% endif %}
+set / network-instance default protocols bgp neighbor {{ isp.core.core.peer }} next-hop-self true
+set / network-instance default protocols bgp neighbor {{ isp.core.core.peer }} export-policy [ EXPORT-TO-EDGE ]
+set / network-instance default protocols bgp group dc peer-as {{ isp.core.dc.peer_asn }}
+set / network-instance default protocols bgp neighbor {{ isp.core.dc.peer }} peer-group dc
+set / network-instance default protocols bgp neighbor {{ isp.core.dc.peer }} description "border-leaf1 (VRF WAN)"
+set / network-instance default protocols bgp neighbor {{ isp.core.dc.peer }} import-policy [ RM-DC-IN ]
+set / network-instance default protocols bgp neighbor {{ isp.core.dc.peer }} export-policy [ RM-DC-OUT ]
+{% if isp.internet is defined %}
+set / network-instance default protocols bgp group internet peer-as {{ isp.internet.asn }}
+set / network-instance default protocols bgp neighbor {{ isp.internet.peering.peer }} peer-group internet
+set / network-instance default protocols bgp neighbor {{ isp.internet.peering.peer }} description "{{ isp.internet.router }} (the internet)"
+set / network-instance default protocols bgp neighbor {{ isp.internet.peering.peer }} import-policy [ RM-INTERNET-IN ]
+set / network-instance default protocols bgp neighbor {{ isp.internet.peering.peer }} export-policy [ RM-INTERNET-OUT ]
+{% endif %}

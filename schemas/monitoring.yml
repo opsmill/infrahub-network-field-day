@@ -150,7 +150,7 @@ nodes:
         identifier: "monitoring_collector__profiles"
         order_weight: 900
       # GROUPS, NOT A DEVICE KIND. The four device kinds are siblings under
-      # DcimGenericDevice; a relationship to DcimDevice would reach the FRR
+      # DcimGenericDevice; a relationship to DcimDevice would reach the WAN
       # routers and miss the fabric, and nothing would say so.
       #
       # MANDATORY MANY, because Backstage's form builder admits cardinality-one

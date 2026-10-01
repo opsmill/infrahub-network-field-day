@@ -122,29 +122,32 @@ def test_the_lab_kube_prometheus_stack_is_never_applied_beside_infrahubs() -> No
     assert '"OTTERNET_SKIP_OBSERVABILITY": "1"' in source, "invoke cluster no longer sets OTTERNET_SKIP_OBSERVABILITY"
 
 
-def test_every_frr_socket_bind_source_is_created_before_deploy(tmp_path: Path) -> None:
-    """ContainerLab refuses the whole topology over a missing bind path.
+def test_every_sr_linux_startup_config_is_one_the_renderer_produces() -> None:
+    """ContainerLab refuses the whole topology over a missing startup-config.
 
-    The first bootstrap with the frr_exporter sidecars died at `invoke lab` on
-    exactly that: `Failed to verify bind path: stat .../wan/run/branch-rtr`.
+    `lab/wan/rendered/` is gitignored, so every file a router boots from has to be
+    one `wan/render.py` writes -- `invoke lab` renders before it deploys. A node
+    renamed in the topology but not in `tenants.yml` would otherwise be found at
+    deploy time, with every other node already refused alongside it.
     """
-    topology = tmp_path / "otternet.clab.yml"
-    topology.write_text(
-        yaml.safe_dump(
-            {
-                "topology": {
-                    "nodes": {
-                        "isp-pe1": {"binds": ["wan/run/isp-pe1:/var/run/frr", "wan/rendered/x:/etc/frr/x:ro"]},
-                        "isp-pe1-exporter": {"binds": ["wan/run/isp-pe1:/var/run/frr"]},
-                        "host": {},
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    created = tasks._ensure_socket_directories(tmp_path, topology)
-    assert created == [tmp_path / "wan/run/isp-pe1"]
-    assert (tmp_path / "wan/run/isp-pe1").is_dir()
-    assert not (tmp_path / "wan/rendered").exists(), "only socket directories are created"
-    assert tasks._ensure_socket_directories(tmp_path, topology) == []
+    import subprocess  # noqa: S404 - one fixed-argv call to the committed renderer
+    import sys
+
+    lab = Path(__file__).resolve().parents[2] / "lab"
+    subprocess.run([sys.executable, str(lab / "wan/render.py")], check=True, capture_output=True)  # noqa: S603
+    nodes = yaml.safe_load((lab / "otternet.clab.yml").read_text(encoding="utf-8"))["topology"]["nodes"]
+    routers = {name: node for name, node in nodes.items() if (node or {}).get("kind") == "nokia_srlinux"}
+
+    assert set(routers) == {"isp-pe1", "isp-pe2", "internet-rtr", "cust-acme-ce", "cust-globex-ce", "branch-rtr"}
+    for name, node in routers.items():
+        assert node["startup-config"] == f"wan/rendered/{name}/config.cli"
+        assert (lab / node["startup-config"]).is_file(), f"{name}: render.py writes no {node['startup-config']}"
+
+
+def test_no_node_binds_the_retired_frr_socket_directories() -> None:
+    """The frr_exporter sidecars and their `wan/run/<router>` binds went with FRR."""
+    lab = Path(__file__).resolve().parents[2] / "lab"
+    nodes = yaml.safe_load((lab / "otternet.clab.yml").read_text(encoding="utf-8"))["topology"]["nodes"]
+    binds = [bind for node in nodes.values() for bind in (node or {}).get("binds", []) or []]
+    assert not [bind for bind in binds if str(bind).startswith("wan/run/")]
+    assert not [name for name in nodes if name.endswith("-exporter")]

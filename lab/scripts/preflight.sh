@@ -50,8 +50,8 @@ else
      download one from https://support.juniper.net/support/downloads/?p=vsrxeval"
 fi
 
-FRR_IMAGE="${OTTERNET_FRR_IMAGE:-quay.io/frrouting/frr:10.2.1}"
-for img in rancher/k3s:v1.31.3-k3s1 ghcr.io/srl-labs/network-multitool:v0.10.0 "$FRR_IMAGE"; do
+SRL_IMAGE="${OTTERNET_SRL_IMAGE:-ghcr.io/nokia/srlinux:26.7.2}"
+for img in rancher/k3s:v1.31.3-k3s1 ghcr.io/srl-labs/network-multitool:v0.10.0 "$SRL_IMAGE"; do
     if docker image inspect "$img" >/dev/null 2>&1; then ok "$img"; else warn "$img not pulled yet (deploy will fetch it)"; fi
 done
 
@@ -83,11 +83,11 @@ done
 # router starts with no config, and the failure looks like a broken image.
 printf '\nWAN configs\n'
 if [[ -d "$LAB_DIR/wan/rendered" ]]; then
-    n=$(find "$LAB_DIR/wan/rendered" -name frr.conf 2>/dev/null | wc -l)
+    n=$(find "$LAB_DIR/wan/rendered" -name config.cli 2>/dev/null | wc -l)
     if (( n > 0 )); then
-        ok "$n FRR configs rendered in wan/rendered/"
+        ok "$n SR Linux configs rendered in wan/rendered/"
     else
-        bad "wan/rendered/ exists but has no FRR configs -- run: make wan-build"
+        bad "wan/rendered/ exists but has no SR Linux configs -- run: make wan-build"
     fi
 else
     bad "no WAN configs rendered -- run: make wan-build"

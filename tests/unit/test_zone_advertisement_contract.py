@@ -6,7 +6,7 @@ instance — the same choice `tests/unit/test_fw_static_route_objects.py` makes.
 Two of these tests are worth more than the rest and both are negative:
 
 * `test_the_advertising_device_peers_the_fabric_switch_kind` — `DcimDevice` in
-  this repository is the WAN's FRR routers. A relationship peered there would
+  this repository is the WAN's routers. A relationship peered there would
   pass `infrahubctl schema check`, load cleanly, and resolve to nothing, and the
   failure would surface a cycle later as "the generator never finds a device".
 * `test_the_tenant_cloud_zones_advertise_nothing` — populating `acme-cloud`
@@ -135,7 +135,7 @@ def test_the_advertising_device_relationship_exists_and_is_singular() -> None:
 def test_the_advertising_device_peers_the_fabric_switch_kind() -> None:
     """FR-061, and the most valuable assertion in this cycle.
 
-    `DcimDevice` in this repository is the WAN's FRR routers. A relationship
+    `DcimDevice` in this repository is the WAN's routers. A relationship
     peered there passes `infrahubctl schema check`, loads cleanly, renders no
     error and resolves to nothing -- AGENTS.md says so outright: "A query naming
     `DcimDevice` does not see a fabric switch and reports nothing." The failure

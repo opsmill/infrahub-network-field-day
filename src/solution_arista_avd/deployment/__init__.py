@@ -11,9 +11,10 @@ each device was *confirmed to match*.
     state      read and write the Deployment kinds
     reconcile  the cycle
 
-**Read `normalise` before changing anything here.** Two of the three device
-families report a non-empty difference against an artifact the device already
-matches, so "the device reported a diff" is not the same as "the device needs
-pushing". Treating them as the same replaces the configuration of every FRR
-router and the firewall on every cycle, forever, while logging success.
+**Read `normalise` before changing anything here.** One of the three device
+families -- the firewall -- reports a non-empty difference against an artifact
+the device already matches, so "the device reported a diff" is not the same as
+"the device needs pushing". Treating them as the same replaces the firewall's
+configuration on every cycle, forever, while logging success. FRR did the same
+until the WAN moved to SR Linux, whose own `diff flat` is empty when in sync.
 """

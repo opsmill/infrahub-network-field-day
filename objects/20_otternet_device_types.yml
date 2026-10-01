@@ -37,10 +37,11 @@ spec:
     # node's kind and image from the platform, so a device without one cannot
     # render into a topology at all -- which is half the reason that artifact
     # covers 14 of the lab's 30 nodes.
-    - name: "FRR Container Router"
-      manufacturer: FRRouting
-      platform: FRR
-      description: "FRRouting container; the WAN's PE, P, internet and CE routers"
+    - name: "SR Linux IXR-D2L"
+      manufacturer: Nokia
+      platform: SRLinux
+      description: "Nokia SR Linux (ContainerLab type ixr-d2l); the WAN's PE, P, internet and CE routers"
+      part_number: 7220 IXR-D2L
       height: 1
       full_depth: false
     - name: "Juniper vSRX"
@@ -52,7 +53,7 @@ spec:
       full_depth: false
     # cust-acme-dr-ce is a customer edge that runs no routing protocol -- acme's
     # DR site attaches statically -- so the lab gives it a plain multitool
-    # container rather than FRR. Typing it as an FRR router would be a tidier
+    # container rather than SR Linux. Typing it as a router would be a tidier
     # table and a false one.
     - name: "Linux Container"
       manufacturer: Generic

@@ -40,7 +40,7 @@ spec:
               kind: LocationSite
               data:
                 name: provider-edge
-            interface: ["isp-pe1", "eth2"]
+            interface: ["isp-pe1", "ethernet-1/2"]
           - side: z
             name: cust-acme-ce-eth1
             status: active
@@ -50,7 +50,7 @@ spec:
               data:
                 name: acme-hq
 
-            interface: ["cust-acme-ce", "eth1"]
+            interface: ["cust-acme-ce", "ethernet-1/1"]
     - circuit_id: acme-dr
       description: "acme DR attachment; statically routed, no routing protocol at all"
       circuit_type: mpls
@@ -68,7 +68,7 @@ spec:
               kind: LocationSite
               data:
                 name: provider-edge
-            interface: ["isp-pe1", "eth4"]
+            interface: ["isp-pe1", "ethernet-1/4"]
           - side: z
             name: cust-acme-dr-ce-eth1
             status: active
@@ -96,7 +96,7 @@ spec:
               kind: LocationSite
               data:
                 name: provider-edge
-            interface: ["isp-pe1", "eth3"]
+            interface: ["isp-pe1", "ethernet-1/3"]
           - side: z
             name: cust-globex-ce-eth1
             status: active
@@ -106,7 +106,7 @@ spec:
               data:
                 name: globex-hq
 
-            interface: ["cust-globex-ce", "eth1"]
+            interface: ["cust-globex-ce", "ethernet-1/1"]
     - circuit_id: isp-to-internet
       description: "Provider transit to AS 64500"
       circuit_type: internet_access
@@ -123,7 +123,7 @@ spec:
               kind: LocationSite
               data:
                 name: provider-edge
-            interface: ["isp-pe2", "eth3"]
+            interface: ["isp-pe2", "ethernet-1/3"]
           - side: z
             name: internet-rtr-eth1
             status: active
@@ -133,7 +133,7 @@ spec:
               data:
                 name: internet-edge
 
-            interface: ["internet-rtr", "eth1"]
+            interface: ["internet-rtr", "ethernet-1/1"]
 ---
 apiVersion: infrahub.app/v1
 kind: Object

@@ -244,11 +244,12 @@ a colon-bearing scalar is force-quoted — the same approach as the peering tran
 **It refuses an incomplete model**: no namespace, exposed with no VIP block, neither chart nor
 manifests, or an attachment whose content is not parseable YAML.
 
-### FrrConfig
+### SrlConfig
 
-Renders the WAN's FRR configuration: the two ISP provider-edge routers, the internet router,
-the two customer edges and the branch router. One `text/plain` artifact per device, targeting
-the `frr_routers` group.
+Renders the WAN's SR Linux configuration: the two ISP provider-edge routers, the internet
+router, the two customer edges and the branch router. One `text/plain` artifact per device,
+`SR Linux Configuration`, targeting the `srl_routers` group. It replaced `FrrConfig` when the
+WAN moved from FRR containers to Nokia SR Linux.
 
 This is the half of the lab PyAVD does not cover. The fabric renders through
 [AvdEosConfigTransform](#avdeosconfigtransform); these six routers render here, from the same
@@ -256,37 +257,55 @@ graph, with the same property — change the model, re-render, review the diff.
 
 **Hybrid Python + Jinja2.** Python assembles a per-device context from one GraphQL query and
 selects one of five templates from the device's `role`; the templates under
-`transforms/templates/frr/` are ported from `lab/wan/templates/` with exactly one line
-changed, the provenance header. `tests/unit/test_frr_config.py` holds the output byte-for-byte
-against `lab/wan/rendered/*/frr.conf` — 448 lines the lab actually runs.
+`transforms/templates/srl/` are copies of `lab/wan/templates/*.srl.j2` with exactly one line
+changed, the provenance header. `tests/unit/test_srl_config.py` holds the output byte-for-byte
+against `lab/wan/rendered/*/config.cli` — the files a six-router prototype booted from and
+passed the WAN reachability matrix with.
+
+**The output is flat `set` commands, and it is a replace.** The same file is the ContainerLab
+startup configuration, what the reconciler loads to compare, and what it commits. The push
+deletes `/interface`, `/network-instance` and `/routing-policy` and re-sets them in one
+candidate, so the router applies only the net difference and a removed tenant is removed.
+`/system` — credentials, the gNMI server — is never touched, which is why the management
+interface and VRF are stated in the artifact: a replace without them would delete them.
 
 **It reads the service layer.** Cycle 010's layering rule says renderers read technical
 objects, and the provider edge is the documented exception, because its per-tenant import
 policy *is* the service intent:
 
 ```text
-route-map RM-ACME-IMPORT permit 10   <- ServiceL3vpn.dc_service_prefixes
-route-map RM-ACME-IMPORT permit 20   <- ServiceTenantCloud.prefix
-route-map RM-ACME-IMPORT permit 30   <- a ServiceInternetAccess EXISTS
+RM-ACME-IMPORT statement 10   <- ServiceL3vpn.dc_service_prefixes
+RM-ACME-IMPORT statement 20   <- ServiceTenantCloud.prefix
+RM-ACME-IMPORT statement 30   <- a ServiceInternetAccess EXISTS
 ```
 
-globex has no `permit 30` because globex bought no internet access. Deleting acme's
-`ServiceInternetAccess` on a branch changes exactly six lines of `isp-pe1`: the four-line
-clause, and the tenant header re-rendering from `internet: yes` to `internet: no`.
+globex has no `statement 30` because globex bought no internet access. Deleting acme's
+`ServiceInternetAccess` on a branch changes exactly six lines of `isp-pe1`: the comment and
+three lines of the statement, and the tenant header re-rendering from `internet: yes` to
+`internet: no`.
 
-**Four things that will bite a change here:**
+**Things that will bite a change here:**
 
-- `StrictUndefined` is mandatory. A BGP neighbor line with a blank address is accepted by
-  vtysh and the session never comes up, so a missing value must fail the render instead.
+- **No quote characters in a comment.** `sr_cli` tokenises quotes before it recognises `#`, so
+  one apostrophe swallows every line up to the next quote and those lines are never applied,
+  with no error. The transform refuses such a render.
+- **Route leaking needs both halves.** A tenant VRF's inter-instance import policy leaks
+  nothing unless the source instance marks routes leakable (`LEAKABLE`), and a leaked route
+  reaches BGP only through `rib-management ... route-table-import`. Either half alone leaves
+  every session up and the routes missing.
+- **It renders interfaces.** A provider-edge port's VRF is derived from the site whose
+  attachment address lies on its subnet; a customer port whose tenant is withdrawn is
+  rendered shut rather than left in the default instance.
+- `StrictUndefined` is mandatory. A BGP neighbor with a blank address never comes up, so a
+  missing value must fail the render instead.
 - Inline fragments are needed in both directions, and on the **concrete** kind. Going
-  interface → address needs `... on InterfaceLayer3`; going address → interface needs
-  `... on InterfacePhysical` and `... on InterfaceVirtual`, because the generated Pydantic
-  model discriminates on `__typename`, which is never the generic's name. `__typename` is also
-  needed at every nested union point.
+  device → interface and address → interface both need `... on InterfacePhysical` and
+  `... on InterfaceVirtual`, because the generated Pydantic model discriminates on
+  `__typename`, which is never the generic's name.
 - Three of the ten BGP sessions belong to no `WanSite` — the iBGP pair between the PEs and the
   two fabric handoffs are provider infrastructure, so they are read from the device.
-- A tenant's sites render BGP-first then static, each by name. The lab's order is authoring
-  order, which Infrahub does not store.
+- A tenant's sites render BGP-first then static, each by name, and interfaces in SR Linux's
+  port order. Infrahub stores no authoring order.
 
 ### JunosConfig
 

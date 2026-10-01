@@ -1,0 +1,8 @@
+insert / interface ethernet-1/1 subinterface 0 ip-mtu 9000
+insert / interface ethernet-1/2 subinterface 0 ip-mtu 9000
+insert / interface ethernet-1/3 subinterface 0 ip-mtu 9000
+insert / interface ethernet-1/4 subinterface 0 ip-mtu 9000
+insert / network-instance CUST_ACME static-routes route 10.60.99.0/24 next-hop-group acme-dr
+insert / network-instance default protocols bgp neighbor 10.50.255.2 description "isp-pe2 (core link)"
+delete / routing-policy prefix-set PL-GLOBEX-HQ-IN
+All changes have been discarded. Leaving candidate mode.
