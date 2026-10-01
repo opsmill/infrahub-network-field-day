@@ -20,15 +20,12 @@ failure this test would otherwise become.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 import yaml
 
 import tasks
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 # `kubectl apply -f "$LAB_DIR/<path>"`, which is how every manifest in
 # install-crossplane.sh is applied.
@@ -98,3 +95,28 @@ def test_the_modelled_claims_are_the_ones_vidra_redelivers() -> None:
 
     assert modelled & unmodelled == set()
     assert modelled | unmodelled == set(tasks.HANDOVER_DELETIONS)
+
+
+def test_the_lab_kube_prometheus_stack_is_never_applied_beside_infrahubs() -> None:
+    """Cycle 034. Two kube-prometheus-stack releases contend for the same CRDs.
+
+    Infrahub delivers `otternet-metrics` through Vidra, which goes up before
+    Crossplane, so the lab's `otternet-observability` would be created in the
+    same window and the second release would fail `invalid ownership metadata`.
+    Deleting it afterwards, as the handover does for the others, is too late --
+    so the installer is told not to apply it, and this holds both halves: the
+    lab honours the flag, and `invoke cluster` sets it.
+    """
+    lab = _lab_directory()
+    if lab is None:
+        pytest.skip("the sibling lab repository is not checked out beside this one")
+    installer = (lab / "k8s/bootstrap/install-crossplane.sh").read_text()
+    guarded = re.search(
+        r'if \[\[ "\$\{OTTERNET_SKIP_OBSERVABILITY:-0\}" != "1" \]\]; then\s+'
+        r'kubectl apply -f "\$LAB_DIR/crossplane/apps/20-observability.yaml"',
+        installer,
+    )
+    assert guarded, "install-crossplane.sh no longer guards the observability claim behind OTTERNET_SKIP_OBSERVABILITY"
+
+    source = Path(tasks.__file__).read_text(encoding="utf-8")
+    assert '"OTTERNET_SKIP_OBSERVABILITY": "1"' in source, "invoke cluster no longer sets OTTERNET_SKIP_OBSERVABILITY"

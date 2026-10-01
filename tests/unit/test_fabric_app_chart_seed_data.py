@@ -175,3 +175,142 @@ def test_the_pod_policy_port_matches_the_container_port() -> None:
     ports = {int(entry["port"]) for entry in demo["policy_allow_ports"]}
 
     assert ports == {CHART_SERVICE_PORT}
+
+
+# ---------------------------------------------------------------------------
+# Cycle 034: the observability applications.
+#
+# Grafana and Prometheus (`otternet-metrics`) and Telegraf
+# (`otternet-telemetry`) are ordinary seeded applications delivered by Vidra.
+# The lab's own `otternet-observability` claim is what they replace, and the
+# new names differ from it on purpose: Vidra refuses to adopt a resource it did
+# not create, so a shared name would leave whichever writer got there first in
+# charge.
+# ---------------------------------------------------------------------------
+
+GRAFANA_BLOCK = "10.112.240.80/28"
+GRAFANA_VIP = "10.112.240.81"
+OBSERVABILITY_APPS = ("otternet-metrics", "otternet-telemetry")
+
+
+def _app(name: str) -> dict[str, Any]:
+    for entry in _data("ServiceFabricApp"):
+        if entry.get("name") == name:
+            return entry
+    pytest.fail(f"{name} is not in the seed data")
+
+
+def test_the_observability_applications_are_complete_charts_with_payloads() -> None:
+    for name in OBSERVABILITY_APPS:
+        app = _app(name)
+        for field in ("chart_repository", "chart_name", "chart_version"):
+            assert app.get(field), f"{name} is missing {field}"
+        assert (PAYLOAD_DIR / f"{name}-values.yaml").is_file(), name
+        assert "service_fabric_apps" in app.get("member_of_groups", []), name
+        assert name != "otternet-observability", "that name is the lab's claim, which the handover deletes"
+
+
+def test_grafana_is_exposed_on_a_seeded_block_and_answers_on_junos_http() -> None:
+    metrics = _app("otternet-metrics")
+    assert metrics["exposed"] is True
+    assert metrics["vip_block"] == [GRAFANA_BLOCK, "default"]
+    assert metrics["advertised_services"] == ["junos-http"]
+    assert metrics["sso_provider"] == "dex"
+
+    values = yaml.safe_load((PAYLOAD_DIR / "otternet-metrics-values.yaml").read_text(encoding="utf-8"))
+    service = values["grafana"]["service"]
+    assert service["type"] == "LoadBalancer"
+    assert service["port"] == CHART_SERVICE_PORT, "the VIP must answer on junos-http's port"
+    # The address Dex's redirect URI names. Allocated rather than pinned, it
+    # would be whichever address Cilium chose first and could differ between
+    # rebuilds, and Dex is configured before anything here exists.
+    assert service["annotations"]["lbipam.cilium.io/ips"] == GRAFANA_VIP
+
+
+def test_grafanas_pod_gate_exists_before_any_grant() -> None:
+    """The third gate must hold from the start, not appear with the first grant.
+
+    The composition renders `allow-ingress` only when `allowFrom` is non-empty,
+    and with default deny off that policy is the only thing narrowing Grafana's
+    ingress. Seeding the cluster's own pod prefix makes it exist from the first
+    render, so a branch packet that got past the firewall is still dropped at
+    the pod until a grant names its source.
+    """
+    metrics = _app("otternet-metrics")
+    assert metrics["policy_default_deny"] is False
+    assert ["10.111.0.0/16", "default"] in metrics["allowed_source_prefixes"]
+    assert ["10.70.0.0/24", "default"] not in metrics["allowed_source_prefixes"], (
+        "the branch is what a grant adds; seeding it would make the request meaningless"
+    )
+    assert metrics["workload_selector"] == ["app.kubernetes.io/name=grafana"]
+    assert metrics["policy_allow_ports"] == [{"port": "3000", "protocol": "TCP"}]
+
+
+def test_telemetry_is_cluster_internal() -> None:
+    telemetry = _app("otternet-telemetry")
+    assert telemetry["exposed"] is False
+    assert "vip_block" not in telemetry
+
+
+def test_the_grafana_block_is_seeded_inside_the_pool_and_overlaps_nothing() -> None:
+    """Seeded, so OTTERNET-VIP-Pool skips it.
+
+    The lab's own Grafana block was picked by hand with no IpamPrefix behind it,
+    and the allocator -- which decides what is free by reading its own records --
+    handed the same block to a portal request. Recording it is the fix.
+    """
+    import ipaddress
+
+    prefixes = [
+        entry
+        for doc in yaml.safe_load_all(Path("objects/29_otternet_offfabric_prefixes.yml").read_text(encoding="utf-8"))
+        if doc and doc.get("spec", {}).get("kind") == "IpamPrefix"
+        for entry in doc["spec"]["data"]
+    ]
+    block = ipaddress.ip_network(GRAFANA_BLOCK)
+    pool = ipaddress.ip_network("10.112.240.0/24")
+    assert any(p["prefix"] == GRAFANA_BLOCK and p.get("role") == "vip_pool" for p in prefixes)
+    assert block.subnet_of(pool)
+    others = [
+        ipaddress.ip_network(p["prefix"])
+        for p in prefixes
+        if p.get("role") == "vip_pool" and p["prefix"] not in (GRAFANA_BLOCK, str(pool))
+    ]
+    assert not [o for o in others if o.overlaps(block)]
+
+
+def test_every_dashboard_parses_and_has_a_unique_uid() -> None:
+    import json
+
+    uids = []
+    for board in sorted((PAYLOAD_DIR / "dashboards").glob("*.json")):
+        loaded = json.loads(board.read_text(encoding="utf-8"))
+        assert loaded.get("uid"), board.name
+        assert loaded.get("panels"), f"{board.name} has no panels"
+        uids.append(loaded["uid"])
+    assert uids, "no dashboards found"
+    assert len(uids) == len(set(uids)), uids
+
+
+def test_dashboards_are_folded_into_the_metrics_payload_deterministically() -> None:
+    """The attachment is assembled; an unchanged tree must give unchanged bytes,
+    or every `invoke load` re-uploads and moves the artifact's checksum."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("seed_app_payloads", Path("scripts/seed_app_payloads.py"))
+    assert spec
+    assert spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    path = PAYLOAD_DIR / "otternet-metrics-values.yaml"
+    first = module.assemble_payload("otternet-metrics", path)
+    assert first == module.assemble_payload("otternet-metrics", path)
+    values = yaml.safe_load(first)
+    boards = values["grafana"]["dashboards"]["otternet"]
+    assert set(boards) == {p.stem for p in (PAYLOAD_DIR / "dashboards").glob("*.json")}
+    provider = values["grafana"]["dashboardProviders"]["dashboardproviders.yaml"]["providers"][0]
+    assert provider["options"]["path"] == "/var/lib/grafana/dashboards/otternet"
+    # Every other application's payload is attached exactly as committed.
+    demo = PAYLOAD_DIR / "otternet-demo-values.yaml"
+    assert module.assemble_payload("otternet-demo", demo) == demo.read_bytes()

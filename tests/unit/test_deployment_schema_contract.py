@@ -112,6 +112,26 @@ def test_nothing_generates_from_a_deployment_kind() -> None:
     )
 
 
+def test_nothing_generates_from_a_monitoring_kind() -> None:
+    """No trigger rule may watch a ``Monitoring*`` kind either (cycle 034).
+
+    It is the same loop in another place. Monitoring intent renders the
+    collector's configuration, the collector observes the devices, and a trigger
+    on monitoring intent would make an edit to *what is watched* regenerate
+    something watched. The collector artifact is kept fresh by a generator the
+    proposed-change pipeline runs, never by an event on these kinds.
+    """
+    offenders = [
+        f"{rule.get('name')} -> node_kind: {rule.get('node_kind')}"
+        for document in _documents("triggers.yml")
+        if document.get("spec", {}).get("kind") == "CoreNodeTriggerRule"
+        for rule in document["spec"].get("data", [])
+        if str(rule.get("node_kind", "")).startswith("Monitoring")
+    ]
+
+    assert offenders == [], f"A trigger rule watches a monitoring kind: {offenders}"
+
+
 def test_no_infrahub_yml_entry_targets_a_deployment_kind() -> None:
     """No generator, artifact definition or check may take a deployment kind."""
     kinds = _deployment_kinds()

@@ -26,7 +26,7 @@ from typing import Any
 
 import pytest
 
-from transforms.junos_config import JunosConfig
+from transforms.junos_config import JunosConfig, JunosConfigError
 
 FIXTURE = Path("tests/unit/fixtures/junos/fw1.json")
 JUNOS_CONF = Path("../lab/configs/fw/vsrx/junos.conf")
@@ -702,3 +702,50 @@ def test_the_applications_stanza_sits_outside_security() -> None:
     security_end = security_start + len(_stanza(rendered, "security")) - 1
     applications_start = next(i for i, line in enumerate(rendered) if line == "applications {")
     assert applications_start > security_end
+
+
+# ---------------------------------------------------------------------------
+# SNMP for the telemetry collector (cycle 034)
+# ---------------------------------------------------------------------------
+
+
+def _rendered_with_snmp(community: Any, clients: Any) -> list[str]:
+    transform = JunosConfig.__new__(JunosConfig)
+    transform.root_directory = str(REPO_ROOT)
+    data: dict[str, Any] = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    root = data.get("data", data)
+    node = root["target"]["edges"][0]["node"]
+    node["snmp_community"] = community
+    node["snmp_clients"] = clients
+    return asyncio.run(transform.transform(data)).splitlines()
+
+
+def test_no_community_renders_no_snmp_stanza() -> None:
+    """Unset is the default for every firewall, and must emit nothing at all."""
+    for community in (None, {"value": None}, {"value": ""}):
+        assert "snmp {" not in _rendered_with_snmp(community, {"node": None})
+
+
+def test_the_snmp_stanza_is_read_only_and_client_restricted() -> None:
+    snmp = _stanza(_rendered(), "snmp")
+    assert "    community otternet-ro {" in snmp
+    assert "        authorization read-only;" in snmp
+    assert "            10.0.0.0/24;" in snmp
+    # fxp0 is in mgmt_junos under `management-instance`; without this the agent
+    # ignores every request arriving there.
+    assert "    routing-instance-access;" in snmp
+    assert not [line for line in snmp if "read-write" in line]
+
+
+def test_a_community_without_clients_is_refused() -> None:
+    """An agent with a community and no `clients` answers anyone who knows it."""
+    with pytest.raises(JunosConfigError, match="snmp_clients"):
+        _rendered_with_snmp({"value": "otternet-ro"}, {"node": None})
+
+
+def test_the_snmp_stanza_is_top_level_so_the_push_replaces_it() -> None:
+    """`_junos_replace_tagged` tags top-level stanzas `replace:`. Nested anywhere
+    else, removing SNMP from the model would never remove it from the device."""
+    lines = _rendered()
+    assert "snmp {" in lines
+    assert not [line for line in lines if line.strip() == "snmp {" and line != "snmp {"]

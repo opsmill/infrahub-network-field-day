@@ -68,6 +68,17 @@
       "name": "ACL-MGMT-IN"
     }
   ],
+  "custom_structured_configuration_management_api_gnmi": {
+    "provider": "eos-native",
+    "transport": {
+      "grpc": [
+        {
+          "name": "default",
+          "vrf": "MGMT"
+        }
+      ]
+    }
+  },
   "custom_structured_configuration_prefix_lists": [
     {
       "name": "PL-CILIUM-PERMITTED",

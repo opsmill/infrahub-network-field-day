@@ -564,6 +564,35 @@ spec:
             kind: ClusterKubernetes
             icon: "mdi:kubernetes"
 
+    # --------- Monitoring ---------
+    # What is watched, as intent (cycle 034). A profile names device groups and
+    # measurements; the collector's whole configuration is the artifact
+    # rendered from them. Edit here, review in a proposed change -- never in
+    # the collector.
+    - namespace: Monitoring
+      name: MonitoringMenu
+      label: Monitoring
+      icon: "mdi:chart-line"
+      children:
+        data:
+          - namespace: Monitoring
+            name: Profiles
+            label: Profiles
+            kind: MonitoringProfile
+            icon: "mdi:tune"
+
+          - namespace: Monitoring
+            name: Collectors
+            label: Collectors
+            kind: MonitoringCollector
+            icon: "mdi:chart-line"
+
+          - namespace: Monitoring
+            name: Measurements
+            label: Measurements
+            kind: MonitoringMeasurement
+            icon: "mdi:gauge"
+
     # --------- WAN ---------
     - namespace: Wan
       name: WanMenu

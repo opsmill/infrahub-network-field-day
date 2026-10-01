@@ -33,6 +33,8 @@ class JunosConfigQueryTargetEdgesNode(BaseModel):
     name: Optional["JunosConfigQueryTargetEdgesNodeName"]
     description: Optional["JunosConfigQueryTargetEdgesNodeDescription"]
     tcp_mss: Optional["JunosConfigQueryTargetEdgesNodeTcpMss"]
+    snmp_community: Optional["JunosConfigQueryTargetEdgesNodeSnmpCommunity"]
+    snmp_clients: "JunosConfigQueryTargetEdgesNodeSnmpClients"
     static_routes: "JunosConfigQueryTargetEdgesNodeStaticRoutes"
     interfaces: "JunosConfigQueryTargetEdgesNodeInterfaces"
 
@@ -47,6 +49,22 @@ class JunosConfigQueryTargetEdgesNodeDescription(BaseModel):
 
 class JunosConfigQueryTargetEdgesNodeTcpMss(BaseModel):
     value: Optional[Any]
+
+
+class JunosConfigQueryTargetEdgesNodeSnmpCommunity(BaseModel):
+    value: Optional[str]
+
+
+class JunosConfigQueryTargetEdgesNodeSnmpClients(BaseModel):
+    node: Optional["JunosConfigQueryTargetEdgesNodeSnmpClientsNode"]
+
+
+class JunosConfigQueryTargetEdgesNodeSnmpClientsNode(BaseModel):
+    prefix: Optional["JunosConfigQueryTargetEdgesNodeSnmpClientsNodePrefix"]
+
+
+class JunosConfigQueryTargetEdgesNodeSnmpClientsNodePrefix(BaseModel):
+    value: Optional[str]
 
 
 class JunosConfigQueryTargetEdgesNodeStaticRoutes(BaseModel):
@@ -847,6 +865,8 @@ JunosConfigQuery.model_rebuild()
 JunosConfigQueryTarget.model_rebuild()
 JunosConfigQueryTargetEdges.model_rebuild()
 JunosConfigQueryTargetEdgesNode.model_rebuild()
+JunosConfigQueryTargetEdgesNodeSnmpClients.model_rebuild()
+JunosConfigQueryTargetEdgesNodeSnmpClientsNode.model_rebuild()
 JunosConfigQueryTargetEdgesNodeStaticRoutes.model_rebuild()
 JunosConfigQueryTargetEdgesNodeStaticRoutesEdges.model_rebuild()
 JunosConfigQueryTargetEdgesNodeStaticRoutesEdgesNode.model_rebuild()

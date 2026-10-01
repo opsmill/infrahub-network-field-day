@@ -98,6 +98,13 @@ queries:
   - name: junos_config
     file_path: "./transforms/junos_config.gql"
 
+  # Cycle 034: the collector's whole Telegraf configuration, rendered from the
+  # monitoring profiles -- and the freshness generator's lookup of that artifact.
+  - name: telemetry_collector_config
+    file_path: "./transforms/telemetry_collector_config.gql"
+  - name: generate_monitoring_collector
+    file_path: "./generators/generate_monitoring_collector.gql"
+
   # Service-layer generator: derives a cluster's fabric BGP sessions
   - name: generate_fabric_peering
     file_path: "./generators/generate_fabric_peering.gql"
@@ -310,6 +317,26 @@ generator_definitions:
     execute_in_proposed_change: false
     execute_after_merge: false
 
+  # Cycle 034. WRITES NO NODE: it only asks for its collector's
+  # `Telemetry Collector Configuration` to be re-rendered on its own branch.
+  # That artifact's target is the collector, and almost nothing that changes
+  # what should be collected is a change to the collector -- a device joining a
+  # group, a profile gaining a measurement -- so without this the proposed
+  # change shows the data and no configuration diff.
+  #
+  # Pipeline and post-merge only. NO trigger rule may name a Monitoring kind:
+  # tests/unit/test_deployment_schema_contract.py fails if one does.
+  - name: generate-monitoring-collector
+    file_path: "./generators/generate_monitoring_collector.py"
+    query: generate_monitoring_collector
+    targets: monitoring_collectors
+    parameters:
+      name: name__value
+    class_name: MonitoringCollectorGenerator
+    convert_query_response: false
+    execute_in_proposed_change: true
+    execute_after_merge: true
+
 check_definitions:
   - name: cv-config-validation
     file_path: "./checks/cv_config_check.py"
@@ -383,6 +410,9 @@ python_transforms:
   - name: junos_config
     class_name: JunosConfig
     file_path: "./transforms/junos_config.py"
+  - name: telemetry_collector_config
+    class_name: TelemetryCollectorConfig
+    file_path: "./transforms/telemetry_collector_config.py"
 
 artifact_definitions:
   - name: "cabling_plan"
@@ -474,3 +504,19 @@ artifact_definitions:
     content_type: "text/plain"
     targets: "frr_routers"
     transformation: "frr_config"
+
+  # Cycle 034. Telegraf's whole configuration, as ONE Kubernetes ConfigMap that
+  # Vidra's third sync delivers into the collector's namespace. `application/yaml`
+  # and a single document, because that is what the existing syncs are proven
+  # to apply.
+  #
+  # The target is the COLLECTOR, so a device joining a group does not change the
+  # target and would leave this stale -- which is why generate-monitoring-collector
+  # exists. It re-renders this on every proposed change and after every merge.
+  - name: "telemetry_collector_config"
+    artifact_name: "Telemetry Collector Configuration"
+    parameters:
+      name: "name__value"
+    content_type: "application/yaml"
+    targets: "monitoring_collectors"
+    transformation: "telemetry_collector_config"

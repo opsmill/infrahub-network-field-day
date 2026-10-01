@@ -251,6 +251,16 @@ class DcimCircuitEndpoint(DcimEndpoint):
     location: RelationshipAttribute[LocationHosting]
 
 
+class MonitoringCollector(CoreArtifactTarget):
+    collector_type: Dropdown
+    config_map_name: String
+    description: StringOptional
+    name: String
+    namespace_name: String
+    cluster: RelationshipAttribute[ClusterKubernetes]
+    monitoring_profiles: RelationshipManager[MonitoringProfile]
+
+
 class DcimDevice(CoreArtifactTarget, DcimGenericDevice, DcimPhysicalDevice):
     status: Dropdown
 
@@ -332,6 +342,7 @@ class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     policy_allow_ports: JSONAttributeOptional
     policy_default_deny: Boolean
     service_selector: ListAttributeOptional
+    sso_provider: Dropdown
     vip_block_managed: Boolean
     vip_block_size: Integer
     workload_selector: ListAttributeOptional
@@ -535,6 +546,12 @@ class OrganizationManufacturer(OrganizationGeneric):
     platform: RelationshipManager[DcimPlatform]
 
 
+class MonitoringMeasurement(CoreNode):
+    description: StringOptional
+    label: StringOptional
+    name: String
+
+
 class ServiceNetworkSegment(ServiceGeneric, GeneratorTarget):
     prefix_length: Integer
     vlan_id: IntegerOptional
@@ -624,6 +641,17 @@ class RoutingPrefixListEntry(CoreNode):
     action: String
     sequence: Integer
     prefix_list: RelationshipAttribute[RoutingPrefixList]
+
+
+class MonitoringProfile(CoreNode):
+    description: StringOptional
+    device_role: StringOptional
+    enabled: Boolean
+    interval_seconds: Integer
+    name: String
+    collector: RelationshipAttribute[MonitoringCollector]
+    device_groups: RelationshipManager[CoreStandardGroup]
+    measurements: RelationshipManager[MonitoringMeasurement]
 
 
 class OrganizationProvider(OrganizationGeneric):

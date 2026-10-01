@@ -1,0 +1,105 @@
+# The Telemetry Collector Configuration artifact's query (cycle 034).
+#
+# One collector, its profiles, and every member of every group a profile names
+# -- through one inline fragment per device kind, because the four kinds are
+# siblings under DcimGenericDevice and a fragment that names the wrong one
+# returns nothing rather than an error.
+#
+# THE ADDRESS DIFFERS BY KIND ON PURPOSE. A switch is observed at its
+# `mgmt_ip`, the address eAPI already uses; the other three kinds at their
+# `telemetry_address`, which the reconciler never reads. They are the same
+# management network either way.
+query TelemetryCollectorConfigQuery($name: String!) {
+  MonitoringCollector(name__value: $name) {
+    edges {
+      node {
+        id
+        name { value }
+        namespace_name { value }
+        config_map_name { value }
+        monitoring_profiles {
+          edges {
+            node {
+              name { value }
+              enabled { value }
+              interval_seconds { value }
+              device_role { value }
+              measurements { edges { node { name { value } } } }
+              device_groups {
+                edges {
+                  node {
+                    name { value }
+                    members {
+                      edges {
+                        node {
+                          __typename
+                          ... on DcimFabricSwitch {
+                            name { value }
+                            role { value }
+                            mgmt_ip { node { address { value } } }
+                            rack { node { name { value } } }
+                            pod { node { name { value } } }
+                            # The stored structured config: the intended BGP
+                            # neighbours are read from what the device renders.
+                            avd_artifact { node { structured_config_file { node { id } } } }
+                          }
+                          ... on DcimDevice {
+                            name { value }
+                            role { value }
+                            telemetry_address { node { address { value } } }
+                            bgp_neighbors { edges { node { peer_address { value } remote_as { value } } } }
+                          }
+                          ... on SecurityFirewall {
+                            name { value }
+                            role { value }
+                            telemetry_address { node { address { value } } }
+                            snmp_community { value }
+                          }
+                          ... on ComputePhysicalServer {
+                            name { value }
+                            role { value }
+                            telemetry_address { node { address { value } } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  # Cabling, for the intended-link series. Unfiltered and small; the transform
+  # keeps only links with a watched device on at least one end.
+  NetworkLink {
+    edges {
+      node {
+        connected_endpoints {
+          edges {
+            node {
+              __typename
+              # CONCRETE KINDS, not `... on DcimInterface`. The return-type
+              # generator types a fragment on a generic as a literal
+              # `__typename: "DcimInterface"`, which no node ever reports, so
+              # every endpoint parses as the fieldless fallback and the link
+              # series comes out empty -- with nothing raised.
+              ... on InterfacePhysical {
+                name { value }
+                status { value }
+                device { node { __typename name { value } } }
+              }
+              ... on SecurityFirewallInterface {
+                name { value }
+                status { value }
+                device { node { __typename name { value } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

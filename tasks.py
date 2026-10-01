@@ -121,8 +121,12 @@ def build(ctx: Context, cache: bool = True) -> None:
 def destroy(ctx: Context) -> None:
     """
     Stop and remove containers, networks, and volumes.
+
+    Every profile is enabled so the services behind one -- the reconciler and the
+    MCP server -- go too. Without it `down` skips them, and the MCP server, being
+    on the compose network, keeps that network in use so it cannot be removed.
     """
-    ctx.run(f"{compose_cmd()} down -v", pty=True)
+    ctx.run(f"{compose_cmd()} --profile '*' down -v", pty=True)
 
 
 class _SemaphoreClient:
@@ -995,13 +999,37 @@ INFRAHUB_OWNED_RESOURCES = (
 #
 # Vidra never sees them either way; it only ever deletes a resource that leaves a
 # manifest it delivered itself. They are the lab's installer's, and deleting them
-# here is the only seam: `install-crossplane.sh` has no flag to skip a claim, so
-# they are applied, waited on, and then removed.
+# here is the seam: the access broker is applied, waited on, and then removed.
+#
+# `otternet-observability` is NOT applied any more (cycle 034):
+# `OTTERNET_SKIP_OBSERVABILITY` keeps the lab's kube-prometheus-stack out of a
+# cluster that receives Infrahub's own `otternet-metrics`. It stays listed so the
+# delete is defensive, and so test_handover_scope.py's parse of the installer --
+# which still contains the guarded apply line -- keeps matching this list.
 LAB_ONLY_APPS = ("otternet-access", "otternet-observability")
 
 # Everything the handover deletes: the two the lab declares and Infrahub owns,
 # which Vidra then re-delivers, and the two that simply go.
 HANDOVER_DELETIONS = INFRAHUB_OWNED_RESOURCES + tuple(("fabricapp", name) for name in LAB_ONLY_APPS)
+
+# What Vidra delivers that the lab never declared (cycle 034): the observability
+# applications and the Telegraf configuration rendered from the monitoring
+# profiles. Kept apart from INFRAHUB_OWNED_RESOURCES because that list is also
+# half of HANDOVER_DELETIONS, and these were never the lab's to delete.
+INFRAHUB_ONLY_RESOURCES = (
+    ("fabricapp", "otternet-metrics"),
+    ("fabricapp", "otternet-telemetry"),
+    ("configmap", "telegraf-intent -n otternet-telemetry"),
+)
+
+# Every resource the cluster should hold once delivery has converged.
+INFRAHUB_DELIVERED_RESOURCES = INFRAHUB_OWNED_RESOURCES + INFRAHUB_ONLY_RESOURCES
+
+# Grafana's Dex client secret. A lab literal, committed beside the client in
+# tooling/10-dex.yaml exactly as the portal's and Infrahub's are -- the two must
+# agree, so this is one constant rather than an environment variable that could
+# drift from the file.
+GRAFANA_DEX_CLIENT_SECRET = "grafana-dex-secret"  # noqa: S105 -- lab literal, see tooling/10-dex.yaml
 
 # The namespace the demo application composes. Waiting on this, rather than on
 # composed-object names, is what makes the teardown check correct -- see
@@ -1086,7 +1114,18 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
     ctx.run("scripts/install_vidra.sh", pty=True, env={"KUBECONFIG": str(kubeconfig)})
 
     print(" - Installing Crossplane, the providers, the XRDs and the compositions")
-    ctx.run(f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-crossplane.sh'))}", pty=True)
+    # OTTERNET_SKIP_OBSERVABILITY, whatever `handover` says. Infrahub delivers
+    # its own kube-prometheus-stack (`otternet-metrics`), and two releases of
+    # that chart contend for the same CRDs: the second fails `invalid ownership
+    # metadata`. Vidra goes up before Crossplane, so both would be created in the
+    # same window and deleting the lab's afterwards is too late. `--no-handover`
+    # does not change that -- it keeps the lab's other claims, not a second
+    # Prometheus operator.
+    ctx.run(
+        f"{shlex.quote(str(lab_path / 'k8s/bootstrap/install-crossplane.sh'))}",
+        pty=True,
+        env={"OTTERNET_SKIP_OBSERVABILITY": "1"},
+    )
 
     if handover:
         print("\n - Removing the lab's claims, so only what Infrahub declares is left")
@@ -1109,6 +1148,9 @@ def cluster(ctx: Context, lab_dir: str = "", handover: bool = True) -> None:
         _wait_for_syncs(ctx, kubeconfig)
     else:
         print("\n - Handover skipped: the lab keeps all four claims and Vidra will not adopt them.")
+
+    _observability_secrets(ctx, kubeconfig)
+    _wait_for_observability(ctx, kubeconfig)
 
     print("\n - Cluster ready.")
 
@@ -1139,6 +1181,144 @@ def vidra(ctx: Context, lab_dir: str = "", wait: bool = True) -> None:
     if wait:
         print("\n - Waiting for both syncs to reach a terminal state")
         _wait_for_syncs(ctx, kubeconfig)
+
+
+def _env_value(name: str) -> str:
+    """A value from `.env`, or the empty string. The file is gitignored."""
+    env_file = MAIN_DIRECTORY_PATH / ".env"
+    if not env_file.exists():
+        return ""
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        if line.startswith(f"{name}="):
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
+def _ensure_env_value(name: str, comment: str) -> str:
+    """The value of `name` in `.env`, generating and persisting one if absent.
+
+    Generated once and then kept, so a rebuild does not rotate a password a
+    person has already written down.
+    """
+    import secrets
+
+    existing = _env_value(name)
+    if existing:
+        return existing
+    value = secrets.token_urlsafe(24)
+    env_file = MAIN_DIRECTORY_PATH / ".env"
+    lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+    lines += ["", f"# {comment}", f"{name}={value}"]
+    env_file.write_text("\n".join(lines).lstrip("\n") + "\n", encoding="utf-8")
+    return value
+
+
+def _wait_for_namespace(ctx: Context, kubeconfig: Path, namespace: str, timeout: int = 300) -> bool:
+    kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if (ctx.run(f"{kube} get ns {namespace} --no-headers", hide=True, warn=True) or MISSING).ok:
+            return True
+        sleep(5)
+    return False
+
+
+def _apply_secret(ctx: Context, kubeconfig: Path, namespace: str, name: str, data: dict[str, str]) -> None:
+    """Create or update a Secret idempotently -- `apply` of a rendered manifest,
+    never `create`, so a second run is a no-op rather than `AlreadyExists`.
+
+    The values go through a temporary file rather than the command line, so they
+    never appear in a process listing.
+    """
+    import base64
+    import tempfile
+
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": name, "namespace": namespace, "labels": {"app.kubernetes.io/managed-by": "invoke"}},
+        "type": "Opaque",
+        "data": {key: base64.b64encode(value.encode()).decode() for key, value in data.items()},
+    }
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=True, encoding="utf-8") as handle:
+        json.dump(manifest, handle)
+        handle.flush()
+        ctx.run(
+            f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))} apply -f {shlex.quote(handle.name)}",
+            hide=True,
+            warn=True,
+        )
+
+
+def _observability_secrets(ctx: Context, kubeconfig: Path) -> None:
+    """The three Secrets the observability applications reference by name.
+
+    None of these values is in the graph or in an artifact: the rendered values
+    name the Secrets and nothing more. They can only be created once Vidra's
+    delivery has made the namespaces, and until then the pods wait in
+    `CreateContainerConfigError` -- which heals by itself the moment this runs.
+    """
+    print("\n - Creating the observability Secrets (credentials never pass through Infrahub)")
+    if _wait_for_namespace(ctx, kubeconfig, "otternet-metrics"):
+        _apply_secret(ctx, kubeconfig, "otternet-metrics", "grafana-oidc", {"client-secret": GRAFANA_DEX_CLIENT_SECRET})
+        admin_password = _ensure_env_value(
+            "GRAFANA_ADMIN_PASSWORD", "Grafana's break-glass admin, for operators only (people sign in through Dex)."
+        )
+        _apply_secret(
+            ctx,
+            kubeconfig,
+            "otternet-metrics",
+            "grafana-admin",
+            {"admin-user": "admin", "admin-password": admin_password},
+        )
+        print("   otternet-metrics: grafana-oidc, grafana-admin")
+    else:
+        print("   WARNING: namespace otternet-metrics never appeared; Grafana will wait for its Secrets")
+
+    if _wait_for_namespace(ctx, kubeconfig, "otternet-telemetry"):
+        # The same local account the reconciler pushes EOS configuration as.
+        _apply_secret(
+            ctx,
+            kubeconfig,
+            "otternet-telemetry",
+            "telemetry-credentials",
+            {
+                "GNMI_USERNAME": os.getenv("OTTERNET_EOS_USERNAME", "admin"),
+                "GNMI_PASSWORD": os.getenv("OTTERNET_EOS_PASSWORD", "admin"),
+            },
+        )
+        print("   otternet-telemetry: telemetry-credentials")
+    else:
+        print("   WARNING: namespace otternet-telemetry never appeared; Telegraf will wait for its Secret")
+
+
+def _wait_for_observability(ctx: Context, kubeconfig: Path, timeout: int = 900) -> None:
+    """Wait for Grafana and Telegraf themselves, not for their claims' conditions.
+
+    kube-prometheus-stack takes minutes on this host, and a FabricApp reads
+    Ready as soon as its Helm release is accepted -- which says nothing about
+    whether Grafana is answering.
+    """
+    kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
+    print(" - Waiting for Grafana and Telegraf (kube-prometheus-stack takes several minutes)")
+    for namespace, selector in (
+        ("otternet-metrics", "app.kubernetes.io/name=grafana"),
+        ("otternet-telemetry", "app.kubernetes.io/name=telegraf"),
+    ):
+        deadline = time.time() + timeout
+        ready = False
+        while time.time() < deadline and not ready:
+            ready = (
+                ctx.run(
+                    f"{kube} -n {namespace} wait pod -l {selector} --for=condition=Ready --timeout=30s",
+                    hide=True,
+                    warn=True,
+                )
+                or MISSING
+            ).ok
+            if not ready:
+                sleep(10)
+        print(f"   {namespace}: {'ready' if ready else f'NOT ready after {timeout}s'}")
 
 
 def _wait_for_cluster_dns(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
@@ -1263,16 +1443,17 @@ def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
     cluster where nothing was delivered, which is the failure that looks most
     like health.
 
-    So the loop asks the API server whether `fabricapp/otternet-demo` and
-    `fabricpeering/otternet` are there, and the sync table is printed afterwards as
-    context rather than as the verdict.
+    So the loop asks the API server whether every resource in
+    INFRAHUB_DELIVERED_RESOURCES is there -- the demo, the peering, the two
+    observability applications and Telegraf's ConfigMap -- and the sync table is
+    printed afterwards as context rather than as the verdict.
     """
     kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
     deadline = time.time() + timeout
     missing: list[str] = []
     while time.time() < deadline:
         missing = []
-        for kind, name in INFRAHUB_OWNED_RESOURCES:
+        for kind, name in INFRAHUB_DELIVERED_RESOURCES:
             found = ctx.run(f"{kube} get {kind} {name} --no-headers", hide=True, warn=True)
             if not (found and found.ok):
                 missing.append(f"{kind}/{name}")
@@ -1288,7 +1469,7 @@ def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
     )
     print("\n - Resources Infrahub owns (this is the verdict, not the sync state):")
     ctx.run(
-        f"{kube} get {','.join(k for k, _ in INFRAHUB_OWNED_RESOURCES)}",
+        f"{kube} get fabricapp,fabricpeering",
         pty=True,
         warn=True,
     )
@@ -1392,6 +1573,68 @@ def tooling(ctx: Context) -> None:
     ctx.run("python scripts/provision_portal_accounts.py", pty=True, warn=True)
 
 
+@task
+def mcp(ctx: Context) -> None:
+    """
+    Start the Infrahub MCP server beside Infrahub, signed in as `mcp-agent`.
+
+    **The account first, then the container**, because the container reads the
+    account's password from `.env` at start. `scripts/provision_mcp_agent.py`
+    creates `mcp-agent` -- read everything, write only on branches, open a
+    proposed change -- and writes that password on first run. The upstream
+    example signs in as `agent` instead, which here is a Super Administrator the
+    task workers run as: a back door past the review gate for anything that can
+    reach the port.
+
+    The server listens on http://127.0.0.1:8001/mcp. Idempotent.
+    """
+    ctx.run("python scripts/provision_mcp_agent.py", pty=True)
+    # --force-recreate so a password rotated in .env reaches a running container,
+    # and --no-deps because without it the recreate cascades to infrahub-server.
+    ctx.run(f"{compose_cmd()} --profile mcp up -d --no-deps --force-recreate infrahub-mcp", pty=True)
+    print(" - Infrahub MCP server: http://127.0.0.1:8001/mcp")
+
+
+@task
+def metrics_exporter(ctx: Context) -> None:
+    """
+    Start the Infrahub exporter beside Infrahub, reading as `metrics-exporter`.
+
+    The graph as Prometheus metrics, for Grafana's organisation dashboards:
+    devices by family, services by status, tenants, proposed changes and
+    deployment state. Prometheus in the workload cluster scrapes it at
+    172.20.41.1:8002.
+
+    **The account first, then the container**, because the container reads the
+    account's token from `.env` at start. `scripts/provision_metrics_exporter.py`
+    creates a view-only account and mints its token; the exporter never holds a
+    Super Administrator's credential.
+
+    Built from a pinned upstream commit, because none is published. Idempotent.
+    """
+    ctx.run("python scripts/provision_metrics_exporter.py", pty=True)
+    # --build, because the image comes from a git context and a first run has
+    # none; --force-recreate so a re-minted token reaches a running container;
+    # --no-deps so the recreate does not cascade to infrahub-server.
+    ctx.run(
+        f"{compose_cmd()} --profile metrics up -d --build --no-deps --force-recreate infrahub-exporter",
+        pty=True,
+    )
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        try:
+            body = httpx.get("http://127.0.0.1:8002/metrics", timeout=5).text
+        except httpx.HTTPError:
+            body = ""
+        if "infrahub_dcimgenericdevice_info" in body:
+            print(" - Infrahub exporter: http://127.0.0.1:8002/metrics")
+            return
+        sleep(5)
+    print(
+        " - WARNING: the exporter answered no device series within 120s; check `docker compose logs infrahub-exporter`"
+    )
+
+
 # `bootstrap` takes a --cluster flag, which shadows the task of the same name
 # inside its body. Alias it here so the call site stays readable.
 _cluster_task = cluster
@@ -1420,7 +1663,10 @@ def bootstrap(
         lab        the ContainerLab topology, management connectivity only
         provision  every device configured from its rendered artifact
         tooling    Dex and the Backstage portal, in the tooling cluster
-        cluster    Cilium, Vidra, Crossplane, and the resource handover
+        mcp        the Infrahub MCP server, signed in as `mcp-agent`
+        metrics    the Infrahub exporter, reading as `metrics-exporter`
+        cluster    Cilium, Vidra, Crossplane, the resource handover, and the
+                   observability Secrets Grafana and Telegraf wait for
 
     **The chain runs on a branch and is merged here rather than by hand.** That
     is not ceremony: the topology generators write a great deal of derived data,
@@ -1472,6 +1718,15 @@ def bootstrap(
     print("\n=== Deploying the tooling cluster ===")
     tooling(ctx)
 
+    print("\n=== Starting the MCP server ===")
+    mcp(ctx)
+
+    # Before the cluster, so Prometheus has organisation metrics to scrape the
+    # moment Grafana comes up, and verify_bootstrap.sh's dashboard check has
+    # data rather than a first-scrape race.
+    print("\n=== Starting the Infrahub exporter ===")
+    metrics_exporter(ctx)
+
     if cluster:
         print("\n=== Bringing up Kubernetes ===")
         _cluster_task(ctx, lab_dir=lab_dir)
@@ -1508,9 +1763,10 @@ def _wait_for_infrahub(timeout: int = 600) -> None:
 @task
 def stop(ctx: Context) -> None:
     """
-    Stop containers and remove networks.
+    Stop containers and remove networks, including the services behind a profile
+    (see `destroy`).
     """
-    ctx.run(f"{compose_cmd()} down", pty=True)
+    ctx.run(f"{compose_cmd()} --profile '*' down", pty=True)
 
 
 @task(help={"component": "Optional name of a specific service to restart."})

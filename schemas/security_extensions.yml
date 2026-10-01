@@ -190,6 +190,48 @@ extensions:
           label: TCP MSS Clamp
           optional: true
           description: "Clamps TCP MSS in security flow; unset renders no flow stanza"
+        # Cycle 034: SNMP, the one telemetry path this firewall can be given
+        # through the model. gNMI/JTI is configured under `system services
+        # extension-service`, and `system` is the hierarchy the push path
+        # refuses by design (_assert_junos_scope) because it holds credential
+        # hashes.
+        #
+        # THE ONE CREDENTIAL IN AN ARTIFACT, and recorded as such. A v2c
+        # community has to reach the device in its configuration, so it is in
+        # the rendered Junos artifact whatever the model does; SNMPv3 would put
+        # its keys there too. It is read-only and restricted to `snmp_clients`.
+        #
+        # OPTIONAL WITH NO DEFAULT, like tcp_mss: unset renders no `snmp`
+        # stanza at all, which is what keeps the artifact byte-identical to the
+        # device file until the stanza is added to both.
+        - name: snmp_community
+          kind: Text
+          label: SNMP Community
+          optional: true
+          description: "Read-only SNMPv2c community; unset renders no snmp stanza"
+          order_weight: 1700
+      relationships:
+        # Same name and reason as DcimDevice.telemetry_address: an address a
+        # collector in a pod can reach, and never one a configuration is pushed
+        # to. The reconciler still arrives by container name.
+        - name: telemetry_address
+          label: Telemetry Address
+          peer: IpamIPAddress
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: "The address telemetry collectors reach this firewall at; never used to push configuration"
+          identifier: "security_firewall__telemetry_address"
+          order_weight: 1670
+        - name: snmp_clients
+          label: SNMP Clients
+          peer: IpamPrefix
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: "The source prefix permitted to poll this firewall over SNMP"
+          identifier: "security_firewall__snmp_clients"
+          order_weight: 1710
 
     - kind: SecurityPolicyRule
       attributes:

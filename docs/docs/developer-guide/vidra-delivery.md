@@ -42,13 +42,18 @@ merge, which is why no trigger definition was added.
 | --- | --- | --- |
 | `fabricapp.otternet.lab/otternet-demo` | Infrahub | Modelled as a `ServiceFabricApp` in the `service_fabric_apps` group |
 | `fabricpeering.otternet.lab/otternet` | Infrahub | Modelled as a `ServiceFabricPeering` |
+| `fabricapp.otternet.lab/otternet-metrics` | Infrahub | Grafana and Prometheus, a seeded `ServiceFabricApp` (see [Observability](./observability.md)) |
+| `fabricapp.otternet.lab/otternet-telemetry` | Infrahub | Telegraf, a seeded `ServiceFabricApp` |
+| `configmap/telegraf-intent` in `otternet-telemetry` | Infrahub | The `Telemetry Collector Configuration` artifact, through a third sync whose destination namespace is Telegraf's own |
 
 An application joins delivery by joining the target group. No cluster-side change is needed —
 a sync selects by artifact **name**, so it already covers every member of the group.
 
-**Those two are the whole list, and that is enforced rather than assumed.** The lab repository's
-bootstrap also applies `otternet-observability` and `otternet-access`, which nothing in Infrahub models.
-`invoke cluster`'s handover deletes them along with the two above, so a finished cluster carries
+**Those are the whole list, and that is enforced rather than assumed.** The lab repository's
+bootstrap also applies `otternet-access`, which nothing in Infrahub models, and would apply
+`otternet-observability`. `invoke cluster` sets `OTTERNET_SKIP_OBSERVABILITY` so that one is never
+applied: two kube-prometheus-stack releases contend for the same CRDs. The handover deletes the
+access broker along with the lab's copies of the demo and the peering, so a finished cluster carries
 only applications a service object declares — a workload no proposed change can account for is
 exactly what this delivery path exists to rule out. `scripts/verify_bootstrap.sh` checks their
 absence and counts the applications, so a third one arriving from elsewhere fails too.

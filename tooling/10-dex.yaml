@@ -48,6 +48,21 @@ data:
           - http://172.20.41.1:8000/auth/oidc/provider1/callback
           - http://agentic-agittings-agittings-dev-vm-02:8000/auth/oidc/provider1/callback
           - http://10.90.0.1:8000/auth/oidc/provider1/callback
+      # Grafana, in the workload cluster (cycle 034). A client of its own rather
+      # than a third redirect URI on an existing one: Dex stamps a token with the
+      # client it was issued to, so a Grafana token cannot be replayed at the
+      # portal, and Grafana's secret -- which lives in another cluster -- is
+      # nobody else's secret.
+      #
+      # The redirect URI names a FIXED address: otternet-metrics pins Grafana's
+      # LoadBalancer IP in its values, because this file is applied before
+      # Infrahub has delivered anything. The secret is the lab literal `invoke
+      # cluster` writes into Secret `grafana-oidc`; change both or neither.
+      - id: grafana
+        name: OTTERNET Grafana
+        secret: grafana-dex-secret
+        redirectURIs:
+          - http://10.112.240.81/login/generic_oauth
 
     enablePasswordDB: true
 

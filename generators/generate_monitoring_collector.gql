@@ -1,0 +1,13 @@
+# generate-monitoring-collector's query (cycle 034): the collector, and nothing
+# about its devices. The generator writes no node; it only asks for its own
+# artifact to be re-rendered, so it needs the id that lookup is keyed on.
+query GenerateMonitoringCollectorQuery($name: String!) {
+  target: MonitoringCollector(name__value: $name) {
+    edges {
+      node {
+        id
+        name { value }
+      }
+    }
+  }
+}

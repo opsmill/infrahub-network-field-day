@@ -27,6 +27,7 @@ value's type, and a colon-bearing scalar is force-quoted.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import yaml
@@ -171,6 +172,131 @@ def build_policy(app: AppNode) -> dict[str, Any]:
     return policy
 
 
+# ---------------------------------------------------------------------------
+# Sign-in through the lab's identity provider (cycle 034)
+# ---------------------------------------------------------------------------
+
+# THE ONE ISSUER. Browser-facing URLs use it, because a branch user's browser is
+# what follows them. AGENTS.md records why there is exactly one and why moving it
+# is a test-every-browser change.
+DEX_ISSUER = "http://10.90.0.11:32556/dex"
+
+# Server-to-server URLs use the tool node's management address instead. A pod
+# reaching 10.90.0.11 would cross the fabric to fw1, which has no k8s-prod ->
+# tooling rule; 172.20.41.101 is reached out of the node's management interface,
+# masqueraded, which is the path Vidra already uses to reach Infrahub. Grafana's
+# generic OAuth reads claims from the userinfo response and does not insist that
+# the token's issuer matches the host it was fetched from.
+DEX_BACK_CHANNEL = "http://172.20.41.101:32556/dex"
+
+DEX_CLIENT_ID = "grafana"
+
+# The Secrets `invoke cluster` creates once the namespace exists. Names only;
+# the values never reach the graph or this artifact.
+OIDC_SECRET = "grafana-oidc"  # noqa: S105 -- a Secret NAME, not its value
+ADMIN_SECRET = "grafana-admin"  # noqa: S105 -- a Secret NAME, not its value
+
+# Where a chart keeps Grafana's values, by chart name. A chart missing from this
+# map has no renderer, and `dex` on it raises rather than writing a block the
+# chart would ignore.
+_GRAFANA_VALUES_PATH: dict[str, tuple[str, ...]] = {
+    "kube-prometheus-stack": ("grafana",),
+    "grafana": (),
+}
+
+_PINNED_ADDRESS = "lbipam.cilium.io/ips"
+
+
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """``overlay`` over ``base``, recursing into mappings. Intent wins over tuning."""
+    merged = copy.deepcopy(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
+def _grafana_sign_in(address: str) -> dict[str, Any]:
+    """Grafana's half of the contract: everybody Viewer, nobody Admin, no form."""
+    return {
+        "envValueFrom": {
+            "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET": {"secretKeyRef": {"name": OIDC_SECRET, "key": "client-secret"}},
+        },
+        "admin": {"existingSecret": ADMIN_SECRET, "userKey": "admin-user", "passwordKey": "admin-password"},
+        "grafana.ini": {
+            # The redirect URI Dex has registered is <root_url>login/generic_oauth.
+            "server": {"root_url": f"http://{address}/"},
+            "auth": {"disable_login_form": True},
+            "auth.generic_oauth": {
+                "enabled": True,
+                "name": "Dex",
+                "client_id": DEX_CLIENT_ID,
+                "scopes": "openid email profile",
+                "auth_url": f"{DEX_ISSUER}/auth",
+                "token_url": f"{DEX_BACK_CHANNEL}/token",
+                "api_url": f"{DEX_BACK_CHANNEL}/userinfo",
+                "login_attribute_path": "email",
+                "email_attribute_path": "email",
+                # A JMESPath literal: every signed-in person is a Viewer. Strict,
+                # so an unmapped role is refused rather than defaulted, and the
+                # login path can never make anyone a server admin.
+                "role_attribute_path": "'Viewer'",
+                "role_attribute_strict": True,
+                "allow_assign_grafana_admin": False,
+                "skip_org_role_sync": False,
+                "allow_sign_up": True,
+                "auto_login": True,
+                "use_pkce": True,
+            },
+        },
+    }
+
+
+def apply_sso(provider: str | None, *, chart: str | None, values: Any, name: str) -> Any:
+    """Merge the identity provider's sign-in block into ``values`` when declared.
+
+    ``none`` (or unset) returns ``values`` untouched, which is what keeps every
+    application that predates the field byte-identical.
+
+    Raises:
+        ValueError: for ``dex`` on a chart with no renderer, or on values that
+            pin no LoadBalancer address. Both would deploy an application that
+            answers and lets nobody in, with nothing logged anywhere.
+    """
+    if provider in (None, "none"):
+        return values
+    if provider != "dex":
+        msg = f"application {name!r}: sso_provider {provider!r} has no renderer"
+        raise ValueError(msg)
+
+    path = _GRAFANA_VALUES_PATH.get(str(chart))
+    if path is None:
+        msg = (
+            f"application {name!r}: sso_provider 'dex' is declared on chart {chart!r}, which has no sign-in "
+            f"renderer (known: {sorted(_GRAFANA_VALUES_PATH)})"
+        )
+        raise ValueError(msg)
+
+    base: dict[str, Any] = values if isinstance(values, dict) else {}
+    grafana: Any = base
+    for key in path:
+        grafana = grafana.get(key, {}) if isinstance(grafana, dict) else {}
+    address = (((grafana or {}).get("service") or {}).get("annotations") or {}).get(_PINNED_ADDRESS)
+    if not address:
+        msg = (
+            f"application {name!r}: sso_provider 'dex' needs Grafana's Service to pin its address with "
+            f"{_PINNED_ADDRESS}, because the redirect URI registered with Dex names it"
+        )
+        raise ValueError(msg)
+
+    overlay: dict[str, Any] = _grafana_sign_in(str(address))
+    for key in reversed(path):
+        overlay = {key: overlay}
+    return _deep_merge(base, overlay)
+
+
 def build_chart(app: AppNode, values: Any) -> dict[str, Any]:
     """``spec.chart``, or an empty dict when no chart is set."""
     name = _value(app.chart_name)
@@ -212,6 +338,7 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
         values = await self._payload(
             app.values_file, _value(app.chart_values), kind="ServiceFabricAppValuesFile", name=name
         )
+        values = apply_sso(_value(app.sso_provider), chart=_value(app.chart_name), values=values, name=name)
         chart = build_chart(app, values)
 
         # A CHART IS THE WHOLE WORKLOAD SOURCE since cycle 033. It used to be a

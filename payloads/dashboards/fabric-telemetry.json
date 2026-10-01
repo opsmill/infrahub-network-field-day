@@ -1,0 +1,223 @@
+{
+  "uid": "otternet-fabric-telemetry",
+  "title": "OTTERNET / Fabric telemetry",
+  "description": "Streaming telemetry from the fabric, collected exactly as Infrahub's monitoring profiles say -- and compared with what Infrahub intends.",
+  "tags": [
+    "otternet",
+    "telemetry",
+    "fabric"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Intended sessions not established",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "otternet_intended_bgp_neighbor unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") or label_replace(frr_bgp_peer_state == 1, \"peer_address\", \"$1\", \"peer\", \"(.*)\"))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "description": "Sessions Infrahub configures that the device does not report as established. Empty is healthy.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Established sessions Infrahub never intended",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") or label_replace(frr_bgp_peer_state == 1, \"peer_address\", \"$1\", \"peer\", \"(.*)\")) unless on (device, peer_address) otternet_intended_bgp_neighbor",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "description": "The other half: a session up on the device that no intent explains.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Interface throughput (bits/s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name) (rate(interface_counters_in_octets{kind=\"DcimFabricSwitch\"}[2m]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Interface errors",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name) (rate(interface_counters_in_errors{kind=\"DcimFabricSwitch\"}[5m]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Cabled interfaces Infrahub expects up",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(otternet_intended_interface_up)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "type": "bargauge",
+      "title": "Devices reporting, by kind",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 16,
+        "w": 18,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count by (kind) (count by (device, kind) ({job=\"telemetry\", kind!=\"\"}))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{kind}}"
+        }
+      ],
+      "description": "Every target here came from a monitoring profile; none is listed by hand.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

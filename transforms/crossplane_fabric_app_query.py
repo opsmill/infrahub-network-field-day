@@ -22,6 +22,7 @@ class CrossplaneFabricAppQueryTargetEdgesNode(BaseModel):
     name: Optional["CrossplaneFabricAppQueryTargetEdgesNodeName"]
     namespace_name: Optional["CrossplaneFabricAppQueryTargetEdgesNodeNamespaceName"]
     exposed: Optional["CrossplaneFabricAppQueryTargetEdgesNodeExposed"]
+    sso_provider: Optional["CrossplaneFabricAppQueryTargetEdgesNodeSsoProvider"]
     chart_repository: Optional["CrossplaneFabricAppQueryTargetEdgesNodeChartRepository"]
     chart_name: Optional["CrossplaneFabricAppQueryTargetEdgesNodeChartName"]
     chart_version: Optional["CrossplaneFabricAppQueryTargetEdgesNodeChartVersion"]
@@ -65,6 +66,10 @@ class CrossplaneFabricAppQueryTargetEdgesNodeNamespaceName(BaseModel):
 
 class CrossplaneFabricAppQueryTargetEdgesNodeExposed(BaseModel):
     value: Optional[bool]
+
+
+class CrossplaneFabricAppQueryTargetEdgesNodeSsoProvider(BaseModel):
+    value: Optional[str]
 
 
 class CrossplaneFabricAppQueryTargetEdgesNodeChartRepository(BaseModel):

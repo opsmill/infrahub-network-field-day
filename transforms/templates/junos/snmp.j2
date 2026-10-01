@@ -1,0 +1,27 @@
+{# SNMP, the one telemetry path this firewall can be given through the model
+   (cycle 034). gNMI/JTI lives under `system services extension-service`, which
+   the push path refuses by design.
+
+   Conditional like `applications`: with no community modelled nothing renders,
+   which is what keeps the artifact byte-identical to a device file that has no
+   stanza. Top level, so `_junos_replace_tagged` tags it `replace:` like every
+   other hierarchy the artifact emits -- and removing it from the model removes
+   it from the device.
+
+   `routing-instance-access`, because fxp0 sits in `mgmt_junos` under
+   `management-instance`; without it the agent ignores requests arriving there.
+   Syntax validated on the lab's vSRX with `commit check` (research R7). #}
+{% if snmp %}
+snmp {
+    /* Read-only, polled by the telemetry collector the monitoring profiles
+     * configure. A v2c community has to be in the configuration the device
+     * receives; it is restricted to the one client prefix below. */
+    community {{ snmp.community }} {
+        authorization read-only;
+        clients {
+            {{ snmp.clients }};
+        }
+    }
+    routing-instance-access;
+}
+{% endif %}

@@ -1,0 +1,1913 @@
+{
+  "MonitoringCollector": {
+    "edges": [
+      {
+        "node": {
+          "config_map_name": {
+            "value": "telegraf-intent"
+          },
+          "id": "18da62e3-0eb6-8e60-2c1d-1187d0203ae5",
+          "monitoring_profiles": {
+            "edges": [
+              {
+                "node": {
+                  "device_groups": {
+                    "edges": [
+                      {
+                        "node": {
+                          "members": {
+                            "edges": [
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-a4e8-3481-33bf-11875e4d5a43"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.11/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "spine-otternet-pod1-1"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": null
+                                  },
+                                  "role": {
+                                    "value": "spine"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-a934-8f0b-33bf-11872dda642f"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.12/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "spine-otternet-pod1-2"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": null
+                                  },
+                                  "role": {
+                                    "value": "spine"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-7caa-c829-33b5-11877088a47f"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.21/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-1-1"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "K8S_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-8d40-b535-33b2-1187a681e770"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.22/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-1-2"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "K8S_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-9580-3f51-33b2-1187421369e3"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.23/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-2-1"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "APP_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-9aae-e58b-33ba-1187ad436399"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.24/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-2-2"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "APP_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-a049-5395-33bc-118718caa3e0"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.25/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-3-1"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "BORDER_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "name": {
+                            "value": "avd_devices"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_role": {
+                    "value": null
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 30
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "interface-counters"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "name": {
+                            "value": "bgp-neighbor-state"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "name": {
+                            "value": "system-resources"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "fabric-core"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "device_groups": {
+                    "edges": [
+                      {
+                        "node": {
+                          "members": {
+                            "edges": [
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-a4e8-3481-33bf-11875e4d5a43"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.11/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "spine-otternet-pod1-1"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": null
+                                  },
+                                  "role": {
+                                    "value": "spine"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-a934-8f0b-33bf-11872dda642f"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.12/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "spine-otternet-pod1-2"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": null
+                                  },
+                                  "role": {
+                                    "value": "spine"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-7caa-c829-33b5-11877088a47f"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.21/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-1-1"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "K8S_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-8d40-b535-33b2-1187a681e770"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.22/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-1-2"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "K8S_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-9580-3f51-33b2-1187421369e3"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.23/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-2-1"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "APP_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-9aae-e58b-33ba-1187ad436399"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.24/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-2-2"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "APP_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimFabricSwitch",
+                                  "avd_artifact": {
+                                    "node": {
+                                      "structured_config_file": {
+                                        "node": {
+                                          "id": "18da1c1e-a049-5395-33bc-118718caa3e0"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "mgmt_ip": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.25/24"
+                                      }
+                                    }
+                                  },
+                                  "name": {
+                                    "value": "leaf-otternet-pod1-3-1"
+                                  },
+                                  "pod": {
+                                    "node": {
+                                      "name": {
+                                        "value": "otternet-pod1"
+                                      }
+                                    }
+                                  },
+                                  "rack": {
+                                    "node": {
+                                      "name": {
+                                        "value": "BORDER_LEAFS"
+                                      }
+                                    }
+                                  },
+                                  "role": {
+                                    "value": "leaf"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "name": {
+                            "value": "avd_devices"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_role": {
+                    "value": "leaf"
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 30
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "evpn-routes"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "fabric-leaf-evpn"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "device_groups": {
+                    "edges": [
+                      {
+                        "node": {
+                          "members": {
+                            "edges": [
+                              {
+                                "node": {
+                                  "__typename": "DcimDevice",
+                                  "bgp_neighbors": {
+                                    "edges": [
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.50.255.2"
+                                          },
+                                          "remote_as": {
+                                            "value": "65500"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.51.10.2"
+                                          },
+                                          "remote_as": {
+                                            "value": "65010"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.51.20.2"
+                                          },
+                                          "remote_as": {
+                                            "value": "65020"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "value": "isp-pe1"
+                                  },
+                                  "role": {
+                                    "value": "isp_edge"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.61/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimDevice",
+                                  "bgp_neighbors": {
+                                    "edges": [
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.250.50.1"
+                                          },
+                                          "remote_as": {
+                                            "value": "65103"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.50.255.1"
+                                          },
+                                          "remote_as": {
+                                            "value": "65500"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.52.0.2"
+                                          },
+                                          "remote_as": {
+                                            "value": "64500"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "value": "isp-pe2"
+                                  },
+                                  "role": {
+                                    "value": "isp_core"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.62/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimDevice",
+                                  "bgp_neighbors": {
+                                    "edges": [
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.52.0.1"
+                                          },
+                                          "remote_as": {
+                                            "value": "65500"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "value": "internet-rtr"
+                                  },
+                                  "role": {
+                                    "value": "internet_edge"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.91/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimDevice",
+                                  "bgp_neighbors": {
+                                    "edges": [
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.51.10.1"
+                                          },
+                                          "remote_as": {
+                                            "value": "65500"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "value": "cust-acme-ce"
+                                  },
+                                  "role": {
+                                    "value": "customer_edge"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.71/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimDevice",
+                                  "bgp_neighbors": {
+                                    "edges": [
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.51.20.1"
+                                          },
+                                          "remote_as": {
+                                            "value": "65500"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "value": "cust-globex-ce"
+                                  },
+                                  "role": {
+                                    "value": "customer_edge"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.73/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "DcimDevice",
+                                  "bgp_neighbors": {
+                                    "edges": [
+                                      {
+                                        "node": {
+                                          "peer_address": {
+                                            "value": "10.250.70.1"
+                                          },
+                                          "remote_as": {
+                                            "value": "65103"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "value": "branch-rtr"
+                                  },
+                                  "role": {
+                                    "value": "branch_router"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.81/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "name": {
+                            "value": "frr_routers"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_role": {
+                    "value": null
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 30
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "bgp-neighbor-state"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "wan-routing"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "device_groups": {
+                    "edges": [
+                      {
+                        "node": {
+                          "members": {
+                            "edges": [
+                              {
+                                "node": {
+                                  "__typename": "SecurityFirewall",
+                                  "name": {
+                                    "value": "fw1"
+                                  },
+                                  "role": {
+                                    "value": "edge_firewall"
+                                  },
+                                  "snmp_community": {
+                                    "value": "otternet-ro"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.31/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "name": {
+                            "value": "junos_firewalls"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_role": {
+                    "value": null
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 60
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "interface-counters"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "name": {
+                            "value": "system-resources"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "name": {
+                            "value": "security-sessions"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "perimeter"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "device_groups": {
+                    "edges": [
+                      {
+                        "node": {
+                          "members": {
+                            "edges": [
+                              {
+                                "node": {
+                                  "__typename": "ComputePhysicalServer",
+                                  "name": {
+                                    "value": "k8s-node1"
+                                  },
+                                  "role": {
+                                    "value": "compute"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.41/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "ComputePhysicalServer",
+                                  "name": {
+                                    "value": "k8s-node2"
+                                  },
+                                  "role": {
+                                    "value": "compute"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.42/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "node": {
+                                  "__typename": "ComputePhysicalServer",
+                                  "name": {
+                                    "value": "k8s-node3"
+                                  },
+                                  "role": {
+                                    "value": "compute"
+                                  },
+                                  "telemetry_address": {
+                                    "node": {
+                                      "address": {
+                                        "value": "172.20.41.43/24"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "name": {
+                            "value": "kubernetes_nodes"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_role": {
+                    "value": null
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 30
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "node-resources"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "cluster-nodes"
+                  }
+                }
+              }
+            ]
+          },
+          "name": {
+            "value": "otternet-telegraf"
+          },
+          "namespace_name": {
+            "value": "otternet-telemetry"
+          }
+        }
+      }
+    ]
+  },
+  "NetworkLink": {
+    "edges": [
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet10"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "ComputePhysicalServer",
+                      "name": {
+                        "value": "k8s-node1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "eth1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet10"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "ComputePhysicalServer",
+                      "name": {
+                        "value": "k8s-node2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "eth1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet11"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "ComputePhysicalServer",
+                      "name": {
+                        "value": "k8s-node3"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "eth1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-2-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet10"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "ComputePhysicalServer",
+                      "name": {
+                        "value": "host-a"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "eth1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-2-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet10"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "ComputePhysicalServer",
+                      "name": {
+                        "value": "host-b"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "eth1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-2-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet11"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "ComputePhysicalServer",
+                      "name": {
+                        "value": "acme-cloud1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "eth1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-2-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet11"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "ComputePhysicalServer",
+                      "name": {
+                        "value": "globex-cloud1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "eth1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet5"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-3-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet3"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-2-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet5"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-3-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet2"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet3"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-2-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet2"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet4"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-2-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet2"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet4"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-2-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet2"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-1"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet2"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet1"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "connected_endpoints": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "spine-otternet-pod1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet2"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-2"
+                      }
+                    }
+                  },
+                  "name": {
+                    "value": "Ethernet2"
+                  },
+                  "status": {
+                    "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

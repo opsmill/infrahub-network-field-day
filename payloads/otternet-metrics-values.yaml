@@ -1,0 +1,218 @@
+---
+# Helm values for otternet-metrics: kube-prometheus-stack 90.0.0 -- Prometheus,
+# Grafana and node-exporter -- on the fabric (cycle 034).
+#
+# Ported from the lab's own ../lab/crossplane/apps/20-observability.yaml, which
+# solved most of what a lab host does to this chart. Every comment marked
+# (lab) is that file's measurement, kept because the problem is the same here.
+# What differs is ownership: this is an Infrahub service object, delivered by
+# Vidra, and the lab's copy is no longer applied at all (see
+# OTTERNET_SKIP_OBSERVABILITY in tasks.py).
+#
+# NOT IN THIS FILE, deliberately:
+#   * Grafana's sign-in block. `sso_provider: dex` on the service object makes
+#     crossplane_fabric_app merge it over these values, so the issuer and the
+#     client live in one place rather than in every values file that wants them.
+#   * Any credential. The admin password and the Dex client secret come from
+#     Secrets `invoke cluster` creates once the namespace exists; the chart
+#     refuses a literal secret in values anyway (assertNoLeakedSecrets).
+#   * Dashboards. They are separate JSON files under payloads/dashboards/, which
+#     scripts/seed_app_payloads.py folds in under `grafana.dashboards` when it
+#     uploads this file, so each one stays reviewable on its own.
+
+# The CRDs belong to this release. That is only safe because the lab's own
+# kube-prometheus-stack is never applied beside it: two releases contend for
+# the same CRDs and the second fails `invalid ownership metadata`.
+crds:
+  enabled: true
+
+# ---- Grafana: the part that goes on the fabric ------------------------------
+grafana:
+  # (lab) Keep Grafana off the control-plane node. The kubelet reports the
+  # HOST's memory as node capacity, not the containerlab cgroup limit, so the
+  # scheduler happily stacks the two heaviest pods onto k8s-node1 beside the
+  # API server and the kernel then OOM-kills whatever is inside.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: DoesNotExist
+  service:
+    type: LoadBalancer
+    # 80, and load bearing twice: it is the port the VIP answers on, and it is
+    # `junos-http`, the SecurityService the application names in
+    # `advertised_services` -- so it is the port every grant's firewall rule
+    # permits. The pod listens on 3000, which is what `policy_allow_ports`
+    # names; Cilium translates before policy is evaluated.
+    port: 80
+    # THE LABEL THAT GETS IT ADVERTISED. It must match the application's
+    # `service_selector`, or the Service gets no VIP and nothing reports a
+    # fault.
+    labels:
+      otternet.lab/advertise: "true"
+    # A FIXED ADDRESS, because Dex is configured before any of this exists.
+    # The redirect URI registered for the `grafana` client in
+    # tooling/10-dex.yaml names this address, and so does `root_url`, which
+    # crossplane_fabric_app derives from it. Allocated, it would be whichever
+    # address Cilium chose first.
+    annotations:
+      lbipam.cilium.io/ips: "10.112.240.81"
+    # (lab) Keeps the client IP intact, so the pod policy sees the real source,
+    # and means only nodes running Grafana advertise the VIP.
+    externalTrafficPolicy: Local
+  # (lab) searchNamespace ALL makes the two k8s-sidecar processes poll every
+  # namespace continuously; measured as the largest CPU consumers on the node.
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: otternet-metrics
+  # (lab) 384Mi is not enough: Grafana registers every bundled datasource
+  # plugin before opening its port, and that peak is well above its steady
+  # state. Under a tight limit it is OOMKilled part-way through and restarts.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      memory: 768Mi
+  # (lab) Plugin registration on a host busy booting seven cEOS nodes takes
+  # well over the chart's 30s probe budget; an impatient probe reads as a crash
+  # loop, and with externalTrafficPolicy Local the VIP is withdrawn meanwhile.
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 30
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 90
+    periodSeconds: 15
+    failureThreshold: 10
+
+# ---- Prometheus --------------------------------------------------------------
+prometheus:
+  service:
+    type: ClusterIP
+  prometheusSpec:
+    # (lab) A lab host is not a monitoring cluster: small, in memory, no
+    # PersistentVolume. A restart losing 6h of lab metrics costs nothing.
+    retention: 6h
+    resources:
+      requests:
+        cpu: 100m
+        memory: 250Mi
+      limits:
+        memory: 900Mi
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: DoesNotExist
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values: [grafana]
+            topologyKey: kubernetes.io/hostname
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    additionalScrapeConfigs:
+      # ORGANISATION METRICS: the Infrahub exporter, beside Infrahub in the
+      # compose stack on the host. Reached the way Vidra reaches Infrahub --
+      # out of the node's management interface, masqueraded -- so it never
+      # crosses fw1. Host port 8002, because 8001 is infrahub-mcp.
+      - job_name: infrahub-exporter
+        scrape_interval: 60s
+        static_configs:
+          - targets: ["172.20.41.1:8002"]
+      # DEVICE TELEMETRY: Telegraf, whose whole configuration is an Infrahub
+      # artifact. Prometheus scrapes one target and Infrahub decides what is
+      # behind it.
+      - job_name: telemetry
+        scrape_interval: 15s
+        static_configs:
+          - targets: ["telegraf.otternet-telemetry.svc:9273"]
+      # (lab) Cilium and Hubble directly rather than through ServiceMonitors:
+      # the Cilium release predates this one and must not depend on its CRDs.
+      - job_name: cilium-agent
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [kube-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_k8s_app]
+            action: keep
+            regex: cilium
+          - source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            replacement: "$1:9962"
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+      - job_name: hubble
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [kube-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_k8s_app]
+            action: keep
+            regex: cilium
+          - source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            replacement: "$1:9965"
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+
+alertmanager:
+  # Alerting is out of scope this cycle; nothing routes, so nothing runs.
+  enabled: false
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
+
+# node-exporter still runs -- on the host network, port 9100 -- but the chart's
+# own ServiceMonitor for it is OFF. Whether the k3s nodes are collected, and
+# which series are kept, is decided by the `cluster-nodes` monitoring profile
+# and rendered into Telegraf's configuration. Leaving this on would collect
+# every node twice, once by intent and once by default.
+nodeExporter:
+  enabled: true
+prometheus-node-exporter:
+  prometheus:
+    monitor:
+      enabled: false
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 48Mi
+    limits:
+      memory: 160Mi
+
+# (lab) k3s does not expose these as scrapeable endpoints the way kubeadm does,
+# and leaving them on paints a wall of permanently red targets.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false

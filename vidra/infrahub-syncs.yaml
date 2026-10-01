@@ -1,5 +1,5 @@
 ---
-# Contract: the two sync declarations. Cluster-scoped; one per artifact name.
+# Contract: the three sync declarations. Cluster-scoped; one per artifact name.
 #
 # `artefactName` values MUST equal the `artifact_name` fields in .infrahub.yml
 # exactly -- spaces and capitals included. They are display names, and a mismatch
@@ -38,4 +38,28 @@ spec:
   destination:
     server: "https://kubernetes.default.svc"
     namespace: "default"
+    reconcileOnEvents: false
+
+---
+# The telemetry collector's configuration (cycle 034): a ConfigMap rendered from
+# the monitoring profiles, delivered into the namespace Telegraf runs in rather
+# than into `default`, because a pod can only mount a ConfigMap from its own
+# namespace. Applied before that namespace exists, it fails and retries on
+# `requeueSyncAfter` until otternet-telemetry's FabricApp has created it.
+#
+# A merge that changes what is monitored moves this artifact; Telegraf's
+# `--watch-config poll` picks the new file up once the kubelet has projected the
+# updated ConfigMap, about a minute later.
+apiVersion: infrahub.operators.com/v1alpha1
+kind: InfrahubSync
+metadata:
+  name: telemetry-collector-config
+spec:
+  source:
+    infrahubAPIURL: "http://172.20.41.1:8000"
+    targetBranch: "main"
+    artefactName: "Telemetry Collector Configuration"
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: "otternet-telemetry"
     reconcileOnEvents: false

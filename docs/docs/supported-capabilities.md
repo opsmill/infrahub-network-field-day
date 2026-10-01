@@ -118,6 +118,17 @@ The schema still carries the roles and underlay choices the upstream examples us
 | Deploy through CloudVision (CVP/CVaaS) | ⬜ | `cv-config-validation` builds and validates a CloudVision workspace for a proposed change; it does not deploy. |
 | Deploy through the bundled Ansible runner | ⬜ | `ansible/deploy.yml` fetches the EOS artifact and writes it to `/tmp` on each host. It configures nothing and knows only one of the three device families. |
 
+## Observability
+
+| Capability | Status | Notes |
+|------------|:------:|-------|
+| Grafana and Prometheus delivered from Infrahub | ✅ | `otternet-metrics`, a seeded `ServiceFabricApp`; signs people in through Dex as Viewer. See [Observability](./developer-guide/observability.md). |
+| Organisation metrics from the graph | ✅ | The Infrahub exporter, reading as a view-only account. |
+| Telemetry configured from monitoring intent | ✅ | `MonitoringProfile` objects render Telegraf's whole configuration as an artifact, for EOS (gNMI), FRR (`frr_exporter`), Junos (SNMP) and the k3s nodes (node-exporter). |
+| Intended versus observed state | ✅ | Intended BGP sessions, links and interface states are exported beside the live series. |
+| Alerting | ⬜ | Out of scope; Alertmanager is disabled. |
+| Per-user Grafana roles | ⬜ | Every signed-in user is a Viewer; access is a network grant. |
+
 ## Interfaces & change management
 
 | Capability | Status | Notes |
