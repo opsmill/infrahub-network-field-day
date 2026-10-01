@@ -10,10 +10,13 @@
 security {
 {% if tcp_mss %}
     /*
-     * Clamp TCP to what the 9192-byte interface MTU can actually carry:
-     * 9192 - 14 (Ethernet) - 20 (IP) - 20 (TCP) = {{ tcp_mss }}. Without this, two hosts
-     * that both think the path is 9214 negotiate an MSS of 9174, build a
-     * 9214-byte packet, and the firewall silently cannot forward it.
+     * Clamp TCP to what the path behind this firewall can actually carry.
+     * Two limits apply and the fabric's is the tighter: this interface's
+     * 9192 - 14 (Ethernet) allows 9138, but traffic onward into a tenant VRF
+     * crosses the EVPN fabric as VXLAN, which adds 50 bytes against a 9214
+     * underlay: 9214 - 50 (VXLAN) - 20 (IP) - 20 (TCP) = {{ tcp_mss }}. At 9138 the
+     * full-size segments were dropped inside the fabric with nothing
+     * reported, and only small replies ever arrived.
      */
     flow {
         tcp-mss {
