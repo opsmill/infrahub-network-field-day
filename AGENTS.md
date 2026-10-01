@@ -1456,7 +1456,8 @@ uv run invoke cluster                   # Cilium, Vidra, Crossplane, then the ha
 uv run invoke cluster --no-handover     # ... leaving the lab in charge of all four
 uv run invoke vidra                     # the operator on its own, for a re-install
 uv run invoke init-semaphore
-uv run invoke test
+uv run invoke test                      # unit tests, as CI runs them
+uv run invoke test --integration        # ... plus the Docker-backed integration suite
 uv run invoke lint
 uv run invoke lint-ruff
 uv run invoke lint-yaml

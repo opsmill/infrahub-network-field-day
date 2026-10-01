@@ -36,6 +36,8 @@ from typing import Any
 
 from infrahub_sdk import Config, InfrahubClientSync
 
+from solution_arista_avd import envfile
+
 REPO = Path(__file__).resolve().parents[1]
 ENV_FILE = REPO / ".env"
 
@@ -55,19 +57,11 @@ FORBIDDEN_GROUPS = ("Super Administrators",)
 
 
 def read_env(name: str) -> str:
-    if not ENV_FILE.exists():
-        return ""
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        if line.startswith(f"{name}="):
-            return line.split("=", 1)[1].strip()
-    return ""
+    return envfile.read_env(ENV_FILE, name)
 
 
 def write_env(name: str, value: str, comment: str) -> None:
-    lines = ENV_FILE.read_text(encoding="utf-8").splitlines() if ENV_FILE.exists() else []
-    lines = [line for line in lines if not line.startswith(f"{name}=")]
-    lines += ["", f"# {comment}", f"{name}={value}"]
-    ENV_FILE.write_text("\n".join(lines).lstrip("\n") + "\n", encoding="utf-8")
+    envfile.upsert_env(ENV_FILE, name, value, comment)
 
 
 def _address() -> str:

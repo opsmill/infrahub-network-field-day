@@ -13,12 +13,7 @@ from typing import Any
 import httpx
 from invoke import Context, Exit, task
 
-# If no version is indicated, we will take the latest
-VERSION = os.getenv("INFRAHUB_IMAGE_VER", None)
-CURRENT_DIRECTORY = Path(__file__).resolve()
 MAIN_DIRECTORY_PATH = Path(__file__).parent
-
-COMPOSE_FILES = "-f docker-compose.yml -f docker-compose.override.yml"
 
 
 def compose_root() -> Path:
@@ -1215,13 +1210,9 @@ def vidra(ctx: Context, lab_dir: str = "", wait: bool = True) -> None:
 
 def _env_value(name: str) -> str:
     """A value from `.env`, or the empty string. The file is gitignored."""
-    env_file = MAIN_DIRECTORY_PATH / ".env"
-    if not env_file.exists():
-        return ""
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        if line.startswith(f"{name}="):
-            return line.split("=", 1)[1].strip()
-    return ""
+    from solution_arista_avd.envfile import read_env
+
+    return read_env(MAIN_DIRECTORY_PATH / ".env", name)
 
 
 def _ensure_env_value(name: str, comment: str) -> str:
@@ -1232,14 +1223,13 @@ def _ensure_env_value(name: str, comment: str) -> str:
     """
     import secrets
 
+    from solution_arista_avd.envfile import upsert_env
+
     existing = _env_value(name)
     if existing:
         return existing
     value = secrets.token_urlsafe(24)
-    env_file = MAIN_DIRECTORY_PATH / ".env"
-    lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
-    lines += ["", f"# {comment}", f"{name}={value}"]
-    env_file.write_text("\n".join(lines).lstrip("\n") + "\n", encoding="utf-8")
+    upsert_env(MAIN_DIRECTORY_PATH / ".env", name, value, comment)
     return value
 
 
@@ -1840,26 +1830,24 @@ def restart(ctx: Context, component: str = "") -> None:
 
 @task
 def load_menu(ctx: Context) -> None:
-    """
-    Load schemas into InfraHub using infrahubctl.
-    """
-    ctx.run("infrahubctl menu load menus/", pty=True)
+    """Load the menu into Infrahub using infrahubctl."""
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run("infrahubctl menu load menus/", pty=True)
 
 
 @task
 def load_schema(ctx: Context) -> None:
-    """
-    Load schemas into InfraHub using infrahubctl.
-    """
-    ctx.run("infrahubctl schema load schemas", pty=True)
+    """Load schemas into Infrahub using infrahubctl."""
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run("infrahubctl schema load schemas", pty=True)
 
 
-@task
-def test(ctx: Context) -> None:
-    """
-    Run tests using pytest.
-    """
-    ctx.run("pytest tests", pty=True)
+@task(help={"integration": "Also run tests/integration, which starts an Infrahub stack in Docker (minutes)."})
+def test(ctx: Context, integration: bool = False) -> None:
+    """Run the unit tests -- what CI runs -- and optionally the integration suite."""
+    target = "tests" if integration else "tests/unit"
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run(f"pytest {target}", pty=True)
 
 
 @task(
@@ -1875,24 +1863,6 @@ def submit_cv_workspace(ctx: Context, proposed_change_id: str, branch: str = "ma
     )
     with ctx.cd(MAIN_DIRECTORY_PATH):
         ctx.run(command, pty=True)
-
-
-@task(help={"override": "Redownload the compose file even if it already exists."})
-def download_compose_file(ctx: Context, override: bool = False) -> Path:  # noqa: ARG001
-    """
-    Download docker-compose.yml from InfraHub if missing or override is True.
-    """
-    compose_file = Path("./docker-compose.yml")
-
-    if compose_file.exists() and not override:
-        return compose_file
-
-    response = httpx.get("https://infrahub.opsmill.io")
-    response.raise_for_status()
-
-    compose_file.write_text(response.content.decode(), encoding="utf-8")
-
-    return compose_file
 
 
 @task
@@ -1917,7 +1887,7 @@ def format_python(ctx: Context) -> None:
 
 @task
 def lint_yaml(ctx: Context) -> None:
-    """Run Linter to check all Python files."""
+    """Run yamllint over every YAML file."""
     print(" - Check code with yamllint")
     exec_cmd = "yamllint ."
     with ctx.cd(MAIN_DIRECTORY_PATH):
@@ -1926,7 +1896,11 @@ def lint_yaml(ctx: Context) -> None:
 
 @task
 def lint_mypy(ctx: Context) -> None:
-    """Run Linter to check all Python files."""
+    """Type-check the library with mypy, the gate CI enforces.
+
+    CI also runs mypy over `generators` and `transforms`, advisory only: they
+    are not yet fully typed. Run `mypy generators transforms` to see that.
+    """
     print(" - Check code with mypy")
     exec_cmd = "mypy --show-error-codes src/solution_arista_avd"
     with ctx.cd(MAIN_DIRECTORY_PATH):
