@@ -120,3 +120,31 @@ def test_the_lab_kube_prometheus_stack_is_never_applied_beside_infrahubs() -> No
 
     source = Path(tasks.__file__).read_text(encoding="utf-8")
     assert '"OTTERNET_SKIP_OBSERVABILITY": "1"' in source, "invoke cluster no longer sets OTTERNET_SKIP_OBSERVABILITY"
+
+
+def test_every_frr_socket_bind_source_is_created_before_deploy(tmp_path: Path) -> None:
+    """ContainerLab refuses the whole topology over a missing bind path.
+
+    The first bootstrap with the frr_exporter sidecars died at `invoke lab` on
+    exactly that: `Failed to verify bind path: stat .../wan/run/branch-rtr`.
+    """
+    topology = tmp_path / "otternet.clab.yml"
+    topology.write_text(
+        yaml.safe_dump(
+            {
+                "topology": {
+                    "nodes": {
+                        "isp-pe1": {"binds": ["wan/run/isp-pe1:/var/run/frr", "wan/rendered/x:/etc/frr/x:ro"]},
+                        "isp-pe1-exporter": {"binds": ["wan/run/isp-pe1:/var/run/frr"]},
+                        "host": {},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    created = tasks._ensure_socket_directories(tmp_path, topology)
+    assert created == [tmp_path / "wan/run/isp-pe1"]
+    assert (tmp_path / "wan/run/isp-pe1").is_dir()
+    assert not (tmp_path / "wan/rendered").exists(), "only socket directories are created"
+    assert tasks._ensure_socket_directories(tmp_path, topology) == []

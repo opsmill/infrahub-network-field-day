@@ -833,6 +833,34 @@ def _fabric_mgmt_addresses() -> list[str]:
     return addresses
 
 
+def _ensure_socket_directories(lab_path: Path, topology: Path) -> list[Path]:
+    """Create every `wan/run/<router>` bind source the topology names.
+
+    Each FRR router shares its daemon sockets with an frr_exporter sidecar
+    through a bind of `wan/run/<router>`. ContainerLab verifies every bind path
+    before it starts any node, and refuses the whole topology over one that is
+    missing -- `Failed to verify bind path: stat .../wan/run/branch-rtr: no such
+    file or directory` -- where plain Docker would have created it. The lab
+    commits the directories, so this matters only for a checkout that lost them,
+    and it costs nothing.
+    """
+    import yaml
+
+    created: list[Path] = []
+    nodes = (yaml.safe_load(topology.read_text(encoding="utf-8")) or {}).get("topology", {}).get("nodes", {})
+    for node in nodes.values():
+        for bind in (node or {}).get("binds", []) or []:
+            source = str(bind).split(":", 1)[0]
+            if source.startswith("wan/run/"):
+                path = lab_path / source
+                if not path.is_dir():
+                    path.mkdir(parents=True, exist_ok=True)
+                    created.append(path)
+    if created:
+        print(f" - Created {len(created)} FRR socket director{'y' if len(created) == 1 else 'ies'} the sidecars bind")
+    return created
+
+
 @task(
     help={
         "lab-dir": "Path to the lab repository. Defaults to OTTERNET_LAB_DIR, else a search beside this checkout.",
@@ -885,6 +913,8 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     if bridge.is_file():
         print(" - Ensuring the tooling bridge exists")
         ctx.run(shlex.quote(str(bridge)), pty=True)
+
+    _ensure_socket_directories(lab_path, topology)
 
     print(f" - Deploying {topology.name} (cEOS takes a few minutes to boot)")
     ctx.run(f"{clab} deploy -t {shlex.quote(str(topology))} --reconfigure", pty=True)
