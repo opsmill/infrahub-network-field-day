@@ -62,7 +62,9 @@ Instead, the generator takes the lowest free multiple of 1000 at or above `11000
 
 An operator can make the same request in the Infrahub UI or with `infrahubctl`: create a branch, create a `ServiceTenantOnboarding` on it with the fields above as a member of the `service_tenant_onboardings` group, and open a proposed change. The `created` event rule runs the generator on the branch, exactly as it does for a portal request.
 
-To withdraw a tenant, set the onboarding's **Status** to `decommissioning` and re-run the generator. It deletes the EVPN tenant, and refuses while VRFs still reference it.
+To withdraw a tenant, set the onboarding's **Status** to `decommissioning` on a branch. An `updated` event rule watches that field, so the generator runs on its own: it deletes the EVPN tenant and sets the status to `decommissioned`. While VRFs or L2 VLANs still reference the tenant it refuses instead: the run fails naming what is attached, and the status stays `decommissioning`. Remove those references, then set the status again to retry.
+
+Editing the organization, the fabric, or the description re-runs the generator too. Changing `mac_vrf_vni_base` after the tenant exists does not, because the generator writes that field itself; run `uv run infrahubctl generator generate-tenant-onboarding name=<onboarding> --branch <branch>` after changing it.
 
 ## Source
 

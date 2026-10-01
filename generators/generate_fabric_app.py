@@ -261,9 +261,9 @@ class FabricAppGenerator(InfrahubGenerator):
         answer to "did this get built", and nothing was answering it.
 
         Guarded on the current value, like the grant generator's, so a run that
-        changes nothing emits no event: `triggers.yml` watches this kind's
-        `created` only, but an unguarded save would still churn the branch diff
-        on every pass.
+        changes nothing emits no event. LOAD BEARING: `triggers.yml` re-runs
+        this generator when `status` changes, so an unguarded save here would
+        fire the next run forever.
         """
         app = await self.client.get(kind="ServiceFabricApp", id=app_id)
         if _value(app.status) == status:  # type: ignore[attr-defined]

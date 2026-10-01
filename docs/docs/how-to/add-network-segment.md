@@ -69,7 +69,9 @@ An operator can make the same request in the Infrahub UI or with `infrahubctl`:
 3. Optionally run `uv run invoke avd --branch <branch>` to regenerate hostvars, structured configs, and artifacts on the branch before review.
 4. Open a proposed change from the branch.
 
-To withdraw a segment, set its **Status** to `decommissioning` on a branch. No event rule watches that update, so run the generator yourself (`uv run infrahubctl generator generate-network-segment --branch <branch>`) or let the proposed change's pipeline run it; it deletes the subnet, VLAN, and SVI and releases both pools.
+To withdraw a segment, set its **Status** to `decommissioning` on a branch. An `updated` event rule watches that field, so `generate-network-segment` runs on its own: it deletes the subnet, VLAN, and SVI, releases both pools, and sets the status to `decommissioned`.
+
+The same rules re-run the generator when you edit the description, `vlan_id`, `prefix_length`, the VRF, the AVD tags, or either pool. An allocated subnet is never resized; the run logs a warning instead. Decommission the segment and request it again to change the size.
 
 See also [Common Issues](../troubleshooting.md) if a step fails.
 

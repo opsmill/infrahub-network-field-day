@@ -194,6 +194,14 @@ class ServerPlacementGenerator(InfrahubGenerator):
         return server.id
 
     async def _record(self, context: PlacementContext, server_id: str) -> None:
+        """Point the service at its machine, and only when that changes.
+
+        Guarded like `_set_status`: `triggers.yml` re-runs this generator on
+        `updated`, and a no-op run must write nothing.
+        """
+        recorded = _node_of(context.placement.server)
+        if recorded is not None and recorded.id == server_id:
+            return
         service = await self.client.get(kind="ServiceServerPlacement", id=context.placement.id)
         service.server = server_id  # type: ignore[attr-defined]
         await service.save(update_group_context=False)

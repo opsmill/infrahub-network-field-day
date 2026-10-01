@@ -377,6 +377,60 @@ async def test_placement_passes_the_template_on_every_run_not_only_creation() ->
     assert data["object_template"] == "tpl-workload"
 
 
+class _UpsertingClient(_Client):
+    """Returns the id it was handed, as an upsert onto an existing node does."""
+
+    async def create(self, kind: str, data: dict[str, Any]) -> Any:
+        node = await super().create(kind, data)
+        if "id" in data:
+            node.id = data["id"]
+        return node
+
+
+@pytest.mark.asyncio
+async def test_a_rerun_of_a_built_placement_writes_nothing_to_the_service() -> None:
+    """What makes the `updated` triggers terminate: the run after a build sets
+    no new status and records nothing new, so it emits no event."""
+    client = _UpsertingClient()
+    client.nodes["plc-1"] = _Node("plc-1", status="active")
+    parsed = _placement_query(
+        _placement(status="active", built=("srv-host-new", "host-new")), servers=_servers("host-new")
+    )
+    await _gen(ServerPlacementGenerator, client).generate(parsed.model_dump(by_alias=True))
+
+    assert client.nodes["plc-1"].saves == []
+
+
+@pytest.mark.asyncio
+async def test_a_first_placement_records_its_machine() -> None:
+    client = _UpsertingClient()
+    await _gen(ServerPlacementGenerator, client).generate(_placement_query().model_dump(by_alias=True))
+
+    assert len(client.nodes["plc-1"].saves) == 2  # the record, then the status
+
+
+@pytest.mark.asyncio
+async def test_a_rerun_of_a_built_onboarding_writes_nothing_to_the_service() -> None:
+    client = _UpsertingClient()
+    client.nodes["onb-1"] = _Node("onb-1", status="active")
+    parsed = _onboarding_query(
+        _onboarding(status="active", base=14000, built=("evpn-TENANT_PLATFORM", "TENANT_PLATFORM", 14000)),
+        tenants=_tenants({**LAB_BASES, "TENANT_PLATFORM": 14000}),
+    )
+    await _gen(TenantOnboardingGenerator, client).generate(parsed.model_dump(by_alias=True))
+
+    assert client.nodes["onb-1"].saves == []
+
+
+@pytest.mark.asyncio
+async def test_a_first_onboarding_records_its_tenant_and_base() -> None:
+    client = _UpsertingClient()
+    await _gen(TenantOnboardingGenerator, client).generate(_onboarding_query().model_dump(by_alias=True))
+
+    assert len(client.nodes["onb-1"].saves) == 2  # the record, then the status
+    assert client.nodes["onb-1"].mac_vrf_vni_base.value == 14000
+
+
 @pytest.mark.asyncio
 async def test_decommissioning_a_placement_deletes_the_machine_it_made() -> None:
     client = _Client()
@@ -405,9 +459,13 @@ async def test_withdrawing_a_tenant_that_still_has_vrfs_is_refused() -> None:
     """The one destructive path in this generator, and it had no test.
 
     An `EvpnTenant` deleted while VRFs hang off it takes the tenant out from
-    under live routing. The generator checks `vrfs` and `l2vlans` and refuses,
-    recording `error` -- but `_Node` carries no relationship managers, so the
-    check was skipped by every existing test and the guard was never exercised.
+    under live routing. The generator checks `vrfs` and `l2vlans` and refuses
+    -- but `_Node` carries no relationship managers, so the check was skipped
+    by every existing test and the guard was never exercised.
+
+    The refusal RAISES and writes no status. Recording `error` fired the
+    `status` trigger, and `error` is not a withdrawn status, so the next run
+    rebuilt the tenant and stamped the service `active`.
     """
     client = _Client()
     tenant = _Node("evpn-x")
@@ -415,10 +473,11 @@ async def test_withdrawing_a_tenant_that_still_has_vrfs_is_refused() -> None:
     client.nodes["evpn-x"] = tenant
 
     parsed = _onboarding_query(_onboarding(status="decommissioning", built=("evpn-x", "TENANT_PLATFORM", 14000)))
-    await _gen(TenantOnboardingGenerator, client).generate(parsed.model_dump(by_alias=True))
+    with pytest.raises(ValueError, match="refusing to delete"):
+        await _gen(TenantOnboardingGenerator, client).generate(parsed.model_dump(by_alias=True))
 
     assert client.deleted == [], "the tenant was deleted while VRFs still pointed at it"
-    assert client.nodes["onb-1"].status.value == "error"
+    assert "onb-1" not in client.nodes, "the refusal wrote to the service, which re-fires its status trigger"
 
 
 @pytest.mark.asyncio
