@@ -292,7 +292,9 @@ async def test_extract_l3ls_pools_creates_required_mlag_defaults_for_mlag_rack()
     assert pools["mlag_peer_l3_ipv4_pool"] == "192.0.0.0/28"
 
 
-async def test_extract_l3ls_pools_uses_fabric_supernet_fallback_for_missing_uplink_pool() -> None:
+async def test_extract_l3ls_pools_uses_fabric_supernet_fallback_for_missing_uplink_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     supernet_pool = _pool_node("supernet", "fabric_supernet")
     fallback_pool = object()
     fabric = SimpleNamespace(
@@ -303,16 +305,14 @@ async def test_extract_l3ls_pools_uses_fabric_supernet_fallback_for_missing_upli
     )
     pod = SimpleNamespace(mlag_peer_pool=None, mlag_l3_pool=None, racks=SimpleNamespace(edges=[]))
     gen = _make_generator({id(fallback_pool): "10.0.0.0/24"})
-    gen._ensure_fabric_supernet_fallback_pool = AsyncMock(return_value=fallback_pool)  # type: ignore[method-assign]
+    gen._client = MagicMock()  # the fallback is called with the generator's client
+    fallback = AsyncMock(return_value=fallback_pool)
+    monkeypatch.setattr("generators.generate_avd_device_hostvar.ensure_fabric_supernet_fallback_pool", fallback)
 
     pools = await gen._extract_l3ls_pools(fabric, pod)
 
     assert pools["uplink_ipv4_pool"] == "10.0.0.0/24"
-    gen._ensure_fabric_supernet_fallback_pool.assert_awaited_once_with(  # type: ignore[attr-defined]
-        fabric=fabric,
-        role=ResourceRole.FABRIC_POINT_TO_POINT,
-        fabric_pool_refs={ResourceRole.FABRIC_SUPERNET: supernet_pool},
-    )
+    fallback.assert_awaited_once_with(gen._client, fabric=fabric, role=ResourceRole.FABRIC_POINT_TO_POINT)
 
 
 async def test_extract_l3ls_pools_uses_generated_mlag_l3_pool_alias() -> None:

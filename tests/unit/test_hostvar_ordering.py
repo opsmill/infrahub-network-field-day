@@ -494,7 +494,7 @@ class TestExtractUplinksOrdering:
             _make_uplink_edge("i2", "Ethernet2", "spine", "r2", "Ethernet2", "d2", "spine-2"),
         ]
 
-        result = extract_uplinks_from_dict(edges, "spine", "local-device-id")
+        result = extract_uplinks_from_dict(edges, "spine")
 
         assert result["uplink_interfaces"] == ["Ethernet1", "Ethernet2", "Ethernet3"]
         assert result["uplink_switches"] == ["spine-1", "spine-2", "spine-3"]
@@ -507,7 +507,7 @@ class TestExtractUplinksOrdering:
             _make_uplink_edge("i1", "Ethernet49", "spine", "r1", "Ethernet3", "d1", "spine-1"),
         ]
 
-        result = extract_uplinks_from_dict(edges, "spine", "local-device-id")
+        result = extract_uplinks_from_dict(edges, "spine")
 
         assert result["uplink_interfaces"] == ["Ethernet49", "Ethernet50"]
         assert result["uplink_switches"] == ["spine-1", "spine-2"]
@@ -520,21 +520,21 @@ class TestExtractUplinksOrdering:
             _make_uplink_edge("i2", "Ethernet2", "spine", "r2", "Ethernet2", "d2", "spine-2"),
         ]
 
-        result = extract_uplinks_from_dict(edges, "spine", "local-device-id")
+        result = extract_uplinks_from_dict(edges, "spine")
 
         assert result["uplink_interfaces"] == ["Ethernet1", "Ethernet2"]
         assert result["uplink_switches"] == ["spine-1", "spine-2"]
 
     def test_empty_uplinks(self) -> None:
         """Empty interface list should return empty uplink lists."""
-        result = extract_uplinks_from_dict([], "spine", "local-device-id")
+        result = extract_uplinks_from_dict([], "spine")
         assert result["uplink_interfaces"] == []
         assert result["uplink_switches"] == []
         assert result["uplink_switch_interfaces"] == []
 
     def test_no_uplink_role(self) -> None:
         """None uplink_role should return empty lists."""
-        result = extract_uplinks_from_dict([], None, "local-device-id")
+        result = extract_uplinks_from_dict([], None)
         assert result["uplink_interfaces"] == []
 
     def test_single_uplink(self) -> None:
@@ -542,7 +542,7 @@ class TestExtractUplinksOrdering:
         edges = [
             _make_uplink_edge("i1", "Ethernet49", "spine", "r1", "Ethernet1", "d1", "spine-1"),
         ]
-        result = extract_uplinks_from_dict(edges, "spine", "local-device-id")
+        result = extract_uplinks_from_dict(edges, "spine")
         assert result["uplink_interfaces"] == ["Ethernet49"]
         assert result["uplink_switches"] == ["spine-1"]
 
@@ -554,7 +554,7 @@ class TestExtractUplinksOrdering:
         server_edge = _make_server_edge("s1", "Ethernet49", "rs1", "eth0", "ds1", "server-1")
 
         edges = [uplink_edge, server_edge, uplink_edge2]
-        result = extract_uplinks_from_dict(edges, "spine", "local-device-id")
+        result = extract_uplinks_from_dict(edges, "spine")
 
         assert result["uplink_interfaces"] == ["Ethernet1", "Ethernet2"]
         assert result["uplink_switches"] == ["spine-2", "spine-1"]
@@ -565,9 +565,9 @@ class TestExtractUplinksOrdering:
         edge2 = _make_uplink_edge("i2", "Ethernet2", "spine", "r2", "Ethernet4", "d2", "spine-2")
         edge3 = _make_uplink_edge("i3", "Ethernet3", "spine", "r3", "Ethernet3", "d3", "spine-3")
 
-        result_abc = extract_uplinks_from_dict([edge1, edge2, edge3], "spine", "x")
-        result_cab = extract_uplinks_from_dict([edge3, edge1, edge2], "spine", "x")
-        result_bca = extract_uplinks_from_dict([edge2, edge3, edge1], "spine", "x")
+        result_abc = extract_uplinks_from_dict([edge1, edge2, edge3], "spine")
+        result_cab = extract_uplinks_from_dict([edge3, edge1, edge2], "spine")
+        result_bca = extract_uplinks_from_dict([edge2, edge3, edge1], "spine")
 
         assert result_abc == result_cab == result_bca
 
