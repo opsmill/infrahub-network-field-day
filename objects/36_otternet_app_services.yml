@@ -133,10 +133,19 @@ spec:
       # the firewall is still dropped at Grafana until a grant adds 10.70.0.0/24
       # -- which is exactly what generate-app-access does.
       policy_default_deny: false
-      policy_allow_dns: true
-      policy_allow_intra_namespace: true
-      policy_allow_egress_api_server: true
-      policy_allow_egress_internet: true
+      # ALL FOUR OFF, and that is the point of default deny being off. The
+      # composition renders an `allow-*` policy for each flag that is true, and
+      # in Cilium any policy selecting a pod switches that direction to
+      # deny-by-default for it -- so `allow-dns` alone made Prometheus's egress
+      # default-deny and it could scrape nothing on another node or in another
+      # namespace: Telegraf, 12 of 18 kubelets, Cilium, Hubble and CoreDNS were
+      # all down (cycle 034, measured). With the flags off nothing selects
+      # Prometheus at all, and only Grafana's own `allow-ingress` -- the gate a
+      # grant opens -- remains.
+      policy_allow_dns: false
+      policy_allow_intra_namespace: false
+      policy_allow_egress_api_server: false
+      policy_allow_egress_internet: false
       allowed_source_prefixes:
         - ["10.111.0.0/16", "default"]
       # The pod port. The VIP answers on 80 (junos-http, below).
@@ -176,10 +185,14 @@ spec:
       exposed: false
 
       policy_default_deny: false
-      policy_allow_dns: true
-      policy_allow_intra_namespace: true
+      # Off for the reason otternet-metrics' are: each true flag renders a
+      # policy that makes Telegraf's ingress or egress deny-by-default, and
+      # `allow-intra-namespace` alone was enough to refuse Prometheus's scrape
+      # from the other namespace.
+      policy_allow_dns: false
+      policy_allow_intra_namespace: false
       policy_allow_egress_api_server: false
-      policy_allow_egress_internet: true
+      policy_allow_egress_internet: false
 
       member_of_groups:
         - service_fabric_apps

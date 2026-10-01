@@ -314,3 +314,23 @@ def test_dashboards_are_folded_into_the_metrics_payload_deterministically() -> N
     # Every other application's payload is attached exactly as committed.
     demo = PAYLOAD_DIR / "otternet-demo-values.yaml"
     assert module.assemble_payload("otternet-demo", demo) == demo.read_bytes()
+
+
+def test_the_observability_apps_render_no_policy_but_grafanas_gate() -> None:
+    """With default deny off, every `allow-*` flag must be off too.
+
+    The composition renders a CiliumNetworkPolicy per true flag, and any policy
+    selecting a pod makes that direction deny-by-default for it. `allow-dns`
+    on otternet-metrics made Prometheus's egress default-deny, and
+    `allow-intra-namespace` on otternet-telemetry refused Prometheus's scrape
+    from the other namespace -- measured with Telegraf, most kubelets, Cilium,
+    Hubble and CoreDNS all down. Grafana's gate is `allowed_source_prefixes`,
+    which renders `allow-ingress` on its pods only.
+    """
+    for name in OBSERVABILITY_APPS:
+        app = _app(name)
+        assert app["policy_default_deny"] is False, name
+        flags = {k: v for k, v in app.items() if k.startswith("policy_allow_") and k != "policy_allow_ports"}
+        assert flags, name
+        assert not any(flags.values()), f"{name}: {flags}"
+    assert _app("otternet-metrics")["allowed_source_prefixes"], "Grafana's pod gate must still exist"
