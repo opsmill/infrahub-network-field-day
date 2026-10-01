@@ -6,6 +6,7 @@ structured configurations for all devices in a fabric.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from operator import itemgetter
@@ -205,36 +206,42 @@ class AvdDeviceStructuredConfigGenerator(InfrahubGenerator):
 
         # Fetch hostvars from object storage
         hostvars = await self._fetch_hostvars_from_storage(devices)
+        # EVERY device, or none. `_fetch_hostvars_from_storage` skips a device
+        # whose file it cannot read, and pyAVD facts are computed fabric-wide:
+        # building them without one device builds its MLAG peer, its EVPN
+        # neighbours and its spines' uplinks from a fabric it is missing from,
+        # and every one of those configs then saves as though it were correct.
+        unreadable = sorted({d["hostname"] for d in devices} - set(hostvars))
+        if unreadable:
+            msg = f"Could not read stored hostvars for {', '.join(unreadable)}; refusing to build partial fabric facts"
+            raise RuntimeError(msg)
+
         missing_remote_peers = self._missing_evpn_gateway_remote_peers(hostvars)
         if missing_remote_peers:
-            self.logger.error(
+            msg = (
                 "Hostname-only EVPN Gateway remote peer hostvars are missing; generate hostvars for these peers "
-                "before structured config generation: %s",
-                ", ".join(missing_remote_peers),
+                f"before structured config generation: {', '.join(missing_remote_peers)}"
             )
-            return
+            raise RuntimeError(msg)
 
         validation_errors = self._collect_input_validation_errors(hostvars)
         if validation_errors:
             for err in validation_errors:
                 self.logger.error(f"Validation error: {err}")
-            self.logger.error(
-                f"pyAVD validation failed for {len(validation_errors)} inputs — aborting structured config generation"
-            )
-            return
+            msg = f"pyAVD validation failed for {len(validation_errors)} inputs; no structured config was written"
+            raise RuntimeError(msg)
 
         self.logger.info("Generating AVD facts for all devices...")
         try:
             avd_facts = get_avd_facts(hostvars)
             self.logger.info(f"Generated facts for {len(avd_facts)} devices")
-        except AVD_INPUT_ERRORS:
+        except AVD_INPUT_ERRORS as exc:
             # Invalid inputs for this fabric (e.g. one device with a bad MLAG/EVPN
-            # payload) fail this fabric alone instead of propagating and aborting
-            # every other fabric's structured-config run. Genuine bugs still raise.
-            self.logger.exception("AVD facts generation failed")
-            return
-
-        import hashlib
+            # payload). Each fabric is its own generator run, so raising fails
+            # this fabric alone -- and shows red, where a bare `return` showed
+            # green in the proposed change while writing nothing.
+            msg = f"AVD facts generation failed: {exc}"
+            raise RuntimeError(msg) from exc
 
         success_count = 0
         skipped_count = 0
@@ -299,3 +306,8 @@ class AvdDeviceStructuredConfigGenerator(InfrahubGenerator):
         )
         for failure in failed_devices:
             self.logger.error(f"  Failed: {failure}")
+        if failed_devices:
+            # Raised AFTER the loop, so every other device's config is still
+            # saved; the run is red because one device's is not.
+            msg = f"Structured config failed for {len(failed_devices)} device(s): {'; '.join(failed_devices)}"
+            raise RuntimeError(msg)

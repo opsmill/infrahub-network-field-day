@@ -492,3 +492,56 @@ class TestEvpnGatewayRemotePeerPreflight:
         missing = AvdDeviceStructuredConfigGenerator._missing_evpn_gateway_remote_peers(hostvars)
 
         assert missing == []
+
+
+# --- A run that writes nothing must not report success ---
+
+
+class TestFailuresAreRaisedNotLogged:
+    """Every abort used to `return` after a log line, so in the proposed-change
+    pipeline the generator showed green while no structured config was written.
+    Missing hostvars stays soft: it is the readiness state the hostvar cascade
+    passes through, not a fault."""
+
+    @staticmethod
+    def _generator_with(
+        monkeypatch: pytest.MonkeyPatch, hostvars: dict[str, dict]
+    ) -> AvdDeviceStructuredConfigGenerator:
+        import generators.generate_avd_device_structured_config as module
+
+        gen = _make_generator()
+        devices = [{"hostname": h, "id": f"id-{h}", "has_hostvar": True} for h in ("leaf-1", "spine-1")]
+        monkeypatch.setattr(module, "GenerateAvdInputsQuery", lambda **_: None)
+        monkeypatch.setattr(gen, "_extract_devices_from_fabric", lambda _data: devices)
+        monkeypatch.setattr(gen, "_fetch_hostvars_from_storage", AsyncMock(return_value=hostvars))
+        return gen
+
+    @pytest.mark.anyio
+    async def test_an_unreadable_hostvar_file_fails_the_run_instead_of_building_partial_facts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gen = self._generator_with(monkeypatch, {"leaf-1": {"hostname": "leaf-1"}})
+
+        with pytest.raises(RuntimeError, match="spine-1"):
+            await gen.generate({})
+
+    @pytest.mark.anyio
+    async def test_a_validation_failure_fails_the_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        both = {"leaf-1": {"hostname": "leaf-1"}, "spine-1": {"hostname": "spine-1"}}
+        gen = self._generator_with(monkeypatch, both)
+        monkeypatch.setattr(gen, "_collect_input_validation_errors", lambda _hv: ["leaf-1: bad (path: x)"])
+
+        with pytest.raises(RuntimeError, match="pyAVD validation failed"):
+            await gen.generate({})
+
+    @pytest.mark.anyio
+    async def test_missing_hostvars_is_still_a_soft_wait(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import generators.generate_avd_device_structured_config as module
+
+        gen = _make_generator()
+        monkeypatch.setattr(module, "GenerateAvdInputsQuery", lambda **_: None)
+        monkeypatch.setattr(
+            gen, "_extract_devices_from_fabric", lambda _data: [{"hostname": "leaf-1", "id": "x", "has_hostvar": False}]
+        )
+
+        await gen.generate({})  # no exception

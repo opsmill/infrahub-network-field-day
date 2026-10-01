@@ -21,10 +21,10 @@ tests/unit/test_deployment_schema_contract.py holds that.
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import quote
 
 from infrahub_sdk.generator import InfrahubGenerator
 
+from .artifact_render import request_artifact_render
 from .generate_monitoring_collector_query import GenerateMonitoringCollectorQuery
 
 COLLECTOR_ARTIFACT = "Telemetry Collector Configuration"
@@ -58,22 +58,14 @@ class MonitoringCollectorGenerator(InfrahubGenerator):
         a render the artifact check performs anyway.
         """
         branch = self.branch_name
-        client = self._init_client
         try:
-            definition = await client.get(
-                kind="CoreArtifactDefinition", artifact_name__value=COLLECTOR_ARTIFACT, branch=branch
+            await request_artifact_render(
+                self._init_client,
+                artifact_name=COLLECTOR_ARTIFACT,
+                target_id=collector_id,
+                branch=branch,
+                first_render=True,
             )
-            artifacts = await client.filters(
-                kind="CoreArtifact", name__value=COLLECTOR_ARTIFACT, object__ids=[collector_id], branch=branch
-            )
-            url = f"{client.address}/api/artifact/generate/{definition.id}"
-            if branch:
-                url = f"{url}?branch={quote(branch, safe='')}"
-            payload = {"nodes": [artifact.id for artifact in artifacts]}
-            # `_post` is private and is what the SDK's own generate() uses; there
-            # is no public call that takes a branch.
-            response = await client._post(url, payload=payload)  # noqa: SLF001
-            response.raise_for_status()
         except Exception as exc:  # noqa: BLE001 - see the docstring; never fatal here
             self.logger.warning("Could not re-render %r for %s (%s)", COLLECTOR_ARTIFACT, name, exc)
             return
