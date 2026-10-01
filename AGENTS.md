@@ -134,6 +134,13 @@ Four things about it are deliberate and each looks like an oversight:
   https://localhost:7007/api/catalog/entities/by-name/User/default/alice failed`, which names the
   catalog and never mentions TLS.
 
+**Guacamole does not sign in through Dex, deliberately.** It is the operator's way into
+the branch desktop, reached on host port 8080 -- often over Tailscale, where the issuer
+(`10.90.0.11`) is unreachable by design. A "sign in with Dex" button would hang for exactly
+the people who use it, and making it work means a second issuer or moving this one, both
+ruled out above. It keeps its file-based `branch` account
+(`lab/configs/branch/guacamole/user-mapping.xml`).
+
 **One catalogue item creates two service objects, and it is the only hand-written one.**
 `backstage/catalog/exposed-app-with-access.yaml` requests an exposed application *and*
 the grant that opens the way to it, on one branch under one proposed change. The

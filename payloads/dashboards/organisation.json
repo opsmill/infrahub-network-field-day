@@ -151,8 +151,8 @@
     },
     {
       "id": 5,
-      "type": "bargauge",
-      "title": "Proposed changes by state",
+      "type": "stat",
+      "title": "Open proposed changes",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -160,7 +160,7 @@
       "gridPos": {
         "x": 6,
         "y": 6,
-        "w": 10,
+        "w": 5,
         "h": 4
       },
       "targets": [
@@ -170,10 +170,42 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count by (state) (infrahub_coreproposedchange_info)",
+          "expr": "count(infrahub_coreproposedchange_info{state=\"open\"}) or vector(0)",
           "instant": true,
-          "range": false,
-          "legendFormat": "{{state}}"
+          "range": false
+        }
+      ],
+      "description": "Requests waiting for review. A fresh lab has none, which reads 0 rather than No data.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Merged proposed changes",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 11,
+        "y": 6,
+        "w": 5,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(infrahub_coreproposedchange_info{state=\"merged\"}) or vector(0)",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
