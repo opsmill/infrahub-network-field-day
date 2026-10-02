@@ -428,6 +428,26 @@ def _point_repository_at(ref: str, tip: str, timeout: int) -> None:
         if not (result.get("CoreReadOnlyRepositoryUpdate") or {}).get("ok"):
             raise Exit(f"Infrahub refused to change the ref to '{ref}'.", code=1)
     _wait_for(lambda: _repository().get("commit") == tip, f"the import of {tip[:10]} from '{ref}'", timeout)
+    _regenerate_artifacts()
+
+
+def _regenerate_artifacts() -> None:
+    """Re-render every artifact against what `main` now holds.
+
+    Moving the ref back to `main` does not always re-render: measured, a reset left
+    the `isp-pe1` artifact (and then the router) carrying the capability it had just
+    removed until the definitions were regenerated. The call is idempotent, and the
+    reconciler pushes only what moved.
+    """
+    print(" - Regenerating artifacts", flush=True)
+    for name, definition_id in sorted(_artifact_definition_ids().items()):
+        response = httpx.post(
+            f"{INFRAHUB_ADDRESS}/api/artifact/generate/{definition_id}",
+            headers={"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")},
+            timeout=300,
+        )
+        if response.status_code >= 400:
+            print(f"   {name}: HTTP {response.status_code}", flush=True)
 
 
 @task(
