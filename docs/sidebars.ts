@@ -6,6 +6,7 @@ const sidebars: SidebarsConfig = {
     'quick-start',
     'service-portal',
     'demo-runbook',
+    'demo-builder',
     'provision-first-fabric',
     'viewing-artifacts',
     'cloudvision',
