@@ -46,8 +46,9 @@ exposed `ServiceFabricApp` and the `ServiceAppAccess` that opens the way to it.
 The ordering is the design. `generate-app-access` reads the application's VIP
 block and `generate-fabric-app` is what allocates it; both fire on creation
 through independent rules, so a grant created beside its application races the
-allocation — and loses permanently, because the generator raises, stamps the
-grant `error`, and nothing re-runs it. The template waits for the allocation
+allocation — and loses for good, because the generator raises and stamps the
+grant `error`, and nothing re-runs it until someone edits one of the grant's own
+inputs. The template waits for the allocation
 between the two creates, then proves the block exists before creating the grant.
 
 It also regenerates the fabric before opening the change, so the reviewer sees

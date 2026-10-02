@@ -66,7 +66,7 @@ The next generator run writes a new `AvdHostvarFile` unconditionally.
 
 ### From the UI
 
-1. On a branch, open **Actions → Generator definitions**.
+1. On a branch, open **Actions → Generator Definitions**.
 2. Pick the generator (for example, `generate-avd-device-hostvar`).
 3. Click **Run** and select the target device (or fabric for Phase 2).
 

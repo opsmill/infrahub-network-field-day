@@ -81,22 +81,22 @@ Preview it with `uv run infrahubctl transform cabling_plan name=OTTERNET_FABRIC`
 
 **Purpose**: Convert AVD structured config to EOS CLI
 
-**Input**: DcimDevice (with AvdArtifact)
+**Input**: DcimFabricSwitch (with AvdArtifact), through `avd_device_config.gql`
 **Output**: EOS CLI configuration
 
 ```python
 class AvdEosConfigTransform(InfrahubTransform):
+    query = "avd_device_config"
+
     async def transform(self, data):
-        device = data["DcimDevice"]["edges"][0]["node"]
-        artifact = device["avd_artifact"]["node"]
+        data = AvdDeviceConfigQuery(**data)
+        device = data.dcim_fabric_switch.edges[0].node
+        artifact = device.avd_artifact.node if device.avd_artifact else None
+        if not artifact or not artifact.structured_config_file.node:
+            return f"! No structured config available for {device.name.value}"
 
-        if not artifact["structured_config_identifier"]["value"]:
-            return "! No structured config available"
-
-        config = await self.client.object_store.get(
-            identifier=artifact["structured_config_identifier"]["value"]
-        )
-        return pyavd.get_device_config(json.loads(config))
+        sc_file = await self.client.get(AvdStructuredConfigFile, id=artifact.structured_config_file.node.id)
+        return pyavd.get_device_config(json.loads(await sc_file.download_file()))
 ```
 
 ### AvdFabricDocTransform
@@ -133,7 +133,7 @@ class AvdFabricDocTransform(InfrahubTransform):
 
 **Purpose**: Generate per-device documentation
 
-**Input**: DcimDevice
+**Input**: DcimFabricSwitch
 **Output**: Markdown documentation for single device
 
 ### AvdAntaCatalogTransform
@@ -143,7 +143,7 @@ class AvdFabricDocTransform(InfrahubTransform):
 **Purpose**: Render a per-device [ANTA](https://anta.arista.com) test catalog from the stored
 structured config
 
-**Input**: DcimDevice
+**Input**: DcimFabricSwitch
 **Output**: YAML catalog, or a one-line marker comment
 
 Unlike EOS config rendering, catalog generation needs fabric-wide data, so the transform gathers

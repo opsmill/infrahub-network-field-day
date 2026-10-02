@@ -22,11 +22,11 @@ A Python routine that reads high-level design intent and creates the many detail
 
 ## Transform
 
-A routine that converts stored data into an output document, saved as an artifact. Here, transforms render EOS CLI configuration, fabric and per-device Markdown documentation, the cabling-plan CSV, the ANTA test catalog, and the ContainerLab topology — with PyAVD running inside Infrahub's workers. See the [Transforms](./transforms.md) reference.
+A routine that converts stored data into an output document, saved as an artifact. Here, transforms render EOS CLI configuration, fabric and per-device Markdown documentation, the cabling-plan CSV, the ANTA test catalog, and the ContainerLab topology — with PyAVD running inside Infrahub's workers — and, beyond the fabric, the SR Linux WAN configurations, the firewall's Junos configuration, the Crossplane manifests Vidra delivers, and the telemetry collector's configuration. See the [Transforms](./transforms.md) reference.
 
 ## Check
 
-A Python routine that Infrahub runs during proposed-change validation. It writes no artifact — it reports pass, information, or error, and an error blocks the merge. This reference design ships one: `cv-config-validation`, which deploys the rendered EOS configs into a CloudVision workspace and reports CloudVision's build result back to the proposed change. See the [Checks](./checks.md) reference and [CloudVision Validation](../cloudvision.md).
+A Python routine that Infrahub runs during proposed-change validation. It writes no artifact — it reports pass, information, or error, and an error blocks the merge. This reference design ships six. `cv-config-validation` deploys the rendered EOS configs into a CloudVision workspace and reports CloudVision's build result back to the proposed change; `fabric-pool-validation` runs per fabric; and `peering-consistency`, `zone-advertisement`, `wan-service-consistency` and `allocation-consistency` are global statements about the whole graph. See the [Checks](./checks.md) reference and [CloudVision Validation](../cloudvision.md).
 
 ## Artifact
 

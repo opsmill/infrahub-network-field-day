@@ -11,12 +11,16 @@ Once generators have run on a branch and you've opened a proposed change (see [P
 
 | Artifact | Attached to | Content type | Purpose |
 |----------|-------------|--------------|---------|
-| **AVD EOS Configuration** | Each `DcimDevice` | `text/plain` | The Arista EOS CLI configuration for that device. |
-| **AVD Device Documentation** | Each `DcimDevice` | `text/markdown` | Human-readable documentation describing the device. |
+| **AVD EOS Configuration** | Each `DcimFabricSwitch` | `text/plain` | The Arista EOS CLI configuration for that device. |
+| **AVD Device Documentation** | Each `DcimFabricSwitch` | `text/markdown` | Human-readable documentation describing the device. |
 | **AVD Fabric Documentation** | Each `NetworkFabric` | `text/markdown` | Fabric-wide topology and design documentation. |
 | **ContainerLab Topology** | Each `NetworkFabric` | `application/yaml` | A [ContainerLab](https://containerlab.dev) topology file for running the fabric as containers. |
 | **Cabling Plan** | Each `NetworkFabric` | `text/csv` | One row per connection for the field and cabling teams. |
-| **AVD ANTA Catalog** | Each `DcimDevice` | `application/yaml` | The device's [ANTA](https://anta.arista.com) test catalog. Rendered only when the fabric has `anta_enabled` set; otherwise the artifact holds a one-line comment saying so. |
+| **AVD ANTA Catalog** | Each `DcimFabricSwitch` | `application/yaml` | The device's [ANTA](https://anta.arista.com) test catalog. Rendered only when the fabric has `anta_enabled` set; otherwise the artifact holds a one-line comment saying so. |
+| **SR Linux Configuration** | Each WAN router (`DcimDevice`, group `srl_routers`) | `text/plain` | The router's full SR Linux configuration as flat `set` commands. |
+| **Junos Configuration** | The firewall (`SecurityFirewall`, group `junos_firewalls`) | `text/plain` | The vSRX configuration, everything except the `system` stanza. |
+| **Crossplane FabricApp** / **Crossplane FabricPeering** | Each `ServiceFabricApp` / `ServiceFabricPeering` | `application/yaml` | The manifest Vidra delivers into the lab's Kubernetes cluster. |
+| **Telemetry Collector Configuration** | Each `MonitoringCollector` | `application/yaml` | Telegraf's whole configuration, rendered from the monitoring profiles. |
 
 Per-device artifacts (`AVD EOS Configuration`, `AVD Device Documentation`) are rendered as part of the proposed-change CI. If you want to view them outside a proposed change, open them on a device's **Artifacts** tab and click **Regenerate**.
 
@@ -77,7 +81,8 @@ topology:
 
 Node kinds, container images, and interface-mapping binds come from schema attributes rather than
 the transform, so changing the cEOS version is a data change. See the
-[ContainerLab page](./containerlab.md) for the full shape and for how to deploy the topology.
+[ContainerLab page](./containerlab.md) for the full shape, and for why `invoke lab` deploys the
+committed topology rather than this one.
 
 ## Downloading artifacts
 

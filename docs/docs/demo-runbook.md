@@ -4,203 +4,413 @@ title: Demo runbook
 
 # Demo runbook
 
-The order below is not preference. It is what the measured timings make sensible:
-a merge reaches the **cluster** in under a minute and a **device** on the
-reconciler's next cycle, so showing the cluster first fills the gap the fabric
-would otherwise leave you standing in.
+This is the script for showing the lab to an audience. It assumes a finished
+`uv run invoke bootstrap`, and every command below is run from the repository
+root unless it says otherwise.
+
+The order is not preference. It follows from the measured timings: a merge
+reaches the **cluster** in under a minute and a **device** on the reconciler's
+next cycle. Showing the cluster first fills the gap the fabric would otherwise
+leave you standing in.
+
+| Act | What the audience sees | Changes state |
+| --- | --- | --- |
+| [Preflight](#before-anyone-is-watching) | Nothing. You do this alone. | No |
+| [One](#act-one-ask-for-an-application) | A branch user asks for an application and can reach it after one merge | Yes: a branch, then a merge |
+| [Two](#act-two-a-branch-user-asks-for-grafana) | The same request against Grafana, then monitoring as intent | Yes |
+| [Three](#act-three-revoke-it) | Access withdrawn through the same workflow | Yes |
+| [Four](#act-four-the-review-step-bites) | A check catching a mistake nothing else would notice | A branch only, never merged |
+| [Five](#act-five-the-agent-through-the-mcp-server) | An agent working through the MCP server, on a branch | A branch only |
+
+:::note What was checked, and how
+The preflight commands, the device commands and the "before" state of every act
+were run against a freshly bootstrapped lab. The steps that create, merge or
+revoke something were not re-run for this page; they are written from the
+portal templates in `backstage/catalog/` and the generators beneath them, and
+their timings come from measurements recorded in this repository's documentation.
+:::
 
 ## Before anyone is watching
 
+Allow ten minutes. Each check guards against something that goes wrong quietly.
+
+### 1. The reconciler loop is running, at demo cadence
+
 ```bash
-docker compose ps | grep deployment-reconciler   # must be running
-uv run infrahubctl branch list                   # main, and nothing stale
-uv run python scripts/provision_portal_accounts.py --check
+docker compose ps deployment-reconciler
+docker exec infrahub-deployment-reconciler-1 env | grep RECONCILE
+docker logs --tail 3 infrahub-deployment-reconciler-1 | grep cycle
 ```
 
-Three things go wrong if you skip these:
+You want the container `Up`, and these two values:
 
-- **No reconciler, no device changes.** It is behind a compose profile. Without
-  it a merge reaches nothing, and the deployment view still shows green from
-  whenever it last ran — a reading identical to a healthy one. Start it with
-  `docker compose --profile reconcile up -d deployment-reconciler`, and for a
-  demo set `OTTERNET_RECONCILE_FIREWALL_EVERY=1` so the firewall is compared
-  every cycle rather than one in four, and `OTTERNET_RECONCILE_INTERVAL=120`.
-  Put both in `.env` at the repository root (gitignored) so they survive a
-  restart; the defaults, 600s and one cycle in four, leave a merge up to forty
-  minutes from the firewall. `docker exec infrahub-deployment-reconciler-1 env
-  | grep RECONCILE` shows what the running container has.
-- **A user with no Infrahub account cannot request anything.** The account is
-  created by their first Infrahub sign-in, so a fresh environment fails the first
-  request *after* creating its branch. `invoke tooling` provisions them; the
-  `--check` above tells you if any are missing.
-- **Stale branches in the selector** are the first thing on screen in Infrahub
-  and invite the one question you do not want. Infrahub mirrors the git branches
-  of the repository it clones, so a local git branch reappears in Infrahub after
-  its Infrahub branch is deleted. Remove or push aside the git branch first.
+```text
+OTTERNET_RECONCILE_INTERVAL=120
+OTTERNET_RECONCILE_FIREWALL_EVERY=1
+```
 
-The branch user's screen is the branch desktop, through Guacamole on the host's
-port 8080 (`http://<host>:8080/`, over Tailscale for a remote laptop). The
-portal itself is reachable only from the branch side, so a browser on the
-presenter's laptop cannot open it directly.
+and a recent line ending `compared=14 differed=0 pushed=0 failed=0 suspended=0 not-due=0`.
 
-## The arc
+**Without the loop, a merge reaches no device**, and the deployment view still
+shows the green it recorded during the build. That reading is identical whether
+the loop is running or was never started. The defaults are a 600-second cycle and
+the firewall compared one cycle in four, which can leave a merge up to forty
+minutes from the firewall. Put both values in `.env` at the repository root
+(gitignored) so they survive a restart, then
+`docker compose --profile reconcile up -d deployment-reconciler`.
 
-**1. Ask for something.** [https://10.90.0.11:32001](https://10.90.0.11:32001), sign in as
-`alice@otternet.lab` / `password`, choose **Exposed application, with access**.
-Every field is a dropdown or prefilled; the chart values default to a working
-exposure block. About **75 seconds**, most of it two generator waits.
+### 2. Infrahub is clean
 
-What to say while it runs: the request creates a branch, an application and an
-access grant, waits for the VIP to be allocated before the grant is built, and
-regenerates the fabric — so the proposed change carries consequences, not just a
-request.
+```bash
+uv run infrahubctl repository list    # Sync status: in-sync
+uv run infrahubctl branch list        # main, and nothing you would rather not explain
+```
 
-**2. Read the proposed change.** This is the point of the whole thing. It
-contains the service objects, the firewall rule, the address-book entry, the
-source prefix added to the application's own policy, the regenerated host vars
-and the **rendered configuration diff** for the border leaf — one line,
-`seq <n> permit <vip>`, inside `PL-DC-ADVERTISED-BRANCH`.
+The branch selector is the first thing on screen in Infrahub. **Infrahub
+mirrors the git branches of the repository it clones**, which here is your own
+checkout, so every local git branch, including each `worktree-*` branch an agent
+created, appears as an Infrahub branch. Deleting the Infrahub branch is not
+enough: delete or push aside the git branch first, or it comes back.
 
-Merging is the approval. There is no second gate, deliberately: two gates can
-only disagree.
+In the Infrahub UI, **Deployment → Device Sync State** should list fourteen
+devices, all `in_sync`, with `last_checked_at` inside the last couple of minutes.
 
-**3. Merge, and show the cluster first.** Vidra delivers within about a minute
-and the application deploys. `kubectl get fabricapp` and `kubectl -n <app> get
-svc` show the VIP arriving.
+### 3. Every portal user has an Infrahub account
 
-**4. Then the device.** On the next reconcile cycle the firewall is pushed. Show
-the rule landing:
+```bash
+uv run python scripts/provision_portal_accounts.py --check
+# Every portal user already has an account.
+```
+
+An Infrahub account is created by its owner's first Infrahub sign-in. A user
+without one fails at the create step **after** the request has already made its
+branch: a red run and an orphan branch, mid-demo. `invoke tooling` provisions
+them; this tells you whether it did.
+
+### 4. The network is up
+
+```bash
+make -C lab fabric-bgp     # underlay and EVPN sessions on all seven switches
+make -C lab wan-bgp        # every SR Linux WAN router's BGP neighbours, all `established`
+export KUBECONFIG=lab/k8s/.kubeconfig/kubeconfig.yaml
+kubectl get fabricapp,fabricpeering    # otternet-demo, -metrics, -telemetry and the peering: READY True
+kubectl get infrahubsync -o custom-columns=NAME:.metadata.name,STATE:.status.syncState
+```
+
+`syncState: Succeeded` alone proves nothing, because a sync over an empty set
+also succeeds. The `READY True` claims are the evidence that Vidra delivered.
+
+### 5. The "before" picture is what you expect
+
+Nothing is granted on a fresh lab, so the branch reaches neither application VIP:
+
+```bash
+docker exec clab-otternet-branch-desktop curl -s -m 8 -o /dev/null -w '%{http_code}\n' http://10.112.240.81/   # 000, timed out
+docker exec clab-otternet-branch-desktop curl -s -m 8 -o /dev/null -w '%{http_code}\n' http://10.112.240.0/    # 000, timed out
+```
+
+`10.112.240.81` is Grafana (`otternet-metrics`) and `10.112.240.0` is the
+seeded `otternet-demo`. The firewall's `branch → k8s-prod` zone pair carries
+only the hand-written rules:
 
 ```bash
 docker exec -i clab-otternet-fw1 sshpass -p 'admin@123' ssh -o StrictHostKeyChecking=no \
-  admin@localhost "show configuration security policies | display set | match <app>"
+  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR admin@127.0.0.1 \
+  "show configuration security policies from-zone branch to-zone k8s-prod | display set" | grep -c svc-
+# 0
 ```
 
-**5. The packet.** From the branch desktop, curl the VIP — and then curl one it
-was not granted:
+### Screens to have open
+
+| Screen | Address | Sign in |
+| --- | --- | --- |
+| The branch desktop, through Guacamole | `http://<host>:8080/` (over Tailscale from a remote laptop) | `branch` / `branch` |
+| Infrahub, as the operator | `http://<host>:8000/` | the local `admin` account |
+| A terminal on the host | | |
+
+The portal (`https://10.90.0.11:32001`) and Dex are reachable **only from the
+branch side**, so open the portal inside the branch desktop. Its Firefox starts
+on the portal and carries toolbar bookmarks for Infrahub, **Grafana (needs
+access)** and **Demo frontend (needs access)**. The desktop already trusts the
+portal's self-signed certificate.
+
+An operator signs in to Infrahub with the local `admin` account on the same
+login page as the Dex button. The Dex issuer is unreachable from an operator's
+laptop on purpose.
+
+## Act one: ask for an application
+
+**1. Ask.** On the branch desktop, open **Service Portal**, sign in with Dex as
+`alice@otternet.lab` / `password`, open the portal's template list, and choose
+**Exposed application, with access**. Fill in what has no default:
+
+| Field | Value |
+| --- | --- |
+| Application name | `otter-shop` |
+| What it is | anything a stranger would understand |
+| Kubernetes namespace | `otter-shop` |
+| Chart repository / name / version | `https://cowboysysop.github.io/charts/` / `whoami` / `6.0.0` (the seeded application's chart) |
+| Request reference | `demo1`, or anything not used before |
+
+Leave the rest. The defaults are the cluster `otternet`, VRF `K8S_PROD`, ports
+`junos-http`, a `/28` VIP block, source site `branch-office`, and chart values
+carrying a working exposure block: a LoadBalancer Service with the
+`otternet.lab/advertise: "true"` label the service selector names.
+
+The run takes **about 75 seconds**, most of it two waits. What to say while it
+runs, step by step, because the step list is on screen:
+
+- It creates a branch, `implement_otter-shop_demo1`, and the application on it,
+  **as `alice`**. The write carries her account through the mutation's `context`,
+  so the events are attributed to her, not to the portal's service account.
+- It **waits for the VIP block to be allocated** before it creates the grant.
+  Both generators fire on creation and nothing else orders them; a grant that
+  loses that race is stamped `error` and nothing retries it on its own.
+- It **regenerates the fabric**: host vars for all seven switches, then their
+  structured configs, about 21 seconds. Without that the border leaf's change
+  would be a JSON attribute rather than configuration.
+- Only then does it open the proposed change, so the change's own checks render
+  from current data.
+
+**2. Read the proposed change.** Follow the run's **Review the proposed change**
+link, or open **Proposed Changes** in Infrahub. This is the point of the whole
+thing. It contains:
+
+- the `ServiceFabricApp`, and the `ServiceAppAccess` with `alice@otternet.lab`
+  as its requester;
+- the VIP block taken from the cluster's pool;
+- the firewall rule `svc-otter-shop-access` (`branch → k8s-prod`, `junos-http`),
+  its address-book entry for the VIP, and `10.70.0.0/24` added to the
+  application's own allowed sources, which is the pod-level gate;
+- the regenerated host vars, and the **rendered configuration diff** for the border
+  leaf: one line, `seq <n> permit <vip block>`, in `PL-DC-ADVERTISED-BRANCH`; the
+  other six switches are unchanged;
+- the re-rendered **Junos Configuration** artifact for `fw1`, and the
+  **Crossplane FabricApp** artifact for the new application.
+
+Point at the checks: `wan-service-consistency`, `zone-advertisement`,
+`allocation-consistency`, `peering-consistency` and `fabric-pool-validation`
+are green, which only means something once [act four](#act-four-the-review-step-bites)
+has shown one going red.
+
+Merging is the approval. The grant has no second gate, deliberately:
+two gates can only disagree.
+
+**3. Merge, and show the cluster first.** Merge the proposed change in Infrahub.
+Vidra delivers within about a minute:
 
 ```bash
-docker exec clab-otternet-branch-desktop curl -s -m 10 http://<granted vip>/     # answers
-docker exec clab-otternet-branch-desktop curl -s -m 8 http://10.112.240.0/       # refused
+kubectl get fabricapp otter-shop                 # SYNCED True, READY True
+kubectl -n otter-shop get svc                    # EXTERNAL-IP is the VIP, inside the allocated block
 ```
 
-The second one matters more than the first. It is what shows the firewall is the
-control rather than an open path.
+**4. Then the devices.** On the next reconcile cycle, two minutes at demo cadence,
+the reconciler pushes two devices, `fw1` and the border leaf, and confirms them
+on the cycle after:
 
-**6. Revoke it.** **Revoke access** in the portal, pick the grant, merge. The
-rule, the address-book entry and the source prefix the grant opened are removed —
-and a rule written by hand in the same zone pair is left alone, because removal
-is keyed on provenance rather than on shape.
+```bash
+docker logs -f infrahub-deployment-reconciler-1 2>&1 | grep --line-buffered cycle
+# ... compared=14 differed=2 pushed=2 ...
+```
+
+Show the rule and the advertisement landing:
+
+```bash
+docker exec -i clab-otternet-fw1 sshpass -p 'admin@123' ssh -o StrictHostKeyChecking=no \
+  -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR admin@127.0.0.1 \
+  "show configuration security policies from-zone branch to-zone k8s-prod | display set | match svc-"
+docker exec clab-otternet-border-leaf1 Cli -c "show ip prefix-list PL-DC-ADVERTISED-BRANCH"
+```
+
+Both pushes are full replaces, never merges. The leaf's runs in an EOS
+configuration session that starts from `rollback clean-config`. The firewall
+loads the whole artifact with `load override` and commits it with `commit
+confirmed`, and the reconciler sends the confirmation only once the device still
+answers, so a push that cut the reconciler off rolls itself back.
+
+**5. The packet.** From the branch desktop, the granted VIP answers, and the one
+nobody granted does not:
+
+```bash
+docker exec clab-otternet-branch-desktop curl -s -m 10 http://<otter-shop vip>/     # whoami answers
+docker exec clab-otternet-branch-desktop curl -s -m 8 http://10.112.240.0/          # times out
+```
+
+The second one matters more than the first. `otternet-demo` is running,
+advertised, and healthy. The branch still cannot reach it, which shows the
+firewall and the pod policy are the control, and not an open path. In the
+desktop's Firefox, the **Demo frontend (needs access)** bookmark makes the same
+point.
 
 ## Act two: a branch user asks for Grafana
 
-Grafana is already running when the demo starts. It is `otternet-metrics`, a seeded application
-that Infrahub delivered through Vidra like any other. Nobody at the branch can use it yet.
+Grafana is already running when the demo starts. It is `otternet-metrics`, a
+seeded application that Infrahub delivered through Vidra like any other, on the
+pinned VIP `10.112.240.81`. Nobody at the branch can use it yet.
 
-**1. Show the gate.** On the branch desktop, the toolbar bookmark **Grafana (needs access)** opens
-`http://10.112.240.81/`, and nothing answers. The branch has no route to the VIP and no firewall
-permit, and Grafana's own pod policy names no branch source.
+**1. Show the gate.** On the branch desktop, the toolbar bookmark **Grafana
+(needs access)** opens `http://10.112.240.81/`, and nothing answers. Three gates
+are shut: the branch has no route to the VIP, the firewall has no permit, and
+Grafana's own pod policy names no branch source.
 
-**2. Ask.** In the portal, as `alice@otternet.lab`, request access to `otternet-metrics` from site
-`branch`. It is the ordinary access request; Grafana needs nothing special.
+**2. Ask.** In the portal, as `alice@otternet.lab`, choose **Application Access
+Grant (generated)**, the template the portal derives from the schema. Create a grant
+on application `otternet-metrics` from source site `branch-office`. Grafana
+needs nothing special; this is the ordinary access request. A grant on its own
+takes about thirty seconds.
 
-**3. Read the proposed change.** The rule `branch → k8s-prod` on `junos-http`, the address-book
-entry for `10.112.240.81`, `10.70.0.0/24` added to the application's allowed sources, and the
-border leaf's `PL-DC-ADVERTISED-BRANCH` gaining the VIP. The Junos and EOS artifacts re-render
-alongside.
+**3. Read the proposed change.** The rule `branch → k8s-prod` on `junos-http`,
+the address-book entry for `10.112.240.81`, `10.70.0.0/24` added to the
+application's allowed sources, and, once the AVD pass has been run on the branch,
+the border leaf's `PL-DC-ADVERTISED-BRANCH` gaining the VIP. The Junos artifact
+re-renders alongside.
 
-**4. Merge, and sign in.** Once the reconciler has pushed fw1 and the leaf, reload the bookmark.
-Grafana redirects to the same Dex sign-in page the portal uses. `alice` signs in and lands as a
-**Viewer** in the OTTERNET folder.
+The generated templates stop at the service's own generator, unlike the
+hand-written one. The fabric consequence still appears because
+`generate-avd-device-hostvar` runs in every proposed change's pipeline; give it a
+moment after the change opens.
 
-**5. Show the dashboards, in this order:**
+**4. Merge, and sign in.** Once the reconciler has pushed `fw1` and the border
+leaf, about 2.3 minutes from the merge at demo cadence, reload the bookmark.
+Grafana redirects to the same Dex sign-in page the portal uses. `alice` signs in
+and lands on the **Organisation** dashboard as a **Viewer**: the sign-in path
+can never make anyone an administrator.
 
-- **Organisation**: what Infrahub says the lab is, counted from the graph by the exporter.
-- **Fabric telemetry**: streaming telemetry from every switch. Point at **Intended sessions not
-  established**, which is empty, and say why that panel exists: Infrahub knows which sessions
-  should be up, so it can say which ones are missing.
-- **Monitoring is intent too.** In Infrahub, open the `fabric-core` profile and remove
-  `bgp-neighbor-state` on a branch. The proposed change shows the collector's configuration losing
-  its BGP subscriptions, and nothing else.
+**5. Show the dashboards, in this order.** They are in the `OTTERNET` folder.
 
-**6. Revoke.** Set the grant to `decommissioning` and merge. After the next reconcile the bookmark
-stops answering again, and anyone already signed in loses the page with it.
+- **OTTERNET / Organisation**: what Infrahub says the lab is, counted from the
+  graph by the exporter. Devices by kind, services by status, and open and
+  merged proposed changes.
+- **OTTERNET / Fabric telemetry**: gNMI from every switch. Point at **Intended
+  but not established**, which is empty, and say why that panel exists:
+  Infrahub knows which sessions *should* be up, so it can say which ones are
+  missing. **Established but never intended** is the converse.
+- **OTTERNET / WAN routing**: the SR Linux routers, also over gNMI. They answer
+  the same OpenConfig paths as the switches, so their series carry the same names
+  and labels.
 
-A grant made **outside the portal** -- over the API or an SDK -- must also be added to the
-`service_app_accesses` group. The generator runs only for members of its target group: the event
-rule fires, and the run fails "Target … is not part of the group" with nothing visible on the
-grant. The portal adds the membership itself.
+**6. Monitoring is intent too.** In Infrahub, on a new branch, open
+**Monitoring → Profiles → `fabric-core`** and remove the measurement
+`bgp-neighbor-state`. Open a proposed change. It shows the collector's
+**Telemetry Collector Configuration** artifact losing its BGP subscriptions,
+and nothing else. Do not merge it; delete the branch afterwards.
 
-## If you want the review step to bite
+## Act three: revoke it
+
+In the portal, choose **Revoke access**, pick the `otter-shop-access` grant (or
+the Grafana one), give a request reference, and submit. It sets the grant to
+`decommissioning` on a branch, waits for the generator to remove what the grant
+created, regenerates the fabric, and opens the proposed change.
+
+The change removes the rule, the address-book entry, the source prefix the grant
+added, and the border leaf's advertisement line. A rule written by hand in the
+same zone pair is left alone. `branch-to-access-portal` is one, and it sits in
+the same zone pair the grant's rule left, because removal is keyed on provenance
+(`managed_by_service`) rather than on shape. A source prefix that another live
+grant still relies on is also left in place.
+
+Merge it. On the next reconcile cycle both devices are pushed again, and the VIP
+stops answering from the branch. Anyone already signed in to Grafana loses the
+page with it.
+
+A grant can also be withdrawn without the portal by setting its `status` to
+`decommissioning` in the Infrahub UI, on a branch: the event rule on `status`
+fires the generator, and the proposed change shows the same withdrawal.
+
+## Act four: the review step bites
+
+Every check is green on every proposed change the demo produces, so the
+review step can read as decoration. This makes one go red:
 
 ```bash
-scripts/demo_break_isolation.sh            # then open the proposed change
-scripts/demo_break_isolation.sh --revert
+scripts/demo_break_isolation.sh            # needs INFRAHUB_API_TOKEN in the environment
+scripts/demo_break_isolation.sh --revert   # afterwards: deletes the branch and the change
 ```
 
-Adds one tenant's circuit to another tenant's L3VPN — the routing domain, not a
-label — and `wan-service-consistency` fails naming both tenants while everything
-else stays green. Nothing renders wrong, which is the point.
+It adds `globex-hq`'s circuit to `acme-l3vpn` on the branch
+`demo-broken-isolation` and opens a proposed change. A circuit in an L3VPN is the
+routing domain, not a label, so this joins two tenants directly across the
+provider edge. `wan-service-consistency` fails naming both tenants while every
+other check stays green. Nothing renders wrong, which is the point: the check is
+what notices.
 
-## The agent, through the MCP server
+The script re-runs the checks after the edit, on purpose. The first pass starts
+when the proposed change is created and has been measured racing the edit, all
+green over data that was already wrong. It never merges.
+
+## Act five: the agent, through the MCP server
 
 ```bash
-uv run invoke mcp                                   # account, then container
 uv run python scripts/provision_mcp_agent.py --check
-curl -s http://127.0.0.1:8001/health                # {"status":"healthy"}
+# mcp-agent signs in and holds only the 'Agent Access' role.
+curl -s http://127.0.0.1:8001/health
+# {"status":"healthy"}
 ```
 
-Claude Code picks the server up from `.mcp.json` as `infrahub-lab` and asks you to
-approve it the first time. It signs in as `mcp-agent`, which reads everything,
-writes only on a branch — the server creates one per session, named
-`mcp/session-<date>-<hex>` — and can open a proposed change. A write aimed at
-`main` is refused by Infrahub, not by the prompt. `find_reachable` answers
-"what depends on this": from `otternet-demo` it returns 24 connected objects,
-its VIP block first.
+Claude Code picks the server up from `.mcp.json` as `infrahub-lab` and asks you
+to approve it the first time. It signs in as `mcp-agent`, never as the
+Super Administrator `agent` the task workers run as. It reads everything, writes
+only on a branch (the server creates one per session, named
+`mcp/session-<date>-<hex>`), and can open a proposed change. A write aimed at
+`main` is refused by Infrahub, not by the prompt.
+
+Good questions to ask it: "what depends on `otternet-demo`?" (`find_reachable`
+walks from the application to its cluster, its VIP block and onward), or "which
+switches would a change to `K8S_PROD` touch?"
 
 **Do not claim the agent cannot merge.** On Infrahub 1.10.6 the
 `CoreProposedChangeMerge` mutation does not check `merge_proposed_change`, and
-the MCP server's `mutate_graphql` does not block it, so `mcp-agent` merged its
-own proposed change when tested. Say instead that every change the agent makes
-lands on a branch as a proposed change, and that merging is where the human
-decides.
+the MCP server does not block it, so `mcp-agent` merged its own proposed change
+when tested. Say instead that every change the agent makes lands on a branch as
+a proposed change, and that merging is where the human decides.
 
 ## Timings, measured
 
 | Step | Wall clock |
 | --- | --- |
-| Portal request, start to proposed change | ~75s |
+| Portal request **Exposed application, with access**, start to proposed change | about 75 s |
+| Of that, the whole-fabric AVD regeneration (7 switches) | about 21 s (15 s host vars, 6 s structured configs) |
+| A single access grant through the portal | about 30 s |
 | Merge to the resource existing in Kubernetes | under a minute |
-| Merge to the firewall carrying the rule | next reconcile cycle |
-| Whole-fabric AVD regeneration (7 switches) | ~21s |
-| Revocation, merge to the rule leaving the device | next reconcile cycle |
-| Grafana grant, merge to Grafana answering the branch | ~2.3 minutes, one reconcile cycle |
+| Merge to `fw1` and the border leaf carrying the change | the next reconcile cycle, 120 s at demo cadence |
+| Grafana grant, merge to Grafana answering the branch | about 2.3 minutes, one reconcile cycle |
+| Revocation, merge to the rule leaving the device | the next reconcile cycle |
 
 Measured on this lab: a granted VIP answered `HTTP 200` from the branch desktop,
-the seeded application's VIP and an unpermitted port on the granted one were both
-refused, and after revoking, the same VIP stopped answering once the reconciler
-pushed — two devices on one cycle, the firewall and the border leaf.
+the seeded application's VIP and an unpermitted port on the granted one were
+both refused, and after revoking, the same VIP stopped answering once the
+reconciler pushed two devices on one cycle: the firewall and the border leaf.
 
 ## What is already there
 
-Only `otternet-demo` is seeded, and it is **not** reachable from the branch: an
-application with no grant. It is a ready-made target if you would rather
-demonstrate granting access to something that already exists than create an
-application first — the generated **Request application access** item does that
-in one step.
+Three applications are seeded, and none is reachable from the branch:
 
-Anything else was requested through the portal and lives only in that
-environment's database, so a rebuild removes it. An earlier runbook named
-`otter-bakery` here; it was portal-created and does not survive a fresh
-bootstrap. Request it again during rehearsal if the demo wants a second
-ungranted application.
+| Application | VIP | Purpose |
+| --- | --- | --- |
+| `otternet-demo` | `10.112.240.0` | a `whoami` workload, the ready-made target for a grant on something that already exists |
+| `otternet-metrics` | `10.112.240.81` | Grafana and Prometheus, for act two |
+| `otternet-telemetry` | none, not exposed | Telegraf, configured entirely from the monitoring profiles |
+
+No grant is seeded, and a test keeps it that way. Anything else was requested
+through the portal and lives only in that environment's database, so a rebuild
+removes it. Rehearse with a different request reference from the one you plan to
+use live.
 
 ## Recovery
 
-- **A request fails half way** — change the request reference and resubmit;
-  `BranchCreate` is not idempotent, so the same reference dies on step 1. Delete
-  the orphan branch afterwards.
-- **`Unable to set context for account that doesn't exist`** — that user has
-  never signed in to Infrahub. Run `scripts/provision_portal_accounts.py`.
-- **The cluster resource never appears** — check the `VidraResource`, not the
-  sync: a sync reports `Succeeded` over an empty or rejected set.
+- **A request fails half way.** Change the request reference and resubmit:
+  `BranchCreate` is not idempotent, so the same reference dies on the first step.
+  Delete the orphan branch afterwards, in Infrahub and, if it was mirrored, in git.
+- **`Unable to set context for account that doesn't exist`.** That user has never
+  signed in to Infrahub. Run `uv run python scripts/provision_portal_accounts.py`.
+- **A grant made outside the portal never builds.** Over the API or an SDK, it must
+  also be added to the `service_app_accesses` group. The event rule fires, and the
+  run fails `Target … is not part of the group` with nothing visible on the grant.
+  The portal adds the membership itself.
+- **The cluster resource never appears.** Check `kubectl get vidraresource -A`, not
+  the sync: a sync reports `Succeeded` over an empty or rejected set. A deleted
+  resource is not redelivered until the `InfrahubSync` is deleted and re-applied
+  from `vidra/infrahub-syncs.yaml`.
+- **The merge reached no device.** Check the reconciler is running and look at
+  `docker logs infrahub-deployment-reconciler-1`; a device the operator suspended
+  shows as `suspended=1` and is left alone by design.

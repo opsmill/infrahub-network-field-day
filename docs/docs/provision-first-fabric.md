@@ -46,7 +46,7 @@ The CLI route needs credentials in your shell — either `source .envrc` first o
 
 ## Step 2 — Run the fabric generator
 
-1. In the Infrahub UI, open **Actions → Generator definitions** from the main menu.
+1. In the Infrahub UI, open **Actions → Generator Definitions** from the main menu.
 2. Find **`generate-fabric`** in the list and click it.
 3. In the generator page, click the **Run** button.
 4. Select the target fabric (`OTTERNET_FABRIC`) from the dropdown.
@@ -71,7 +71,7 @@ via event triggers.
 
 :::note The AVD stage is not chained from the rack generator
 `generate-avd-device-hostvar` has no trigger rule at all. It runs when something
-asks: `invoke avd`, a manual run from **Actions → Generator definitions**, the
+asks: `invoke avd`, a manual run from **Actions → Generator Definitions**, the
 portal's request templates, or a proposed change (it is
 `execute_in_proposed_change: true`, which is what makes a service request show
 its fabric consequence). `generate-avd-device-structured-config` follows it, both
@@ -81,7 +81,7 @@ pipeline.
 
 In the UI:
 
-1. Open **Actions → Tasks** (or watch the running-task indicator in the navbar).
+1. Open **Activity → Tasks** (or watch the running-task indicator in the navbar).
 2. Tasks appear in this order:
    - `generate-fabric` (1 task, per fabric)
    - `generate-pod` (one per pod in the fabric)

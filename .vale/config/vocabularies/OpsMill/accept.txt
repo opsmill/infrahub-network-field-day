@@ -227,3 +227,4 @@ Alertmanager
 [Pp]rovisioning's
 [Rr]econciler's
 CRDs
+runbook
