@@ -529,8 +529,9 @@ spec:
             icon: "mdi:routes"
 
           # The three VRF-scoped services below are AVD *inputs* -- authored
-          # here and rendered into config -- unlike the four above, which the
-          # backfill generator reconciles from what AVD derived.
+          # here and rendered into the fabric's config. The five above hold the
+          # WAN routers' and the firewall's own sessions and routes; nothing
+          # reads a switch's derived routing state back into them.
           - namespace: Routing
             name: VrfStaticRoute
             label: VRF Static Routes

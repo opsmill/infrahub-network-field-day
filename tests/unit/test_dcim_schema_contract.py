@@ -404,7 +404,6 @@ EXPECTED_FRAGMENTS = {
     "transforms/cabling_plan.py": {"DcimDevice": 0, "DcimFabricSwitch": 2},
     "generators/avd_device_hostvar.gql": {"DcimDevice": 0, "DcimFabricSwitch": 5},
     "generators/generate_avd.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},
-    "generators/backfill_structured_config.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},
     "generators/generate_fabric_peering.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},
     "checks/fabric_pool_check.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},
     "checks/peering_consistency_check.gql": {"DcimDevice": 0, "DcimFabricSwitch": 1},

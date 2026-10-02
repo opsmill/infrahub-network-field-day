@@ -6,14 +6,52 @@ two functions. The copies drifted: one deleted the old `NAME=` line but kept the
 comment above it, so every re-mint left another orphaned comment behind.
 
 Host-side only. Nothing that runs in the Infrahub image imports this.
+
+**Which `.env` is the one that matters.** docker compose reads `.env` from its
+project directory, and `tasks.py` pins that to the MAIN checkout even when run
+from a git worktree (see `compose_root`). A caller that resolved `.env` next to
+its own file would, from a worktree, write a credential into a file compose never
+reads -- and, on `--check`, report the real one missing. `main_checkout` is the
+one place that decides, and `env_file` is what every caller should use.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import subprocess  # noqa: S404 - one fixed-argv git call, never a shell string
+from pathlib import Path
 
-if TYPE_CHECKING:
-    from pathlib import Path
+
+def main_checkout(start: Path) -> Path:
+    """The main checkout of the repository containing `start`.
+
+    From a normal checkout this is the checkout itself; from a git worktree it is
+    the checkout the worktree was made from. `git rev-parse --git-common-dir`
+    names the shared git directory in both cases, and its parent is the answer.
+    Outside a git repository -- or when git is unavailable -- `start` is returned
+    unchanged, so a source tarball still finds the `.env` beside it.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=start,
+        )
+    except OSError:
+        return start
+    if result.returncode == 0 and result.stdout.strip():
+        common = Path(result.stdout.strip())
+        if not common.is_absolute():
+            common = (start / common).resolve()
+        if common.name == ".git":
+            return common.parent
+    return start
+
+
+def env_file(start: Path) -> Path:
+    """The `.env` docker compose reads: the main checkout's, never a worktree's."""
+    return main_checkout(start) / ".env"
 
 
 def read_env(path: Path, name: str) -> str:

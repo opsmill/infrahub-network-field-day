@@ -2,7 +2,6 @@ import json
 import os
 import shlex
 import shutil
-import subprocess  # noqa: S404 - one fixed-argv git call, never a shell string
 import sys
 import time
 from collections.abc import Callable
@@ -35,20 +34,9 @@ def compose_root() -> Path:
     `git rev-parse --git-common-dir` gives the shared git directory for both
     cases; its parent is the checkout to use.
     """
-    result = subprocess.run(
-        ["git", "rev-parse", "--git-common-dir"],  # noqa: S607
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=MAIN_DIRECTORY_PATH,
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        common = Path(result.stdout.strip())
-        if not common.is_absolute():
-            common = (MAIN_DIRECTORY_PATH / common).resolve()
-        if common.name == ".git":
-            return common.parent
-    return MAIN_DIRECTORY_PATH
+    from solution_arista_avd.envfile import main_checkout
+
+    return main_checkout(MAIN_DIRECTORY_PATH)
 
 
 def compose_cmd() -> str:
@@ -1114,10 +1102,13 @@ def vidra(ctx: Context, lab_dir: str = "", wait: bool = True) -> None:
 
 
 def _env_value(name: str) -> str:
-    """A value from `.env`, or the empty string. The file is gitignored."""
-    from solution_arista_avd.envfile import read_env
+    """A value from `.env`, or the empty string. The file is gitignored.
 
-    return read_env(MAIN_DIRECTORY_PATH / ".env", name)
+    The main checkout's `.env`, because that is the one compose reads.
+    """
+    from solution_arista_avd.envfile import env_file, read_env
+
+    return read_env(env_file(MAIN_DIRECTORY_PATH), name)
 
 
 def _ensure_env_value(name: str, comment: str) -> str:
@@ -1128,13 +1119,13 @@ def _ensure_env_value(name: str, comment: str) -> str:
     """
     import secrets
 
-    from solution_arista_avd.envfile import upsert_env
+    from solution_arista_avd.envfile import env_file, upsert_env
 
     existing = _env_value(name)
     if existing:
         return existing
     value = secrets.token_urlsafe(24)
-    upsert_env(MAIN_DIRECTORY_PATH / ".env", name, value, comment)
+    upsert_env(env_file(MAIN_DIRECTORY_PATH), name, value, comment)
     return value
 
 

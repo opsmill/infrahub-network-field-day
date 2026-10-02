@@ -622,24 +622,20 @@ yet, not that the generator failed.
 into the default data set and change every rendered EOS artifact, and the fixtures those are
 held against are the hand-written baseline. Request one on a branch instead.
 
-### BackfillStructuredConfigGenerator
+### No structured-config backfill
 
-**File**: `generators/backfill_structured_config.py`
+There used to be a `backfill-structured-config` generator, which ran in the opposite direction to
+the rest of the chain: it read each switch's stored structured config and upserted the objects it
+implied (prefixes, addresses, interface MTU, BGP peer groups and neighbors, prefix lists, route
+maps, static routes). It was removed because nothing read what it wrote, and because the
+fabric-switch split had already broken it: `RoutingBGPPeerGroup`, `RoutingBGPNeighbor`,
+`RoutingPrefixList` and `RoutingRouteMap` peer `DcimDevice`, which a `DcimFabricSwitch` is not, so
+every run failed at the first BGP peer group and left a red task in every proposed change that
+rebuilt the fabric.
 
-**Target**: `AvdStructuredConfigFile` (group `avd_structured_configs`)
-
-**Purpose**: Read AVD's structured-config output back into the Infrahub data model
-
-**Actions**: Parse each device's stored structured config and upsert the objects it implies —
-`IpamPrefix` and `IpamIPAddress` entries, `DcimInterface.mtu`, BGP peer groups and neighbors,
-prefix lists, route maps, and static routes.
-
-**Query**: `backfill_structured_config.gql`
-
-This generator runs in the opposite direction to the rest of the chain: everything else turns intent
-into AVD inputs, while the backfill turns AVD's derived output into queryable objects. Those objects
-are reconciled *from* AVD, not authored as inputs — see
-[Supported Capabilities](../supported-capabilities.md).
+The routing kinds remain, for the devices that author them: the WAN routers' BGP neighbors are
+seeded, and the firewall's static routes are rendered by `junos_config`. A switch's intended routing
+state is read from its structured config directly, as `telemetry_collector_config` does.
 
 ## Generator execution order
 
@@ -709,9 +705,6 @@ deletes the spines' leaf-facing ports that the racks are cabled to, and `generat
 fails. Run them only on a freshly loaded instance. The AVD generators are idempotent and safe to
 re-run; `uv run invoke avd --branch <branch-name>` runs both and regenerates the artifacts.
 :::
-
-`backfill-structured-config` is the exception: its parameter is the artifact name
-(`artifact__name__value`), still passed as `name=`.
 
 ## GeneratorMixin
 
@@ -825,12 +818,6 @@ generator_definitions:
     class_name: ServerCablingGenerator
     targets: servers
     query: generate_server_cabling
-
-  - name: backfill-structured-config
-    file_path: "./generators/backfill_structured_config.py"
-    class_name: BackfillStructuredConfigGenerator
-    targets: avd_structured_configs
-    query: backfill_structured_config
 ```
 
 The AVD generators are registered in the same block; the file is the authoritative list of all seven.
@@ -864,10 +851,7 @@ generators/
 ├── generate_avd_device_inputs_query.py  # AVD device Pydantic models
 ├── generate_server_cabling.py      # Server cabling generator
 ├── generate_server_cabling.gql     # Server cabling query
-├── server_cabling_query.py         # Server cabling Pydantic models
-├── backfill_structured_config.py   # Structured-config backfill generator
-├── backfill_structured_config.gql  # Backfill query
-└── backfill_structured_config_query.py  # Backfill Pydantic models
+└── server_cabling_query.py         # Server cabling Pydantic models
 ```
 
 ## Source
@@ -878,7 +862,6 @@ generators/
   - [`generators/generate_pod.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_pod.py) — `PodGenerator`.
   - [`generators/generate_rack.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_rack.py) — `RackGenerator`.
   - [`generators/generate_server_cabling.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_server_cabling.py) — `ServerCablingGenerator`.
-  - [`generators/backfill_structured_config.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/backfill_structured_config.py) — `BackfillStructuredConfigGenerator`.
 - AVD generators (documented in detail in the [AVD Pipeline sub-section](./avd/overview.md)):
   - [`generators/generate_avd_device_hostvar.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_avd_device_hostvar.py) — `GenerateAVDDeviceHostvar`.
   - [`generators/generate_avd_device_structured_config.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/generators/generate_avd_device_structured_config.py) — `AvdDeviceStructuredConfigGenerator`.

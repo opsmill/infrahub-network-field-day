@@ -26,10 +26,10 @@ WHAT THIS PINS, AND WHY EACH CLAUSE EARNS ITS PLACE:
 * **`RoutingVrfStaticRoute` is a different kind.** VRF-scoped, reached through
   ``WanSite``, and read by ``transforms/srl_config.py``. The two are easy to
   confuse and a tidy-up that merged them would break the WAN render.
-* **The uniqueness constraint is load-bearing beyond display.** The
-  `backfill-structured-config` generator saves with ``allow_upsert=True``,
-  which resolves against ``[device, prefix__value, vrf__value]``. Changing it
-  breaks generator idempotence, not a label.
+* **The uniqueness constraint is load-bearing beyond display.** An upsert of a
+  route -- ``objects/32b_otternet_fw_static_routes.yml`` loads with one --
+  resolves against ``[device, prefix__value, vrf__value]``. Changing it breaks
+  a re-load's idempotence, not a label.
 """
 
 from __future__ import annotations
@@ -238,8 +238,8 @@ def test_display_and_uniqueness_are_unchanged() -> None:
     """`human_friendly_id` reads through the relationship to `name`.
 
     ``DcimGenericDevice`` carries `name`, so the HFID keeps resolving. The
-    uniqueness constraint matters beyond display: the backfill generator's
-    ``allow_upsert=True`` resolves against it.
+    uniqueness constraint matters beyond display: a re-load of the seeded
+    routes upserts, and that resolves against it.
     """
     schema = _load_yaml(ROUTING_SCHEMA)
     node = _node(schema, "Routing", "StaticRoute")

@@ -18,7 +18,7 @@ Once generators have run on a branch and you've opened a proposed change (see [P
 | **Cabling Plan** | Each `NetworkFabric` | `text/csv` | One row per connection for the field and cabling teams. |
 | **AVD ANTA Catalog** | Each `DcimFabricSwitch` | `application/yaml` | The device's [ANTA](https://anta.arista.com) test catalog. Rendered only when the fabric has `anta_enabled` set; otherwise the artifact holds a one-line comment saying so. |
 | **SR Linux Configuration** | Each WAN router (`DcimDevice`, group `srl_routers`) | `text/plain` | The router's full SR Linux configuration as flat `set` commands. |
-| **Junos Configuration** | The firewall (`SecurityFirewall`, group `junos_firewalls`) | `text/plain` | The vSRX configuration, everything except the `system` stanza. |
+| **Junos Configuration** | The firewall (`SecurityFirewall`, group `junos_firewalls`) | `text/plain` | The vSRX's whole configuration, `system` included. The reconciler pushes it with `load override`, so anything it omits is deleted from the device. |
 | **Crossplane FabricApp** / **Crossplane FabricPeering** | Each `ServiceFabricApp` / `ServiceFabricPeering` | `application/yaml` | The manifest Vidra delivers into the lab's Kubernetes cluster. |
 | **Telemetry Collector Configuration** | Each `MonitoringCollector` | `application/yaml` | Telegraf's whole configuration, rendered from the monitoring profiles. |
 
