@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Themes that are installed. XFCE's packaged defaults name Greybird and
+  elementary-xfce-dark, neither of which this image carries, so menu entries
+  whose icon exists only in Humanity rendered as blanks. Everything not set
+  here keeps the system default in /etc/xdg.
+-->
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Adwaita"/>
+    <property name="IconThemeName" type="string" value="Humanity"/>
+  </property>
+</channel>

@@ -28,8 +28,8 @@ TIMEOUT = 900
 
 def main() -> int:
     token, ref, values = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
-    # The portal's certificate is self-signed; the desktop trusts it in Firefox,
-    # not necessarily in python's bundle. What is under test is the template.
+    # The portal's certificate is signed by a throwaway lab CA the desktop trusts,
+    # and python's bundle does not. What is under test is the template.
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE

@@ -43,7 +43,7 @@ app:
 backend:
   baseUrl: ${BACKSTAGE_BASE_URL}
   listen: ':7007'
-  # TLS, with a self-signed certificate supplied by scripts/deploy_tooling.sh.
+  # TLS, with a certificate scripts/deploy_tooling.sh signs with a throwaway lab CA.
   #
   # IT IS HERE BECAUSE OF `crypto.randomUUID`, not because of eavesdroppers. The
   # frontend calls it after sign-in, `globalThis.crypto` is only populated in a

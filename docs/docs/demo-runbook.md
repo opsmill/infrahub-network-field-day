@@ -170,10 +170,35 @@ all: it crosses no firewall, so showing it proves nothing about a grant. Open
 **OTTERNET / Deployment state** there before the first merge.
 
 The portal (`https://10.90.0.11:32001`) and Dex are reachable **only from the
-branch side**, so open the portal inside the branch desktop. Its Firefox starts
-on the portal and carries toolbar bookmarks for Infrahub, **Grafana (needs
-access)** and **Demo frontend (needs access)**. The desktop already trusts the
-portal's self-signed certificate.
+branch side**, so open the portal inside the branch desktop. Guacamole opens its
+one connection, **OTTERNET branch office desktop**, straight after sign in. The
+desktop shows two icons, **Service Portal** and **Start here**, and the same two
+sit in the top panel. Start here is a one-page note naming who to sign in as.
+Firefox opens on the portal, with no first-run or sponsored pages, and its
+toolbar carries four bookmarks in the order the demo uses them:
+
+| Bookmark | Address | Before any grant |
+| --- | --- | --- |
+| **Service Portal** | `https://10.90.0.11:32001/` | answers |
+| **Proposed changes** | `http://10.90.0.1:8000/proposed-changes`, Infrahub signed in with Dex | answers |
+| **Demo app (locked)** | `http://10.112.240.0/`, `otternet-demo` | times out |
+| **Grafana (locked)** | `http://10.112.240.81/`, `otternet-metrics` | times out |
+
+`(locked)` means the address answers only after a grant, and `make -C lab verify` holds
+each bookmark to its label from inside the desktop. The portal's certificate is
+trusted without a click: `invoke tooling` signs it with a throwaway CA and installs
+the CA on the desktop. If the portal shows a certificate warning, Firefox was
+already open when `invoke tooling` ran. Close Firefox and open it again from the
+Service Portal icon.
+
+A preflight of the desktop, read-only, from the host:
+
+```bash
+make -C lab verify 2>&1 | grep -E "bookmark|launcher|portal|policies"
+```
+
+Every line should read `PASS`. A `the desktop runs the committed Firefox policies`
+failure means the desktop image predates the bookmarks in this runbook.
 
 An operator signs in to Infrahub with the local `admin` account on the same
 login page as the Dex button. The Dex issuer is unreachable from an operator's
@@ -301,8 +326,7 @@ docker exec clab-otternet-branch-desktop curl -s -m 8 http://10.112.240.0/      
 The second one matters more than the first. `otternet-demo` is running,
 advertised, and healthy. The branch still cannot reach it, which shows the
 firewall and the pod policy are the control, and not an open path. In the
-desktop's Firefox, the **Demo frontend (needs access)** bookmark makes the same
-point.
+desktop's Firefox, the **Demo app (locked)** bookmark makes the same point.
 
 ## Act two: a branch user asks for Grafana
 
@@ -311,7 +335,7 @@ seeded application that Infrahub delivered through Vidra like any other, on the
 pinned VIP `10.112.240.81`. Nobody at the branch can use it yet.
 
 **1. Show the gate.** On the branch desktop, the toolbar bookmark **Grafana
-(needs access)** opens `http://10.112.240.81/`, and nothing answers. Two gates
+(locked)** opens `http://10.112.240.81/`, and nothing answers. Two gates
 are shut: the firewall has no permit, and Grafana's own pod policy names no
 branch source. The route is **not** a gate here, and it is worth not claiming it
 is: `PL-DC-ADVERTISED-BRANCH` already permits the whole VIP range

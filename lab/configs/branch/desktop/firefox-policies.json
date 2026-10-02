@@ -2,14 +2,65 @@
   "policies": {
     "Homepage": {
       "URL": "https://10.90.0.11:32001/",
-      "Locked": false,
+      "Locked": true,
       "StartPage": "homepage"
     },
-    "OverrideFirstRunPage": "https://10.90.0.11:32001/",
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "NewTabPage": false,
+    "FirefoxHome": {
+      "Search": false,
+      "TopSites": false,
+      "SponsoredTopSites": false,
+      "Highlights": false,
+      "Pocket": false,
+      "Stories": false,
+      "SponsoredPocket": false,
+      "SponsoredStories": false,
+      "Snippets": false,
+      "Locked": true
+    },
+    "UserMessaging": {
+      "ExtensionRecommendations": false,
+      "FeatureRecommendations": false,
+      "UrlbarInterventions": false,
+      "SkipOnboarding": true,
+      "MoreFromMozilla": false,
+      "FirefoxLabs": false,
+      "Locked": true
+    },
+    "FirefoxSuggest": {
+      "WebSuggestions": false,
+      "SponsoredSuggestions": false,
+      "ImproveSuggest": false,
+      "Locked": true
+    },
+    "SearchSuggestEnabled": false,
+    "DisablePocket": true,
     "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisableFeedbackCommands": true,
     "DisableFirefoxAccounts": true,
     "DisableProfileImport": true,
+    "DisableAppUpdate": true,
     "DontCheckDefaultBrowser": true,
+    "PasswordManagerEnabled": false,
+    "OfferToSaveLogins": false,
+    "AutofillAddressEnabled": false,
+    "AutofillCreditCardEnabled": false,
+    "PopupBlocking": {
+      "Allow": [
+        "https://10.90.0.11:32001",
+        "http://10.90.0.11:32556",
+        "http://10.90.0.1:8000",
+        "http://10.112.240.81"
+      ],
+      "Default": true
+    },
+    "Certificates": {
+      "Install": ["/usr/local/share/ca-certificates/otternet-portal.crt"]
+    },
+    "DisplayBookmarksToolbar": "always",
     "NoDefaultBookmarks": true,
     "Bookmarks": [
       {
@@ -18,23 +69,43 @@
         "Placement": "toolbar"
       },
       {
-        "Title": "Infrahub",
-        "URL": "http://10.90.0.1:8000/",
+        "Title": "Proposed changes",
+        "URL": "http://10.90.0.1:8000/proposed-changes",
         "Placement": "toolbar"
       },
       {
-        "Title": "Grafana (needs access)",
-        "URL": "http://10.112.240.81/",
-        "Placement": "toolbar"
-      },
-      {
-        "Title": "Demo frontend (needs access)",
+        "Title": "Demo app (locked)",
         "URL": "http://10.112.240.0/",
+        "Placement": "toolbar"
+      },
+      {
+        "Title": "Grafana (locked)",
+        "URL": "http://10.112.240.81/",
         "Placement": "toolbar"
       }
     ],
     "Preferences": {
-      "security.enterprise_roots.enabled": {
+      "browser.startup.homepage_override.mstone": {
+        "Value": "ignore",
+        "Status": "locked"
+      },
+      "browser.aboutwelcome.enabled": {
+        "Value": false,
+        "Status": "locked"
+      },
+      "browser.sessionstore.resume_from_crash": {
+        "Value": false,
+        "Status": "locked"
+      },
+      "browser.translations.automaticallyPopup": {
+        "Value": false,
+        "Status": "locked"
+      },
+      "browser.ml.chat.enabled": {
+        "Value": false,
+        "Status": "locked"
+      },
+      "datareporting.policy.dataSubmissionPolicyBypassNotification": {
         "Value": true,
         "Status": "locked"
       }

@@ -22,7 +22,9 @@
 -->
 <user-mapping>
     <authorize username="branch" password="branch">
-        <connection name="Branch office desktop">
+        <!-- The name is what the browser tab and the connection list show. With
+             one connection Guacamole opens it straight after sign in. -->
+        <connection name="OTTERNET branch office desktop">
             <protocol>vnc</protocol>
             <param name="hostname">10.70.0.20</param>
             <param name="port">5901</param>

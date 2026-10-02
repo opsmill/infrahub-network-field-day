@@ -17,7 +17,7 @@ Prerequisites:
 
 ## Open the service portal
 
-From the branch desktop, open **`https://10.90.0.11:32001`** and sign in through Dex, for example as `alice@otternet.lab`. The certificate is self-signed; see [The service portal](../service-portal.md) for why, and for the one-time Infrahub sign-in every portal user needs.
+From the branch desktop, open **`https://10.90.0.11:32001`** and sign in through Dex, for example as `alice@otternet.lab`. See [The service portal](../service-portal.md) for the certificate, and for the one-time Infrahub sign-in every portal user needs.
 
 Open the catalogue and choose the **Network Segment (generated)** template. It's generated from the `ServiceNetworkSegment` schema, so its fields are the kind's own attributes and relationships.
 

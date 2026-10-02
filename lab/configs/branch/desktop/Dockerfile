@@ -25,12 +25,16 @@ ENV LANG=C.UTF-8
 # tigervnc-tools is not optional despite the name: on Ubuntu 24.04 vncpasswd
 # lives there, not in tigervnc-common, and without it the session dies at
 # startup with 'runuser: failed to execute vncpasswd'.
+#
+# librsvg2-common is not optional either: it is gdk-pixbuf's SVG loader, and
+# without it every SVG icon -- all of Humanity and Adwaita's scalable set --
+# renders as a blank or a generic document, which is most of the menu.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xfce4-session xfwm4 xfdesktop4 xfce4-panel xfce4-terminal \
         xfce4-settings thunar xfconf \
         tigervnc-standalone-server tigervnc-common tigervnc-tools \
         dbus-x11 x11-xserver-utils xdg-utils \
-        fonts-dejavu-core hicolor-icon-theme adwaita-icon-theme \
+        fonts-dejavu-core hicolor-icon-theme adwaita-icon-theme librsvg2-common \
         iproute2 iputils-ping curl ca-certificates netcat-openbsd \
         dnsutils less nano \
     && rm -rf /var/lib/apt/lists/*
@@ -58,12 +62,36 @@ ARG DESKTOP_UID=1001
 RUN useradd -m -u ${DESKTOP_UID} -s /bin/bash ${DESKTOP_USER}
 
 COPY firefox-policies.json /etc/firefox/policies/policies.json
-COPY xfce-desktop.xml /home/${DESKTOP_USER}/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
-COPY service-portal.desktop /home/${DESKTOP_USER}/Desktop/service-portal.desktop
+COPY start-here.html /opt/branch/start-here.html
 COPY start-desktop.sh /opt/start-desktop.sh
 COPY session.sh /opt/session.sh
 
-RUN chmod +x /opt/start-desktop.sh /opt/session.sh /home/${DESKTOP_USER}/Desktop/service-portal.desktop \
+# The XFCE channels this image sets. Each is partial: what it does not name
+# keeps the packaged default, so the files say only what was decided.
+ARG XFCONF=/home/${DESKTOP_USER}/.config/xfce4/xfconf/xfce-perchannel-xml
+COPY xfce-desktop.xml ${XFCONF}/xfce4-desktop.xml
+COPY xfce4-panel.xml ${XFCONF}/xfce4-panel.xml
+COPY xfwm4.xml ${XFCONF}/xfwm4.xml
+COPY xsettings.xml ${XFCONF}/xsettings.xml
+
+# Two launchers, each in two places: on the desktop, and in the panel, which
+# reads its launcher items from a directory per plugin id (xfce4-panel.xml).
+COPY service-portal.desktop start-here.desktop /home/${DESKTOP_USER}/Desktop/
+COPY service-portal.desktop /home/${DESKTOP_USER}/.config/xfce4/panel/launcher-3/
+COPY start-here.desktop /home/${DESKTOP_USER}/.config/xfce4/panel/launcher-4/
+
+# Menu entries hidden by a same-named file higher in XDG_DATA_DIRS. Log Out
+# because the session is the container's main process, so it stops the node;
+# Mail Reader because no mail client is installed and it opens an error dialog;
+# Python because it is a REPL in a terminal and means nothing to a branch user.
+# The terminal stays in the menu, deliberately: it is how a presenter shows a
+# curl from the branch, and it is not on the desktop or the panel.
+RUN install -d /home/${DESKTOP_USER}/.local/share/applications \
+    && for entry in xfce4-session-logout xfce4-mail-reader python3.12; do \
+         printf '[Desktop Entry]\nType=Application\nName=%s\nHidden=true\n' "$entry" \
+           > /home/${DESKTOP_USER}/.local/share/applications/$entry.desktop; \
+       done \
+    && chmod +x /opt/start-desktop.sh /opt/session.sh /home/${DESKTOP_USER}/Desktop/*.desktop \
     && chown -R ${DESKTOP_USER}:${DESKTOP_USER} /home/${DESKTOP_USER}
 
 ENV DESKTOP_USER=${DESKTOP_USER}
