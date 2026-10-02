@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Service Portal
+Comment=Ask for an application, or access to one, through the Backstage portal
+Exec=firefox https://10.90.0.11:32001/
+Icon=firefox
+Terminal=false
+Categories=Network;

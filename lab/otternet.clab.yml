@@ -414,8 +414,9 @@ topology:
         - /opt/init.sh
       labels: {role: branch-host, tier: branch}
 
-    # The branch employee's workstation: XFCE on Xvnc, with Firefox pointed at
-    # the access portal's VIP. Built locally by `make desktop-image` -- see
+    # The branch employee's workstation: XFCE on Xvnc, with Firefox and the
+    # desktop's Service Portal launcher pointed at the Backstage portal in the
+    # tooling cluster (https://10.90.0.11:32001/). Built locally by `make desktop-image` -- see
     # configs/branch/desktop/ for why it is a container rather than a QEMU VM.
     #
     # No fabric MTU worries here: its init.sh sets 9214 like every other WAN

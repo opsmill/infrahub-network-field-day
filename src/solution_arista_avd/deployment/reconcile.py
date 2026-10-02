@@ -22,6 +22,15 @@ a default:
 4. **Cycles do not overlap.** A sequential loop cannot overlap itself; the
    interval is measured from the end of one cycle, so a slow cycle delays the
    next rather than stacking against it.
+
+**The interval is a maximum, not a fixed sleep.** Between cycles the loop polls
+the artifacts' checksums and starts early once a moved set has held still (see
+`wake`), and a cycle that pushed is followed by one confirming comparison after
+`CONFIRM_DELAY` rather than a whole interval later. Neither changes what a cycle
+decides: confirmation still needs a comparison that finds no difference, and the
+firewall's one-in-N cadence counts only the interval's own cycles -- an early
+cycle compares the firewall only when the firewall's own intent moved, or it was
+just pushed.
 """
 
 from __future__ import annotations
@@ -29,12 +38,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from solution_arista_avd.deployment import compare as cmp
 from solution_arista_avd.deployment import devices as dv
 from solution_arista_avd.deployment import inventory as inv
+from solution_arista_avd.deployment import wake
 from solution_arista_avd.deployment.state import (
     STATUS_DRIFTED,
     STATUS_FAILED,
@@ -45,6 +56,8 @@ from solution_arista_avd.deployment.state import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Collection
+
     from infrahub_sdk import InfrahubClient
 
 log = logging.getLogger("infrahub.reconcile")
@@ -67,6 +80,15 @@ box. During a demo nobody else is using it and the firewall is the payoff, so
 `OTTERNET_RECONCILE_FIREWALL_EVERY=1` compares it every cycle."""
 
 
+CONFIRM_DELAY = MINIMUM_INTERVAL
+"""After a cycle that pushed, the next one -- comparing what was pushed -- is
+due this soon rather than a whole interval later, because `last_confirmed_at`
+only moves on a comparison that finds no difference. It is the floor, so it
+never compares more often than the loop is allowed to, and a device gets it once
+per push: one that is pushed again by the confirming cycle waits for the
+interval like any other, rather than being pushed every minute."""
+
+
 class ConfigurationError(ValueError):
     """The service was asked to run in a way that is not safe."""
 
@@ -82,6 +104,9 @@ class CycleReport:
     suspended: list[str] = field(default_factory=list)
     not_due: list[str] = field(default_factory=list)
     swept: list[str] = field(default_factory=list)
+    # The checksums this cycle read: the baseline the wait between cycles
+    # compares against, so intent that moves DURING a cycle still wakes the next.
+    checksums: wake.Snapshot = field(default_factory=dict)
 
     def summary(self) -> str:
         return (
@@ -105,10 +130,31 @@ def validate_interval(seconds: int) -> int:
     return seconds
 
 
-def _due(target: dv.Target, cycle: int) -> bool:
-    """Whether this device is compared on this cycle."""
+def validate_poll(seconds: float) -> float:
+    """Refuse a checksum poll tighter than its floor, for the interval's reason."""
+    if seconds < wake.MINIMUM_POLL:
+        raise ConfigurationError(f"poll {seconds}s is below the {wake.MINIMUM_POLL}s floor")
+    return seconds
+
+
+def _due(
+    target: dv.Target,
+    cycle: int,
+    force: Collection[str] = (),
+    *,
+    scheduled: bool = True,
+) -> bool:
+    """Whether this device is compared on this cycle.
+
+    `force` names devices whose intent moved or that were just pushed; they are
+    compared whatever the cadence says. `scheduled` is False for a cycle the
+    interval did not start, which never takes the firewall's lock on its own
+    account.
+    """
+    if target.device in force:
+        return True
     if target.artifact_name == dv.ARTIFACT_JUNOS:
-        return cycle % FIREWALL_EVERY == 0
+        return scheduled and cycle % FIREWALL_EVERY == 0
     return True
 
 
@@ -140,6 +186,8 @@ async def run_cycle(
     branch: str = "",
     dry_run: bool = False,
     all_due: bool = False,
+    force: Collection[str] = (),
+    scheduled: bool = True,
 ) -> CycleReport:
     """One pass over the fabric.
 
@@ -150,6 +198,7 @@ async def run_cycle(
     report = CycleReport()
     store = StateStore(client)
     targets = _order(dv.discover(branch))
+    report.checksums = wake.snapshot(targets)
 
     if not dry_run:
         report.swept = sweep(targets)
@@ -164,7 +213,7 @@ async def run_cycle(
     # and recorded as not surviving contact. The tasks return plain data and the
     # state writes happen below, sequentially, in this coroutine.
     by_name = {t.device: t for t in targets}
-    due = {name: t for name, t in by_name.items() if all_due or _due(t, cycle)}
+    due = {name: t for name, t in by_name.items() if all_due or _due(t, cycle, force, scheduled=scheduled)}
     report.not_due = sorted(set(by_name) - set(due))
 
     suspended: set[str] = set()
@@ -230,20 +279,102 @@ async def run_cycle(
     return report
 
 
-async def run_forever(client: InfrahubClient, interval: int = DEFAULT_INTERVAL) -> None:
-    """The service. Refuses to start below the floor."""
+def _observe() -> wake.Snapshot:
+    """The poll between cycles: the cycle's own discovery query, nothing more."""
+    return wake.snapshot(dv.discover())
+
+
+def _cycle_arguments(reason: wake.Wake, follow_up: frozenset[str]) -> tuple[bool, dict[str, Any]]:
+    """Whether a cycle counts towards the cadence, and what it compares.
+
+    * the interval (or the first cycle) with nothing to confirm: everything the
+      cadence makes due, and only these advance the firewall's one-in-N count;
+    * artifacts that moved and held still: the fabric, plus the devices whose
+      intent moved, so a firewall change is compared without waiting its turn;
+    * the confirmation after a push: the fabric, plus the pushed devices;
+    * a request (`invoke reconcile --now`): every device, firewall included.
+    """
+    if reason.reason == wake.WAKE_REQUESTED:
+        return False, {"all_due": True}
+    scheduled = reason.reason in {wake.WAKE_START, wake.WAKE_INTERVAL} and not follow_up
+    return scheduled, {"force": frozenset(reason.moved | follow_up), "scheduled": scheduled}
+
+
+async def run_forever(
+    client: InfrahubClient,
+    interval: int = DEFAULT_INTERVAL,
+    *,
+    poll_seconds: float = wake.POLL_SECONDS,
+    observe: Callable[[], wake.Snapshot] = _observe,
+    trigger: Callable[[], bool] | None = None,
+    sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
+    clock: Callable[[], float] = time.monotonic,
+    cycle_fn: Callable[..., Awaitable[CycleReport]] = run_cycle,
+    max_cycles: int | None = None,
+) -> None:
+    """The service. Refuses to start below either floor.
+
+    `max_cycles` exists for the tests; the service passes None and never returns.
+    """
     validate_interval(interval)
-    log.info("reconciler starting: interval=%ss firewall every %s cycles", interval, FIREWALL_EVERY)
-    cycle = 0
-    while True:
+    validate_poll(poll_seconds)
+    if trigger is None:
+        trigger = wake.FileTrigger().consume
+    # A request left from before this process started is answered by the first
+    # cycle, which runs now anyway.
+    trigger()
+    log.info(
+        "reconciler starting: interval=%ss (the maximum) poll=%ss firewall every %s cycles",
+        interval,
+        poll_seconds,
+        FIREWALL_EVERY,
+    )
+
+    scheduled_cycles = 0  # interval-started cycles, which alone drive the firewall's cadence
+    ran = 0
+    reason = wake.Wake(wake.WAKE_START)
+    follow_up: frozenset[str] = frozenset()  # pushed last cycle, awaiting a confirming comparison
+    while max_cycles is None or ran < max_cycles:
+        scheduled, arguments = _cycle_arguments(reason, follow_up)
+        label = "confirmation" if follow_up and reason.reason == wake.WAKE_INTERVAL else reason.reason
+        moved_note = f", intent moved on {', '.join(sorted(reason.moved))}" if reason.moved else ""
+        log.info("starting cycle %s (%s%s)", scheduled_cycles, label, moved_note)
+
+        report: CycleReport | None = None
         try:
-            await run_cycle(client, cycle)
+            report = await cycle_fn(client, scheduled_cycles, **arguments)
         except Exception:
-            log.exception("cycle %s failed entirely", cycle)
-        cycle += 1
+            log.exception("cycle %s failed entirely", scheduled_cycles)
+        ran += 1
+        if scheduled:
+            scheduled_cycles += 1
+
+        baseline: wake.Snapshot | None
+        if report is not None:
+            baseline = report.checksums
+        else:
+            try:
+                baseline = observe()
+            except Exception:  # noqa: BLE001 - the wait copes with no baseline
+                baseline = None
+
+        # Each push earns ONE early confirmation. A device pushed again by the
+        # cycle that was confirming it waits for the interval.
+        follow_up = frozenset(report.pushed) - follow_up if report is not None else frozenset()
+        if max_cycles is not None and ran >= max_cycles:
+            return
+
         # Measured from the end of the cycle, so a slow cycle delays the next one
         # rather than stacking against it.
-        await asyncio.sleep(interval)
+        reason = await wake.wait_for_wake(
+            baseline,
+            CONFIRM_DELAY if follow_up else interval,
+            observe=observe,
+            trigger=trigger,
+            sleep=sleep,
+            clock=clock,
+            poll_seconds=poll_seconds,
+        )
 
 
 MAX_CONVERGE_CYCLES = 6

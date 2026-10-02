@@ -242,7 +242,7 @@ guac: ## How to reach the branch desktop through Guacamole
 	@printf '\n'
 	@printf '  The desktop itself is 10.70.0.20 on the branch LAN; Guacamole reaches\n'
 	@printf '  it through guacd at 10.70.0.31, so the VNC session crosses the site\n'
-	@printf '  network. Firefox opens on the access portal at http://10.112.240.33/\n\n'
+	@printf '  network. Firefox opens on the Service Portal at https://10.90.0.11:32001/\n\n'
 	@printf '  If the page loads but the connection does not:\n'
 	@printf '    docker logs clab-$(LAB)-branch-guacd\n'
 	@printf '    docker exec clab-$(LAB)-branch-desktop ss -ltn\n\n'

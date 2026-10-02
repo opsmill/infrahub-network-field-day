@@ -1224,6 +1224,25 @@ reported no difference, never because a push was sent; `last_checked_at` moves e
 stale confirmation is distinguishable from a dead loop. The service never writes `suspend` or
 `suspend_reason` — those are the operator's break-glass.
 
+**The interval is a maximum, not a sleep** (`deployment/wake.py`). Between cycles the loop polls
+the configuration artifacts' checksums on `main` (the cycle's own discovery query, no device
+I/O) and starts early once a moved set holds still for two polls, forcing the devices whose
+intent moved; a cycle that pushed is confirmed 60 seconds later rather than an interval later,
+once per push. Two things look loosenable and are not:
+
+- **Only interval-started cycles advance the firewall's one-in-N cadence.** An early cycle
+  compares `fw1` only when `fw1`'s own artifact moved or it was just pushed. Counting early
+  cycles would take the exclusive lock as often as merges land.
+- **The wake fires only on movement away from what the last cycle read, and only once it
+  stops.** Waking on the first movement compares a half-rendered fabric; treating agreement as
+  enough repeats `_wait_for_artifacts`' stale-checksum lesson. A snapshot equal to the
+  baseline is "nothing happened" and the full interval applies.
+
+`invoke reconcile --now` asks the running container for an immediate all-device cycle through a
+trigger file. A changed `wake.py` reaches the loop only after `invoke build` and recreating the
+container: `scripts/reconcile.py` comes from the bind mount and imports the image's package, so
+a new script against an old image fails at import.
+
 ## Development workflow
 
 1. Prefer schema-first changes: add or update YAML under `schemas/` before code uses
@@ -1707,7 +1726,8 @@ uv run invoke provision --kind eos      # ... one family only: eos, srl, or juno
 uv run invoke reconcile --converge      # cycle until every device is confirmed (the bootstrap path)
 uv run invoke reconcile --once          # a single reconcile cycle
 uv run invoke reconcile --dry-run --branch X  # report differences, change nothing
-uv run invoke reconcile                 # the loop, 600s default, 60s floor
+uv run invoke reconcile                 # the loop, 600s maximum, 60s floor, wakes early on a merge
+uv run invoke reconcile --now           # ask the running loop for an all-device cycle now
 uv run invoke backstage-build           # build the portal image (it runs in the tooling cluster)
 uv run invoke tooling                   # Dex and the portal, into the tooling cluster
 uv run invoke mcp                       # the MCP server beside Infrahub, as mcp-agent

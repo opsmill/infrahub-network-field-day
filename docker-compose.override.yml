@@ -280,7 +280,11 @@ services:
       OTTERNET_EOS_PASSWORD: ${OTTERNET_EOS_PASSWORD:-admin}
       OTTERNET_VSRX_USERNAME: ${OTTERNET_VSRX_USERNAME:-admin}
       OTTERNET_VSRX_PASSWORD: ${OTTERNET_VSRX_PASSWORD:-admin@123}
+      # The MAXIMUM between cycles. The loop polls the artifacts' checksums
+      # every OTTERNET_RECONCILE_POLL seconds and starts early once a moved set
+      # holds still, so a merge reaches the devices without waiting this out.
       OTTERNET_RECONCILE_INTERVAL: ${OTTERNET_RECONCILE_INTERVAL:-600}
+      OTTERNET_RECONCILE_POLL: ${OTTERNET_RECONCILE_POLL:-10}
       # One in four keeps the firewall's exclusive lock out of the way in
       # steady state. Set to 1 for a demo, where the firewall is the payoff
       # and nobody else is on the box.

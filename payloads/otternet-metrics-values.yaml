@@ -28,6 +28,18 @@ crds:
 
 # ---- Grafana: the part that goes on the fabric ------------------------------
 grafana:
+  # NO STOCK DASHBOARDS. The chart ships 21 kube-prometheus dashboards into
+  # "General", beside the six OTTERNET ones, and the OTTERNET folder is the
+  # demo. Off rather than moved to a "Platform" folder, because nothing here
+  # leads to them and several cannot show anything on this cluster: no
+  # OTTERNET dashboard links to one (every link is `/d/otternet-*`, held by
+  # test_no_otternet_dashboard_links_outside_the_folder), no runbook step
+  # opens one, the two USE Method dashboards read a node-exporter job that is
+  # never scraped (see nodeExporter below), and the API server's latency
+  # panels read histogram buckets dropped at scrape time (see kubelet below).
+  # OTTERNET / Kubernetes nodes is the replacement for the node-level views;
+  # Explore still reaches every series.
+  defaultDashboardsEnabled: false
   # (lab) Keep Grafana off the control-plane node. The kubelet reports the
   # HOST's memory as node capacity, not the containerlab cgroup limit, so the
   # scheduler happily stacks the two heaviest pods onto k8s-node1 beside the
@@ -229,9 +241,9 @@ nodeExporter:
   # The chart's per-OS node dashboards read `job="node-exporter"`, which is
   # never scraped (see above), so they could only ever be empty -- and AIX and
   # macOS describe no machine here at all. OTTERNET / Kubernetes nodes is the
-  # replacement. These flags gate the dashboards only, not the DaemonSet. The
-  # two "USE Method" dashboards have no such flag and stay, empty for the same
-  # reason.
+  # replacement. These flags gate the dashboards only, not the DaemonSet, and
+  # with `grafana.defaultDashboardsEnabled: false` they are belt and braces:
+  # they keep these dashboards off should the stock set ever be re-enabled.
   operatingSystems:
     linux:
       enabled: false
