@@ -83,6 +83,35 @@ def main() -> int:
         print(f"the template's create mutation no longer asks for {missing}; update this check")
         return 1
 
+    # A PICKED RELATIONSHIP GOES IN BY ITS INFRAHUB ID, not by name. Since #37 the
+    # template resolves an EntityPicker's value with a `catalog:fetch` step and
+    # binds `{ id: $x }` to the entity's `infrahub.opsmill.com/id` annotation,
+    # because entity names are lowercased and cannot be looked up. Feeding the
+    # name here made Infrahub answer NODE_NOT_FOUND against a correct portal. So
+    # resolve exactly what the template resolves: for every `<rel>: { id: $var }`,
+    # the relationship's peer kind from the schema, then the node by its name.
+    by_id = dict(re.findall(r"(\w+):\s*\{\s*id:\s*\$(\w+)\s*\}", mutation))
+    kind = re.search(r"(\w+)Create\(", mutation).group(1)  # type: ignore[union-attr]
+    schema = httpx.get(f"{ADDRESS}/api/schema/{kind}", headers=HEADERS, timeout=60).json()
+    peers = {rel["name"]: rel["peer"] for rel in schema.get("relationships", [])}
+    for relationship, var in by_id.items():
+        if var not in variables:
+            continue
+        peer = peers.get(relationship)
+        if not peer:
+            print(f"{kind}.{relationship} is not in the schema; update this check")
+            return 1
+        found = gql(
+            f"query ($name: String!) {{ {peer}(name__value: $name) {{ edges {{ node {{ id }} }} }} }}",
+            {"name": variables[var]},
+            phase=f"resolving {relationship} {variables[var]!r} to its id",
+        )
+        edges = next(iter(found.values()))["edges"]
+        if len(edges) != 1:
+            print(f"expected one {peer} named {variables[var]!r}, found {len(edges)}")
+            return 1
+        variables[var] = edges[0]["node"]["id"]
+
     gql(
         "mutation ($name: String!) { BranchCreate(data: { name: $name, sync_with_git: false }) { ok } }",
         {"name": BRANCH},
