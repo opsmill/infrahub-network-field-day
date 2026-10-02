@@ -23,11 +23,23 @@ leave you standing in.
 | [Five](#act-five-the-agent-through-the-mcp-server) | An agent working through the MCP server, on a branch | A branch only |
 
 :::note What was checked, and how
-The preflight commands, the device commands and the "before" state of every act
-were run against a freshly bootstrapped lab. The steps that create, merge or
-revoke something were not re-run for this page; they are written from the
-portal templates in `backstage/catalog/` and the generators beneath them, and
-their timings come from measurements recorded in this repository's documentation.
+Everything up to each merge was rehearsed against a freshly bootstrapped lab:
+the preflight, act four, act five, and acts one and two submitted through the
+portal as `alice` and read in their proposed changes. The merges themselves, and
+what follows them on the devices and in the cluster, were not re-run for this
+page; those timings come from measurements recorded in this repository's
+documentation.
+
+Rehearse before an audience does, with a request reference you do not plan to use live:
+
+```bash
+uv run python scripts/demo_rehearsal.py          # every act up to its merge, about ten minutes
+uv run python scripts/demo_rehearsal.py --only four,five
+```
+
+It creates branches and proposed changes, deletes them afterwards even when an
+act fails, merges nothing, and touches no device. It prints a timing for every
+step, so the numbers below can be checked against the lab in front of you.
 :::
 
 ## Before anyone is watching
@@ -157,7 +169,7 @@ Leave the rest. The defaults are the cluster `otternet`, VRF `K8S_PROD`, ports
 carrying a working exposure block: a LoadBalancer Service with the
 `otternet.lab/advertise: "true"` label the service selector names.
 
-The run takes **about 75 seconds**, most of it two waits. What to say while it
+The run takes **70 to 85 seconds**, most of it two waits. What to say while it
 runs, step by step, because the step list is on screen:
 
 - It creates a branch, `implement_otter-shop_demo1`, and the application on it,
@@ -167,7 +179,7 @@ runs, step by step, because the step list is on screen:
   Both generators fire on creation and nothing else orders them; a grant that
   loses that race is stamped `error` and nothing retries it on its own.
 - It **regenerates the fabric**: host vars for all seven switches, then their
-  structured configs, about 21 seconds. Without that the border leaf's change
+  structured configs, 21 to 25 seconds. Without that the border leaf's change
   would be a JSON attribute rather than configuration.
 - Only then does it open the proposed change, so the change's own checks render
   from current data.
@@ -183,7 +195,8 @@ thing. It contains:
   its address-book entry for the VIP, and `10.70.0.0/24` added to the
   application's own allowed sources, which is the pod-level gate;
 - the regenerated host vars, and the **rendered configuration diff** for the border
-  leaf: one line, `seq <n> permit <vip block>`, in `PL-DC-ADVERTISED-BRANCH`; the
+  leaf, `leaf-otternet-pod1-3-1`: one line, `seq <n> permit <vip block>`, in
+  `PL-DC-ADVERTISED-BRANCH`, and the same line in its device documentation; the
   other six switches are unchanged;
 - the re-rendered **Junos Configuration** artifact for `fw1`, and the
   **Crossplane FabricApp** artifact for the new application.
@@ -249,26 +262,47 @@ seeded application that Infrahub delivered through Vidra like any other, on the
 pinned VIP `10.112.240.81`. Nobody at the branch can use it yet.
 
 **1. Show the gate.** On the branch desktop, the toolbar bookmark **Grafana
-(needs access)** opens `http://10.112.240.81/`, and nothing answers. Three gates
-are shut: the branch has no route to the VIP, the firewall has no permit, and
-Grafana's own pod policy names no branch source.
+(needs access)** opens `http://10.112.240.81/`, and nothing answers. Two gates
+are shut: the firewall has no permit, and Grafana's own pod policy names no
+branch source. The route is **not** a gate here, and it is worth not claiming it
+is: `PL-DC-ADVERTISED-BRANCH` already permits the whole VIP range
+(`seq 10 permit 10.112.240.0/24 le 32`), so `branch-rtr` holds
+`10.112.240.0/24` before anyone asks. The grant still adds its own block's line,
+which is the record of what it opened, and revoking removes that line.
 
 **2. Ask.** In the portal, as `alice@otternet.lab`, choose **Application Access
-Grant (generated)**, the template the portal derives from the schema. Create a grant
-on application `otternet-metrics` from source site `branch-office`. Grafana
-needs nothing special; this is the ordinary access request. A grant on its own
-takes about thirty seconds.
+Grant (generated)**, the template the portal derives from the schema, and leave
+**What do you want to do?** on *Request a new service*. Four fields matter, and
+three of them the form requires:
 
-**3. Read the proposed change.** The rule `branch → k8s-prod` on `junos-http`,
-the address-book entry for `10.112.240.81`, `10.70.0.0/24` added to the
-application's allowed sources, and, once the AVD pass has been run on the branch,
-the border leaf's `PL-DC-ADVERTISED-BRANCH` gaining the VIP. The Junos artifact
-re-renders alongside.
+| Field | Value |
+| --- | --- |
+| Name | `grafana-alice`, or anything not used before; the branch is `implement_<name>` |
+| Application | `otternet-metrics` |
+| Owner | `branch` |
+| Source Site | `branch-office` |
+
+Leave the rest empty: the ports come from the application's advertised services,
+and the zone and source address from the site. Grafana needs nothing special;
+this is the ordinary access request. It takes **20 to 40 seconds**.
+
+**3. Read the proposed change.** The rule `svc-<name>` (`branch → k8s-prod`,
+`junos-http`), the address-book entry for Grafana's block `10.112.240.80/28`,
+`10.70.0.0/24` added to the application's allowed sources (the **Crossplane
+FabricApp** artifact for `otternet-metrics` gains it under `allowFrom`), and the
+border leaf's `PL-DC-ADVERTISED-BRANCH` gaining `seq <n> permit 10.112.240.80/28`.
+The Junos artifact re-renders alongside.
 
 The generated templates stop at the service's own generator, unlike the
 hand-written one. The fabric consequence still appears because
-`generate-avd-device-hostvar` runs in every proposed change's pipeline; give it a
-moment after the change opens.
+`generate-avd-device-hostvar` runs in every proposed change's pipeline, and it
+arrives **last**: about a minute after the change opens, once the pipeline's
+host vars and structured configs are written and the border leaf's artifacts
+re-render. Open the change, talk through the firewall rule, then show the leaf.
+If the leaf's diff is still missing after two minutes, retry the artifact
+checks from the **Checks** tab (the API equivalent is
+`CoreProposedChangeRunCheck` with `check_type: ARTIFACT`); that re-renders it from
+the files the pipeline wrote, in about fifteen seconds.
 
 **4. Merge, and sign in.** Once the reconciler has pushed `fw1` and the border
 leaf, about 2.3 minutes from the merge at demo cadence, reload the bookmark.
@@ -291,9 +325,10 @@ can never make anyone an administrator.
 
 **6. Monitoring is intent too.** In Infrahub, on a new branch, open
 **Monitoring → Profiles → `fabric-core`** and remove the measurement
-`bgp-neighbor-state`. Open a proposed change. It shows the collector's
-**Telemetry Collector Configuration** artifact losing its BGP subscriptions,
-and nothing else. Do not merge it; delete the branch afterwards.
+`bgp-neighbor-state`. Open a proposed change. About a minute later it shows the
+collector's **Telemetry Collector Configuration** artifact losing its BGP
+subscriptions for each fabric switch, and no other artifact moves. Do not merge
+it; delete the branch afterwards.
 
 ## Act three: revoke it
 
@@ -316,6 +351,12 @@ page with it.
 A grant can also be withdrawn without the portal by setting its `status` to
 `decommissioning` in the Infrahub UI, on a branch: the event rule on `status`
 fires the generator, and the proposed change shows the same withdrawal.
+Rehearsed on a grant's own branch, the generator had the grant `decommissioned`,
+its rule gone and `fw1`'s configuration back to main's byte for byte about
+twelve seconds after the status changed.
+
+The **Revoke access** picker lists only grants that exist on `main`, so it can
+only be rehearsed after a real merge. Before one, it offers nothing.
 
 ## Act four: the review step bites
 
@@ -334,9 +375,21 @@ provider edge. `wan-service-consistency` fails naming both tenants while every
 other check stays green. Nothing renders wrong, which is the point: the check is
 what notices.
 
-The script re-runs the checks after the edit, on purpose. The first pass starts
-when the proposed change is created and has been measured racing the edit, all
-green over data that was already wrong. It never merges.
+The script takes 35 to 45 seconds and `--revert` about 4. It re-runs the checks
+after the edit, on purpose. The first pass starts when the proposed change is
+created and has been measured racing the edit, all green over data that was
+already wrong. It never merges.
+
+Because of that re-run, the **Checks** tab lists `wan-service-consistency`
+twice, both red, and the other global checks twice, both green. A check with no
+`targets` gets a new entry on every pass. That is one fault reported by two
+passes, not two faults. The message reads:
+
+```text
+L3VPN 'acme-l3vpn' belongs to 'acme' but carries circuit 'globex-hq', which belongs
+to 'globex'. Membership of this list is the routing domain, so the two tenants
+would reach each other directly across the provider edge.
+```
 
 ## Act five: the agent, through the MCP server
 
@@ -354,9 +407,27 @@ only on a branch (the server creates one per session, named
 `mcp/session-<date>-<hex>`), and can open a proposed change. A write aimed at
 `main` is refused by Infrahub, not by the prompt.
 
+`provision_mcp_agent.py --check` reads the password from the `.env` beside the
+script, so run it from the main checkout. From a git worktree it reports
+`INFRAHUB_MCP_PASSWORD is not set` against a server that is working.
+
 Good questions to ask it: "what depends on `otternet-demo`?" (`find_reachable`
-walks from the application to its cluster, its VIP block and onward), or "which
-switches would a change to `K8S_PROD` touch?"
+from `ServiceFabricApp__otternet-demo` reaches its `ClusterKubernetes`
+`otternet`, its VIP block `10.112.240.0/28` and onward; the cluster kind is
+`ClusterKubernetes`, and naming it `KubernetesCluster` is refused as an unknown
+kind), or "which switches would a change to `K8S_PROD` touch?" (from
+`IpamVRF__K8S_PROD` it reaches the leaves through the VRF's BGP peers).
+
+Two refusals are worth showing, because they come from different places:
+
+- Ask it to work on `main` and the **MCP server** refuses:
+  `Writes to the default branch 'main' are not allowed`.
+- Its account is refused by **Infrahub** too, which is what makes that more
+  than a prompt: `mcp-agent` writing to `main` directly gets `PERMISSION_DENIED`
+  (`object:Service:FabricApp:update:allow_default`).
+
+A write it is allowed lands on its session branch, and `propose_changes` opens
+the proposed change from there in well under a second.
 
 **Do not claim the agent cannot merge.** On Infrahub 1.10.6 the
 `CoreProposedChangeMerge` mutation does not check `merge_proposed_change`, and
@@ -368,9 +439,12 @@ a proposed change, and that merging is where the human decides.
 
 | Step | Wall clock |
 | --- | --- |
-| Portal request **Exposed application, with access**, start to proposed change | about 75 s |
-| Of that, the whole-fabric AVD regeneration (7 switches) | about 21 s (15 s host vars, 6 s structured configs) |
-| A single access grant through the portal | about 30 s |
+| Portal request **Exposed application, with access**, start to proposed change | 70 to 85 s |
+| Of that, the whole-fabric AVD regeneration (7 switches) | 21 to 25 s (15 to 19 s host vars, 6 s structured configs) |
+| Its proposed change, opened to every check finished | 60 to 80 s |
+| A single access grant through the portal | 20 to 40 s |
+| Its proposed change, opened to the border leaf's diff | about 60 s |
+| Act four, break to red check / `--revert` | 35 to 45 s / about 4 s |
 | Merge to the resource existing in Kubernetes | under a minute |
 | Merge to `fw1` and the border leaf carrying the change | the next reconcile cycle, 120 s at demo cadence |
 | Grafana grant, merge to Grafana answering the branch | about 2.3 minutes, one reconcile cycle |
@@ -411,6 +485,12 @@ use live.
   the sync: a sync reports `Succeeded` over an empty or rejected set. A deleted
   resource is not redelivered until the `InfrahubSync` is deleted and re-applied
   from `vidra/infrahub-syncs.yaml`.
+- **A `backfill-structured-config` run is red in the proposed change's tasks.** It
+  is on every proposed change that regenerates the fabric, and it is not a check:
+  every check stays green. It fails writing `RoutingBGPPeerGroup.device`,
+  whose peer is `DcimDevice`, with a fabric switch, which has been a
+  `DcimFabricSwitch` since the device kinds were split. The rendered
+  configurations are unaffected; do not open the Tasks tab on screen.
 - **The merge reached no device.** Check the reconciler is running and look at
   `docker logs infrahub-deployment-reconciler-1`; a device the operator suspended
   shows as `suspended=1` and is left alone by design.
