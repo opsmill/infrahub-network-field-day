@@ -412,6 +412,8 @@ nodes:
     description: "Helm values as an attached file. Takes precedence over the inline chart_values attribute"
     label: Application Chart Values File
     icon: mdi:file-code-outline
+    # `<app>-values.yaml`; without it a row reads as a bare UUID.
+    display_label: "{{ file_name__value }}"
     include_in_menu: false
     inherit_from:
       - CoreFileObject

@@ -204,11 +204,37 @@ xp-apply: ## Re-apply every Crossplane definition and claim from crossplane/
 	$(KUBECTL) apply -f crossplane/platform/ -f crossplane/apps/
 
 ## ----------------------------------------------------------- access ----
+#
+# THE LAB'S OWN ACCESS BROKER, which exists only in a lab-only deployment.
+# When Infrahub drives this lab, `invoke cluster`'s handover deletes the
+# broker ON PURPOSE: nothing in Infrahub models it, and a workload no service
+# object declares is state no proposed change can explain. Access is then
+# requested through Infrahub's portal (Backstage, in the tooling cluster) as a
+# `ServiceAppAccess`, and the rule lands on fw1 through the Junos artifact --
+# so there are no AppAccess or FirewallAccess objects for `access-status` to
+# show, and `access` would re-install exactly what the handover removed.
+#
+# The test is the same one scripts/verify.sh uses: a `vidra-system` namespace
+# means Infrahub delivers into this cluster. OTTERNET_ACCESS_BROKER=1 overrides
+# it, for someone who really does want both.
+define access_broker_gate
+	@if [ -z "$${OTTERNET_ACCESS_BROKER:-}" ] && $(KUBECTL) get namespace vidra-system >/dev/null 2>&1; then \
+		printf '\n\033[1;33mInfrahub drives this lab, so the lab'"'"'s access broker is gone by design.\033[0m\n\n'; \
+		printf '  `invoke cluster` removed it in the handover: nothing in Infrahub models it.\n'; \
+		printf '  Request access in the Backstage portal instead (a ServiceAppAccess); the\n'; \
+		printf '  rule reaches fw1 through the Junos Configuration artifact.\n\n'; \
+		printf '  Grants:   Infrahub, Service Requests -> Application Access\n'; \
+		printf '  Override: OTTERNET_ACCESS_BROKER=1 make $@   (or `invoke cluster --no-handover`)\n\n'; \
+		exit 1; \
+	fi
+endef
 
-access-images: ## Build the portal and firewall-controller images into the k3s nodes
+access-images: ## Lab-only: build the access broker's images (refused when Infrahub drives the lab)
+	$(access_broker_gate)
 	./scripts/access-images.sh
 
-access: ## (Re-)install the access broker API, RBAC and the portal
+access: ## Lab-only: (re-)install the access broker (refused when Infrahub drives the lab)
+	$(access_broker_gate)
 	$(KUBECTL) apply -f crossplane/access/00-crd-firewall-access.yaml
 	$(KUBECTL) apply -f crossplane/access/01-xrd-app-access.yaml
 	$(KUBECTL) apply -f crossplane/access/02-composition-app-access.yaml
@@ -217,7 +243,8 @@ access: ## (Re-)install the access broker API, RBAC and the portal
 	@printf '\n\033[1;36m==> Waiting for the portal\033[0m\n'
 	$(KUBECTL) wait fabricapp/otternet-access --for=condition=Ready --timeout=5m
 
-access-status: ## Requests, grants, and the policies they put on the firewall
+access-status: ## Lab-only: the access broker's requests, grants and firewall policies
+	$(access_broker_gate)
 	@printf '\n\033[1m--- requests (the platform API) ---\033[0m\n'
 	$(KUBECTL) get appaccess
 	@printf '\n\033[1m--- grants (what the controller was told to do) ---\033[0m\n'

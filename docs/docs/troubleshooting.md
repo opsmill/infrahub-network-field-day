@@ -169,6 +169,9 @@ markers point elsewhere:
 
 ### Symptoms
 
+- The `cv-config-validation` check does not appear on a proposed change at all. That is expected
+  in this lab: it is not registered, because there is no CloudVision. See
+  [CloudVision Validation](./cloudvision.md) to re-enable it.
 - The `cv-config-validation` check reports an informational skip on a proposed change.
 - The check fails with a CloudVision connection or authentication error.
 

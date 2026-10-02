@@ -524,7 +524,7 @@ def normalise_ports(grant: GrantNode, derived: list[int] | None = None) -> list[
     A grant that names NO ports takes the ports its application's ADVERTISED
     SERVICES answer on, because the application already knows what it serves
     and the requester mostly does not. `derived` is that list, computed by
-    `advertised_service_ports` from the manifests.
+    `advertised_service_ports` from the application's `advertised_services`.
 
     Naming ports explicitly still works, and is how you ask for a SUBSET.
 
@@ -546,8 +546,8 @@ def normalise_ports(grant: GrantNode, derived: list[int] | None = None) -> list[
     if not raw:
         msg = (
             f"grant {name!r} names no ports and no advertised Service was found on its "
-            "application to derive them from; name the ports explicitly, or give the "
-            "application a LoadBalancer Service in its manifests. An empty list is "
+            "application to derive them from; name the ports explicitly, or name the "
+            "application's advertised_services. An empty list is "
             "rejected rather than read as 'all ports', which is what a "
             "permit-everything rule would mean"
         )

@@ -151,7 +151,7 @@ Examples:
 
 ## Validation pipeline
 
-Alongside transforms, proposed-change validation runs **checks** — Python routines that report pass, information, or error rather than producing an artifact. The repository ships six: `cv-config-validation`, which deploys the rendered EOS configs into a CloudVision workspace and blocks the proposed change on a failed build; `fabric-pool-validation`; and the global `peering-consistency`, `zone-advertisement`, `wan-service-consistency` and `allocation-consistency`. See [Checks](./checks.md).
+Alongside transforms, proposed-change validation runs **checks** — Python routines that report pass, information, or error rather than producing an artifact. Five are registered: `fabric-pool-validation`, and the global `peering-consistency`, `zone-advertisement`, `wan-service-consistency` and `allocation-consistency`. A sixth, `cv-config-validation`, which deploys the rendered EOS configs into a CloudVision workspace, ships as code but is not registered, because this lab has no CloudVision. See [Checks](./checks.md).
 
 ## Checksum-based change detection
 

@@ -55,7 +55,10 @@ generics:
         optional: false
         unique: true
         description: "Service name, unique across every service kind"
-        order_weight: 1000
+        # 100, below every relationship (the inherited `owner` sits at 900 and
+        # the concrete kinds' peers at 910-960), so a detail page opens on the
+        # name rather than on whichever relationship happens to weigh least.
+        order_weight: 100
         # Deliberately branch-AWARE, unlike opsmill/infrahub-demo-dc which
         # marks this branch: agnostic. A branch-agnostic attribute is global,
         # so a rename on a branch would take effect everywhere at once and
@@ -65,11 +68,12 @@ generics:
         kind: Text
         label: Description
         optional: true
-        order_weight: 1100
+        order_weight: 110
       - name: status
         kind: Dropdown
         label: Status
         optional: false
+        description: "Lifecycle; decommissioning and decommissioned withdraw the service and its technical objects"
         default_value: provisioning
         order_weight: 1200
         choices:

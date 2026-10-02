@@ -43,6 +43,9 @@ nodes:
 
   - name: HostvarFile
     namespace: Avd
+    # The file name carries the device (`<device>-hostvars.json`), so it is
+    # the label; without one a row reads `AvdHostvarFile(ID: <uuid>)`.
+    display_label: "{{ file_name__value }}"
     description: "Stores per-device pyAVD hostvars as a JSON file"
     include_in_menu: false
     inherit_from:
@@ -61,6 +64,9 @@ nodes:
 
   - name: StructuredConfigFile
     namespace: Avd
+    # The file name carries the device (`<device>-structured-config.json`), so it is
+    # the label; without one a row reads `AvdStructuredConfigFile(ID: <uuid>)`.
+    display_label: "{{ file_name__value }}"
     description: "Stores per-device AVD structured configuration as a JSON file"
     include_in_menu: false
     inherit_from:
