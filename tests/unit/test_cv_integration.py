@@ -373,8 +373,12 @@ def test_repository_objects_register_one_placeholder_cloudvision_webhook() -> No
     assert "event_type: infrahub.proposed_change.merged" in repository_text
     assert "infrahub.proposed_change.submitted" not in repository_text
     assert "https://placeholder.invalid/cloudvision-workspace-submission" in repository_text
-    assert "cv-workspace-submission-webhook-payload" in repository_text
-    assert "cv_workspace_submission_webhook_payload" in repository_text
+    # One definition, imported from git: a second copy in repository_checks.yml is deleted by
+    # every branch import and shows up as unrelated changes in each proposed change.
+    assert "cv-workspace-submission-webhook-payload" not in repository_text
+    assert repository_text.count("name: cv_workspace_submission_webhook_payload") == 1
+    assert "transformation: cv_workspace_submission_webhook_payload" in repository_text
+    assert Path("repository_checks.yml").read_text(encoding="utf-8").count("name: cv_workspace_submission_webhook\n") == 0
     assert "CVWorkspaceSubmissionWebhookPayload" in repository_text
     webhook_block = repository_text.split("kind: CoreCustomWebhook", maxsplit=1)[1]
     assert "node_kind:" not in webhook_block

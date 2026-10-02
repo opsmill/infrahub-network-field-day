@@ -56,67 +56,10 @@ spec:
             }
           }
         }
-    - name: cv_workspace_submission_webhook
-      repository: test-repository
-      query: |
-        query CVWorkspaceSubmissionQuery($proposed_change_id: String!) {
-          CloudvisionWorkspace(proposed_change_id__value: $proposed_change_id) {
-            edges {
-              node {
-                id
-                name {
-                  value
-                }
-                workspace_id {
-                  value
-                }
-                proposed_change_id {
-                  value
-                }
-                status {
-                  value
-                }
-                workspace_url {
-                  value
-                }
-                thread_id {
-                  value
-                }
-                change_control_id {
-                  value
-                }
-                change_control_url {
-                  value
-                }
-                fabric {
-                  node {
-                    id
-                    name {
-                      value
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-# The CoreCheckDefinition for `cv-config-validation` used to follow here. It
-# is withdrawn for this lab, which has no CloudVision -- see the comment at the
-# top of `check_definitions` in .infrahub.yml for why, and for the block that
-# re-enables it. Loading it here would re-create on every `invoke load` what
-# the repository import deletes.
----
-apiVersion: infrahub.app/v1
-kind: Object
-spec:
-  kind: CoreTransformPython
-  data:
-    - name: cv-workspace-submission-webhook-payload
-      repository: test-repository
-      query: cv_workspace_submission_webhook
-      file_path: "./transforms/cv_workspace_submission_webhook.py"
-      class_name: CVWorkspaceSubmissionWebhookPayload
-      convert_query_response: false
+# The webhook payload transform and its query are declared in .infrahub.yml and imported
+# from git, which is the only place they are defined. A second copy loaded here under
+# another name is removed by every branch import, and showed up as unrelated changes in
+# every proposed change that carried one.
 ---
 apiVersion: infrahub.app/v1
 kind: Object
@@ -141,4 +84,4 @@ spec:
       description: "CloudVision workspace submission handoff for cv-config-validation (inactive — no endpoint configured)"
       url: https://placeholder.invalid/cloudvision-workspace-submission
       validate_certificates: false
-      transformation: cv-workspace-submission-webhook-payload
+      transformation: cv_workspace_submission_webhook_payload
