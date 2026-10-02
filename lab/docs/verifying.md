@@ -7,7 +7,7 @@ First, point kubectl at the cluster. Use the **absolute** path — a
 `$PWD`-relative one silently does the wrong thing if you are not inside `lab/`:
 
 ```bash
-export KUBECONFIG=/home/ubuntu/dev/nfd41/lab/k8s/.kubeconfig/kubeconfig.yaml
+export KUBECONFIG=/path/to/infrahub/lab/k8s/.kubeconfig/kubeconfig.yaml   # this repository's lab/
 ```
 
 Sanity-check that it took, because the failure mode here is confusing:
@@ -28,10 +28,10 @@ passes the kubeconfig explicitly, so these work from anywhere in `lab/`:
 ```bash
 make k8s-status     # nodes, pods, services, network policies
 make k8s-bgp        # Cilium BGP peering and advertised routes
-make verify         # all 61 checks
+make verify         # every check, pass/fail
 ```
 
-If you only run one thing, run `make verify` — it executes 61 checks across the
+If you only run one thing, run `make verify` — it runs every check across the
 fabric, the security layers, the Crossplane control plane and the datapath, and
 prints a pass/fail line for each. Everything below is what it
 does, unpacked, so you can watch it rather than trust it.
@@ -119,12 +119,12 @@ the node subnet, and nothing else.
 docker exec clab-otternet-host-a curl -s --max-time 5 telnet://10.110.0.11:22 \
   && echo "SSH reachable — bad" || echo "blocked — correct"
 
-docker exec clab-otternet-fw1 nft list chain inet zones forward \
-  | grep 'DROP inter-zone' | grep -oE 'counter packets [0-9]+'
+make fw-log    # active sessions, then the RT_FLOW permits and denies
 ```
 
-The zone policy permits only 80/443 and ICMP between tenants. The drop counter
-is in the tens of thousands and climbing.
+The zone policy permits only 80/443 and ICMP between tenants; everything else
+falls to the default deny. `show security policies hit-count from-zone app-prod`
+in `make fw-console` shows which rule each permitted session matched.
 
 To see the path rather than infer it:
 
@@ -531,7 +531,7 @@ In order, what should appear:
 ```bash
 kubectl get fabricapp otternet-kanboard                 # the app, composed
 kubectl -n otternet-kanboard get pods,svc               # running, with a VIP
-kubectl get firewallaccess                           # policy id allocated
+kubectl get firewallaccess                           # where the policy landed
 kubectl -n otternet-kanboard get cnp                    # Cilium naming the branch
 ```
 
@@ -558,10 +558,10 @@ Delete the generated policy by hand and it comes back inside twenty seconds —
 the same property `make xp-drift` demonstrates for the Cilium config:
 
 ```bash
-docker exec clab-otternet-fw1 python3 /opt/push-config.py --password admin \
-    --run "config firewall policy
-delete 1000
-end"
+make fw-console
+  configure
+  delete security policies from-zone branch to-zone k8s-prod policy aa-access-kanboard
+  commit and-quit
 make access-status        # gone
 sleep 25
 make access-status        # back

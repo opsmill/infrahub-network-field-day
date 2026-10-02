@@ -1,6 +1,6 @@
 ---
 title: Checks
-description: Python checks that run in the proposed-change pipeline — CloudVision configuration validation and its workspace lifecycle, and fabric pool validation.
+description: Python checks that run in the proposed-change pipeline — CloudVision configuration validation and its workspace lifecycle, fabric pool validation, and the global consistency checks.
 audience: developer
 sidebar_position: 5
 ---
@@ -151,6 +151,50 @@ Per pod:
 Unit coverage is in
 [`tests/unit/test_fabric_pool_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tests/unit/test_fabric_pool_check.py).
 
+## `peering-consistency`
+
+**Class**: `PeeringConsistencyCheck`
+**Source**: [`checks/peering_consistency_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/checks/peering_consistency_check.py)
+**Query**: [`checks/peering_consistency_check.gql`](https://github.com/opsmill/infrahub-arista-avd/blob/main/checks/peering_consistency_check.gql) (registered as `peering_consistency_check`)
+**Target**: none — **global**.
+
+`generate-fabric-peering` corrects drift between the two ends of a cluster's BGP sessions when it
+runs; nothing stops someone editing a session by hand and merging it. This check is the gate. It
+reports every finding rather than stopping at the first:
+
+- the session's ASN is not the peer device's `RoutingAsn`;
+- the session's address is not the one on the peer device's peering SVI;
+- two services claim one cluster;
+- the peer device is not cabled to the cluster;
+- the peer is not a fabric leaf;
+- the fabric's own SVI node record of the same address disagrees.
+
+Unit coverage is in
+[`tests/unit/test_peering_consistency_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tests/unit/test_peering_consistency_check.py).
+
+## `wan-service-consistency`
+
+**Class**: `WanServiceConsistencyCheck`
+**Source**: [`checks/wan_service_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/checks/wan_service_check.py)
+**Target**: none — **global**.
+
+The WAN service kinds **name** technical objects rather than creating them, so no generator sits
+beneath them to verify a reference. The WAN's tenant isolation is structural — no VRF imports the
+route targets of another — but only while the services are wired correctly. Four rules:
+
+1. A `ServiceL3vpn` lists a circuit belonging to another tenant. The circuit list is the routing
+   domain, so a foreign circuit joins two tenants directly across the provider edge.
+2. Two L3VPNs share a provider-edge VRF, which is the same collapse by another route.
+3. A tenant cloud's zone governs a different VRF, which silently sends grants into the wrong
+   firewall policy.
+4. Two clouds share a VRF or a zone.
+
+It judges decommissioned services too, deliberately. `scripts/demo_break_isolation.sh` breaks the
+first rule on a branch to show the check failing; see the [demo runbook](../demo-runbook.md#act-four-the-review-step-bites).
+
+Unit coverage is in
+[`tests/unit/test_wan_service_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/tests/unit/test_wan_service_check.py).
+
 ## `zone-advertisement`
 
 **Class**: `ZoneAdvertisementCheck`
@@ -171,9 +215,9 @@ Four rules, each describing a failure that is otherwise silent:
    permits the session, and nothing errors.
 2. A zone carries one half of its advertisement policy and not the other. The schema permits it and
    the generator raises at run time, which is late; this refuses the merge that introduced it.
-3. An approved grant's destination VIP falls outside its application's `vip_block`. The cluster only
+3. A live grant's destination VIP falls outside its application's `vip_block`. The cluster only
    advertises addresses from that block, so the session is permitted and unroutable.
-4. An approved grant names an application that is not exposed, which gets no pool, no VIP and no
+4. A live grant names an application that is not exposed, which gets no pool, no VIP and no
    advertisement at all.
 
 ### Why it reads fabric scope only

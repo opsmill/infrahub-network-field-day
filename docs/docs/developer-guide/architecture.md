@@ -139,15 +139,19 @@ Transforms convert data to artifacts:
 Examples:
 - DcimInterface → ComputedInterfaceDescription → "→ device:interface"
 - NetworkFabric → CablingPlan → CSV cabling matrix
-- DcimDevice → AvdEosConfig → EOS CLI configuration
+- DcimFabricSwitch → AvdEosConfig → EOS CLI configuration
 - NetworkFabric → AvdFabricDoc → Markdown documentation
-- DcimDevice → AvdAntaCatalog → ANTA test catalog (YAML)
+- DcimFabricSwitch → AvdAntaCatalog → ANTA test catalog (YAML)
 - NetworkFabric → ContainerLabTopology → ContainerLab topology (YAML)
+- DcimDevice → SrlConfig → SR Linux configuration (the WAN routers)
+- SecurityFirewall → JunosConfig → Junos configuration
+- ServiceFabricApp / ServiceFabricPeering → Crossplane manifests (YAML)
+- MonitoringCollector → TelemetryCollectorConfig → Telegraf ConfigMap
 ```
 
 ## Validation pipeline
 
-Alongside transforms, proposed-change validation runs **checks** — Python routines that report pass, information, or error rather than producing an artifact. The repository ships five: `cv-config-validation`, which deploys the rendered EOS configs into a CloudVision workspace and blocks the proposed change on a failed build; `fabric-pool-validation`; and the global `peering-consistency`, `zone-advertisement` and `wan-service-consistency`. See [Checks](./checks.md).
+Alongside transforms, proposed-change validation runs **checks** — Python routines that report pass, information, or error rather than producing an artifact. The repository ships six: `cv-config-validation`, which deploys the rendered EOS configs into a CloudVision workspace and blocks the proposed change on a failed build; `fabric-pool-validation`; and the global `peering-consistency`, `zone-advertisement`, `wan-service-consistency` and `allocation-consistency`. See [Checks](./checks.md).
 
 ## Checksum-based change detection
 
@@ -220,7 +224,7 @@ During migration, legacy fabric and pod pool relationships are still present and
 - Schemas: [`schemas/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/schemas) — the data model.
 - Generators: [`generators/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/generators) — Python generator classes.
 - Transforms: [`transforms/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/transforms) — Python transform classes and templates.
-- Checks: [`checks/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/checks) — proposed-change validation, currently CloudVision.
+- Checks: [`checks/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/checks) — proposed-change validation: CloudVision, fabric pools, and the global consistency checks.
 - Playbooks: [`ansible/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/ansible) — the tree Semaphore runs for EOS config deployment and ContainerLab staging.
 - Core library: [`src/solution_arista_avd/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/src/solution_arista_avd) — shared protocols, AVD utilities, sorting, addressing.
 - Service portal: [`backstage/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/backstage) — the Backstage portal whose catalog provider generates one request template per service kind.

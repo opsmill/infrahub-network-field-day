@@ -299,20 +299,21 @@ VPNv4 and no route targets: with two PEs and a lab-sized customer count, LDP
 and a labelled core buy realism at the cost of a dataplane that is materially
 more likely to need debugging than to teach anything.
 
-What replaces it is BGP VRF leaking, and the interesting part is that isolation
-becomes a route-policy property rather than a dataplane one:
+What replaces it is route leaking between network instances, and the interesting part is that
+isolation becomes a route-policy property rather than a dataplane one:
 
 1. the CE announces its LAN over eBGP into `CUST_<name>`
-2. the ISP's default table does `import vrf CUST_<name>`, so the DC learns a
-   route back to the customer
-3. each customer VRF does `import vrf default` — but through
-   `RM-DC-SERVICES-ONLY`, which permits only `dc_service_prefixes`
+2. the ISP's `default` network instance imports `CUST_<name>` through an inter-instance
+   policy, so the DC learns a route back to the customer
+3. each customer instance imports `default` — but through `RM-<TENANT>-IMPORT`, which
+   accepts only the shared DC services, that tenant's own cloud subnet, and a default
+   route if the tenant bought internet access
 
 Step 3 is the whole design. After step 2 **both** customers' prefixes are
 sitting in the provider's default table; they have to be, or return traffic
 could not be routed. So if step 3 imported the default table unfiltered, each
 customer would be handed the other's routes and the provider would be
-transiting between them. The route-map is the only thing preventing it, which
+transiting between them. The import policy is the only thing preventing it, which
 is why `make verify` asserts the negative directly rather than trusting the
 config:
 
@@ -335,8 +336,8 @@ others:
 
 | Control | Enforced by | Says |
 |---|---|---|
-| `RM-CUST-<name>-IN` | the ISP, on isp-pe1 | this customer may originate only its assigned prefix — not a default route, not another customer's LAN |
-| `RM-DC-SERVICES-ONLY` | the ISP, on isp-pe1 | this customer may learn only the DC's published service prefixes |
+| `RM-<TENANT>-<SITE>-IN` | the ISP, on isp-pe1 | this site may originate only its assigned prefix — not a default route, not another customer's LAN |
+| `RM-<TENANT>-IMPORT` | the ISP, on isp-pe1 | this customer may learn only the DC's published service prefixes, its own cloud, and a default route if it bought internet access |
 | `RM-WAN-IN` + `ACL-FROM-WAN` | the DC, on border-leaf1 | the provider may announce only customer space, and may only source packets from it |
 | `RM-DC-TO-EXTERNAL` | the DC, on border-leaf1 | the outside world learns the service VIP range and nothing else — not the pod CIDR, not the node subnet |
 | zone policy | the firewall | a customer gets tcp/80 and tcp/443 to the service range; the branch also gets ICMP |
@@ -497,8 +498,10 @@ Value 9228 is not within range (256..9192)
 
 36 bytes short is enough to produce the failure this lab warns about everywhere
 else — ping fine, sessions establish, bulk transfers stall. The config clamps
-TCP MSS to 9138 (`security flow tcp-mss all-tcp`) so endpoints never build a
-segment that cannot fit, rather than relying on PMTUD and ICMP finding their way
+TCP MSS to 9124 (`security flow tcp-mss all-tcp`) so endpoints never build a
+segment that cannot fit. The figure is sized for the VXLAN fabric behind the firewall,
+9214 − 50 − 20 − 20, not for its own interface: at 9138 every full-size segment died
+inside the fabric, rather than relying on PMTUD and ICMP finding their way
 back through a default-deny firewall. `make verify` asserts the clamp is
 present.
 
@@ -542,7 +545,7 @@ again later — and be able to say, afterwards, who asked and who approved.
                                                           ▼
                                                    fw-controller
                                                     ──SSH──► vSRX
-                                                             policy 1000+
+                                                             policy aa-*
 ```
 
 One object is the request, the approval, the deployment and the firewall rule.
@@ -577,7 +580,7 @@ reached all along.
 
 So the branch baseline is now exactly two rules: reach the access portal, and
 ping. Everything else a branch user can reach was granted, and appears on the
-box as a policy in the 1000+ range with the requester's name in its comment.
+box as a policy named `aa-<grant>` with the requester's name in its comment.
 
 The WAN zone deliberately kept its blanket permit. Having one zone with standing
 access and one with requested access on the same firewall is the clearest way to
@@ -586,8 +589,8 @@ that Grafana is *not* reachable from the branch until somebody asks.
 
 ### Why a controller and not a Crossplane provider
 
-There is no Crossplane provider worth depending on for either firewall this lab
-can run, so something had to bridge the gap. `k8s/access/fw-controller` is that
+There is no Crossplane provider worth depending on for the firewall this lab
+runs, so something had to bridge the gap. `k8s/access/fw-controller` is that
 something: it reconciles `FirewallAccess` objects onto the box and writes back
 what it did.
 
@@ -606,8 +609,8 @@ firewall the same drift correction Crossplane gives the Cilium config — the
 story `make xp-drift` tells for one, you can tell for the other by deleting a
 policy on the box and watching it come back.
 
-It also sweeps orphans: anything in the 1000-1999 range named `aa-*` with no
-matching `FirewallAccess` is deleted. That is the case where a firewall quietly
+It also sweeps orphans: any policy named `aa-*` with no matching
+`FirewallAccess` is deleted. That is the case where a firewall quietly
 accumulates access nobody can account for, and it is worth handling explicitly
 rather than trusting the delete path never to be interrupted.
 
@@ -704,7 +707,7 @@ ordering problem.
 
 ## One topology file, environment-driven profiles
 
-The full fabric needs ~20 GB, which does not fit on a host already running
+The full lab needs about 37 GB, which does not fit on a host already running
 something substantial. The obvious answer — a second, trimmed topology file —
 was rejected: two copies of a 200-line topology drift apart, and the trimmed one
 is always the stale one.
@@ -733,9 +736,6 @@ even on a host that cannot run the fabric at all.
 - **k8s nodes are single-homed.** Dual-homing them to the MLAG pair with a bond
   would be more realistic but complicates Cilium's BGP source address. The
   subnet is still MLAG-redundant via the anycast gateway.
-- **No north-south / internet edge.** The border leaf hands off to the firewall
-  for inter-tenant traffic only. Adding an untrust zone and a NAT policy is a
-  natural extension; there is a spare `ge-0/0/2` on the cSRX.
 - **MACsec is not configured** on spine-leaf links. AVD supports it, but cEOS
   does not implement it, so it would render config that never comes up.
 - **ANTA validation is wired but unexercised** — `make avd-validate` needs a

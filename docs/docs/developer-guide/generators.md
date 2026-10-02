@@ -308,12 +308,13 @@ deletion candidates.
 
 **Target**: `ServiceAppAccess` (group `service_app_accesses`)
 
-**Purpose**: Turn an approved access grant into the firewall objects that permit the session, and
+**Purpose**: Turn an access grant into the firewall objects that permit the session, and
 into the fabric advertisement that makes its destination reachable
 
 **Actions**:
 
-1. Check `approved`. An unapproved grant creates nothing and its status is left alone.
+1. Check `status`. A `decommissioning` or `decommissioned` grant is withdrawn instead: the
+   objects it recorded are removed and its status ends at `decommissioned`.
 2. Validate and derive everything before the first write — ports, the destination zone, the
    policy, and the `tcp` protocol object.
 3. Upsert a `SecurityIPAMIPAddress` for the grant's destination VIP, or adopt an entry that
@@ -346,11 +347,13 @@ The entry is written at **device scope** rather than fabric scope. The hostvar g
 scopes by entry identity, so a device-scope sequence composes with the fabric's baseline instead of
 replacing it, and the hand-authored policy every other switch shares is untouched.
 
-**The write does not reach a switch on its own.** It lands in `avd_custom_hostvars`, which
-`generate-avd-device-hostvar` reads — and that generator is registered `execute_after_merge: false`
-because the AVD chain is expensive and run explicitly. The model is correct immediately; the switch
-follows on the next `invoke avd`, exactly as it does for any other fabric change. The Junos half has
-no such gap: step 8 re-renders the firewall's artifact, and the reconciler pushes it.
+**The write is not configuration yet.** It lands in `avd_custom_hostvars`, which
+`generate-avd-device-hostvar` reads. That generator runs on no trigger, but it is registered
+`execute_in_proposed_change: true`, so the proposed change's pipeline regenerates the host vars and
+the structured configs, and the reviewer sees the border leaf's rendered configuration change. The
+portal's curated templates run both AVD stages themselves before opening the proposed change, so
+theirs carry the change from the start. The Junos half needs neither: step 8 re-renders the
+firewall's artifact, and the reconciler pushes it after the merge.
 
 A zone the datacentre advertises nothing toward yields no advertisement, which is not an error —
 four of the six zones are in that state, and a grant from one gets its firewall rule and nothing
@@ -369,15 +372,21 @@ reports no difference. Infrahub's trigger rules cannot close this: `CoreGenerato
 The request is best effort. The objects are already written and correct by that point, and raising
 would skip the tracking context's group update, leaving the run's objects outside the group they own.
 
-#### The approval gate
+#### The branch is the gate
 
-`approved` is the gate, so an unapproved request is inert rather than merely hidden. The grant
-seeded in `objects/38_otternet_access_grants.yml` is unapproved deliberately: it keeps the rendered
-artifact byte-identical to what the unit tests hold against the device's own configuration, while
-leaving the whole demo one field-flip away.
+The grant used to carry `approved`, `approved_by` and `approved_at`, and composed nothing while
+the first was false. That was a second gate in front of the one the workflow already has: a
+request is made on a branch and reaches no device until its proposed change merges. The fields are
+gone, and merging is the approval.
 
-The cost is that "ran successfully and created nothing" is the normal outcome, which is
-indistinguishable from a broken generator unless you check the flag first.
+**No grant is seeded**, and `test_no_grant_is_seeded` keeps it that way. Without the gate a
+seeded grant would materialise a rule, a service object and an address-book entry into the default
+data, and the rendered Junos artifact is held byte for byte against a device file that has no such
+rule.
+
+The generator runs on `created`, and on `updated` for each of its own inputs (`status`, `ports`,
+`application`, `destination_vip` and the `source_*` relationships), so withdrawing a grant is
+setting its status. `granted_rules` is deliberately not watched: it is what the generator writes.
 
 #### The two allocation floors
 
@@ -674,7 +683,7 @@ VTEP loopback IP, and ASN. Existing non-empty operator values, including
 ### Via Infrahub UI
 
 1. Navigate to target object (Fabric, Pod, Rack, or Device)
-2. Click **Actions** → **Generator definitions**
+2. Click **Actions** → **Generator Definitions**
 3. Select the generator
 4. Click **Run**
 

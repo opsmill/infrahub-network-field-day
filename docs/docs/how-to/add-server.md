@@ -81,7 +81,7 @@ The resulting hostvars include `port_channel.channel_id` for switch-side server 
 If the proposed change shows the server but no updated device configs:
 
 1. Open the proposed change's branch in the Infrahub UI.
-2. Navigate to **Actions → Tasks** and check the status of the placement, cabling, hostvar, and structured-config generator runs.
+2. Navigate to **Activity → Tasks** and check the status of the placement, cabling, hostvar, and structured-config generator runs.
 3. If the AVD generators didn't run, regenerate them on the branch with `uv run invoke avd --branch <branch>`.
 
 ## Without the portal

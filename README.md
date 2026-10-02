@@ -6,7 +6,7 @@ The OTTERNET lab's Arista EVPN/VXLAN fabric, modelled in Infrahub and rendered w
 
 A fork of [opsmill/infrahub-arista-avd](https://github.com/opsmill/infrahub-arista-avd) with one thing changed: instead of seven illustrative example designs, it models **one real fabric** — the OTTERNET containerlab topology. Topology, addressing, EVPN services, tenant VRFs, firewall handoffs and workload BGP peerings all live in Infrahub as structured, queryable data, and PyAVD renders them into the EOS configuration the switches actually run.
 
-The claim is falsifiable, and tested. That lab is currently driven by static Ansible `group_vars`; this repository holds the same fabric as Infrahub objects, and asserts that the configuration it renders is **byte-for-byte identical** to what the lab is deployed with. The source of truth moves; nothing on the wire changes.
+The claim is falsifiable, and tested. The lab in `lab/` can still be built from static Ansible `group_vars` (`lab/avd/`); this repository holds the same fabric as Infrahub objects, and asserts that the configuration it renders is **byte-for-byte identical** to what the lab is deployed with. The source of truth moves; nothing on the wire changes.
 
 ```console
 $ uv run pytest tests/unit/test_otternet_golden_config.py
@@ -66,7 +66,7 @@ uv sync --all-packages
 export INFRAHUB_BASE_VERSION=1.10.6
 uv run invoke build
 
-# Start all services: Infrahub, Neo4j, PostgreSQL, Redis, RabbitMQ, service portal, Semaphore
+# Start all services: Infrahub, Neo4j, PostgreSQL, Redis, RabbitMQ, Semaphore
 uv run invoke start
 
 # Load schemas, UI menu, seed data, register the repository, and load event triggers
@@ -87,27 +87,31 @@ After `invoke load` completes and you run the generator chain on a fabric:
 4. **AVD generators run** — each device's PyAVD host_vars and structured configuration are stored as `AvdArtifact` graph objects.
 5. **Transforms produce artifacts** — EOS device configuration, per-device Markdown documentation, fabric documentation, and a cabling plan CSV are available as downloadable artifacts on each device and fabric object.
 6. **Propose and review** — open a proposed change from the branch; the UI shows a diff of every new object and the rendered artifacts for review before any configuration reaches production.
-7. **Deploy to devices** — apply the rendered configurations to the fabric through the bundled Ansible runner (Semaphore) or CloudVision (CVP/CVaaS).
+7. **Deploy to devices** — `uv run invoke provision` pushes each device's rendered artifact onto it, and the deployment reconciler (`uv run invoke reconcile`) does the same on a timer, pushing only what differs. CloudVision validates a proposed change's EOS configs in a workspace; it does not deploy.
 
 ## What's Included
 
-- **Schemas** — 20 schema files covering the full fabric data model:
-  - Topology: NetworkFabric, NetworkPod, NetworkDevice, NetworkInterface, NetworkLink
+- **Schemas** — 43 schema files covering the fabric, the WAN, the firewall, the cluster and the service layer:
+  - Topology: NetworkFabric, NetworkPod, LocationRack, DcimFabricSwitch, DcimInterface, NetworkLink
+  - Devices beyond the fabric: DcimDevice (the SR Linux WAN routers), SecurityFirewall, ComputePhysicalServer
   - IPAM: prefixes and addresses with role tagging (loopback, interconnect, management, server)
   - EVPN: tenants, VRFs, SVIs, L2 VLANs
   - MLAG: domain and peer pool definitions
   - AVD types: `AvdArtifact` for per-device hostvar and structured config tracking with checksums
-- **Generators** — six checksum-based, idempotent generators:
+- **Generators** — fourteen checksum-based, idempotent generators:
   - FabricGenerator, PodGenerator, RackGenerator — device creation, addressing, and cabling
   - GenerateAVDDeviceHostvar — assembles per-device PyAVD input from the source of truth
   - AvdDeviceStructuredConfigGenerator — runs PyAVD to produce structured configuration
   - GenerateServerCabling — handles server attachment
+  - One per service kind — network segments, tenant onboarding, server placement, applications, access grants, cluster peering — plus the monitoring collector's freshness generator
 - **Transforms** — render structured data into downloadable artifacts:
   - EOS device configuration (via PyAVD, running inside Infrahub workers)
   - Per-device and fabric-level Markdown documentation
   - Cabling plan CSV
   - ANTA test catalogs — generation ships; test execution is on the roadmap
   - Computed interface descriptions
+  - SR Linux configuration for the WAN routers, and Junos configuration for the firewall
+  - Crossplane manifests for applications and cluster peering, delivered by Vidra, and the telemetry collector's configuration
 - **Seed data** — the manufacturer, cEOS-LAB device type, interface profiles and device templates, addressing and number pools (loopback, VTEP, interconnect, MLAG, management, ASN, node ID), and the `OTTERNET_FABRIC` design: one pod, three leaf racks, the seven switches with their pinned identity, four tenants over six VRFs, and the workload endpoints.
 - **Service portal** — Backstage, in the tooling cluster, with one generated request template per service kind:
   - Network segment (subnet, VLAN, and gateway SVI, allocated from pools)
@@ -120,8 +124,8 @@ After `invoke load` completes and you run the generator chain on a fabric:
 |------|-------------|
 | `.infrahub.yml` | Registers all generators, transforms, queries, and artifact definitions with Infrahub |
 | `schemas/` | YAML schema definitions for the full data model |
-| `generators/` | Python generators (fabric, pod, rack, AVD hostvars, structured config, server cabling) |
-| `transforms/` | Python and Jinja2 transforms (EOS config, docs, cabling plan, ANTA catalog, interface descriptions) |
+| `generators/` | Python generators (fabric, pod, rack, AVD hostvars, structured config, server cabling, and the service layer) |
+| `transforms/` | Python and Jinja2 transforms (EOS, SR Linux and Junos config, docs, cabling plan, ANTA catalog, Crossplane manifests, telemetry config) |
 | `objects/` | Seed YAML (manufacturers, device types, pools, profiles, templates, fabrics, racks, VLANs) |
 | `triggers.yml` | Event trigger rules wiring schema changes to generator runs |
 | `backstage/` | Backstage service portal, deployed into the tooling cluster |
@@ -138,6 +142,7 @@ The full documentation is under [`docs/`](docs/docs/). Key entry points:
 | | |
 |--|--|
 | **Get the stack running** | [Quick Start](docs/docs/quick-start.md) — prerequisites, install steps, and first load |
+| **Show the lab to an audience** | [Demo runbook](docs/docs/demo-runbook.md) — the demo script: preflight checks, five acts, and measured timings |
 | **Provision a fabric end-to-end** | [Provision Your First Fabric](docs/docs/provision-first-fabric.md) — step-by-step walkthrough from seed data to rendered EOS artifacts |
 | **Check what's supported** | [Supported Capabilities](docs/docs/supported-capabilities.md) — capability matrix (supported / partial / not yet) |
 | **Run a day-two workflow** | [Add a Network Segment](docs/docs/how-to/add-network-segment.md) — and the other how-to guides |

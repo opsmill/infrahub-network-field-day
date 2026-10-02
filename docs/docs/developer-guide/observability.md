@@ -24,7 +24,6 @@ to what it is configured with is.
 The exporter, the Dex client and the Secrets sit outside Infrahub for a reason each:
 
 - **The exporter** has no published image or chart.
-- **The sidecars** must share a router's filesystem, and the topology belongs to the lab.
 - **Dex** has to exist before Infrahub can deliver anything.
 - **Credentials** never pass through the graph.
 

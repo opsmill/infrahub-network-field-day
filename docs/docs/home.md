@@ -21,7 +21,7 @@ flowchart LR
     S3["<b>3 · Run EOS Designs</b><br/>PyAVD produces the vendor<br/>structured configuration"]
     S4["<b>4 · Generate artifacts</b><br/>Render EOS configs and<br/>network documentation"]
     S5["<b>5 · Store &amp; version</b><br/>Persist every output as versioned<br/>objects in the knowledge graph"]
-    S6["<b>6 · Deploy</b><br/>Push configs via the Ansible<br/>runner or CloudVision"]
+    S6["<b>6 · Deploy</b><br/>The reconciler pushes each<br/>device's rendered artifact"]
     S1 --> S2 --> S3 --> S4 --> S5 --> S6
     subgraph gen ["AVD / PyAVD — generates"]
         S3

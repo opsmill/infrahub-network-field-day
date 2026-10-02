@@ -66,9 +66,9 @@ Triggers connect the topology generators into a chain: `generate-fabric` → `ge
 
 ### Diagnose
 
-In the Infrahub UI, open **Governance → Triggers**. You should see trigger entries covering each generator.
+In the Infrahub UI, open **Actions → Events → Rules**. You should see trigger rules covering each generator.
 
-If the Triggers page is empty, the trigger load step didn't run.
+If the Rules page is empty, the trigger load step didn't run.
 
 ### Fix
 
@@ -131,7 +131,7 @@ The structured-config generator (Phase 2 of the AVD pipeline) runs per fabric, n
 
 Re-run the structured-config generator for the fabric:
 
-1. In the Infrahub UI, on the correct branch, open **Actions → Generator definitions**.
+1. In the Infrahub UI, on the correct branch, open **Actions → Generator Definitions**.
 2. Click **`generate-avd-device-structured-config`**.
 3. Click **Run** and select the fabric, `OTTERNET_FABRIC`.
 
@@ -196,7 +196,7 @@ Normal durations on a typical laptop:
 | `generate-avd-device-hostvar` | one device | 20–45 s |
 | `generate-avd-device-structured-config` | one fabric | 1–3 min for a small fabric; longer for many devices |
 
-If a task has been in **Running** state for more than 10 minutes, check the task's log in **Actions → Tasks → [task]** and look for errors. Most long-running tasks are waiting on a missing dependency (an IP pool, a parent object). The log names the missing item.
+If a task has been in **Running** state for more than 10 minutes, check the task's log in **Activity → Tasks → [task]** and look for errors. Most long-running tasks are waiting on a missing dependency (an IP pool, a parent object). The log names the missing item.
 
 ## Starting over {#starting-over-completely}
 

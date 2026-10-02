@@ -30,7 +30,7 @@ Per-device container that links the device to its hostvars and structured config
       unique: true
   relationships:
     - name: device
-      peer: DcimDevice
+      peer: DcimFabricSwitch
       kind: Attribute
       cardinality: one
       optional: false
@@ -111,7 +111,7 @@ Same shape as `AvdHostvarFile`, for the structured-config JSON:
 
 ```mermaid
 flowchart LR
-    ND[DcimDevice]
+    ND[DcimFabricSwitch]
     AA[AvdArtifact]
     HF[AvdHostvarFile]
     SCF[AvdStructuredConfigFile]
@@ -179,7 +179,7 @@ When an operator opens one of these artifacts in the UI, Infrahub runs the trans
 
 ## Target groups
 
-- `avd_devices` — all `DcimDevice` nodes that should participate in AVD. Populated by upstream generators (for example, `generate-rack` adds newly created leaves to the group).
+- `avd_devices` — all `DcimFabricSwitch` nodes that should participate in AVD. Populated by upstream generators (for example, `generate-rack` adds newly created leaves to the group).
 - `fabrics` — all `NetworkFabric` nodes.
 
 Group membership is set by the generators at creation time; there is no separate "add to group" step in the AVD pipeline itself.

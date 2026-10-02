@@ -165,8 +165,8 @@ Everything else is either already here or pulled automatically, including
 Nokia SR Linux (`ghcr.io/nokia/srlinux:26.7.2`) for the ISP, customer and
 branch routers, and the Guacamole images for the branch gateway.
 
-The two VM firewalls need images their vendors do not redistribute, both built
-locally from a qcow2 in `/images`:
+The VM firewall needs an image its vendor does not redistribute, built locally
+from a qcow2 in `/images`:
 
 ```bash
 make fw-image                # vrnetlab/juniper_vsrx:22.3R1.11
@@ -277,8 +277,8 @@ Three things about it are worth knowing:
   bundles, not how many policies you may write, so the access broker can grant
   as many as anyone asks for.
 - **vSRX caps interface MTU at 9192**, an IP MTU of 9178 against the fabric's
-  9214. The config clamps TCP MSS to 9138 to compensate; see
-  [docs/design.md](docs/design.md#a-second-real-firewall-vsrx).
+  9214. The config clamps TCP MSS to 9124 to compensate; see
+  [docs/design.md](docs/design.md#living-with-vsrx).
 
 Building it — Juniper does not redistribute the image, but no support contract
 is needed either. A free account registered for "Evaluation user access" can
@@ -294,6 +294,12 @@ make deploy
 
 ## What to actually demo
 
+These are the standalone lab's demos, run after `make deploy` and `make crossplane`.
+When the lab is driven from Infrahub (`uv run invoke bootstrap` in the repository root),
+`invoke cluster` removes the lab's access broker and observability stack, and a branch
+user asks through the Backstage portal instead; the script for that is the
+[demo runbook](../docs/docs/demo-runbook.md).
+
 **A branch user asks for an application, and gets it.** This is the headline
 demo of the branch site.
 
@@ -302,7 +308,8 @@ make guac              # → http://<host>:8080/   branch / branch
 ```
 
 That drops you onto a real XFCE desktop at `10.70.0.20`, on the branch LAN,
-behind the branch's private circuit. Firefox opens on the access portal — the
+behind the branch's private circuit. Firefox opens on the Backstage service
+portal; its **Access Portal (DC)** bookmark is the lab's own access portal — the
 one datacentre service the branch is permitted to reach without asking.
 
 Before you click anything, prove the door is shut. From the desktop's terminal:
@@ -326,9 +333,9 @@ Within a minute the portal shows a link and the desktop's browser reaches it.
 What actually happened, in order: Crossplane composed a `FabricApp`, which
 created the namespace, the Deployment, the LoadBalancer Service, a VIP pool, a
 BGP advertisement and a default-deny `CiliumNetworkPolicy` naming the branch
-LAN; it composed a `FirewallAccess`; the controller allocated policy id 1000,
-wrote an address object, a service object and a policy, and moved that policy
-above the default deny.
+LAN; it composed a `FirewallAccess`; the controller wrote an address object, an
+application object and a policy, all named `aa-access-kanboard`, and moved that
+policy above the default deny.
 
 Then take it away:
 
@@ -341,10 +348,10 @@ make access-status     # the policy, the address object and the app are all gone
 hand and watch it come back — the same story `make xp-drift` tells for Cilium:
 
 ```bash
-docker exec -it clab-otternet-fw1 telnet localhost 5000
-  config firewall policy
-  delete 1000
-  end
+make fw-console
+  configure
+  delete security policies from-zone branch to-zone k8s-prod policy aa-access-kanboard
+  commit and-quit
 # wait 20s
 make access-status
 ```
@@ -991,7 +998,7 @@ every command above it run for real. `make -n` also skips prerequisites, so the
 `containerlab deploy --reconfigure`, which tears the lab down before rebuilding
 it, then failed the virtualization check — so a dry run deleted the lab and did
 not bring it back. There is now no `$(MAKE)` anywhere in a recipe; shared
-sub-steps are shell variables (`POST_DEPLOY`, `FW_CONFIG`) called directly.
+sub-steps are shell variables (`POST_DEPLOY`, `WAN_DEPLOY`) called directly.
 
 **A make target that shares a name with a directory silently does nothing.**
 `make crossplane` printed `make: 'crossplane' is up to date.` and exited 0,
@@ -1083,7 +1090,8 @@ password.
 **vSRX will not accept the fabric's MTU.** The interface maximum is 9192 and
 Junos counts the Ethernet header in it, so `mtu 9228` is rejected with `Value
 9228 is not within range (256..9192)` and the best available IP MTU is 9178
-against the fabric's 9214. The config clamps TCP MSS to 9138; without that,
+against the fabric's 9214. The config clamps TCP MSS to 9124, sized for the VXLAN fabric
+behind the firewall (9214 − 50 − 20 − 20) rather than for its own interface; without that,
 large transfers stall while ping and session setup work perfectly.
 
 **A `docker restart` of the firewall loses its data interfaces.** The restart

@@ -49,7 +49,7 @@ Scenario: you want to support a new Infrahub role (for example, `border-leaf`) t
 
 **Touch points:**
 
-1. **Schema** — add the role value to the `DcimDevice` `role` dropdown in [`schemas/dcim_extensions.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/dcim_extensions.yml) (the single authoritative device-role list).
+1. **Schema** — add the role value to the `DcimFabricSwitch` `role` dropdown in [`schemas/dcim_extensions.yml`](https://github.com/opsmill/infrahub-arista-avd/blob/main/schemas/dcim_extensions.yml) (the single authoritative device-role list).
 2. **Reload the schema and regenerate generated files** — none of these files should be hand-edited:
 
    ```bash
@@ -126,7 +126,7 @@ Scenario: you want PyAVD to receive an additional input field (for example, a pe
 
 **Touch points:**
 
-1. **Schema** — if the field isn't already represented, add it to the relevant schema (`DcimDevice`, `NetworkFabric`, etc.) in [`schemas/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/schemas).
+1. **Schema** — if the field isn't already represented, add it to the relevant schema (`DcimFabricSwitch`, `NetworkFabric`, etc.) in [`schemas/`](https://github.com/opsmill/infrahub-arista-avd/tree/main/schemas).
 2. **Reload the schema and regenerate generated files**:
 
    ```bash

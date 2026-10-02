@@ -102,8 +102,11 @@ The payload files live in `payloads/` rather than `objects/` deliberately: every
 the whole load.
 
 Seed data loads in filename order, and the numeric prefixes encode that order: shared data first
-(`00`–`06` — groups, manufacturers, device types, IPAM, management, profiles, device templates),
-then the `OTTERNET_FABRIC` design (`20`–`28`): device types and templates, pools, management objects, the fabric and pod, tenants and VRFs, racks, the pinned switches, the VRF services, and the workload endpoints.
+(`00`–`05` — groups, manufacturers, device types, profiles), then the `OTTERNET_FABRIC` design
+(`20`–`28`): device types and templates, pools, management objects, the fabric and pod, tenants and
+VRFs, racks, the pinned switches, the VRF services, and the workload endpoints. The rest of the
+lab follows (`29`–`40`): off-fabric prefixes and devices, the firewall, the WAN, the Kubernetes
+cluster, the seeded services, and the monitoring profiles.
 
 ## 5. Confirm everything loaded
 

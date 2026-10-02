@@ -12,7 +12,7 @@ not exist. containerlab validates binds before anything starts. Check the paths
 are relative to the topology file, not your shell's cwd.
 
 **Deploy dies partway with OOM, or the host starts swapping** — the full profile
-wants ~20 GB. Check what else is holding memory:
+wants about 37 GB, the lite one about 30 GB. Check what else is holding memory:
 
 ```bash
 docker ps --format '{{.Names}}\t{{.Image}}' | grep -v '^clab-'
@@ -615,9 +615,9 @@ docker exec clab-otternet-border-leaf1 Cli -p 15 -c 'show ip route vrf WAN bgp'
 #    refuses
 
 # 3. Did the firewall permit the session?
-docker exec clab-otternet-fw1 nft -a list chain inet zones forward | grep wan
-#    counters at zero -> traffic never arrived; look at 1 and 2 again
-#    counters rising on a DROP rule -> policy, and the rule name says which
+make fw-console    # then: show security policies hit-count from-zone wan
+#    counts at zero -> traffic never arrived, or fell to the default deny;
+#    `make fw-log` shows the RT_FLOW deny and the rule or default that dropped it
 ```
 
 If all three look right and it still times out, it is the fourth gate: the
@@ -850,13 +850,13 @@ instead:
 make deploy
 ```
 
-### Which firewall am I running?
+### Reaching the firewall
+
+The lab runs one firewall, a vSRX, and two targets reach it:
 
 ```bash
-docker inspect clab-otternet-fw1 --format '{{ index .Config.Labels "clab-node-kind" }}'
-# juniper_vsrx
-make fw-console      # dispatches on that automatically
-make fw-log
+make fw-console      # the Junos CLI, as admin
+make fw-log          # session summary and recent RT_FLOW permits and denies
 ```
 
 ## Self-service access requests

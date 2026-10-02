@@ -181,8 +181,8 @@ line says success.
 3. **Fail noisy.** Anything unrecognised counts as a difference — a gap causes an unnecessary
    push, never a missed one.
 
-That third rule earns its keep. The first live dry run reported `isp-pe1` as differing: the
-scaffold rule matched `router bgp <asn>` but not `router bgp <asn> vrf <NAME>`, so on a
+That third rule earned its keep while the WAN still ran FRR. The first live dry run reported
+`isp-pe1` as differing: the scaffold rule matched `router bgp <asn>` but not `router bgp <asn> vrf <NAME>`, so on a
 provider edge each customer VRF left an unsuppressed wrapper behind. The rule surfaced it
 instead of hiding it.
 

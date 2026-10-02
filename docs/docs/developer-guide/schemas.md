@@ -207,7 +207,7 @@ Top-level container for a datacenter fabric. Inherits `Network.BuildingBlock` an
 A pod within a fabric. Inherits `Network.BuildingBlock` and `Generator.Target`; parented by `NetworkFabric`.
 
 - **Attributes**: `name` (unique), `index`, `role` (`fabric`, `cpu`, `storage`), interface-sorting methods, `checksum` (from `Generator.Target`).
-- **Relationships**: `device_designs` → `NetworkPodDeviceDesign` (spine sizing), `racks` → `LocationRack`, `devices` → `DcimDevice` (the pod's spines), `mlag_peer_pool` / `mlag_l3_pool` → `CoreIPAddressPool`.
+- **Relationships**: `device_designs` → `NetworkPodDeviceDesign` (spine sizing), `racks` → `LocationRack`, `devices` → `DcimFabricSwitch` (the pod's spines), `mlag_peer_pool` / `mlag_l3_pool` → `CoreIPAddressPool`.
 
 ### `NetworkBuildingBlock` — `Network.BuildingBlock` (generic)
 
@@ -370,7 +370,7 @@ The two gateway styles are mutually exclusive per SVI. `ip_address_virtual` is a
 
 ### `EvpnSviNode` — `Evpn.SviNode`
 
-One device's own address on an SVI, alongside the shared VARP gateway. Attributes: `ip_address`. Relationships: `svi` → `EvpnSvi` (parent), `device` → `DcimDevice`.
+One device's own address on an SVI, alongside the shared VARP gateway. Attributes: `ip_address`. Relationships: `svi` → `EvpnSvi` (parent), `device` → `DcimFabricSwitch`.
 
 Its human-friendly ID is `device` + `ip_address` rather than `svi` + `device`: `EvpnSvi.name` is only unique within its VRF, so an ID through it is not a stable identifier.
 
@@ -397,13 +397,13 @@ The peer is the device *generic*, not `DcimDevice`, and that is deliberate. `Sec
 
 ### `RoutingVrfStaticRoute` — `Routing.VrfStaticRoute`
 
-A static route originated inside a VRF. Attributes: `prefix`, `next_hop`, `description`. Relationships: `vrf` → `IpamVRF` (parent), `devices` → `DcimDevice`.
+A static route originated inside a VRF. Attributes: `prefix`, `next_hop`, `description`. Relationships: `vrf` → `IpamVRF` (parent), `devices` → `DcimGenericDevice`.
 
 `description` is documentation only — AVD's static-route model has no such key and rejects one, so it is not emitted into the host_vars. Scoping to `devices` matters: originating a tenant default fabric-wide would black-hole traffic on every leaf with no path to the next hop.
 
 ### `RoutingVrfBgpPeer` — `Routing.VrfBgpPeer`
 
-An eBGP neighbour inside a VRF — a workload (Cilium on a Kubernetes node) or an external router (an ISP PE, a branch router). Attributes: `ip_address`, `remote_asn`, `description`, `cleartext_password`, `send_community`, `next_hop_self`, `maximum_routes`, `route_map_in`, `route_map_out`. Relationships: `vrf` → `IpamVRF` (parent), `devices` → `DcimDevice` (both members of an MLAG pair, typically).
+An eBGP neighbour inside a VRF — a workload (Cilium on a Kubernetes node) or an external router (an ISP PE, a branch router). Attributes: `ip_address`, `remote_asn`, `description`, `cleartext_password`, `send_community`, `next_hop_self`, `maximum_routes`, `route_map_in`, `route_map_out`. Relationships: `vrf` → `IpamVRF` (parent), `devices` → `DcimFabricSwitch` (both members of an MLAG pair, typically).
 
 `route_map_in` and `maximum_routes` are the load-bearing fields: together they bound what a peer may announce and how much of it, which is what keeps a compromised node from injecting a default route or hijacking another tenant.
 
@@ -411,7 +411,7 @@ Prefer `cleartext_password` over a pre-hashed value. EOS type-7 ciphertext is ke
 
 ### `RoutingVrfL3Interface` — `Routing.VrfL3Interface`
 
-A routed interface placed in a VRF, such as a firewall or WAN handoff. Attributes: `interface_name`, `ip_address`, `description`, `enabled`, `ipv4_acl_in`, `ipv4_acl_out`. Relationships: `vrf` → `IpamVRF` (parent), `device` → `DcimDevice`.
+A routed interface placed in a VRF, such as a firewall or WAN handoff. Attributes: `interface_name`, `ip_address`, `description`, `enabled`, `ipv4_acl_in`, `ipv4_acl_out`. Relationships: `vrf` → `IpamVRF` (parent), `device` → `DcimFabricSwitch`.
 
 AVD takes parallel `interfaces` / `nodes` / `ip_addresses` lists; each object is one device-and-interface pair and becomes a single-element entry, so every handoff stays individually addressable with its own ACL bindings and change history. The ACL *names* are references — the ACL bodies are an AVD `ipv4_acls` input supplied through the fabric's `avd_custom_hostvars`, so a name with no matching ACL renders an interface bound to a list that does not exist.
 
@@ -421,9 +421,9 @@ An EVPN domain owned by one `NetworkFabric`. Attributes: `name`, `domain_id`, an
 
 ### `EvpnGatewayGroup` — `Evpn.GatewayGroup`
 
-EVPN Multi-Domain Gateway intent shared by one or more Border Leaf devices in a selected Pod. Attributes include `resiliency_model` (only `all_active_multihoming`), EVPN L2/L3 enablement flags, D-PATH enablement, All-Active Multihoming enablement, and Ethernet Segment identifier/RT import values. Relationships: `local_domain` -> `EvpnDomain` (parent), `pod` -> `NetworkPod` (required non-owning context), `remote_domain` -> `EvpnDomain`, and `members` -> `DcimDevice`. The selected Pod must have `evpn_domain` set to the same object as `local_domain`, `remote_domain` must differ from `local_domain`, and group names are unique by `[local_domain, pod, name__value]`. Its schema-valid HFID uses the selected Pod and group name, while the display label and ordering include native `local_domain`, `pod`, `remote_domain`, and `name` fields. Reviewers distinguish the parent local domain from the EVPN Domain relationship view through `EvpnDomain.local_gateway_groups`; no computed or denormalized helper attribute is added solely for local-domain display.
+EVPN Multi-Domain Gateway intent shared by one or more Border Leaf devices in a selected Pod. Attributes include `resiliency_model` (only `all_active_multihoming`), EVPN L2/L3 enablement flags, D-PATH enablement, All-Active Multihoming enablement, and Ethernet Segment identifier/RT import values. Relationships: `local_domain` -> `EvpnDomain` (parent), `pod` -> `NetworkPod` (required non-owning context), `remote_domain` -> `EvpnDomain`, and `members` -> `DcimFabricSwitch`. The selected Pod must have `evpn_domain` set to the same object as `local_domain`, `remote_domain` must differ from `local_domain`, and group names are unique by `[local_domain, pod, name__value]`. Its schema-valid HFID uses the selected Pod and group name, while the display label and ordering include native `local_domain`, `pod`, `remote_domain`, and `name` fields. Reviewers distinguish the parent local domain from the EVPN Domain relationship view through `EvpnDomain.local_gateway_groups`; no computed or denormalized helper attribute is added solely for local-domain display.
 
-`NetworkFabric.evpn_domains`, `NetworkPod.evpn_domain`, `NetworkPod.evpn_gateway_groups`, and `DcimDevice.evpn_gateway_group` are additive relationships from `evpn/evpn_gateway.yml`. Both `EvpnDomain` and `EvpnGatewayGroup` set `include_in_menu: false` because the custom menu exposes one **Data Centre Fabric → EVPN → Domains** item for `EvpnDomain`; gateway groups are reached from EVPN Domain relationship views.
+`NetworkFabric.evpn_domains`, `NetworkPod.evpn_domain`, `NetworkPod.evpn_gateway_groups`, and `DcimFabricSwitch.evpn_gateway_group` are additive relationships from `evpn/evpn_gateway.yml`. Both `EvpnDomain` and `EvpnGatewayGroup` set `include_in_menu: false` because the custom menu exposes one **Data Centre Fabric → EVPN → Domains** item for `EvpnDomain`; gateway groups are reached from EVPN Domain relationship views.
 
 ## Compute
 
@@ -435,7 +435,7 @@ A physical server. Inherits `Compute.GenericUnit`, `Dcim.GenericDevice`, and `Ge
 
 ### `AvdArtifact` — `Avd.Artifact`
 
-Per-device container linking a device to its stored hostvars and structured config. Attributes: `name` (unique). Relationships: `device` → `DcimDevice` (required), `hostvar_file` → `AvdHostvarFile` (component), `structured_config_file` → `AvdStructuredConfigFile` (component). See [AvdArtifact & File Storage](./avd/artifacts.md).
+Per-device container linking a device to its stored hostvars and structured config. Attributes: `name` (unique). Relationships: `device` → `DcimFabricSwitch` (required), `hostvar_file` → `AvdHostvarFile` (component), `structured_config_file` → `AvdStructuredConfigFile` (component). See [AvdArtifact & File Storage](./avd/artifacts.md).
 
 ### `AvdHostvarFile` — `Avd.HostvarFile` · `AvdStructuredConfigFile` — `Avd.StructuredConfigFile`
 

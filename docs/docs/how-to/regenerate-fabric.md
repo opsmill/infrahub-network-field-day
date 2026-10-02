@@ -84,7 +84,7 @@ See [Viewing Artifacts](../viewing-artifacts.md) for where each one lives.
 You can trigger the same generators in the Infrahub UI:
 
 1. Create a branch.
-2. Open **Actions → Generator definitions**.
+2. Open **Actions → Generator Definitions**.
 3. Run **`generate-avd-device-hostvar`**, then **`generate-avd-device-structured-config`**. The structured-config generator reads the **stored** hostvar files, so it must follow.
 4. Create a proposed change from the branch; its checks re-render the artifacts.
 
