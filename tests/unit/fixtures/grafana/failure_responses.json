@@ -1,0 +1,39 @@
+{
+ "provenance": "Recorded from the lab's Grafana 13.2.1. plugin_not_registered is the body every /api/ds/query returned before PR #33 set grafana.ini plugins.preinstall_disabled; empty_result is the result for a query that matches no series (rate(nonexistent_metric[$__rate_interval])).",
+ "plugin_not_registered": {
+  "status": 404,
+  "response": {"statusCode": 404, "messageId": "plugin.notRegistered", "message": "Plugin not registered"}
+ },
+ "empty_result": {
+  "status": 200,
+  "frames": [
+   {
+    "schema": {
+     "refId": "A",
+     "meta": {
+      "typeVersion": [0, 0],
+      "custom": {"calculatedMinStep": 30000},
+      "executedQueryString": "Expr: rate(nonexistent_metric[2m0s])\nStep: 30s"
+     },
+     "fields": []
+    },
+    "data": {"values": []}
+   }
+  ]
+ },
+ "parse_error_result": {
+  "error": "bad_data: invalid parameter \"query\": 1:5: parse error: unclosed left parenthesis",
+  "errorSource": "downstream",
+  "status": 400,
+  "frames": [
+   {
+    "schema": {
+     "refId": "A",
+     "meta": {"typeVersion": [0, 0], "custom": {"calculatedMinStep": 30000}, "executedQueryString": "Expr: sum(\nStep: 30s"},
+     "fields": []
+    },
+    "data": {"values": []}
+   }
+  ]
+ }
+}
