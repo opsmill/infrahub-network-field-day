@@ -215,6 +215,23 @@ proposed change opened and no AVD steps, left **zero** hostvars, structured
 configs and EOS artifacts differing from main. The same request through the
 curated template changed exactly one of each, on the border leaf.
 
+**The flag got the files there and not the configuration, until the
+structured-config generator asked for it.** The pipeline runs generators and
+artifact validators concurrently: on a generated-template grant,
+`avd_eos_configuration` was validated at 04:12:15–22 while the hostvar pass ran
+until 04:12:37 and the cascaded structured-config run that wrote the border
+leaf's new file finished at 04:12:47. The branch held the new structured config
+beside the old rendered configuration, and nothing re-rendered it, because a new
+file under `AvdArtifact` is not a change to the switch. So
+`generate-avd-device-structured-config` now requests the per-switch artifacts for
+every switch whose file moved, on its own branch only (`_request_renders`). Two
+traps in writing that: `client.default_branch` on a generator's client is the
+run's branch, because the client is a clone pinned to it, so "is this main" has
+to be asked of Infrahub; and a task worker that imported `generators.*` from
+`main`'s commit keeps reloading `main`'s file for a branch's commit, so a
+generator change cannot be tested live on a branch before it merges. Test the
+new path by calling it locally against the branch instead.
+
 **Registering a hand-written catalogue item is three edits.** The file, `catalog.locations`
 in *both* app-configs — `app-config.docker.yaml` REPLACES the dev list and is the one the
 lab runs with — and a `COPY` in `packages/backend/Dockerfile`, which copies only named
@@ -1671,6 +1688,7 @@ uv run invoke avd --branch b --merge    # ... on a branch, merged when it succee
 uv run invoke bootstrap                 # the whole environment, one command
 uv run invoke bootstrap --fresh         # ... destroying the stack and the lab first
 scripts/verify_bootstrap.sh             # rebuild from nothing and assert the result
+uv run python scripts/demo_rehearsal.py # rehearse the demo runbook up to every merge, then clean up
 uv run invoke lab                       # deploy lab/'s topology with management connectivity
 uv run invoke lab --destroy             # tear it down
 uv run invoke provision                 # push every rendered artifact onto the running devices

@@ -18,7 +18,13 @@ from pyavd import get_avd_facts, get_device_structured_config, validate_inputs
 from solution_arista_avd.generator import save_file_if_changed
 from solution_arista_avd.protocols import AvdArtifact, AvdStructuredConfigFile
 
+from .artifact_render import request_artifact_render
 from .generate_avd_inputs_query import GenerateAvdInputsQuery
+
+# The per-switch artifacts whose transforms read the stored structured config.
+# The fabric-wide ones (documentation, telemetry) target other objects and are
+# left to their own definitions.
+RENDERED_FROM_STRUCTURED_CONFIG = ("AVD EOS Configuration", "AVD Device Documentation", "AVD ANTA Catalog")
 
 try:  # pyAVD's error base is not part of its public API; import defensively.
     from pyavd._errors import AristaAvdError  # noqa: PLC2701 - intentional private import, guarded above
@@ -183,6 +189,48 @@ class AvdDeviceStructuredConfigGenerator(InfrahubGenerator):
             )
         return validation_errors
 
+    async def _request_renders(self, device_ids: list[str]) -> None:
+        """Ask for the rendered artifacts of every switch whose structured config moved.
+
+        WITHOUT THIS A PROPOSED CHANGE SHOWS NO FABRIC CONFIGURATION for any
+        request that did not run the AVD pass itself -- every generated portal
+        template, the UI, `infrahubctl`. The pipeline runs this generator and the
+        artifact validators CONCURRENTLY: measured on a grant's proposed change,
+        `avd_eos_configuration` was validated 04:12:15-04:12:22 while the hostvar
+        generator ran until 04:12:37 and the cascaded structured-config run that
+        actually wrote the border leaf's new file finished at 04:12:47. The
+        branch then held the new structured config and the OLD rendered
+        configuration, and nothing ever re-rendered it. An artifact regenerates
+        when its target changes, and a new file under `AvdArtifact` is not a
+        change to the switch.
+
+        Only on a branch: `main` is rendered by `invoke avd` and by the merge.
+        Best effort, because the file is already saved and correct.
+        """
+        if not device_ids:
+            return
+        branch = self.branch_name
+        if not branch:
+            return
+        # Asked of Infrahub, not compared with `client.default_branch`: the
+        # generator's client is a clone pinned to this run's branch, so its
+        # "default" IS the branch and the comparison is always true.
+        try:
+            if (await self._init_client.branch.get(branch)).is_default:
+                return
+        except Exception as exc:  # noqa: BLE001 - delivery, not generation
+            self.logger.warning("Could not read branch %s, not requesting re-renders: %s", branch, exc)
+            return
+        for artifact_name in RENDERED_FROM_STRUCTURED_CONFIG:
+            for device_id in device_ids:
+                try:
+                    await request_artifact_render(
+                        self._init_client, artifact_name=artifact_name, target_id=device_id, branch=branch
+                    )
+                except Exception as exc:  # noqa: BLE001 - delivery, not generation
+                    self.logger.warning("Could not request %r for %s on %s: %s", artifact_name, device_id, branch, exc)
+        self.logger.info("Requested a re-render of %d switch(es) on %s", len(device_ids), branch)
+
     async def generate(self, data: dict) -> None:
         """Generate AVD inputs and structured config for all devices."""
         data: GenerateAvdInputsQuery = GenerateAvdInputsQuery(**data)
@@ -246,6 +294,7 @@ class AvdDeviceStructuredConfigGenerator(InfrahubGenerator):
         success_count = 0
         skipped_count = 0
         failed_devices: list[str] = []
+        changed_devices: list[str] = []
         for hostname, inputs in hostvars.items():
             try:
                 structured_config = get_device_structured_config(hostname=hostname, inputs=inputs, avd_facts=avd_facts)
@@ -297,6 +346,7 @@ class AvdDeviceStructuredConfigGenerator(InfrahubGenerator):
                     skipped_count += 1
                 else:
                     success_count += 1
+                    changed_devices.append(hostname)
             except (ValueError, KeyError, TypeError, AttributeError) as e:
                 self.logger.exception(f"Structured config failed for {hostname}")
                 failed_devices.append(f"{hostname}: {e}")
@@ -304,6 +354,7 @@ class AvdDeviceStructuredConfigGenerator(InfrahubGenerator):
         self.logger.info(
             f"Structured config complete: {success_count} updated, {skipped_count} unchanged, {len(failed_devices)} failed"
         )
+        await self._request_renders([device_mapping[h] for h in changed_devices if h in device_mapping])
         for failure in failed_devices:
             self.logger.error(f"  Failed: {failure}")
         if failed_devices:

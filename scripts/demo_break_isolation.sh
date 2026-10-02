@@ -58,9 +58,15 @@ if [ "${1:-}" = "--revert" ]; then
         gql "mutation { CoreProposedChangeDelete(data: {id: \"$pc\"}) { ok } }" >/dev/null
         echo "  proposed change deleted"
     fi
-    if gql "{Branch(name: \"$BRANCH\"){name}}" >/dev/null 2>&1; then
-        gql "mutation { BranchDelete(data: {name: \"$BRANCH\"}) { ok } }" >/dev/null || true
+    # `Branch(name:)` answers a LIST, empty when there is no such branch, so the
+    # query succeeding says nothing; the list being non-empty is the question.
+    exists=$(gql "{Branch(name: \"$BRANCH\"){name}}" \
+        | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["Branch"]))')
+    if [ "$exists" -gt 0 ]; then
+        gql "mutation { BranchDelete(data: {name: \"$BRANCH\"}) { ok } }" >/dev/null
         echo "  branch deleted"
+    else
+        echo "  no branch $BRANCH to delete"
     fi
     say "main is untouched; nothing was ever merged"
     exit 0
@@ -107,13 +113,18 @@ pc=$(gql "mutation {
 say "Re-running the checks"
 gql "mutation { CoreProposedChangeRunCheck(data: {id: \"$pc\", check_type: ALL}) { ok } }" >/dev/null
 printf '  waiting for a check to report the breakage'
+# Distinct NAMES, not a count. A global check (no `targets`) gets a fresh
+# validator on every pass, so after the re-run wan-service-consistency is listed
+# twice in the Checks tab, and a count read "2 check(s) failing" for one fault.
+failing=""
 for _ in $(seq 1 30); do
-    failing=$(gql "{CoreCheck{edges{node{conclusion{value}}}}}" "$BRANCH" \
-        | python3 -c 'import json,sys; print(sum(1 for e in json.load(sys.stdin)["CoreCheck"]["edges"] if e["node"]["conclusion"]["value"] != "success"))')
-    [ "$failing" -gt 0 ] && { printf '\n  %s check(s) failing\n' "$failing"; break; }
+    failing=$(gql "{CoreCheck{edges{node{name{value} conclusion{value}}}}}" "$BRANCH" \
+        | python3 -c 'import json,sys; print(", ".join(sorted({e["node"]["name"]["value"] for e in json.load(sys.stdin)["CoreCheck"]["edges"] if e["node"]["conclusion"]["value"] != "success"})))')
+    [ -n "$failing" ] && { printf '\n  failing: %s\n' "$failing"; break; }
     printf '.'
     sleep 10
 done
+[ -n "$failing" ] || printf '\n  nothing has failed yet; give the Checks tab another minute\n'
 
 say "Done"
 cat <<EOF

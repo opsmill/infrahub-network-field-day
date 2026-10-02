@@ -1,6 +1,7 @@
 """Unit tests for AVD device structured config generator."""
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -545,3 +546,79 @@ class TestFailuresAreRaisedNotLogged:
         )
 
         await gen.generate({})  # no exception
+
+
+class TestChangedConfigIsReRenderedOnItsBranch:
+    """The proposed-change pipeline validates artifacts while this generator is
+    still running, so a switch whose structured config moved kept its OLD
+    rendered configuration on the branch: a grant requested through a generated
+    template showed the firewall diff and no border-leaf line. The generator now
+    asks for those artifacts itself, on its own branch."""
+
+    @staticmethod
+    def _generator(
+        monkeypatch: pytest.MonkeyPatch, branch: str
+    ) -> tuple[AvdDeviceStructuredConfigGenerator, list[tuple[str, str, str | None]]]:
+        import generators.generate_avd_device_structured_config as module
+
+        gen = _make_generator()
+        gen.branch = branch
+        gen._init_client = AsyncMock()
+        # A clone pinned to the run's branch reports that branch as its default,
+        # which is the trap: the generator has to ask Infrahub instead.
+        gen._init_client.default_branch = branch
+        gen._init_client.branch.get = AsyncMock(return_value=SimpleNamespace(is_default=branch == "main"))
+        gen.logger = module.logging.getLogger("test")
+        calls: list[tuple[str, str, str | None]] = []
+
+        async def fake_render(
+            _client: object, *, artifact_name: str, target_id: str, branch: str | None, first_render: bool = False
+        ) -> bool:
+            calls.append((artifact_name, target_id, branch))
+            return not first_render
+
+        monkeypatch.setattr(module, "request_artifact_render", fake_render)
+        return gen, calls
+
+    @pytest.mark.anyio
+    async def test_every_changed_switch_is_rendered_on_the_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        gen, calls = self._generator(monkeypatch, "implement_grafana-access")
+
+        await gen._request_renders(["id-leaf"])
+
+        assert {name for name, _, _ in calls} == {
+            "AVD EOS Configuration",
+            "AVD Device Documentation",
+            "AVD ANTA Catalog",
+        }
+        assert {(target, branch) for _, target, branch in calls} == {("id-leaf", "implement_grafana-access")}
+
+    @pytest.mark.anyio
+    async def test_main_is_left_to_the_merge(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        gen, calls = self._generator(monkeypatch, "main")
+
+        await gen._request_renders(["id-leaf"])
+
+        assert calls == []
+
+    @pytest.mark.anyio
+    async def test_nothing_changed_requests_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        gen, calls = self._generator(monkeypatch, "implement_x")
+
+        await gen._request_renders([])
+
+        assert calls == []
+
+    @pytest.mark.anyio
+    async def test_a_failed_request_does_not_fail_the_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import generators.generate_avd_device_structured_config as module
+
+        gen, _ = self._generator(monkeypatch, "implement_x")
+
+        async def broken(*_args: object, **_kwargs: object) -> bool:
+            msg = "500"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(module, "request_artifact_render", broken)
+
+        await gen._request_renders(["id-leaf"])  # no exception
