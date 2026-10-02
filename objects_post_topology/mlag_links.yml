@@ -1,0 +1,53 @@
+---
+# ============================================================================
+# OTTERNET -- the MLAG peer links between each pair of leaves.
+#
+# lab/otternet.clab.yml wires Ethernet3 and Ethernet4 between the two leaves of
+# a rack. Those ports are created by the rack generator from the device type,
+# so they do not exist when `invoke load` runs and a link to them cannot be
+# loaded with objects/. `invoke avd --topology` loads this file once the racks
+# are complete. It is an upsert, so a re-run against a built fabric is harmless.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: NetworkLink
+  data:
+    - name: otternet-leaf-otternet-pod1-1-1-Ethernet3--leaf-otternet-pod1-1-2-Ethernet3
+      medium: copper
+    - name: otternet-leaf-otternet-pod1-1-1-Ethernet4--leaf-otternet-pod1-1-2-Ethernet4
+      medium: copper
+    - name: otternet-leaf-otternet-pod1-2-1-Ethernet3--leaf-otternet-pod1-2-2-Ethernet3
+      medium: copper
+    - name: otternet-leaf-otternet-pod1-2-1-Ethernet4--leaf-otternet-pod1-2-2-Ethernet4
+      medium: copper
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: InterfacePhysical
+  data:
+    - name: Ethernet3
+      device: leaf-otternet-pod1-1-1
+      connector: otternet-leaf-otternet-pod1-1-1-Ethernet3--leaf-otternet-pod1-1-2-Ethernet3
+    - name: Ethernet3
+      device: leaf-otternet-pod1-1-2
+      connector: otternet-leaf-otternet-pod1-1-1-Ethernet3--leaf-otternet-pod1-1-2-Ethernet3
+    - name: Ethernet4
+      device: leaf-otternet-pod1-1-1
+      connector: otternet-leaf-otternet-pod1-1-1-Ethernet4--leaf-otternet-pod1-1-2-Ethernet4
+    - name: Ethernet4
+      device: leaf-otternet-pod1-1-2
+      connector: otternet-leaf-otternet-pod1-1-1-Ethernet4--leaf-otternet-pod1-1-2-Ethernet4
+    - name: Ethernet3
+      device: leaf-otternet-pod1-2-1
+      connector: otternet-leaf-otternet-pod1-2-1-Ethernet3--leaf-otternet-pod1-2-2-Ethernet3
+    - name: Ethernet3
+      device: leaf-otternet-pod1-2-2
+      connector: otternet-leaf-otternet-pod1-2-1-Ethernet3--leaf-otternet-pod1-2-2-Ethernet3
+    - name: Ethernet4
+      device: leaf-otternet-pod1-2-1
+      connector: otternet-leaf-otternet-pod1-2-1-Ethernet4--leaf-otternet-pod1-2-2-Ethernet4
+    - name: Ethernet4
+      device: leaf-otternet-pod1-2-2
+      connector: otternet-leaf-otternet-pod1-2-1-Ethernet4--leaf-otternet-pod1-2-2-Ethernet4
