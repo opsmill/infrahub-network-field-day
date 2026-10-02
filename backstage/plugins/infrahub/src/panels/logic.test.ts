@@ -1,6 +1,6 @@
 import { addressesIn, cellRole } from './PrefixMap';
 import { buildTraceGraph, Reachable } from './ServiceTrace';
-import { capacity, RackOption, withSelected } from '../pages/RacksPage';
+import { RackOption, withSelected } from '../pages/RacksPage';
 import { roleFor } from './graph';
 
 describe('addressesIn', () => {
@@ -73,7 +73,7 @@ describe('cellRole', () => {
 describe('withSelected', () => {
   const option = (id: string): RackOption => ({
     id,
-    shortname: { value: id },
+    name: { value: id },
     display_label: id,
     parent: null,
   });
@@ -95,34 +95,6 @@ describe('withSelected', () => {
     const options = [option('bru01-ra')];
 
     expect(withSelected(options, null)).toBe(options);
-  });
-});
-
-describe('capacity', () => {
-  const rack = (units: number, heights: (number | null)[]) =>
-    ({
-      height: { value: units },
-      mounted_devices: {
-        edges: heights.map(height => ({
-          node: { device_type: { node: { height: { value: height } } } },
-        })),
-      },
-    } as any);
-
-  it('counts used units from device heights, not device count', () => {
-    expect(capacity(rack(24, [1, 2, 4]))).toEqual({
-      units: 24,
-      used: 7,
-      free: 17,
-    });
-  });
-
-  it('assumes 1U for a device whose type has no height', () => {
-    expect(capacity(rack(10, [null, null])).used).toBe(2);
-  });
-
-  it('never reports negative free space in an over-filled rack', () => {
-    expect(capacity(rack(2, [4])).free).toBe(0);
   });
 });
 
