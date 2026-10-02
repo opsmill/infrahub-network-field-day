@@ -696,11 +696,13 @@ def demo_release(
     print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
 
 
-def _reset_demo_main(ctx: Context, location: str, branch: str) -> str:
-    """Put `branch`'s tree back to what `main` holds, as a new commit. Returns the new tip, or ''.
+def _reset_demo_main(ctx: Context, location: str, branch: str, stage: str) -> str:
+    """Put `branch`'s tree back to the baseline the staged branch was cut from, as a new commit.
 
-    Forward only. Infrahub's clone has pulled the merge commit, so deleting and
-    recreating the branch would leave that commit in the clone and push it straight back.
+    Returns the new tip, or '' when nothing was merged. The baseline is the merge-base of
+    `branch` and the local `stage` branch, not today's `main`: the merge is the only thing to undo.
+    Forward only. Infrahub's clone has pulled the merge commit, so deleting and recreating the
+    branch would leave that commit in the clone and push it straight back.
     """
     import tempfile
 
@@ -708,13 +710,14 @@ def _reset_demo_main(ctx: Context, location: str, branch: str) -> str:
         clone = Path(tmp) / "clone"
         ctx.run(f"git clone --quiet --branch {shlex.quote(branch)} {shlex.quote(location)} {shlex.quote(str(clone))}")
         with ctx.cd(clone):
-            ctx.run("git fetch --quiet origin main")
-            if ctx.run("git diff --quiet HEAD FETCH_HEAD", warn=True).ok:
+            ctx.run(f"git fetch --quiet {shlex.quote(str(MAIN_DIRECTORY_PATH))} {shlex.quote(f'refs/heads/{stage}')}")
+            base = ctx.run("git merge-base HEAD FETCH_HEAD", hide=True).stdout.strip()
+            if ctx.run(f"git diff --quiet HEAD {shlex.quote(base)}", warn=True).ok:
                 return ""
-            ctx.run("git read-tree -u --reset FETCH_HEAD")
+            ctx.run(f"git read-tree -u --reset {shlex.quote(base)}")
             ctx.run(
                 "git -c user.name=demo-reset -c user.email=demo-reset@example.invalid "
-                f"commit --quiet -m {shlex.quote(f'Reset {branch} to main')}"
+                f"commit --quiet -m {shlex.quote(f'Reset {branch} to {base[:10]}')}"
             )
             ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
             return ctx.run("git rev-parse HEAD", hide=True).stdout.strip()
@@ -742,10 +745,10 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
     demo = dr.demo_branch(name, run)
     repo = _repository()
     if repo.get("kind") == "CoreRepository":
-        new_tip = _reset_demo_main(ctx, repo["location"], dr.DEFAULT_DEMO_BRANCH)
+        new_tip = _reset_demo_main(ctx, repo["location"], dr.DEFAULT_DEMO_BRANCH, dr.stage_branch(name))
         if new_tip:
             print(
-                f" - Reset {dr.DEFAULT_DEMO_BRANCH} to main ({new_tip[:10]}); waiting for Infrahub to import it",
+                f" - Reset {dr.DEFAULT_DEMO_BRANCH} to its baseline ({new_tip[:10]}); waiting for Infrahub to import it",
                 flush=True,
             )
             _wait_for(lambda: _repository().get("commit") == new_tip, f"the import of {new_tip[:10]}", timeout)
