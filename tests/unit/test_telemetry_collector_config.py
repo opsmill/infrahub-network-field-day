@@ -417,8 +417,6 @@ def test_wan_services_are_checked_against_the_sessions_their_sites_and_peerings_
     assert any('device="isp-pe1"' in line and 'peer_address="10.51.10.2"' in line for line in l3vpn)
     assert any('device="cust-acme-ce"' in line and 'peer_address="10.51.10.1"' in line for line in l3vpn)
     assert all('kind="DcimDevice"' in line for line in l3vpn)
-    internet = [line for line in bgp if 'service="acme-internet"' in line]
-    assert {line.split('device="', 1)[1].split('"', 1)[0] for line in internet} == {"internet-rtr", "isp-pe2"}
 
 
 def test_vrf_bound_services_take_the_fabric_sessions_in_their_vrf() -> None:

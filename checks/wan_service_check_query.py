@@ -7,11 +7,14 @@ from pydantic import BaseModel, Field
 
 class WanServiceCheckQuery(BaseModel):
     service_l_3_vpn: "WanServiceCheckQueryServiceL3Vpn" = Field(alias="ServiceL3vpn")
-    service_tenant_cloud: "WanServiceCheckQueryServiceTenantCloud" = Field(alias="ServiceTenantCloud")
-    service_internet_access: "WanServiceCheckQueryServiceInternetAccess" = Field(alias="ServiceInternetAccess")
+    service_tenant_cloud: "WanServiceCheckQueryServiceTenantCloud" = Field(
+        alias="ServiceTenantCloud"
+    )
     wan_site: "WanServiceCheckQueryWanSite" = Field(alias="WanSite")
     dcim_device: "WanServiceCheckQueryDcimDevice" = Field(alias="DcimDevice")
-    wan_internet_peering: "WanServiceCheckQueryWanInternetPeering" = Field(alias="WanInternetPeering")
+    wan_internet_peering: "WanServiceCheckQueryWanInternetPeering" = Field(
+        alias="WanInternetPeering"
+    )
     ipam_ip_address: "WanServiceCheckQueryIpamIpAddress" = Field(alias="IpamIPAddress")
 
 
@@ -72,14 +75,20 @@ class WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixes(BaseModel):
 
 
 class WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixesEdges(BaseModel):
-    node: Optional["WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixesEdgesNode"]
+    node: Optional[
+        "WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixesEdgesNode"
+    ]
 
 
 class WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixesEdgesNode(BaseModel):
-    prefix: Optional["WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixesEdgesNodePrefix"]
+    prefix: Optional[
+        "WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixesEdgesNodePrefix"
+    ]
 
 
-class WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixesEdgesNodePrefix(BaseModel):
+class WanServiceCheckQueryServiceL3VpnEdgesNodeDcServicePrefixesEdgesNodePrefix(
+    BaseModel
+):
     value: Optional[str]
 
 
@@ -93,7 +102,9 @@ class WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdges(BaseModel):
 
 class WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNode(BaseModel):
     id: str
-    circuit_id: Optional["WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeCircuitId"]
+    circuit_id: Optional[
+        "WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeCircuitId"
+    ]
     tenant: "WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenant"
 
 
@@ -102,15 +113,21 @@ class WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeCircuitId(BaseMo
 
 
 class WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenant(BaseModel):
-    node: Optional["WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenantNode"]
+    node: Optional[
+        "WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenantNode"
+    ]
 
 
 class WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenantNode(BaseModel):
     id: str
-    name: Optional["WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenantNodeName"]
+    name: Optional[
+        "WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenantNodeName"
+    ]
 
 
-class WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenantNodeName(BaseModel):
+class WanServiceCheckQueryServiceL3VpnEdgesNodeCircuitsEdgesNodeTenantNodeName(
+    BaseModel
+):
     value: Optional[str]
 
 
@@ -206,61 +223,6 @@ class WanServiceCheckQueryServiceTenantCloudEdgesNodePrefixNodePrefix(BaseModel)
     value: Optional[str]
 
 
-class WanServiceCheckQueryServiceInternetAccess(BaseModel):
-    edges: list["WanServiceCheckQueryServiceInternetAccessEdges"]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdges(BaseModel):
-    node: Optional["WanServiceCheckQueryServiceInternetAccessEdgesNode"]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNode(BaseModel):
-    id: str
-    name: Optional["WanServiceCheckQueryServiceInternetAccessEdgesNodeName"]
-    status: Optional["WanServiceCheckQueryServiceInternetAccessEdgesNodeStatus"]
-    l_3_vpn: "WanServiceCheckQueryServiceInternetAccessEdgesNodeL3Vpn" = Field(alias="l3vpn")
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeName(BaseModel):
-    value: Optional[str]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeStatus(BaseModel):
-    value: Optional[str]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeL3Vpn(BaseModel):
-    node: Optional["WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNode"]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNode(BaseModel):
-    id: str
-    name: Optional["WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeName"]
-    status: Optional["WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeStatus"]
-    tenant: "WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeTenant"
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeName(BaseModel):
-    value: Optional[str]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeStatus(BaseModel):
-    value: Optional[str]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeTenant(BaseModel):
-    node: Optional["WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNode"]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNode(BaseModel):
-    id: str
-    name: Optional["WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNodeName"]
-
-
-class WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNodeName(BaseModel):
-    value: Optional[str]
-
-
 class WanServiceCheckQueryWanSite(BaseModel):
     edges: list["WanServiceCheckQueryWanSiteEdges"]
 
@@ -326,7 +288,9 @@ class WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdges(BaseModel):
 
 
 class WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNode(BaseModel):
-    peer_address: Optional["WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodePeerAddress"]
+    peer_address: Optional[
+        "WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodePeerAddress"
+    ]
     device: "WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodeDevice"
 
 
@@ -339,8 +303,12 @@ class WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodeDevice(BaseModel):
 
 
 class WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodeDeviceNode(BaseModel):
-    name: Optional["WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodeDeviceNodeName"]
-    role: Optional["WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodeDeviceNodeRole"]
+    name: Optional[
+        "WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodeDeviceNodeName"
+    ]
+    role: Optional[
+        "WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodeDeviceNodeRole"
+    ]
 
 
 class WanServiceCheckQueryWanSiteEdgesNodeBgpSessionsEdgesNodeDeviceNodeName(BaseModel):
@@ -360,7 +328,9 @@ class WanServiceCheckQueryWanSiteEdgesNodeStaticRoutesEdges(BaseModel):
 
 
 class WanServiceCheckQueryWanSiteEdgesNodeStaticRoutesEdgesNode(BaseModel):
-    next_hop: Optional["WanServiceCheckQueryWanSiteEdgesNodeStaticRoutesEdgesNodeNextHop"]
+    next_hop: Optional[
+        "WanServiceCheckQueryWanSiteEdgesNodeStaticRoutesEdgesNodeNextHop"
+    ]
 
 
 class WanServiceCheckQueryWanSiteEdgesNodeStaticRoutesEdgesNodeNextHop(BaseModel):
@@ -445,63 +415,103 @@ class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdges(BaseModel):
     ]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeDcimInterface(BaseModel):
-    typename__: Literal["DcimInterface", "InterfaceLag", "SecurityFirewallInterface"] = Field(alias="__typename")
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeDcimInterface(
+    BaseModel
+):
+    typename__: Literal[
+        "DcimInterface", "InterfaceLag", "SecurityFirewallInterface"
+    ] = Field(alias="__typename")
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical(BaseModel):
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysical(
+    BaseModel
+):
     typename__: Literal["InterfacePhysical"] = Field(alias="__typename")
-    name: Optional["WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalName"]
+    name: Optional[
+        "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalName"
+    ]
     ip_addresses: "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddresses"
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalName(BaseModel):
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalName(
+    BaseModel
+):
     value: Optional[str]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddresses(BaseModel):
-    edges: list["WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdges"]
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddresses(
+    BaseModel
+):
+    edges: list[
+        "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdges"
+    ]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdges(BaseModel):
-    node: Optional["WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdgesNode"]
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdges(
+    BaseModel
+):
+    node: Optional[
+        "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdgesNode"
+    ]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdgesNode(BaseModel):
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdgesNode(
+    BaseModel
+):
     address: Optional[
         "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdgesNodeAddress"
     ]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdgesNodeAddress(BaseModel):
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfacePhysicalIpAddressesEdgesNodeAddress(
+    BaseModel
+):
     value: Optional[str]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtual(BaseModel):
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtual(
+    BaseModel
+):
     typename__: Literal["InterfaceVirtual"] = Field(alias="__typename")
-    name: Optional["WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualName"]
+    name: Optional[
+        "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualName"
+    ]
     ip_addresses: "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddresses"
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualName(BaseModel):
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualName(
+    BaseModel
+):
     value: Optional[str]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddresses(BaseModel):
-    edges: list["WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdges"]
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddresses(
+    BaseModel
+):
+    edges: list[
+        "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdges"
+    ]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdges(BaseModel):
-    node: Optional["WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdgesNode"]
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdges(
+    BaseModel
+):
+    node: Optional[
+        "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdgesNode"
+    ]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdgesNode(BaseModel):
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdgesNode(
+    BaseModel
+):
     address: Optional[
         "WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdgesNodeAddress"
     ]
 
 
-class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdgesNodeAddress(BaseModel):
+class WanServiceCheckQueryDcimDeviceEdgesNodeInterfacesEdgesNodeInterfaceVirtualIpAddressesEdgesNodeAddress(
+    BaseModel
+):
     value: Optional[str]
 
 
@@ -515,7 +525,9 @@ class WanServiceCheckQueryWanInternetPeeringEdges(BaseModel):
 
 class WanServiceCheckQueryWanInternetPeeringEdgesNode(BaseModel):
     name: Optional["WanServiceCheckQueryWanInternetPeeringEdgesNodeName"]
-    customer_aggregate: "WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregate"
+    customer_aggregate: (
+        "WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregate"
+    )
 
 
 class WanServiceCheckQueryWanInternetPeeringEdgesNodeName(BaseModel):
@@ -523,14 +535,20 @@ class WanServiceCheckQueryWanInternetPeeringEdgesNodeName(BaseModel):
 
 
 class WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregate(BaseModel):
-    node: Optional["WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregateNode"]
+    node: Optional[
+        "WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregateNode"
+    ]
 
 
 class WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregateNode(BaseModel):
-    prefix: Optional["WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregateNodePrefix"]
+    prefix: Optional[
+        "WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregateNodePrefix"
+    ]
 
 
-class WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregateNodePrefix(BaseModel):
+class WanServiceCheckQueryWanInternetPeeringEdgesNodeCustomerAggregateNodePrefix(
+    BaseModel
+):
     value: Optional[str]
 
 
@@ -568,16 +586,26 @@ class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceLayer3(Bas
     typename__: Literal["InterfaceLag", "InterfaceLayer3"] = Field(alias="__typename")
 
 
-class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysical(BaseModel):
+class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysical(
+    BaseModel
+):
     typename__: Literal["InterfacePhysical"] = Field(alias="__typename")
-    device: "WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDevice"
+    device: (
+        "WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDevice"
+    )
 
 
-class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDevice(BaseModel):
-    node: Optional["WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNode"]
+class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDevice(
+    BaseModel
+):
+    node: Optional[
+        "WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNode"
+    ]
 
 
-class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNode(BaseModel):
+class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNode(
+    BaseModel
+):
     typename__: Literal[
         "ComputePhysicalServer",
         "DcimDevice",
@@ -585,23 +613,37 @@ class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDe
         "DcimGenericDevice",
         "SecurityFirewall",
     ] = Field(alias="__typename")
-    name: Optional["WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNodeName"]
+    name: Optional[
+        "WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNodeName"
+    ]
 
 
-class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNodeName(BaseModel):
+class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfacePhysicalDeviceNodeName(
+    BaseModel
+):
     value: Optional[str]
 
 
-class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtual(BaseModel):
+class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtual(
+    BaseModel
+):
     typename__: Literal["InterfaceVirtual"] = Field(alias="__typename")
-    device: "WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDevice"
+    device: (
+        "WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDevice"
+    )
 
 
-class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDevice(BaseModel):
-    node: Optional["WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNode"]
+class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDevice(
+    BaseModel
+):
+    node: Optional[
+        "WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNode"
+    ]
 
 
-class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNode(BaseModel):
+class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNode(
+    BaseModel
+):
     typename__: Literal[
         "ComputePhysicalServer",
         "DcimDevice",
@@ -609,10 +651,14 @@ class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDev
         "DcimGenericDevice",
         "SecurityFirewall",
     ] = Field(alias="__typename")
-    name: Optional["WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNodeName"]
+    name: Optional[
+        "WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNodeName"
+    ]
 
 
-class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNodeName(BaseModel):
+class WanServiceCheckQueryIpamIpAddressEdgesNodeInterfaceNodeInterfaceVirtualDeviceNodeName(
+    BaseModel
+):
     value: Optional[str]
 
 
@@ -645,13 +691,6 @@ WanServiceCheckQueryServiceTenantCloudEdgesNodeZoneNodeVrf.model_rebuild()
 WanServiceCheckQueryServiceTenantCloudEdgesNodeZoneNodeVrfNode.model_rebuild()
 WanServiceCheckQueryServiceTenantCloudEdgesNodePrefix.model_rebuild()
 WanServiceCheckQueryServiceTenantCloudEdgesNodePrefixNode.model_rebuild()
-WanServiceCheckQueryServiceInternetAccess.model_rebuild()
-WanServiceCheckQueryServiceInternetAccessEdges.model_rebuild()
-WanServiceCheckQueryServiceInternetAccessEdgesNode.model_rebuild()
-WanServiceCheckQueryServiceInternetAccessEdgesNodeL3Vpn.model_rebuild()
-WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNode.model_rebuild()
-WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeTenant.model_rebuild()
-WanServiceCheckQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNode.model_rebuild()
 WanServiceCheckQueryWanSite.model_rebuild()
 WanServiceCheckQueryWanSiteEdges.model_rebuild()
 WanServiceCheckQueryWanSiteEdgesNode.model_rebuild()

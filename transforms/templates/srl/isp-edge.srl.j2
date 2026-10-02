@@ -14,7 +14,7 @@
 #      internet learn a route back
 #   3. VRF CUST_x imports the default network instance -- but through
 #      RM-<TENANT>-IMPORT, which accepts the shared DC services, the own cloud
-#      subnet of that tenant, and a default route only if the tenant buys internet
+#      subnet of that tenant
 #
 # Step 3 is the whole design. The prefixes of EVERY tenant are in the default
 # instance after step 2; without the per-tenant policy, step 3 would hand each
@@ -57,8 +57,7 @@ set / routing-policy prefix-set PL-DEFAULT prefix 0.0.0.0/0 mask-length-range ex
 {% endif %}
 #
 # ---- per-tenant import policy -------------------------------------------
-# Shared DC services, plus the own cloud subnet of this tenant, plus a default
-# route if it bought internet. Anything else in the provider instance -- which
+# Shared DC services, plus the own cloud subnet of this tenant. Anything else in the provider instance -- which
 # includes every other tenant -- is rejected.
 {% for t in tenants %}
 set / routing-policy prefix-set PL-{{ t.name | upper }}-CLOUD prefix {{ t.dc.subnet }} mask-length-range exact
@@ -70,12 +69,6 @@ set / routing-policy policy RM-{{ t.name | upper }}-IMPORT statement 10 action p
 set / routing-policy policy RM-{{ t.name | upper }}-IMPORT statement 20 match origin-network-instance default
 set / routing-policy policy RM-{{ t.name | upper }}-IMPORT statement 20 match prefix prefix-set PL-{{ t.name | upper }}-CLOUD
 set / routing-policy policy RM-{{ t.name | upper }}-IMPORT statement 20 action policy-result accept
-{% if t.internet %}
-# {{ t.name }} buys internet access
-set / routing-policy policy RM-{{ t.name | upper }}-IMPORT statement 30 match origin-network-instance default
-set / routing-policy policy RM-{{ t.name | upper }}-IMPORT statement 30 match prefix prefix-set PL-DEFAULT
-set / routing-policy policy RM-{{ t.name | upper }}-IMPORT statement 30 action policy-result accept
-{% endif %}
 set / routing-policy policy RM-{{ t.name | upper }}-IMPORT default-action policy-result reject
 {% endfor %}
 #
@@ -170,7 +163,7 @@ set / network-instance default protocols bgp neighbor {{ isp.edge.core.peer }} n
 set / network-instance default protocols bgp neighbor {{ isp.edge.core.peer }} export-policy [ EXPORT-BGP-TABLE ]
 {% for t in tenants %}
 #
-# ==== tenant {{ t.name }} (VRF {{ t.vrf }}, internet: {{ 'yes' if t.internet else 'no' }}) ====
+# ==== tenant {{ t.name }} (VRF {{ t.vrf }}) ====
 {% for site in t.sites %}
 #   site {{ site.name }}: {{ site.lan }} via {{ site.ce.node }} ({{ site.kind }}{% if site.kind == 'bgp' %}, AS {{ site.asn }}{% endif %})
 {% endfor %}

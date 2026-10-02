@@ -5,12 +5,6 @@
 # internet peering, the VRFs and the firewall zones -- and deferred the services
 # on top. These are those services, transcribed from lab/wan/tenants.yml.
 #
-# The asymmetry is the point and is not a transcription slip: acme has
-# `internet: true` in the lab file and globex has `internet: false`, so there is
-# exactly ONE internet-access service. A tenant having a WAN does not mean it
-# has a way out to the internet, and modelling both tenants identically would
-# lose the only interesting thing about the pair.
-#
 # The PE-side VRFs below (CUST_*) are separate from the DC-side tenant VRFs
 # (TENANT_*) that cycle 010 seeded. The lab's own note explains why: a tenant
 # gets one VRF on the PE and one identity; two sites of the same tenant reach
@@ -53,22 +47,6 @@ spec:
       # is a different concept and already lives on ServiceTenantCloud.prefix.
       dc_service_prefixes:
         - ["10.112.240.0/24", "default"]
----
-apiVersion: infrahub.app/v1
-kind: Object
-spec:
-  kind: ServiceInternetAccess
-  data:
-    # Only acme. globex has `internet: false` in the lab, and the absence of a
-    # second object here is the model recording that.
-    - name: acme-internet
-      description: "Internet access for the acme L3VPN"
-      status: active
-      owner: OTTERNET-ISP
-      l3vpn: acme-l3vpn
-      peering: isp-to-internet
-      default_route_imported: true
-      prefixes_announced: true
 ---
 apiVersion: infrahub.app/v1
 kind: Object
