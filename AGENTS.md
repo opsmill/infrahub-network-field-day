@@ -1003,8 +1003,8 @@ allocation until its generator returns it, and a hand-declared block is never re
 ## Repository sync, and the one thing that wedges it
 
 Infrahub clones the repository over git and imports what it finds: queries, generators,
-transforms, checks, artifact definitions, and menus. Two behaviours are worth knowing before
-debugging a change that never arrives.
+transforms, checks, artifact definitions, and menus — **from `main` only**, see the end of this
+section. Two behaviours are worth knowing before debugging a change that never arrives.
 
 **A failed import is not retried until the commit changes.** Infrahub compares the commit it
 has against the repository's HEAD, and an unchanged hash means there is nothing to do — even
@@ -1046,6 +1046,33 @@ docker compose logs task-worker --since 10m | grep -i "Failed to synchronize"
 The failure seen here was a race between the two `task-worker` replicas importing the same
 repository, surfacing as `Multiple CoreMenuItem nodes have the same hfid` on a menu item whose
 HFID is not in fact duplicated.
+
+**Infrahub imports only `main`, and `INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES` is why.** The
+CoreRepository's `/upstream` is this checkout, bind-mounted, and by default Infrahub turns
+**every local git branch** of its source into an Infrahub branch — each agent worktree and each
+feature branch. Every Infrahub branch registers about 171 Prefect automations (display labels,
+human-friendly ids, profile refresh) and imports the repository for itself. Measured with a
+handful of worktrees: the task manager at 100% CPU, 3,868 automations, 126 queued runs,
+SQLAlchemy pool timeouts, and `set_state` 500s that failed a portal request's generators with
+`One or more generators failed`. Nothing named the branches as the cause.
+
+`docker-compose.override.yml` sets the variable to `["main"]` on the task workers (where the git
+sync runs) and the server. It is Infrahub's own filter, `get_filtered_remote_branches`: a JSON
+list of names or regexes tried with `re.fullmatch`. Things to know:
+
+- **The developer loop is unchanged.** Commit or merge to the checkout's `main` and the next poll
+  imports it; `/upstream`, the CoreRepository and its stored commit did not move, so the
+  `merge-base --is-ancestor` diagnosis above still applies.
+- **It filters new branches, not ones Infrahub already has.** A branch that already exists
+  in Infrahub with `sync_with_git: true` keeps syncing whatever its name. Delete the Infrahub
+  branch once and it does not come back. Every branch this repository creates, the portal's,
+  `invoke avd --branch`, the demo scripts, is `sync_with_git: false`, so their proposed changes
+  run `main`'s generators, checks and transforms, as before.
+- **A mirror was considered and rejected.** A main-only bare mirror kept current by a fetch
+  loop would work too, at the cost of a service, a poll interval stacked on Infrahub's own, and
+  a second place Infrahub pushes to. The setting does the same with no moving part.
+- `tests/unit/test_repository_sync_contract.py` pins the value and the `/upstream` mount.
+  Integration tests are unaffected: they build their own Infrahub and repository.
 
 ## Services expand on their branch, by event rule
 

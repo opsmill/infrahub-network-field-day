@@ -201,6 +201,19 @@ Normal durations on a typical laptop:
 
 If a task has been in **Running** state for more than 10 minutes, check the task's log in **Activity → Tasks → [task]** and look for errors. Most long-running tasks are waiting on a missing dependency (an IP pool, a parent object). The log names the missing item.
 
+### Every task is slow and the branch list is long
+
+Infrahub clones your checkout, and each Infrahub branch registers its own set of background automations. If Infrahub has imported many git branches, such as agent worktrees or feature branches, the task manager saturates and unrelated generator runs fail with `One or more generators failed`.
+
+The compose stack prevents this by setting `INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES` to `["main"]`, so only `main` is imported. Confirm the running task workers carry it:
+
+```bash
+docker compose exec task-worker env | grep IMPORT_SYNC_BRANCH_NAMES
+uv run infrahubctl branch list
+```
+
+If the variable is missing, recreate the services with `docker compose up -d infrahub-server task-worker`. A branch imported before the setting existed keeps syncing until you delete it in Infrahub.
+
 ## Starting over {#starting-over-completely}
 
 ```bash
