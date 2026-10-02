@@ -334,3 +334,37 @@ def test_the_observability_apps_render_no_policy_but_grafanas_gate() -> None:
         assert flags, name
         assert not any(flags.values()), f"{name}: {flags}"
     assert _app("otternet-metrics")["allowed_source_prefixes"], "Grafana's pod gate must still exist"
+
+
+def test_every_exposed_seeded_application_keeps_the_client_address() -> None:
+    """`externalTrafficPolicy: Local` on every exposed application's Service.
+
+    With the charts' default, `Cluster`, a request landing on a node whose chosen
+    backend is elsewhere is SNATed to that node's address. Measured on
+    otternet-demo: 4 of 6 requests from host-a reached whoami as 10.110.0.x, so
+    the pod policy admitted them as `remote-node` rather than on their source
+    prefix, and `allowed_source_prefixes` decided nothing for most of them.
+
+    Asserted on the payload AND on what the transform renders from it: the
+    payload states it so it reads truthfully, and the transform is what holds
+    every application to it, including ones the portal creates.
+    """
+    from transforms.crossplane_fabric_app import apply_local_traffic
+
+    exposed = [app for app in _data("ServiceFabricApp") if app.get("exposed")]
+    assert {app["name"] for app in exposed} == {"otternet-demo", "otternet-metrics"}
+
+    service_path = {"whoami": ("service",), "kube-prometheus-stack": ("grafana", "service")}
+    for app in exposed:
+        values = yaml.safe_load((PAYLOAD_DIR / f"{app['name']}-values.yaml").read_text(encoding="utf-8"))
+        rendered = apply_local_traffic(exposed=True, chart=app["chart_name"], values=values, name=app["name"])
+        for label, tree in (("payload", values), ("rendered", rendered)):
+            service = tree
+            for key in service_path[app["chart_name"]]:
+                service = service[key]
+            assert service["type"] == "LoadBalancer", f"{app['name']} {label}"
+            assert service["externalTrafficPolicy"] == "Local", f"{app['name']} {label}"
+        # The payload already says it, so enforcing it changes nothing -- which
+        # is what keeps the rendered manifest a one-line diff for the demo and
+        # byte-identical for Grafana.
+        assert rendered == values, app["name"]

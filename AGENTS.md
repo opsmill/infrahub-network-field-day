@@ -517,8 +517,18 @@ Current generator definitions are registered in `.infrahub.yml`:
 **An application is a Helm chart, and nothing else.** Cycle 033 made `chart_repository`,
 `chart_name` and `chart_version` mandatory together — which is what the Crossplane XRD already
 required — and withdrew the `manifests` attribute, the `manifests_file` relationship and the
-`ServiceFabricAppManifestsFile` kind. Four things are worth knowing before touching this:
+`ServiceFabricAppManifestsFile` kind. Five things are worth knowing before touching this:
 
+- **`crossplane_fabric_app` forces `externalTrafficPolicy: Local` on every exposed application.**
+  Charts default to `Cluster`, which SNATs a request to a node address whenever it lands on a node
+  whose backend is elsewhere. The pod policy then admits it as `remote-node`, not on its source
+  prefix, so `allowed_source_prefixes` (the third gate) decides nothing. Measured on
+  `otternet-demo`: 4 of 6 requests from host-a reached whoami as `10.110.0.x`. The Service's
+  values path is known per chart (`_LB_SERVICE_VALUES_PATH`). For any other chart rendering
+  **refuses** unless the values already say `Local`, because a guessed key is one the chart
+  ignores. Measured on a copy of the whoami chart: with `Local`, 10/10 from host-a and both WAN
+  customers kept their own address, and the VIP's `/32` moved to whichever nodes ran a pod. The
+  one gap was a single refused connection while a new pod was still starting.
 - **A chart's Kubernetes Services are invisible to Infrahub**, because they exist only once Helm
   has run. `generate-app-access` used to derive a grant's ports by reading the manifests for
   LoadBalancer Services; an exposed application now names them through `advertised_services`, a

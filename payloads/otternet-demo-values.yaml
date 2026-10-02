@@ -23,6 +23,17 @@ service:
   # advertised; a Service is never exposed to the fabric merely by being of this
   # type. Both halves are needed -- this, and the label below.
   type: LoadBalancer
+  # LOCAL IS LOAD BEARING, and the chart defaults to Cluster. With Cluster a
+  # request landing on a node whose chosen backend is elsewhere is SNATed to
+  # that node's address, so the pod sees 10.110.0.x rather than the client --
+  # measured: 4 of 6 requests from host-a arrived as a k8s node. The pod's
+  # CiliumNetworkPolicy then admits them as `remote-node` instead of on their
+  # source prefix, and `allowed_source_prefixes`, the third gate, decides
+  # nothing. With Local only nodes running a pod answer for the VIP, and Cilium
+  # withdraws the VIP's BGP route from the rest, so the fabric's ECMP set tracks
+  # where the pods are. crossplane_fabric_app enforces this for every exposed
+  # application; it is stated here as well so the payload reads truthfully.
+  externalTrafficPolicy: Local
   ports:
     # 80, and this number is load bearing in two places at once. It is the port
     # the VIP answers on, and it is `junos-http`, the SecurityService this

@@ -207,6 +207,7 @@ spec:
 
             service:
               type: LoadBalancer
+              externalTrafficPolicy: Local
               ports:
                 http: 80
 
@@ -215,7 +216,10 @@ spec:
           description: >-
             Helm values. The Service must be a LoadBalancer AND carry the label
             named above, or the application deploys, reports healthy, and is
-            reachable by nothing.
+            reachable by nothing. It must also set externalTrafficPolicy Local,
+            or the pod sees a node address instead of the requester's and the
+            source-prefix policy cannot apply; for a chart Infrahub does not
+            know, rendering refuses values that omit it.
           ui:widget: textarea
           ui:options:
             rows: 16

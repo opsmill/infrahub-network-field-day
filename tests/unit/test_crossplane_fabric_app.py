@@ -11,6 +11,7 @@ the whole payload round-trips and is compared with the hand-written manifest.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -20,6 +21,7 @@ from transforms.crossplane_fabric_app import (
     DEX_BACK_CHANNEL,
     DEX_ISSUER,
     CrossplaneFabricAppTransform,
+    apply_local_traffic,
     apply_sso,
     build_expose,
     build_policy,
@@ -347,3 +349,79 @@ def test_dex_render_is_deterministic() -> None:
     first = apply_sso("dex", chart="kube-prometheus-stack", values=_kps_values(), name="m")
     second = apply_sso("dex", chart="kube-prometheus-stack", values=_kps_values(), name="m")
     assert first == second
+
+
+# ---------------------------------------------------------------------------
+# externalTrafficPolicy: Local on every exposed application
+# ---------------------------------------------------------------------------
+
+
+def _whoami_values(**service: Any) -> dict[str, Any]:
+    return {"replicaCount": 1, "service": {"type": "LoadBalancer", "ports": {"http": 80}, **service}}
+
+
+def test_an_exposed_known_chart_gets_local_even_when_its_values_omit_it() -> None:
+    """The portal's own prefill used to omit it, and the chart defaults to Cluster."""
+    values = apply_local_traffic(exposed=True, chart="whoami", values=_whoami_values(), name="a")
+    assert values["service"]["externalTrafficPolicy"] == "Local"
+    assert values["service"]["ports"] == {"http": 80}, "the rest of the Service values survive"
+
+
+def test_local_overrides_an_explicit_cluster_on_a_known_chart() -> None:
+    """Intent wins over tuning: `Cluster` is the setting that defeats the pod gate."""
+    values = apply_local_traffic(
+        exposed=True, chart="whoami", values=_whoami_values(externalTrafficPolicy="Cluster"), name="a"
+    )
+    assert values["service"]["externalTrafficPolicy"] == "Local"
+
+
+def test_grafana_inside_kube_prometheus_stack_is_the_service_enforced() -> None:
+    values = apply_local_traffic(exposed=True, chart="kube-prometheus-stack", values=_kps_values(), name="m")
+    assert values["grafana"]["service"]["externalTrafficPolicy"] == "Local"
+    assert "service" not in values
+
+
+def test_an_unexposed_application_is_left_exactly_as_it_was() -> None:
+    """No VIP, nothing reaches it from outside -- and telegraf has no Service path."""
+    values = {"service": {"enabled": False}}
+    assert apply_local_traffic(exposed=False, chart="telegraf", values=values, name="t") is values
+
+
+def test_enforcing_is_a_no_op_when_the_values_already_say_local() -> None:
+    """What keeps an application that already states it byte-identical."""
+    values = _whoami_values(externalTrafficPolicy="Local")
+    assert apply_local_traffic(exposed=True, chart="whoami", values=values, name="a") == _whoami_values(
+        externalTrafficPolicy="Local"
+    )
+
+
+def test_an_unknown_chart_passes_only_when_its_values_say_local() -> None:
+    values = {"controller": {"service": {"type": "LoadBalancer", "externalTrafficPolicy": "Local"}}}
+    assert apply_local_traffic(exposed=True, chart="ingress-nginx", values=values, name="a") is values
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        None,
+        {"service": {"type": "LoadBalancer"}},
+        {"service": {"type": "LoadBalancer", "externalTrafficPolicy": "Cluster"}},
+        {"a": {"externalTrafficPolicy": "Local"}, "b": {"externalTrafficPolicy": "Cluster"}},
+    ],
+)
+def test_an_unknown_chart_without_local_raises_rather_than_guessing(values: Any) -> None:
+    """A guessed key would be ignored by the chart, and the SNAT would come back."""
+    with pytest.raises(ValueError, match="externalTrafficPolicy: Local"):
+        apply_local_traffic(exposed=True, chart="nginx", values=values, name="shop")
+
+
+def test_the_portal_prefill_states_local() -> None:
+    """The curated template's default values are what a requester who changes
+    nothing submits, so they must already be the right shape for another chart
+    that follows the same `service.*` convention."""
+    template = yaml.safe_load(Path("backstage/catalog/exposed-app-with-access.yaml").read_text(encoding="utf-8"))
+    fields = {
+        name: spec for page in template["spec"]["parameters"] for name, spec in page.get("properties", {}).items()
+    }
+    prefill = yaml.safe_load(fields["values_file_content"]["default"])
+    assert prefill["service"]["externalTrafficPolicy"] == "Local"

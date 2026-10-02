@@ -305,6 +305,81 @@ def apply_sso(provider: str | None, *, chart: str | None, values: Any, name: str
     return _deep_merge(base, overlay)
 
 
+# ---------------------------------------------------------------------------
+# externalTrafficPolicy: Local on every exposed application
+# ---------------------------------------------------------------------------
+
+# Where a chart keeps the values of the LoadBalancer Service that gets the VIP,
+# by chart name. Like `_GRAFANA_VALUES_PATH`, a chart missing from this map is
+# not guessed at: its values must say `Local` themselves, or rendering refuses.
+_LB_SERVICE_VALUES_PATH: dict[str, tuple[str, ...]] = {
+    "whoami": ("service",),
+    "kube-prometheus-stack": ("grafana", "service"),
+    "grafana": ("service",),
+}
+
+_TRAFFIC_POLICY = "externalTrafficPolicy"
+_LOCAL = "Local"
+
+
+def _traffic_policies(values: Any) -> list[Any]:
+    """Every ``externalTrafficPolicy`` value anywhere in ``values``."""
+    if isinstance(values, dict):
+        found = [value for key, value in values.items() if key == _TRAFFIC_POLICY]
+        for value in values.values():
+            found.extend(_traffic_policies(value))
+        return found
+    if isinstance(values, list):
+        return [found for item in values for found in _traffic_policies(item)]
+    return []
+
+
+def apply_local_traffic(*, exposed: bool, chart: str | None, values: Any, name: str) -> Any:
+    """Force ``externalTrafficPolicy: Local`` on an exposed application's Service.
+
+    THE THIRD GATE DEPENDS ON IT. Charts default to ``Cluster``, and with that a
+    request landing on a node whose chosen backend is elsewhere is SNATed to the
+    node's address before delivery -- measured on ``otternet-demo``: 4 of 6
+    requests from host-a reached the pod as 10.110.0.x. The composed
+    CiliumNetworkPolicy admits those as ``remote-node``, so
+    ``allowed_source_prefixes`` decides nothing for most requests, and a source
+    no grant names gets in. With ``Local`` the client address survives, and
+    Cilium advertises the VIP only from nodes running a backend.
+
+    Enforced here rather than left to each payload, because a portal request
+    supplies its own values and the default it would inherit is the wrong one.
+    An unexposed application is returned untouched: it has no VIP, so nothing
+    reaches it from outside the cluster.
+
+    Raises:
+        ValueError: for an exposed application on a chart with no known Service
+            path whose values do not set ``Local`` -- or set anything else.
+            Guessing the key would write a value the chart ignores, and the
+            application would deploy with the very SNAT this exists to stop.
+    """
+    if not exposed:
+        return values
+
+    path = _LB_SERVICE_VALUES_PATH.get(str(chart))
+    if path is None:
+        declared = _traffic_policies(values)
+        if declared and all(value == _LOCAL for value in declared):
+            return values
+        msg = (
+            f"application {name!r} is exposed on chart {chart!r}, whose values do not set "
+            f"{_TRAFFIC_POLICY}: {_LOCAL} on its LoadBalancer Service (found {declared or 'nothing'}); "
+            f"with the default the pod sees a node address and the source-prefix policy cannot apply "
+            f"(known charts: {sorted(_LB_SERVICE_VALUES_PATH)})"
+        )
+        raise ValueError(msg)
+
+    overlay: dict[str, Any] = {_TRAFFIC_POLICY: _LOCAL}
+    for key in reversed(path):
+        overlay = {key: overlay}
+    base: dict[str, Any] = values if isinstance(values, dict) else {}
+    return _deep_merge(base, overlay)
+
+
 def build_chart(app: AppNode, values: Any) -> dict[str, Any]:
     """``spec.chart``, or an empty dict when no chart is set."""
     name = _value(app.chart_name)
@@ -347,6 +422,9 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
             app.values_file, _value(app.chart_values), kind="ServiceFabricAppValuesFile", name=name
         )
         values = apply_sso(_value(app.sso_provider), chart=_value(app.chart_name), values=values, name=name)
+        values = apply_local_traffic(
+            exposed=bool(_value(app.exposed)), chart=_value(app.chart_name), values=values, name=name
+        )
         chart = build_chart(app, values)
 
         # A CHART IS THE WHOLE WORKLOAD SOURCE since cycle 033. It used to be a
