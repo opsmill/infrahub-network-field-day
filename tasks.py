@@ -467,6 +467,7 @@ def _repository(branch: str = "") -> dict[str, str]:
         "kind": str(node["__typename"]),
         "id": str(node["id"]),
         "location": value("location"),
+        "default_branch": value("default_branch"),
         "commit": value("commit"),
         "ref": value("ref"),
         "sync_status": value("sync_status"),
@@ -697,11 +698,15 @@ def demo_release(
     print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
 
 
-def _restore_baseline_onto_branch(ctx: Context, location: str, branch: str, stage: str) -> str:
-    """Put the baseline the staged branch was cut from onto `branch` as one commit, and push it.
+def _restore_baseline_onto_branch(ctx: Context, location: str, branch: str, stage: str, default_branch: str) -> str:
+    """Make `branch` hold the baseline's tree and descend from `default_branch`'s tip; push it.
 
-    The baseline is the merge-base of `branch` and the local `stage` branch. Returns the tip,
-    which is the branch's current one when it already holds the baseline.
+    The baseline is the merge-base of `branch` and the local `stage` branch. Infrahub creates the
+    git branch for a new Infrahub branch at the old baseline, not at the merged tip, and the
+    baseline is already an ancestor of `default_branch`, so merging it would change nothing. The
+    branch therefore takes a commit holding the baseline tree and then a `-s ours` merge of the
+    default branch's tip, which keeps that tree and makes Infrahub's merge a fast-forward that
+    really restores it. Returns the new tip.
     """
     import tempfile
 
@@ -709,15 +714,21 @@ def _restore_baseline_onto_branch(ctx: Context, location: str, branch: str, stag
         clone = Path(tmp) / "clone"
         ctx.run(f"git clone --quiet --branch {shlex.quote(branch)} {shlex.quote(location)} {shlex.quote(str(clone))}")
         with ctx.cd(clone):
-            ctx.run(f"git fetch --quiet {shlex.quote(str(MAIN_DIRECTORY_PATH))} {shlex.quote(f'refs/heads/{stage}')}")
-            base = ctx.run("git merge-base HEAD FETCH_HEAD", hide=True).stdout.strip()
+            ctx.run(
+                f"git fetch --quiet {shlex.quote(str(MAIN_DIRECTORY_PATH))} "
+                f"{shlex.quote(f'refs/heads/{stage}:refs/tmp/stage')}"
+            )
+            ctx.run(f"git fetch --quiet origin {shlex.quote(f'refs/heads/{default_branch}:refs/tmp/default')}")
+            base = ctx.run("git merge-base HEAD refs/tmp/stage", hide=True).stdout.strip()
+            who = "git -c user.name=demo-reset -c user.email=demo-reset@example.invalid"
             if not ctx.run(f"git diff --quiet HEAD {shlex.quote(base)}", warn=True).ok:
                 ctx.run(f"git read-tree -u --reset {shlex.quote(base)}")
+                ctx.run(f"{who} commit --quiet -m {shlex.quote(f'Restore the baseline {base[:10]}')}")
+            if not ctx.run("git merge-base --is-ancestor refs/tmp/default HEAD", warn=True).ok:
                 ctx.run(
-                    "git -c user.name=demo-reset -c user.email=demo-reset@example.invalid "
-                    f"commit --quiet -m {shlex.quote(f'Restore the baseline {base[:10]}')}"
+                    f"{who} merge --quiet -s ours --no-edit -m 'Take the merged tip, keep the baseline' refs/tmp/default"
                 )
-                ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
+            ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
             return ctx.run("git rev-parse HEAD", hide=True).stdout.strip()
 
 
@@ -732,7 +743,9 @@ def _delete_demo_branch(ctx: Context, branch: str) -> None:
             ctx.run(f"git push origin --delete {shlex.quote(branch)}", pty=True, warn=True)
 
 
-def _take_capability_back_out(ctx: Context, location: str, name: str, run: int, timeout: int) -> None:
+def _take_capability_back_out(
+    ctx: Context, location: str, default_branch: str, name: str, run: int, timeout: int
+) -> None:
     """Undo a merged release through Infrahub itself, with a branch whose merge restores the baseline.
 
     Infrahub never imports a commit pushed to `demo-main` from outside: the remote `main`
@@ -747,10 +760,11 @@ def _take_capability_back_out(ctx: Context, location: str, name: str, run: int, 
 
     reset = f"{dr.demo_branch(name, run)}-reset"
     before = _repository().get("commit", "")
+    _delete_demo_branch(ctx, reset)  # a leftover from an interrupted reset
     print(f" - Creating '{reset}' with Sync with Git", flush=True)
     ctx.run(f"infrahubctl branch create {shlex.quote(reset)} --sync-with-git", pty=True)
     _wait_for(lambda: bool(_remote_tip(ctx, reset)), f"Infrahub to publish '{reset}'", timeout)
-    tip = _restore_baseline_onto_branch(ctx, location, reset, dr.stage_branch(name))
+    tip = _restore_baseline_onto_branch(ctx, location, reset, dr.stage_branch(name), default_branch)
     _wait_until_settled(reset, tip, timeout, require_capability=False)
     for edge in (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}", reset).get(DEMO_KIND) or {}).get(
         "edges", []
@@ -796,7 +810,7 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
     merged = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"))
     if repo.get("kind") == "CoreRepository":
         if merged:
-            _take_capability_back_out(ctx, repo["location"], name, run, timeout)
+            _take_capability_back_out(ctx, repo["location"], repo["default_branch"], name, run, timeout)
     elif repo.get("kind") == "CoreReadOnlyRepository" and repo["ref"] != "main":
         main_tip = _remote_tip(ctx, "main")
         print(" - Pointing the repository back at main", flush=True)
