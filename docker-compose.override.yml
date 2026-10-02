@@ -255,6 +255,39 @@ services:
     ports:
       - "8002:8001"
 
+  # The service-lifecycle exporter (cycle 035): where every service request is
+  # in the pipeline -- requested on a branch with its proposed change's verdict,
+  # merged, deployed, decommissioning, removed. The Infrahub exporter above
+  # cannot say any of that: it reads one branch, configured once, and a request
+  # lives on a branch nobody configured.
+  #
+  # NO CONFIGURATION OF ITS OWN. Telegraf scrapes it at 172.20.41.1:8003 with
+  # `?kinds=`, and that scrape is rendered into the collector's artifact from
+  # the `service-lifecycle` monitoring profile -- so which kinds it reports is
+  # changed in Infrahub and reviewed as an artifact diff.
+  #
+  # The project image and the checkout bind-mounted, run with the checkout's
+  # own `src/` first (the script puts it on the path), so a change needs no
+  # `invoke build`. It reads as `metrics-exporter`, the same view-only account
+  # as the Infrahub exporter, and writes nothing.
+  service-lifecycle-exporter:
+    <<: *infrahub_custom_build
+    profiles: ["metrics"]
+    restart: unless-stopped
+    depends_on:
+      infrahub-server:
+        condition: service_healthy
+    volumes:
+      - "./:/source"
+    working_dir: /source
+    environment:
+      INFRAHUB_ADDRESS: http://infrahub-server:8000
+      INFRAHUB_API_TOKEN: ${INFRAHUB_EXPORTER_TOKEN:-}
+      OTTERNET_LIFECYCLE_POLL: ${OTTERNET_LIFECYCLE_POLL:-15}
+    command: python scripts/service_lifecycle_exporter.py
+    ports:
+      - "8003:8003"
+
   # The deployment reconciler. Compares every device against its rendered
   # artifact on a timer and pushes the ones that genuinely differ.
   #

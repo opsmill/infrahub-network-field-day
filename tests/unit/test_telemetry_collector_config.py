@@ -74,9 +74,22 @@ def _conf(out: dict[str, Any]) -> dict[str, Any]:
 
 
 def _kinds(conf: dict[str, Any]) -> Counter[str]:
+    """Device inputs by kind. Service inputs carry no device `kind` tag."""
     return Counter(
-        block["tags"]["kind"] for plugin in ("gnmi", "prometheus", "snmp") for block in conf["inputs"].get(plugin, [])
+        block["tags"]["kind"]
+        for plugin in ("gnmi", "prometheus", "snmp")
+        for block in conf["inputs"].get(plugin, [])
+        if "kind" in block["tags"]
     )
+
+
+def _device_lines(out: dict[str, Any]) -> list[str]:
+    """intended.prom's samples about devices, without the services' half (cycle 035)."""
+    return [
+        line
+        for line in out["manifest"]["data"]["intended.prom"].splitlines()
+        if not line.startswith("#") and not line.startswith("otternet_intended_service")
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +214,7 @@ def test_credentials_are_references_and_tags_come_from_the_graph() -> None:
     assert routers["isp-pe1"]["password"] == "${GNMI_PASSWORD}"  # noqa: S105 -- a reference, not a password
     assert routers["isp-pe1"]["tls_enable"] is True
     assert "tls_enable" not in switch, "EOS gNMI is plaintext on 6030; only SR Linux's server is TLS"
-    assert not any(b["tags"]["kind"] == "DcimDevice" for b in conf["inputs"].get("prometheus", []))
+    assert not any(b["tags"].get("kind") == "DcimDevice" for b in conf["inputs"].get("prometheus", []))
 
 
 def test_routers_subscribe_to_the_same_openconfig_paths_as_switches() -> None:
@@ -236,7 +249,7 @@ def test_routers_subscribe_to_the_same_openconfig_paths_as_switches() -> None:
 
 def test_intended_series_carry_the_contracted_names_and_labels() -> None:
     out, client = _render()
-    lines = [line for line in out["manifest"]["data"]["intended.prom"].splitlines() if not line.startswith("#")]
+    lines = _device_lines(out)
     metrics = Counter(line.split("{", 1)[0] for line in lines)
     assert set(metrics) == {
         "otternet_intended_bgp_neighbor",
@@ -321,7 +334,7 @@ def test_intended_series_carry_the_kind_and_routers_claim_no_vrf() -> None:
     carry no network instance in the model, so they name no VRF rather than
     claiming `default` for a session that lives in a customer's."""
     out, _ = _render()
-    lines = [line for line in out["manifest"]["data"]["intended.prom"].splitlines() if not line.startswith("#")]
+    lines = _device_lines(out)
     assert lines
     assert all('kind="' in line for line in lines)
     bgp = [line for line in lines if line.startswith("otternet_intended_bgp_neighbor")]
@@ -331,3 +344,237 @@ def test_intended_series_carry_the_kind_and_routers_claim_no_vrf() -> None:
     assert switches
     assert not any("vrf=" in line for line in routers)
     assert all("vrf=" in line for line in switches)
+
+
+# ---------------------------------------------------------------------------
+# Services (cycle 035)
+# ---------------------------------------------------------------------------
+
+
+def _services(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return [e["node"] for e in data["ServiceGeneric"]["edges"]]
+
+
+def _service(data: dict[str, Any], name: str) -> dict[str, Any]:
+    return next(s for s in _services(data) if s["name"]["value"] == name)
+
+
+def _profile(data: dict[str, Any], name: str) -> dict[str, Any]:
+    return next(p for p in _profiles(data) if p["name"]["value"] == name)
+
+
+def _intended(out: dict[str, Any], metric: str) -> list[str]:
+    return [line for line in out["manifest"]["data"]["intended.prom"].splitlines() if line.startswith(metric + "{")]
+
+
+def test_without_service_profiles_the_device_render_is_unchanged() -> None:
+    """The services half only ADDS: every line the device profiles render is still
+    there, in the same order, once the service profiles are added."""
+    data = _data()
+    devices_only = copy.deepcopy(data)
+    edges = devices_only["MonitoringCollector"]["edges"][0]["node"]["monitoring_profiles"]["edges"]
+    edges[:] = [e for e in edges if not e["node"]["service_kind"]["value"]]
+    before = _render(devices_only)[0]["text"].splitlines()
+    after = iter(_render(data)[0]["text"].splitlines())
+    assert all(line in after for line in before), "a device line moved or vanished when services were added"
+    assert "otternet_intended_service" not in "\n".join(before)
+
+
+def test_every_live_service_is_watched_and_none_is_named() -> None:
+    out, _ = _render()
+    watched = {line.split('service="', 1)[1].split('"', 1)[0] for line in _intended(out, "otternet_intended_service")}
+    live = {
+        s["name"]["value"]
+        for s in _services(_data())
+        if s["status"]["value"] not in {"decommissioning", "decommissioned"}
+    }
+    assert watched == live
+    seeded = yaml.safe_load_all(Path("objects/40_otternet_monitoring.yml").read_text(encoding="utf-8"))
+    profiles = next(d["spec"]["data"] for d in seeded if d["spec"]["kind"] == "MonitoringProfile")
+    assert not live & set(json.dumps(profiles).replace('"', " ").split()), "a profile names a service"
+
+
+@pytest.mark.parametrize("status", ["decommissioning", "decommissioned"])
+def test_a_withdrawn_service_is_no_longer_watched(status: str) -> None:
+    data = _data()
+    _service(data, "acme-l3vpn")["status"]["value"] = status
+    out, _ = _render(data)
+    assert not any('service="acme-l3vpn"' in line for line in out["manifest"]["data"]["intended.prom"].splitlines())
+    assert any('service="globex-l3vpn"' in line for line in _intended(out, "otternet_intended_service_bgp"))
+
+
+def test_wan_services_are_checked_against_the_sessions_their_sites_and_peerings_record() -> None:
+    out, _ = _render()
+    bgp = _intended(out, "otternet_intended_service_bgp")
+    l3vpn = sorted(line for line in bgp if 'service="acme-l3vpn"' in line)
+    assert len(l3vpn) == 2
+    assert any('device="isp-pe1"' in line and 'peer_address="10.51.10.2"' in line for line in l3vpn)
+    assert any('device="cust-acme-ce"' in line and 'peer_address="10.51.10.1"' in line for line in l3vpn)
+    assert all('kind="DcimDevice"' in line for line in l3vpn)
+    internet = [line for line in bgp if 'service="acme-internet"' in line]
+    assert {line.split('device="', 1)[1].split('"', 1)[0] for line in internet} == {"internet-rtr", "isp-pe2"}
+
+
+def test_vrf_bound_services_take_the_fabric_sessions_in_their_vrf() -> None:
+    """A tenant cloud and a peering name a VRF, not sessions: they are checked
+    against the sessions the fabric's structured configs place in that VRF --
+    on the peering's own leaves only, for a peering."""
+    out, _ = _render()
+    bgp = _intended(out, "otternet_intended_service_bgp")
+    peering = [line for line in bgp if 'service="otternet-fabric-peering"' in line]
+    assert peering
+    assert all('vrf="K8S_PROD"' in line for line in peering)
+    assert {line.split('device="', 1)[1].split('"', 1)[0] for line in peering} == {
+        "leaf-otternet-pod1-1-1",
+        "leaf-otternet-pod1-1-2",
+    }
+
+
+def test_an_application_is_checked_for_its_workload_and_its_vip() -> None:
+    out, _ = _render()
+    workloads = _intended(out, "otternet_intended_service_workload")
+    assert any('namespace="otternet-demo"' in line for line in workloads)
+    vips = _intended(out, "otternet_intended_service_vip")
+    assert any('vip_block="10.112.240.0/28"' in line for line in vips)
+    assert not any('service="otternet-telemetry"' in line for line in vips), "an unexposed app has no VIP to check"
+
+
+def test_a_gated_application_is_not_probed_and_the_artifact_says_why() -> None:
+    """Measured: Telegraf's pod is dropped at every gated application's pod --
+    a probe there would report a healthy application down forever."""
+    out, _ = _render()
+    conf = _conf(out)
+    assert "net_response" not in conf["inputs"]
+    text = out["manifest"]["data"]["telegraf.conf"]
+    assert "# not probed: otternet-demo's pod gate admits no in-cluster source" in text
+    assert "# not probed: otternet-telemetry is not exposed, so it has no VIP" in text
+
+
+class _ValuesClient(_Client):
+    def __init__(self, values: str) -> None:
+        super().__init__()
+        self.values = values
+
+    async def get(self, *_args: Any, **kwargs: Any) -> Any:
+        if kwargs.get("kind") == "ServiceFabricAppValuesFile":
+            values = self.values
+
+            class _Values:
+                async def download_file(self) -> bytes:
+                    return values.encode()
+
+            return _Values()
+        return await super().get(*_args, **kwargs)
+
+
+def _render_with(data: dict[str, Any], client: _Client) -> dict[str, Any]:
+    transform = TelemetryCollectorConfig.__new__(TelemetryCollectorConfig)
+    transform._init_client = client
+    text = asyncio.run(transform.transform(data))
+    return {"text": text, "manifest": yaml.safe_load(text)}
+
+
+def test_an_ungated_application_is_probed_on_each_advertised_tcp_port_at_its_pinned_address() -> None:
+    data = _data()
+    app = _service(data, "otternet-metrics")
+    app["policy_default_deny"]["value"] = False
+    app["allowed_source_prefixes"]["count"] = 0
+    profile = _profile(data, "services-apps")
+    profile["timeout_seconds"]["value"] = 3
+    out = _render_with(
+        data, _ValuesClient('grafana:\n  service:\n    annotations:\n      lbipam.cilium.io/ips: "10.112.240.81"\n')
+    )
+    probes = _conf(out)["inputs"]["net_response"]
+    assert [p["address"] for p in probes] == ["10.112.240.81:80"]
+    assert probes[0]["protocol"] == "tcp"
+    assert probes[0]["timeout"] == "3s", "the timeout is the profile's"
+    assert probes[0]["interval"] == "30s", "and so is the interval"
+    assert probes[0]["tags"]["service"] == "otternet-metrics"
+    assert _intended(out, "otternet_intended_service_probe") == [
+        'otternet_intended_service_probe{address="10.112.240.81",port="80",service="otternet-metrics",'
+        'service_kind="ServiceFabricApp"} 1'
+    ]
+    # Unpinned, the first address of its own block: Cilium hands an app's first
+    # Service the first address of the pool the composition gives it alone.
+    unpinned = _render_with(data, _ValuesClient("replicaCount: 1\n"))
+    assert [p["address"] for p in _conf(unpinned)["inputs"]["net_response"]] == ["10.112.240.80:80"]
+
+
+def test_the_lifecycle_scrape_asks_for_exactly_the_kinds_the_profiles_name() -> None:
+    out, _ = _render()
+    scrape = [b for b in _conf(out)["inputs"]["prometheus"] if "kind" not in b["tags"]]
+    assert scrape == [
+        {
+            "urls": ["http://172.20.41.1:8003/metrics?kinds=ServiceGeneric"],
+            "metric_version": 2,
+            "interval": "30s",
+            "timeout": "10s",
+            "tags": {"collector": "otternet-telegraf", "profile": "services-lifecycle"},
+        }
+    ]
+    data = _data()
+    _profile(data, "services-lifecycle")["service_kind"]["value"] = "ServiceAppAccess"
+    narrowed = [b for b in _conf(_render(data)[0])["inputs"]["prometheus"] if "kind" not in b["tags"]]
+    assert narrowed[0]["urls"] == ["http://172.20.41.1:8003/metrics?kinds=ServiceAppAccess"]
+    _profile(data, "services-lifecycle")["enabled"]["value"] = False
+    assert not [b for b in _conf(_render(data)[0])["inputs"]["prometheus"] if "kind" not in b["tags"]]
+
+
+def test_a_disabled_service_profile_withdraws_exactly_its_series() -> None:
+    data = _data()
+    _profile(data, "services-routing")["enabled"]["value"] = False
+    out, _ = _render(data)
+    assert not _intended(out, "otternet_intended_service_bgp")
+    assert _intended(out, "otternet_intended_service_workload"), "the apps profile is untouched"
+    assert "# disabled: profile services-routing renders nothing" in out["manifest"]["data"]["telegraf.conf"]
+
+
+def test_the_lifecycle_exporter_port_is_the_one_compose_publishes() -> None:
+    from transforms.telemetry_services import LIFECYCLE_EXPORTER
+
+    compose = yaml.safe_load(Path("docker-compose.override.yml").read_text(encoding="utf-8"))
+    service = compose["services"]["service-lifecycle-exporter"]
+    port = LIFECYCLE_EXPORTER.rsplit(":", 1)[1].split("/", 1)[0]
+    assert f"{port}:{port}" in service["ports"]
+    token = service["environment"]["INFRAHUB_API_TOKEN"]
+    assert token == "${INFRAHUB_EXPORTER_TOKEN:-}", "view-only, never admin"  # noqa: S105 - a reference
+    assert "metrics" in service["profiles"]
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (lambda p: p["service_kind"].update(value="ServiceMadeUp"), "no renderer knows"),
+        (
+            lambda p: p["measurements"]["edges"].append({"node": {"name": {"value": "bgp-neighbor-state"}}}),
+            "no service renderer",
+        ),
+        (
+            lambda p: p["device_groups"]["edges"].append(
+                {"node": {"name": {"value": "avd_devices"}, "members": {"edges": []}}}
+            ),
+            "one or the other",
+        ),
+    ],
+)
+def test_a_service_profile_that_cannot_render_is_refused(mutate: Any, match: str) -> None:
+    data = _data()
+    mutate(_profile(data, "services-routing"))
+    with pytest.raises(TelemetryCollectorConfigError, match=match):
+        _render(data)
+
+
+def test_a_device_profile_with_no_group_is_refused() -> None:
+    """device_groups is optional in the schema since a service profile names none;
+    a DEVICE profile without one would render nothing, so it is refused."""
+    data = _data()
+    _profile(data, "cluster-nodes")["device_groups"]["edges"] = []
+    with pytest.raises(TelemetryCollectorConfigError, match="names no device group"):
+        _render(data)
+
+
+def test_a_service_measurement_on_a_device_profile_says_what_is_missing() -> None:
+    data = _data()
+    _profile(data, "cluster-nodes")["measurements"]["edges"].append({"node": {"name": {"value": "service-routing"}}})
+    with pytest.raises(TelemetryCollectorConfigError, match="service_kind"):
+        _render(data)

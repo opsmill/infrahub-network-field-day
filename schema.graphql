@@ -13874,6 +13874,14 @@ type MonitoringProfile implements CoreNode {
   """If set, only group members whose role equals this are watched"""
   device_role: TextAttribute
 
+  """
+  If set, this profile watches every live service of this kind (ServiceGeneric: every kind) instead of devices
+  """
+  service_kind: TextAttribute
+
+  """None"""
+  timeout_seconds: NumberAttribute
+
   """None"""
   description: TextAttribute
   profiles(offset: Int, limit: Int, order: OrderInput, ids: [ID], isnull: Boolean, display_label__value: String, display_label__values: [String], display_label__isnull: Boolean, profile_name__value: String, profile_name__values: [String], profile_name__source__id: ID, profile_name__owner__id: ID, profile_name__is_protected: Boolean, profile_priority__value: BigInt, profile_priority__values: [BigInt], profile_priority__source__id: ID, profile_priority__owner__id: ID, profile_priority__is_protected: Boolean): NestedPaginatedCoreProfile!
@@ -116871,6 +116879,14 @@ input MonitoringProfileCreateInput {
 
   """If set, only group members whose role equals this are watched"""
   device_role: TextAttributeCreate
+
+  """
+  If set, this profile watches every live service of this kind (ServiceGeneric: every kind) instead of devices
+  """
+  service_kind: TextAttributeCreate
+
+  """None"""
+  timeout_seconds: NumberAttributeCreate
   description: TextAttributeCreate
   profiles: [RelatedNodeInput]
   member_of_groups: [RelatedNodeInput]
@@ -116895,6 +116911,14 @@ input MonitoringProfileUpdateInput {
 
   """If set, only group members whose role equals this are watched"""
   device_role: TextAttributeUpdate
+
+  """
+  If set, this profile watches every live service of this kind (ServiceGeneric: every kind) instead of devices
+  """
+  service_kind: TextAttributeUpdate
+
+  """None"""
+  timeout_seconds: NumberAttributeUpdate
   description: TextAttributeUpdate
   profiles: [RelatedNodeInput]
   member_of_groups: [RelatedNodeInput]
@@ -116919,6 +116943,14 @@ input MonitoringProfileUpsertInput {
 
   """If set, only group members whose role equals this are watched"""
   device_role: TextAttributeUpdate
+
+  """
+  If set, this profile watches every live service of this kind (ServiceGeneric: every kind) instead of devices
+  """
+  service_kind: TextAttributeUpdate
+
+  """None"""
+  timeout_seconds: NumberAttributeUpdate
   description: TextAttributeUpdate
   profiles: [RelatedNodeInput]
   member_of_groups: [RelatedNodeInput]

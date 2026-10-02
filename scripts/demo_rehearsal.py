@@ -27,7 +27,8 @@ Acts, in the order run:
   one        "Exposed application, with access", up to the merge
   two        "Application Access Grant (generated)" on Grafana, up to the merge,
              then the same grant withdrawn on its branch (act three's UI path)
-  monitoring act two's step 6: a monitoring profile edit, up to the merge
+  monitoring act two's step 6: a monitoring profile edit, up to the merge -- a
+             device measurement removed, then a SERVICE profile switched off
   five       the MCP server, as mcp-agent: reads, a branch, a proposed change,
              and the refusal on main
 
@@ -36,7 +37,10 @@ Acts, in the order run:
              border leaf, Vidra delivering the pod policy, alice signing in to
              Grafana from the branch desktop; then the portal's Revoke template,
              merged too; then the lab compared with a snapshot taken first and
-             `make -C lab verify` run. About twenty minutes.
+             `make -C lab verify` run. About twenty minutes. On the way it holds
+             the Services dashboard's series to each stage: requested while the
+             proposed change is open, deployed and healthy after the merge,
+             removed after the revoke -- in the exporter AND in Prometheus.
 
     uv run python scripts/demo_rehearsal.py --merge          # preflight, then the merge cycle
     uv run python scripts/demo_rehearsal.py --resume-revoke grafana-<ref>  # finish one that stopped
@@ -58,6 +62,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -235,6 +240,74 @@ def cleanup(branches: list[str]) -> None:
         print(f"  cleaned up {branch}", flush=True)
 
 
+# ------------------------------------------------- service monitoring (cycle 035)
+
+LIFECYCLE = os.environ.get("OTTERNET_LIFECYCLE_URL", "http://127.0.0.1:8003/metrics")
+COLLECTOR = ("Telemetry Collector Configuration", "otternet-telegraf")
+
+
+def lifecycle_stages(service: str) -> list[dict[str, str]]:
+    """Every `otternet_service_stage` row the service-lifecycle exporter reports for one service."""
+    try:
+        text = httpx.get(LIFECYCLE, timeout=10).text
+    except httpx.HTTPError:
+        return []
+    rows = []
+    for line in text.splitlines():
+        if line.startswith("otternet_service_stage{"):
+            labels = dict(re.findall(r'(\w+)="((?:[^"\\]|\\.)*)"', line.split("}", 1)[0]))
+            if labels.get("service") == service:
+                rows.append(labels)
+    return rows
+
+
+def has_stage(service: str, stage_name: str, **labels: str) -> bool:
+    return any(
+        row.get("stage") == stage_name and all(row.get(k) == v for k, v in labels.items())
+        for row in lifecycle_stages(service)
+    )
+
+
+def prom(query: str) -> list[dict[str, Any]]:
+    """An instant query against the lab's Prometheus, through the API server's service proxy."""
+    path = "/api/v1/namespaces/otternet-metrics/services/prometheus-operated:9090/proxy/api/v1/query?" + urlencode(
+        {"query": query}
+    )
+    result = kubectl("get", "--raw", path)
+    if result.returncode != 0:
+        return []
+    return json.loads(result.stdout).get("data", {}).get("result", [])
+
+
+def collector_diff(branch: str) -> tuple[str, str]:
+    """(removed, added) lines of the collector's artifact on a branch, against main's."""
+    removed, added = changed_artifacts(branch).get(COLLECTOR, ([], []))
+    return "\n".join(removed), "\n".join(added)
+
+
+def healthy(service: str) -> bool:
+    """Deployed, at least one check rendered for it, and none of the checks failing.
+
+    The same reading the Services dashboard's Healthy tile makes, asked for one
+    service: workload, VIP, BGP and grant checks joined to what is observed.
+    """
+    sel = f'service="{service}"'
+    checks = prom(
+        f"count(otternet_intended_service_bgp{{{sel}}} or otternet_intended_service_workload{{{sel}}} "
+        f"or otternet_intended_service_vip{{{sel}}} or otternet_intended_service_access{{{sel}}})"
+    )
+    failing = prom(
+        f"count((otternet_intended_service_workload{{{sel}}} unless on (namespace) "
+        "((sum by (namespace) (kube_deployment_status_replicas_available) > 0) unless on (namespace) "
+        "(sum by (namespace) (kube_deployment_status_replicas_unavailable) > 0))) "
+        f"or (otternet_intended_service_vip{{{sel}}} unless on (namespace) kube_service_status_load_balancer_ingress) "
+        f"or (otternet_intended_service_access{{{sel}}} unless on (firewall) "
+        'label_replace(infrahub_deploymentstate_info{status="in_sync"}, "firewall", "$1", "name", "(.*)")))'
+    )
+    deployed = prom(f'otternet_service_stage{{{sel}, stage="deployed"}}')
+    return bool(checks) and not failing and bool(deployed)
+
+
 # ----------------------------------------------------------- the desktop side
 
 
@@ -314,6 +387,14 @@ def act_preflight() -> None:
         "svc-" not in rules and "branch-to-access-portal" in rules,
         "branch -> k8s-prod carries only the hand-written rules",
     )
+    # The Services dashboard's two sources (cycle 035): the lifecycle exporter,
+    # and the collector scraping it as the services-lifecycle profile says.
+    check(has_stage("otternet-demo", "deployed"), "the service-lifecycle exporter reports otternet-demo deployed")
+    check(
+        any(r["value"][1] == "1" for r in prom("otternet_service_lifecycle_up")),
+        "Prometheus holds the lifecycle series, through the collector",
+    )
+    check(healthy("otternet-demo"), "the Services dashboard reads otternet-demo as healthy")
 
 
 def desk_firewall(command: str) -> str:
@@ -342,6 +423,15 @@ def act_four() -> None:
         for c in v["checks"]["edges"]
     )
     check("'acme'" in messages and "'globex'" in messages, "the failure names both tenants")
+    check(
+        bool(
+            wait_until(
+                lambda: has_stage("acme-l3vpn", "requested", branch=branch, change="update", validation="failed"),
+                timeout=90,
+            )
+        ),
+        "the Services dashboard shows the change as a request with failing validators",
+    )
     with timed("act four: --revert"):
         run(str(REPO / "scripts" / "demo_break_isolation.sh"), "--revert")
     gone = not gql("query ($b: String!) { Branch(name: $b) { name } }", {"b": branch})["Branch"]
@@ -423,6 +513,23 @@ def act_one(reference: str) -> None:
     junos_added = " ".join(changed.get((JUNOS, "fw1"), ([], []))[1])
     check(f"policy svc-{app}-access" in junos_added and vip in junos_added, "fw1 gains the rule and the VIP's address")
 
+    # MONITORING ARRIVES WITH THE REQUEST, unasked: the collector's artifact on
+    # the branch already watches both new services, because a service profile
+    # selects by kind -- and the lifecycle exporter reports both as requested.
+    _removed, monitored = collector_diff(branch)
+    check(
+        f'otternet_intended_service{{owner="acme",profile="services-apps",service="{app}"' in monitored
+        and f'otternet_intended_service_workload{{namespace="{app}"' in monitored
+        and f'service="{app}-access"' in monitored,
+        "the collector's artifact on the branch watches the application and the grant, unasked",
+    )
+    check(
+        has_stage(app, "requested", branch=branch, change="create")
+        and has_stage(f"{app}-access", "requested", branch=branch, change="create"),
+        "the Services dashboard's exporter reports both as REQUESTED on their branch",
+        str(lifecycle_stages(app))[:200],
+    )
+
 
 def act_two(reference: str) -> None:
     stage("Act two: a branch user asks for Grafana (up to the merge), then withdraws it")
@@ -448,8 +555,18 @@ def act_two(reference: str) -> None:
     with timed("act two: proposed change opened, until every validator is done"):
         validators = settled_validators(branch)
     check_all_green(validators, "every validator on the proposed change is green")
+    check(
+        has_stage(name, "requested", branch=branch, change="create", validation="passed"),
+        "the exporter reports the grant REQUESTED, its validators passed",
+        str(lifecycle_stages(name))[:200],
+    )
 
     changed = changed_artifacts(branch)
+    check(
+        f'otternet_intended_service{{owner="branch",profile="services-access",service="{name}"'
+        in collector_diff(branch)[1],
+        "the collector's artifact on the branch watches the grant",
+    )
     junos_added = " ".join(changed.get((JUNOS, "fw1"), ([], []))[1])
     check(
         f"policy svc-{name}" in junos_added and "10.112.240.80/28" in junos_added,
@@ -515,6 +632,15 @@ def act_monitoring() -> None:
         },
         branch=branch,
     )
+    # And a SERVICE profile switched off, on the same branch, before the
+    # proposed change exists -- nothing re-renders the artifact for an edit
+    # made after its pipeline ran, because no trigger may watch a Monitoring kind.
+    routing = gql('{ MonitoringProfile(name__value: "services-routing") { edges { node { id } } } }', branch=branch)
+    gql(
+        "mutation ($p: String!) { MonitoringProfileUpdate(data: {id: $p, enabled: {value: false}}) { ok } }",
+        {"p": routing["MonitoringProfile"]["edges"][0]["node"]["id"]},
+        branch=branch,
+    )
     gql(
         """mutation ($b: String!) { CoreProposedChangeCreate(data: {name: {value: "rehearsal: stop watching fabric BGP"},
              source_branch: {value: $b}, destination_branch: {value: "main"}}) { ok } }""",
@@ -532,6 +658,22 @@ def act_monitoring() -> None:
     removed = " ".join(line for diff in changed.values() for line in diff[0])
     added = " ".join(line for diff in changed.values() for line in diff[1])
     check("bgp_neighbor" in removed and "bgp_neighbor" not in added, "it loses the BGP subscriptions")
+
+    # SERVICE MONITORING IS INTENT TOO, in the same proposed change: with the
+    # routing profile off, the routed services' checks leave the artifact and
+    # the application and grant checks stay.
+    removed_text, added_text = collector_diff(branch)
+    gone = {line.split("{", 1)[0].strip() for line in removed_text.splitlines() if "otternet_intended_service" in line}
+    check(
+        gone == {"otternet_intended_service_bgp", "otternet_intended_service"},
+        "switching services-routing off removes exactly the routed services' checks",
+        ", ".join(sorted(gone)),
+    )
+    check(
+        "# disabled: profile services-routing renders nothing" in added_text
+        and "otternet_intended_service_workload" not in removed_text,
+        "and says so, leaving the application checks alone",
+    )
 
 
 class Mcp:
@@ -972,12 +1114,21 @@ def act_merge(reference: str, via: str = "template") -> None:
     if not check(list(eos or {}) == [LEAF], "act two: the border leaf's diff is on the proposed change", str(eos)):
         return
 
+    check(
+        has_stage(name, "requested", branch=grant_branch, change="create", validation="passed"),
+        "act two: the Services dashboard shows the grant REQUESTED while its proposed change is open",
+    )
     merged = merge_change(grant_branch)
     print(f"    merged {grant_branch}", flush=True)
     watch(
         "act two",
         merged,
         {
+            "the exporter moves the grant to merged, then deployed": lambda: has_stage(name, "deployed"),
+            "Prometheus holds the grant DEPLOYED (through the collector)": lambda: bool(
+                prom(f'otternet_service_stage{{service="{name}", stage="deployed"}}')
+            ),
+            "the grant is HEALTHY: its rule on a confirmed fw1, Grafana ready and addressed": lambda: healthy(name),
             "Vidra delivers Grafana's pod policy with the branch LAN": lambda: (
                 BRANCH_LAN in (grafana_gate()["fromCIDR"] or [])
             ),
@@ -1102,6 +1253,9 @@ def act_revoke(name: str, reference: str, before: dict[str, Any], via: str = "te
                 desk_http(f"http://{GRAFANA_VIP}/api/health") == "000"
             ),
             "the reconciler has pushed and then confirmed": lambda: pushed_and_confirmed(merged),
+            "the Services dashboard shows the grant DECOMMISSIONING": lambda: bool(
+                prom(f'otternet_service_stage{{service="{name}", stage="decommissioning"}}')
+            ),
         },
         timeout=600,
     )
@@ -1119,6 +1273,21 @@ def act_revoke(name: str, reference: str, before: dict[str, Any], via: str = "te
         "the merged revocation left the grant decommissioned on main",
     )
     delete_grant(name)
+    gone = time.time()
+    watch(
+        "restore",
+        gone,
+        {
+            "the exporter reports the grant REMOVED": lambda: has_stage(name, "removed"),
+            "Prometheus holds the grant REMOVED, and no other stage": lambda: (
+                {r["metric"].get("stage") for r in prom(f'otternet_service_stage{{service="{name}"}}')} == {"removed"}
+            ),
+            "the grant's checks have left the collector's intent": lambda: (
+                not prom(f'otternet_intended_service{{service="{name}"}}')
+            ),
+        },
+        timeout=600,
+    )
     for branch in (grant_branch, revoke_branch):
         if gql("query ($b: String!) { Branch(name: $b) { name } }", {"b": branch})["Branch"]:
             gql("mutation ($b: String!) { BranchDelete(data: {name: $b}) { ok } }", {"b": branch})

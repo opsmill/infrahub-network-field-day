@@ -1,7 +1,7 @@
 {
   "uid": "otternet-organisation",
   "title": "OTTERNET / Organisation",
-  "description": "The lab at a glance: what is wrong right now across every family, then what Infrahub models -- devices, services, tenants and the changes in flight. Every health tile links to the dashboard that explains it.",
+  "description": "The lab at a glance: what is wrong right now across every family, then what Infrahub models -- devices, services, tenants and the changes in flight. Every health tile links to the dashboard that explains it, and every service request from its branch to its health on the Services dashboard.",
   "tags": [
     "otternet",
     "organisation"
@@ -69,7 +69,7 @@
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "targets": [
@@ -133,9 +133,9 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 4,
+        "x": 3,
         "y": 1,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "targets": [
@@ -199,9 +199,9 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 8,
+        "x": 6,
         "y": 1,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "targets": [
@@ -265,9 +265,9 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 12,
+        "x": 9,
         "y": 1,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "targets": [
@@ -331,9 +331,9 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 16,
+        "x": 12,
         "y": 1,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "targets": [
@@ -397,9 +397,9 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 20,
+        "x": 15,
         "y": 1,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "targets": [
@@ -467,6 +467,138 @@
         {
           "title": "Telemetry coverage",
           "url": "/d/otternet-fabric-telemetry"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Service requests stalled",
+      "description": "Service requests open for 30 minutes or failing validation, merges not deployed after 15 minutes, and deployed services failing a check -- from the Services dashboard.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count((otternet_service_stage{stage=\"requested\"} and on (service_kind, service, branch) (time() - otternet_service_stage_since_timestamp_seconds{stage=\"requested\"} > 1800)) or otternet_service_stage{stage=\"requested\", validation=\"failed\"} or (otternet_service_stage{stage=\"merged\"} and on (service_kind, service) (time() - otternet_service_stage_since_timestamp_seconds{stage=\"merged\"} > 900)) or (otternet_service_stage{stage=\"deployed\"} and on (service_kind, service) count by (service_kind, service) (label_replace(count by (service_kind, service) (otternet_intended_service_bgp unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") == 6)), \"check\", \"bgp\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_interface unless on (device, interface) (label_replace(interface_status_oper_status_code, \"interface\", \"$1\", \"name\", \"(.*)\") == 1)), \"check\", \"interface\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_workload unless on (namespace) ((sum by (namespace) (kube_deployment_status_replicas_available) > 0) unless on (namespace) (sum by (namespace) (kube_deployment_status_replicas_unavailable) > 0))), \"check\", \"workload\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_vip unless on (namespace) kube_service_status_load_balancer_ingress), \"check\", \"vip\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_probe unless on (service, port) (net_response_result_code == 0)), \"check\", \"probe\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_access unless on (firewall) label_replace(infrahub_deploymentstate_info{status=\"in_sync\"}, \"firewall\", \"$1\", \"name\", \"(.*)\")), \"check\", \"access\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_access and on (application) label_replace((count by (service_kind, service) (otternet_intended_service_workload unless on (namespace) ((sum by (namespace) (kube_deployment_status_replicas_available) > 0) unless on (namespace) (sum by (namespace) (kube_deployment_status_replicas_unavailable) > 0))) or count by (service_kind, service) (otternet_intended_service_vip unless on (namespace) kube_service_status_load_balancer_ingress) or count by (service_kind, service) (otternet_intended_service_probe unless on (service, port) (net_response_result_code == 0))), \"application\", \"$1\", \"service\", \"(.*)\")), \"check\", \"application\", \"\", \"\")))) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "links": [
+        {
+          "title": "Services",
+          "url": "/d/otternet-services"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Services failing a check",
+      "description": "Deployed services with at least one failing check: a session that realises it down, a workload not ready, a VIP unassigned, a grant's firewall not confirmed in sync.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 21,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(otternet_service_stage{stage=\"deployed\"} and on (service_kind, service) count by (service_kind, service) (label_replace(count by (service_kind, service) (otternet_intended_service_bgp unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\") == 6)), \"check\", \"bgp\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_interface unless on (device, interface) (label_replace(interface_status_oper_status_code, \"interface\", \"$1\", \"name\", \"(.*)\") == 1)), \"check\", \"interface\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_workload unless on (namespace) ((sum by (namespace) (kube_deployment_status_replicas_available) > 0) unless on (namespace) (sum by (namespace) (kube_deployment_status_replicas_unavailable) > 0))), \"check\", \"workload\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_vip unless on (namespace) kube_service_status_load_balancer_ingress), \"check\", \"vip\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_probe unless on (service, port) (net_response_result_code == 0)), \"check\", \"probe\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_access unless on (firewall) label_replace(infrahub_deploymentstate_info{status=\"in_sync\"}, \"firewall\", \"$1\", \"name\", \"(.*)\")), \"check\", \"access\", \"\", \"\") or label_replace(count by (service_kind, service) (otternet_intended_service_access and on (application) label_replace((count by (service_kind, service) (otternet_intended_service_workload unless on (namespace) ((sum by (namespace) (kube_deployment_status_replicas_available) > 0) unless on (namespace) (sum by (namespace) (kube_deployment_status_replicas_unavailable) > 0))) or count by (service_kind, service) (otternet_intended_service_vip unless on (namespace) kube_service_status_load_balancer_ingress) or count by (service_kind, service) (otternet_intended_service_probe unless on (service, port) (net_response_result_code == 0))), \"application\", \"$1\", \"service\", \"(.*)\")), \"check\", \"application\", \"\", \"\"))) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "links": [
+        {
+          "title": "Services",
+          "url": "/d/otternet-services"
         }
       ]
     },
@@ -646,7 +778,13 @@
           "fields": "",
           "values": false
         }
-      }
+      },
+      "links": [
+        {
+          "title": "Services",
+          "url": "/d/otternet-services"
+        }
+      ]
     },
     {
       "id": 12,

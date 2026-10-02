@@ -192,7 +192,24 @@ docker exec -i clab-otternet-fw1 sshpass -p 'admin@123' ssh -o StrictHostKeyChec
 
 The operator's Grafana is for act one, before the branch can reach Grafana at
 all: it crosses no firewall, so showing it proves nothing about a grant. Open
-**OTTERNET / Deployment state** there before the first merge.
+**OTTERNET / Deployment state** there before the first merge, and
+**OTTERNET / Services** in a second tab: it is where every request in this
+runbook appears, moves, and leaves.
+
+**OTTERNET / Services** reads two sources, and both should be live before
+anyone watches:
+
+```bash
+curl -s 'http://127.0.0.1:8003/metrics?kinds=ServiceGeneric' | grep -c '^otternet_service_stage{'
+# 9 or more: every seeded service, at stage "deployed"
+curl -s 'http://127.0.0.1:8003/metrics' | grep '^otternet_service_lifecycle_up'
+# otternet_service_lifecycle_up 1
+```
+
+The first is the service-lifecycle exporter beside Infrahub; the second half is
+Telegraf scraping it, which the dashboard's **Healthy** tile only shows once it
+has. On the dashboard, every seeded service reads **Deployed**, and **Healthy**
+counts all nine.
 
 The portal (`https://10.90.0.11:32001`) and Dex are reachable **only from the
 branch side**, so open the portal inside the branch desktop. Guacamole opens its
@@ -278,7 +295,19 @@ thing. It contains:
   `PL-DC-ADVERTISED-BRANCH`, and the same line in its device documentation; the
   other six switches are unchanged;
 - the re-rendered **Junos Configuration** artifact for `fw1`, and the
-  **Crossplane FabricApp** artifact for the new application.
+  **Crossplane FabricApp** artifact for the new application;
+- the re-rendered **Telemetry Collector Configuration** artifact: the checks the
+  collector runs for both new services, which nobody asked for.
+
+**While the proposed change is open, show OTTERNET / Services.** Both new
+services are already there, at **Requested**, with the branch, the proposed
+change and its validators' verdict (**Running**, then **Passed**). Nobody added
+monitoring for them: a monitoring profile watches every service of a kind, and
+the proposed change's own **Telemetry Collector Configuration** artifact diff
+shows the checks the collector runs for `otter-shop` (its pods ready, its
+VIP assigned) and for `otter-shop-access` (its rule on a confirmed `fw1`). A
+request whose validators fail turns **Validators failing** and **Stalled** red
+here before anyone opens the proposed change.
 
 Point at the checks: `wan-service-consistency`, `zone-advertisement`,
 `allocation-consistency`, `peering-consistency` and `fabric-pool-validation`
@@ -352,6 +381,14 @@ The second one matters more than the first. `otternet-demo` is running,
 advertised, and healthy. The branch still cannot reach it, which shows the
 firewall and the pod policy are the control, and not an open path. In the
 desktop's Firefox, the **Demo app (locked)** bookmark makes the same point.
+
+**6. Back to OTTERNET / Services.** The two rows have moved from **Requested** to
+**Merged** within a minute of the merge, and to **Deployed** once the reconciler
+has confirmed every device since: deployed means confirmed, never merely pushed,
+the same rule as Deployment state. **Healthy** counts them once their checks
+pass: `otter-shop`'s pods ready and its VIP assigned, and the grant's rule on a
+`fw1` confirmed in sync. A purple **created** annotation marks the moment each
+reached `main`, and a green one the merge.
 
 ## Act two: a branch user asks for Grafana
 
@@ -437,13 +474,31 @@ can never make anyone an administrator.
   comparison found no difference, not merely that a push was sent. If a step
   above leaves you waiting on the reconciler, open this one first; it is the
   dashboard about the wait.
+- **OTTERNET / Services**: the grant you just asked for, **Deployed** and
+  **Healthy**, beside every other service. **Health of every watched service**
+  lists what is checked for each and by which profile; **Routed services** joins
+  the WAN and fabric services to the BGP sessions that realise them, read from
+  the same telemetry the WAN dashboard draws. Nothing on it names a service: a
+  kind or a service added tomorrow appears without an edit.
 
-**6. Monitoring is intent too.** In Infrahub, on a new branch, open
-**Monitoring → Profiles → `fabric-core`** and remove the measurement
-`bgp-neighbor-state`. Open a proposed change. About a minute later it shows the
-collector's **Telemetry Collector Configuration** artifact losing its BGP
-subscriptions for each fabric switch, and no other artifact moves. Do not merge
-it; delete the branch afterwards.
+**6. Monitoring is intent too, for services as much as devices.** In Infrahub,
+on a new branch, open **Monitoring → Profiles → `fabric-core`** and remove the
+measurement `bgp-neighbor-state`. Then open **`services-routing`**, the profile
+that watches every routed service's BGP sessions, and switch **Enabled** off.
+Open a proposed change. About a minute later it shows the collector's
+**Telemetry Collector Configuration** artifact losing its BGP subscriptions for
+each fabric switch, and every `otternet_intended_service_bgp` line with them, and
+a comment saying `services-routing renders nothing`. No other artifact moves, and
+the application and grant checks stay. Do not merge it; delete the branch
+afterwards.
+
+The same edit, the other way, is how a check is turned on: give
+`services-apps` a shorter **Interval**, add a measurement to a profile, or
+narrow `services-routing` from `ServiceGeneric` to one kind, and the diff is
+exactly the monitoring that moves. Merged, the collector reloads within about a
+minute and the Services dashboard follows a scrape later. Which kinds the
+lifecycle exporter reports is the same kind of edit: its scrape URL in that
+artifact carries `?kinds=`, rendered from `services-lifecycle`.
 
 ## Act three: revoke it
 
@@ -487,13 +542,21 @@ leaf's line follow once the merged artifacts hold still: measured 50 and 79
 seconds from the merge (before the early-wake change: 2.5 to 3 minutes). Anyone already signed in to Grafana loses the page with the pod
 policy.
 
+**On OTTERNET / Services the grant goes Requested again** (a change on the
+revoke branch), then **Decommissioning** once merged, with a purple status
+annotation at the merge. Its checks leave the collector's intent in the same
+merge, so it stops counting towards **Healthy** rather than failing.
+
 **The grant stays on `main`, `decommissioned`.** That is the record of what was
 granted and withdrawn, and it configures nothing. The Revoke picker still offers
 it, though, so before running the demo again delete it in the Infrahub UI, with
 its `generate-app-access: <name>` generator instance and its empty
 `generate-app-access-<hash>` group: deleting a grant deletes neither, and the
 orphaned instance turns `generate-app-access` red on every later proposed change
-(see [Recovery](#recovery)). `demo_rehearsal.py --merge` does all three.
+(see [Recovery](#recovery)). `demo_rehearsal.py --merge` does all three. Deleted,
+it shows on OTTERNET / Services as **Removed** for a day, with a **deleted**
+annotation, so the whole life of the request -- asked, merged, deployed,
+healthy, withdrawn, removed -- is on one timeline.
 
 A grant can also be withdrawn without the portal by setting its `status` to
 `decommissioning` in the Infrahub UI, on a branch: the event rule on `status`
@@ -522,7 +585,9 @@ It adds `globex-hq`'s circuit to `acme-l3vpn` on the branch
 routing domain, not a label, so this joins two tenants directly across the
 provider edge. `wan-service-consistency` fails naming both tenants while every
 other check stays green. Nothing renders wrong, which is the point: the check is
-what notices.
+what notices. On **OTTERNET / Services** the change appears as a request against
+`acme-l3vpn` with **Failed** validators, and **Stalled** turns red, before
+anyone opens the proposed change.
 
 The script takes 35 to 45 seconds and `--revert` about 4. It re-runs the checks
 after the edit, on purpose. The first pass starts when the proposed change is

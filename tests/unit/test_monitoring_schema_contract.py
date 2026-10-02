@@ -4,10 +4,13 @@ Monitoring intent is the input the telemetry collector's configuration is
 rendered from, the same way design intent is the input to a device's. Three
 properties of the model are load bearing and none of them fails at load time:
 
-* **The portal has to be able to build a form for a profile.** Backstage's form
-  builder admits cardinality-one relationships and *mandatory* cardinality-many
-  ones only, so ``device_groups`` and ``measurements`` are mandatory with a
-  ``min_count`` of one. Optional, they would silently vanish from the form.
+* **A profile selects devices by group or services by kind** (cycle 035). A
+  service is in a group only when a generator sits beneath its kind, so a
+  group-based selection would miss every WAN service. ``device_groups`` became
+  optional for that reason; it was mandatory so Backstage's form builder (which
+  admits *mandatory* cardinality-many only) would offer it, and no Monitoring
+  kind is in the portal's catalogue -- which a test below now holds, so the
+  trade is re-examined the day one is added. ``measurements`` stays mandatory.
 * **A profile peers groups, not a device kind.** The four device kinds are
   siblings under ``DcimGenericDevice``; a relationship to ``DcimDevice`` would
   reach the FRR routers and miss the fabric, and nothing would report it.
@@ -53,14 +56,35 @@ def test_the_collector_is_an_artifact_target() -> None:
     assert "CoreArtifactTarget" in _nodes()["MonitoringCollector"].get("inherit_from", [])
 
 
-def test_profile_selection_is_formable_and_reaches_every_device_kind() -> None:
+def test_profile_selection_reaches_every_device_kind_and_every_service_kind() -> None:
     profile = _nodes()["MonitoringProfile"]
-    for name, peer in (("device_groups", "CoreStandardGroup"), ("measurements", "MonitoringMeasurement")):
-        rel = _relationship(profile, name)
-        assert rel["peer"] == peer, name
-        assert rel.get("cardinality") == "many", name
-        assert rel.get("optional") is False, f"{name} must be mandatory or the portal form omits it"
-        assert rel.get("min_count") == 1, name
+    measurements = _relationship(profile, "measurements")
+    assert measurements["peer"] == "MonitoringMeasurement"
+    assert measurements.get("cardinality") == "many"
+    assert measurements.get("optional") is False
+    assert measurements.get("min_count") == 1
+    groups = _relationship(profile, "device_groups")
+    assert groups["peer"] == "CoreStandardGroup", "groups, not a device kind: the four device kinds are siblings"
+    assert groups.get("cardinality") == "many"
+    assert groups.get("optional") is True, "a service profile names no group"
+    kind = _attribute(profile, "service_kind")
+    assert kind["kind"] == "Text", "Text, so a new service kind needs no schema change"
+    assert kind.get("optional") is True
+    assert kind["parameters"]["regex"].startswith("^Service")
+    timeout = _attribute(profile, "timeout_seconds")
+    assert timeout.get("optional") is True
+    assert timeout.get("default_value") == 5
+
+
+def test_no_monitoring_kind_is_in_the_portal_catalogue() -> None:
+    """The reason device_groups could become optional. If a Monitoring kind is ever
+    offered by the portal, its form builder drops optional many-relationships, and
+    a profile requested there could name no group -- re-examine before adding one."""
+    portal = Path(__file__).parents[2] / "backstage"
+    for config in ("app-config.yaml", "app-config.docker.yaml"):
+        path = portal / config
+        if path.exists():
+            assert "Monitoring" not in path.read_text(encoding="utf-8"), config
 
 
 def test_interval_is_bounded() -> None:
