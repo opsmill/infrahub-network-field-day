@@ -44,11 +44,12 @@ nodes:
       - name: name
         kind: Text
         unique: true
-        order_weight: 1000
+        # Below the relationships (900-960), so the detail page leads with it.
+        order_weight: 100
       - name: description
         kind: Text
         optional: true
-        order_weight: 1010
+        order_weight: 110
       # A Dropdown with one value, so a second renderer is an additive change
       # rather than a new attribute.
       - name: collector_type
@@ -110,11 +111,12 @@ nodes:
       - name: name
         kind: Text
         unique: true
-        order_weight: 1000
+        # Below the relationships (900-960), so the detail page leads with it.
+        order_weight: 100
       - name: description
         kind: Text
         optional: true
-        order_weight: 1010
+        order_weight: 110
       # How a profile is withdrawn without being deleted. False renders nothing
       # for it and says so in a comment in the artifact, so a profile that is
       # switched off is visible rather than merely absent.

@@ -298,7 +298,10 @@ These are the standalone lab's demos, run after `make deploy` and `make crosspla
 When the lab is driven from Infrahub (`uv run invoke bootstrap` in the repository root),
 `invoke cluster` removes the lab's access broker and observability stack, and a branch
 user asks through the Backstage portal instead; the script for that is the
-[demo runbook](../docs/docs/demo-runbook.md).
+[demo runbook](../docs/docs/demo-runbook.md). In that case `make access`, `make access-images`
+and `make access-status` refuse to run and say why, because the first would re-install what the
+handover removed and the last has no broker objects to show; `OTTERNET_ACCESS_BROKER=1`
+overrides the check.
 
 **A branch user asks for an application, and gets it.** This is the headline
 demo of the branch site.

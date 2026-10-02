@@ -35,6 +35,7 @@ nodes:
         kind: Text
         label: Requester
         optional: false
+        description: "Who asked for this grant; the portal fills it from the signed-in user"
         order_weight: 1300
       - name: justification
         kind: TextArea
@@ -60,10 +61,13 @@ nodes:
         kind: List
         label: Permitted Ports
         optional: true
-        # An empty list is rejected by the generator rather than read as
-        # "all ports" -- the lab's FirewallAccess CRD makes the same choice
-        # with minItems: 1.
-        description: "TCP ports this grant opens; empty is rejected, never treated as all"
+        # Leaving this empty is the NORMAL case: the generator takes the TCP
+        # ports of the application's `advertised_services`
+        # (generate_app_access.py::normalise_ports), and naming ports here
+        # asks for a subset. What is refused is an empty RESULT -- no ports
+        # named and none advertised -- which is never read as "all ports";
+        # the lab's FirewallAccess CRD makes the same choice with minItems: 1.
+        description: "TCP ports to open; empty takes the application's advertised services. Never read as all ports"
         order_weight: 1500
     relationships:
       - name: application

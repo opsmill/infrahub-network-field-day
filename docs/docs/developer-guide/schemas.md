@@ -453,7 +453,7 @@ AVD-specific fabric tag object. Attributes: `name`, `description`. Relationships
 
 ### `CloudvisionWorkspace` — `Cloudvision.Workspace`
 
-Tracks one CloudVision workspace created by the `cv-config-validation` check for a proposed change and fabric, defined in `cv/cv.yml`. Listed under **Deployment → CloudVision Workspaces** in the custom menu (`include_in_menu: false` on the schema, as for every kind the menu names); identified by `workspace_id`.
+Tracks one CloudVision workspace created by the `cv-config-validation` check for a proposed change and fabric, defined in `cv/cv.yml`. Not in the menu (`include_in_menu: false`, and the custom menu's **Deployment → CloudVision Workspaces** entry was removed because this lab has no CloudVision and the check is not registered); identified by `workspace_id`.
 
 - **Attributes**: `name` (display name), `workspace_id` (unique — the CloudVision workspace UUID), `proposed_change_id`, `workspace_url`, `thread_id` (the `CoreChangeThread` used for lifecycle comments), `change_control_id` and `change_control_url` (set when a change control exists), `last_submission_error`, `last_submission_attempt_at`, `submitted_at`, and `status`.
 - **Relationships**: `fabric` → `NetworkFabric` (cardinality one).

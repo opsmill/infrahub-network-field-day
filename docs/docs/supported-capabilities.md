@@ -96,7 +96,7 @@ The schema still carries the roles and underlay choices the upstream examples us
 
 | Capability | Status | Notes |
 |------------|:------:|-------|
-| CloudVision config validation in a proposed change | ✅ | The `cv-config-validation` check deploys the rendered configs to a CloudVision workspace and blocks the proposed change on a failed build. Opt in per fabric with `cloudvision_managed`. See [CloudVision Validation](./cloudvision.md). |
+| CloudVision config validation in a proposed change | ✅ | The `cv-config-validation` check deploys the rendered configs to a CloudVision workspace and blocks the proposed change on a failed build. Opt in per fabric with `cloudvision_managed`. **Not registered in this lab**, which has no CloudVision. See [CloudVision Validation](./cloudvision.md). |
 | Workspace tracking and review link | ✅ | Each workspace is recorded as a `CloudvisionWorkspace` object and its URL posted to the proposed change. |
 | Workspace submission | 🟡 | Submission runs from a `CoreCustomWebhook` on proposed-change merge, or manually via `invoke submit-cv-workspace`. The shipped webhook target is a placeholder URL, not a production receiver. |
 | CloudVision change-control management | ⬜ | Out of scope for this phase. |
