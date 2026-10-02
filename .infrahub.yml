@@ -505,8 +505,9 @@ artifact_definitions:
     transformation: "junos_config"
 
   # The WAN's SR Linux configuration, one artifact per router: flat `set`
-  # commands, which ContainerLab boots and the reconciler loads into a candidate
-  # as a replace of /interface, /network-instance and /routing-policy.
+  # commands opening with `delete /`, so the file is the router's WHOLE
+  # configuration: ContainerLab boots it, and the reconciler commits it as a
+  # full replace under `commit confirmed`.
   # `text/plain` because the transform returns a str; a dict would make it
   # application/json and wrap the config in JSON.
   #

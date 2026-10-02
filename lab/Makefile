@@ -267,24 +267,24 @@ xp-drift: ## Prove the XR is the source of truth: break Cilium by hand, watch it
 	done
 	printf '\033[1;31m  still 65999 after 60s -- is provider-kubernetes healthy? make xp\033[0m\n'; exit 1
 
-grafana: ## How to reach the Crossplane-deployed Grafana, on its BGP-advertised VIP
-	@vip=$$($(KUBECTL) -n otternet-observability get svc -l otternet.lab/advertise=true \
+grafana: ## How to reach Grafana (otternet-metrics, delivered by Infrahub through Vidra)
+	@vip=$$($(KUBECTL) -n otternet-metrics get svc -l app.kubernetes.io/name=grafana \
 		-o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}')
-	printf '\nGrafana VIP (advertised into EVPN): \033[1m%s\033[0m\n' "$$vip"
-	printf '  login: admin / otternet-lab-not-a-secret\n\n'
-	printf 'From the *other* tenant, across the firewall and over EVPN:\n'
-	printf '  docker exec clab-$(LAB)-host-a curl -sS http://%s/api/health\n\n' "$$vip"
+	printf '\nGrafana VIP (advertised into EVPN): \033[1mhttp://%s/\033[0m\n' "$$vip"
+	printf '  sign in with Dex (e.g. alice); the branch reaches it only once a grant exists.\n'
+	printf '  break-glass admin: GRAFANA_ADMIN_PASSWORD in the repository .env\n\n'
 	printf 'From this host (management path, no fabric involved):\n'
 	printf '  make grafana-forward   # then http://localhost:13000\n\n'
 
 grafana-forward: ## Port-forward Grafana to localhost:13000
-	@echo "Grafana: http://localhost:13000  (admin / otternet-lab-not-a-secret)"
-	$(KUBECTL) -n otternet-observability port-forward \
-		svc/$$($(KUBECTL) -n otternet-observability get svc -l otternet.lab/advertise=true -o jsonpath='{.items[0].metadata.name}') 13000:80
+	@echo "Grafana: http://localhost:13000  (admin password: GRAFANA_ADMIN_PASSWORD in the repository .env)"
+	$(KUBECTL) -n otternet-metrics port-forward \
+		svc/$$($(KUBECTL) -n otternet-metrics get svc -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].metadata.name}') 13000:80
 
 prometheus-forward: ## Port-forward Prometheus to localhost:19090
 	@echo "Prometheus: http://localhost:19090/targets"
-	$(KUBECTL) -n otternet-observability port-forward svc/$$($(KUBECTL) -n otternet-observability get svc -o name | grep -- '-prometheus$$' | head -1 | cut -d/ -f2) 19090:9090
+	$(KUBECTL) -n otternet-metrics port-forward \
+		svc/$$($(KUBECTL) -n otternet-metrics get svc -l app=kube-prometheus-stack-prometheus -o jsonpath='{.items[0].metadata.name}') 19090:9090
 
 ## ------------------------------------------------------------------- wan ----
 
