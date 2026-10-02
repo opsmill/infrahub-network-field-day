@@ -267,6 +267,23 @@ const usesPicker = (relationship: ResolvedRelationship): boolean =>
   !isMultiple(relationship) &&
   (relationship.hfidLength ?? 1) <= 1;
 
+/** `text` ending in exactly one full stop, so two sentences can be joined. */
+const sentence = (text: string): string => {
+  const trimmed = text.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+};
+
+/**
+ * A kind label as a noun in running text: `IP Address` becomes `IP address`,
+ * `Fabric Application` becomes `fabric application`. An all-capitals word is
+ * an acronym and keeps its case.
+ */
+const readableNoun = (label: string): string =>
+  label
+    .split(' ')
+    .map(word => (word.length > 1 && word === word.toUpperCase() ? word : word.toLowerCase()))
+    .join(' ');
+
 /** The `catalog:fetch` step that resolves a picked entity to its Infrahub id. */
 const pickerStepId = (relationship: SchemaRelationship): string =>
   `${relationship.name}_entity`;
@@ -306,6 +323,8 @@ type SchemaAttribute = {
   name: string;
   kind: string;
   optional?: boolean;
+  /** Infrahub's own label -- `Destination VIP`, where a derived one says `Vip`. */
+  label?: string;
   description?: string;
   /** Present and null when there is no default, so absence proves nothing. */
   default_value?: unknown;
@@ -323,6 +342,8 @@ type SchemaRelationship = {
   kind?: string;
   /** Infrahub's own label, which reads better than a derived one. */
   label?: string;
+  /** Written for the person filling the form, when the schema has one. */
+  description?: string;
 };
 
 /** A relationship plus where its field's options come from, if anywhere. */
@@ -354,6 +375,15 @@ type ResolvedRelationship = SchemaRelationship & {
    * create form could only reference something that does not exist yet.
    */
   fileParentField?: string;
+  /**
+   * The PEER kind's own label -- `IP Address`, not `IpamIPAddress` -- for the
+   * fallback help text when the relationship carries no description. A form
+   * that says "The IpamIPAddress this service belongs to" is talking to the
+   * developer who wrote the schema, not to the person filling it in.
+   */
+  peerLabel?: string;
+  /** The peer's hfid elements, readable: `address`, `ip namespace name`. */
+  hfidParts?: string[];
 };
 
 type KindSchema = {
@@ -407,6 +437,9 @@ export class InfrahubEntityProvider implements EntityProvider {
 
   /** Peer kind -> how many elements its human_friendly_id has. */
   private readonly hfidLengths = new Map<string, number>();
+  /** Read from the same peer schema as the hfid length; see ResolvedRelationship. */
+  private readonly peerLabels = new Map<string, string>();
+  private readonly peerHfidParts = new Map<string, string[]>();
   /**
    * For a peer inheriting `CoreFileObject`, the name of its OWN relationship
    * back to the node that owns it -- `app` on `ServiceFabricAppManifestsFile`.
@@ -712,6 +745,15 @@ export class InfrahubEntityProvider implements EntityProvider {
         `/api/schema/${peer}`,
       );
       length = schema.human_friendly_id?.length || 1;
+      if (schema.label) {
+        this.peerLabels.set(peer, schema.label);
+      }
+      this.peerHfidParts.set(
+        peer,
+        (schema.human_friendly_id ?? []).map(element =>
+          element.replace(/__value$/, '').replace(/_+/g, ' '),
+        ),
+      );
       // Free of charge: the same document says whether this peer is a file
       // and what it calls its owner, and a second fetch would double the
       // schema reads on every refresh.
@@ -827,7 +869,14 @@ export class InfrahubEntityProvider implements EntityProvider {
             )
               .map(
                 ([name, property]) =>
-                  [name, this.withChoiceLabels(name, property, schema)] as [
+                  [
+                    name,
+                    this.withSchemaText(
+                      name,
+                      this.withChoiceLabels(name, property, schema),
+                      schema,
+                    ),
+                  ] as [
                     string,
                     any,
                   ],
@@ -856,6 +905,8 @@ export class InfrahubEntityProvider implements EntityProvider {
                     ? undefined
                     : this.pickerFor(relationship.peer, mappings),
                 hfidLength: peerHfids.get(relationship.peer) ?? 1,
+                peerLabel: this.peerLabels.get(relationship.peer),
+                hfidParts: this.peerHfidParts.get(relationship.peer),
                 // A file peer with no Parent relationship cannot be attached
                 // to anything, so it is not offered as one.
                 fileParentField:
@@ -905,6 +956,29 @@ export class InfrahubEntityProvider implements EntityProvider {
       enumNames: property.enum.map(
         (option: unknown) => labelFor.get(String(option)) ?? String(option),
       ),
+    };
+  }
+
+  /**
+   * The attribute's own label and description from `/api/schema/{kind}`.
+   *
+   * json_schema's `title` is derived from the field name -- `Vlan Id`,
+   * `Destination Vip` -- and the synthesised fallback has none at all, while
+   * the schema's `label` is what Infrahub's own UI shows. The label wins where
+   * there is one; a description is kept from json_schema unless the schema
+   * has its own, which is the same text when both are present.
+   */
+  private withSchemaText(name: string, property: any, schema: KindSchema): any {
+    const attribute = (schema.attributes ?? []).find(
+      candidate => candidate.name === name,
+    );
+    if (!attribute) {
+      return property;
+    }
+    return {
+      ...property,
+      ...(attribute.label ? { title: attribute.label } : {}),
+      ...(attribute.description ? { description: attribute.description } : {}),
     };
   }
 
@@ -1113,8 +1187,31 @@ export class InfrahubEntityProvider implements EntityProvider {
       )
       .filter((ref): ref is string => Boolean(ref));
 
-    // Attributes first, then what this object points at, which is usually the
-    // part someone is actually looking for -- the site, the VLAN, the prefix.
+    // THE OBJECT'S OWN WORDS FIRST. A catalogue row is read by someone
+    // browsing, and "Chart Version 6.0.0 · Service Selector ..." is a dump of
+    // fields, not a description -- while the requester was asked to write one
+    // "for a stranger" and it was then buried among them.
+    const own = attr('description');
+    const ownText =
+      typeof own === 'string' && own.trim() !== '' ? own.trim() : undefined;
+
+    // What this object points at, which is usually the part someone is
+    // actually looking for -- the site, the VLAN, the prefix.
+    const relationLines = kind.relationships
+      .map(relationship => {
+        const peers = this.peersOf(node, relationship)
+          .map(peer => peer.display_label)
+          .filter(Boolean);
+        return peers.length
+          ? `${
+              relationship.label ?? this.fieldTitle(relationship.name)
+            } ${peers.join(', ')}`
+          : undefined;
+      })
+      .filter((line): line is string => Boolean(line));
+
+    // Attributes first, then the relations: the full detail, used only when
+    // the object has no description of its own.
     const details = [
       ...kind.attributes
         .filter(([name]) => attr(name) !== undefined && attr(name) !== '')
@@ -1130,19 +1227,17 @@ export class InfrahubEntityProvider implements EntityProvider {
           const title = property?.title ?? this.fieldTitle(name);
           return `${title} ${attr(name)}${asked}`;
         }),
-      ...kind.relationships
-        .map(relationship => {
-          const peers = this.peersOf(node, relationship)
-            .map(peer => peer.display_label)
-            .filter(Boolean);
-          return peers.length
-            ? `${
-                relationship.label ?? this.fieldTitle(relationship.name)
-              } ${peers.join(', ')}`
-            : undefined;
-        })
-        .filter((line): line is string => Boolean(line)),
+      ...relationLines,
     ];
+
+    // With a description, a SHORT detail line after it: at most three of the
+    // relations, which say where the thing lives, rather than every field.
+    const pendingNote = pending ? ' (change requested)' : '';
+    const description = ownText
+      ? [ownText + pendingNote, relationLines.slice(0, 3).join(' · ')]
+          .filter(Boolean)
+          .join(' — ')
+      : details.join(' · ') || `${kind.label} in Infrahub`;
 
     return {
       apiVersion: 'backstage.io/v1alpha1',
@@ -1152,7 +1247,7 @@ export class InfrahubEntityProvider implements EntityProvider {
         // real identifier stays in the title and the annotations.
         name: identifier.toLowerCase(),
         title: node.display_label ?? identifier,
-        description: details.join(' · ') || `${kind.label} in Infrahub`,
+        description,
         tags: [
           kind.tag,
           ...(live('status') ? [live('status')] : []),
@@ -1265,7 +1360,14 @@ export class InfrahubEntityProvider implements EntityProvider {
     // The attribute that names an object of this kind, from its schema.
     const idField = kind.identifier ?? 'name';
     const identifier = `\${{ parameters.${idField} if parameters.mode === "create" else steps.fetch.output.entity.metadata.title }}`;
-    const branch = `\${{ ("implement_" + (parameters.${idField} | lower)) if parameters.mode === "create" else ("change_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.change_reference) }}`;
+    const branchName = `("implement_" + (parameters.${idField} | lower)) if parameters.mode === "create" else ("change_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.change_reference)`;
+    const branch = `\${{ ${branchName} }}`;
+    // Appended to every link that opens an object the request created or
+    // changed. Those objects exist only on the request's branch until it
+    // merges, so a bare `/objects/<Kind>/<id>` opens main and reads as "not
+    // found" -- or, for a change, as the old values -- to the very person who
+    // just asked for it.
+    const onBranch = `"?branch=" + ((${branchName}) | urlencode)`;
 
     const createProperties: Record<string, any> = {};
     const changeProperties: Record<string, any> = {
@@ -1315,8 +1417,8 @@ export class InfrahubEntityProvider implements EntityProvider {
         changeProperties[name] = {
           ...field,
           description: property.description
-            ? `${property.description}. Leave empty to keep the current value`
-            : 'Leave empty to keep the current value',
+            ? `${sentence(property.description)} Leave empty to keep the current value.`
+            : 'Leave empty to keep the current value.',
         };
       }
     }
@@ -1346,8 +1448,9 @@ export class InfrahubEntityProvider implements EntityProvider {
           type: 'string',
           'ui:widget': 'textarea',
           'ui:options': { rows: 16 },
-          description:
-            `${label}, pasted as YAML. Left empty, nothing is attached.`,
+          description: relationship.description
+            ? `${sentence(relationship.description)} Paste it as YAML; leave it empty to attach nothing.`
+            : `Paste the ${label.toLowerCase()} as YAML; leave it empty to attach nothing.`,
         };
         continue;
       }
@@ -1366,37 +1469,29 @@ export class InfrahubEntityProvider implements EntityProvider {
           }
         : // No entities behind this peer, so ask for the identifier Infrahub
           // uses. Less pretty than a picker, and better than losing the field.
-          { 'ui:placeholder': `${relationship.peer} identifier` };
-
-      const description = relationship.picker
-        ? `The ${relationship.peer} this service belongs to`
-        : `The ${relationship.peer} this service belongs to, by its Infrahub identifier`;
+          { 'ui:placeholder': `${relationship.peerLabel ?? relationship.peer} name` };
 
       // A composite hfid needs every element, so the field is an array and the
-      // description says which parts, in order -- nothing else in the form
-      // tells a requester that `10.112.240.10/32` alone will be refused.
+      // help says which parts, in order -- nothing else in the form tells a
+      // requester that `10.112.240.10/32` alone will be refused.
       const composite = (relationship.hfidLength ?? 1) > 1;
       const multiple = isMultiple(relationship);
       const shape =
         composite || multiple
           ? { type: 'array', items: { type: 'string' } }
           : { type: 'string', ...widget };
-      let text = description;
-      if (multiple) {
-        text = `The ${relationship.peer}s this service belongs to, one identifier per entry`;
-      } else if (composite) {
-        text = `${description}, as its ${relationship.hfidLength} hfid elements in order`;
-      }
+      const text = this.relationshipHelp(relationship, composite, multiple);
 
       createProperties[relationship.name] = {
-        title: this.fieldTitle(relationship.name),
+        // The schema's own label -- `Destination VIP` -- where it has one.
+        title: relationship.label ?? this.fieldTitle(relationship.name),
         ...shape,
         description: text,
       };
       if (relationship.optional !== false) {
         changeProperties[relationship.name] = {
           ...createProperties[relationship.name],
-          description: `${text}. Leave empty to keep the current value`,
+          description: `${text} Leave empty to keep the current value.`,
         };
       }
     }
@@ -1406,10 +1501,13 @@ export class InfrahubEntityProvider implements EntityProvider {
       kind: 'Template',
       metadata: {
         name: `${kind.tag}-request`,
-        title: `${kind.label} (generated)`,
-        description:
-          `Request a new ${kind.label} service, or change an existing one. ` +
-          `Generated from the Infrahub schema, so it follows the kind's own fields.`,
+        // The title and description are what a branch user reads in the
+        // catalogue, so they say what the thing IS. That the template is
+        // generated from the schema is for tooling, and the `generated` tag
+        // still says so -- it is what anything that needs to find these
+        // templates should key on, never the title.
+        title: kind.label,
+        description: this.templateDescription(kind),
         tags: ['infrahub', 'service-request', 'generated'],
         ...this.base(`${this.infrahub.externalAddress}/schema`),
       },
@@ -1710,7 +1808,10 @@ export class InfrahubEntityProvider implements EntityProvider {
             },
             {
               title: `${kind.label} in Infrahub`,
-              url: `\${{ (steps.create.output.address + "/objects/${kind.kind}/" + steps.create.output.data.${kind.kind}Create.object.id) if parameters.mode === "create" else steps.fetch.output.entity.metadata.annotations["backstage.io/view-url"] }}`,
+              // Both modes open the REQUEST'S branch: on main the created
+              // object does not exist yet and a changed one shows its old
+              // values.
+              url: `\${{ ((steps.create.output.address + "/objects/${kind.kind}/" + steps.create.output.data.${kind.kind}Create.object.id) if parameters.mode === "create" else steps.fetch.output.entity.metadata.annotations["backstage.io/view-url"]) + ${onBranch} }}`,
             },
           ],
         },
@@ -1874,6 +1975,53 @@ export class InfrahubEntityProvider implements EntityProvider {
       '  }',
       '}',
     ].join('\n');
+  }
+
+  /**
+   * What a generated template says it is for, in the catalogue.
+   *
+   * The kind's own schema description first, when it has one, then the
+   * action in the kind's own words. No `service` is appended to the label:
+   * every kind here is one, and appending it produced `Fabric Peering Service
+   * service` on the one page a first-time user reads before anything else.
+   */
+  private templateDescription(kind: LoadedKind): string {
+    const action = `Request a new ${readableNoun(kind.label)}, or change one you already have.`;
+    return kind.schema.description
+      ? `${sentence(kind.schema.description)} ${action}`
+      : action;
+  }
+
+  /**
+   * One plain sentence of help for a relationship field.
+   *
+   * The schema's own description when it has one. Otherwise it is built from
+   * the PEER's label rather than its kind name -- the requester is a
+   * first-time branch user, and "The IpamIPAddress this service belongs to,
+   * as its 2 hfid elements in order" names a schema class and an Infrahub
+   * internal in one sentence.
+   */
+  private relationshipHelp(
+    relationship: ResolvedRelationship,
+    composite: boolean,
+    multiple: boolean,
+  ): string {
+    if (relationship.description) {
+      return sentence(relationship.description);
+    }
+    const noun = readableNoun(relationship.peerLabel ?? relationship.peer);
+    if (multiple) {
+      return `One ${noun} per entry, by its name in Infrahub.`;
+    }
+    if (composite) {
+      const parts = relationship.hfidParts?.length
+        ? relationship.hfidParts.join(', then ')
+        : `${relationship.hfidLength} parts of its name`;
+      return `The ${noun}: enter its ${parts}, one per entry.`;
+    }
+    return relationship.picker
+      ? `Choose the ${noun}.`
+      : `The ${noun}, by its name in Infrahub.`;
   }
 
   /** service_identifier -> Service Identifier */

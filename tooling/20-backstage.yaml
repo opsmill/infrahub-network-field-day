@@ -44,12 +44,21 @@ metadata:
   namespace: otternet-tooling
 type: Opaque
 stringData:
-  # Lab values, committed on purpose, like everything else in auth/. The token
-  # is the stack's initial admin token; the session secret signs the express
-  # session the OIDC strategy keeps its state in.
+  # The two OIDC values are lab values, committed on purpose, like everything
+  # else in auth/; the session secret signs the express session the OIDC
+  # strategy keeps its state in.
   BACKSTAGE_OIDC_CLIENT_SECRET: "backstage-dex-secret"
   BACKSTAGE_SESSION_SECRET: "otternet-lab-backstage-session-secret"
-  INFRAHUB_API_TOKEN: "06438eb2-8019-4776-878c-0941b1f1d1ec"
+  # THE INFRAHUB TOKEN IS NOT COMMITTED, and it is not the admin token any more.
+  # It belongs to `backstage-portal`, a least-privilege account created by
+  # scripts/provision_portal_account.py: read everything, write only on
+  # branches, open a proposed change, run generators, and attribute writes to
+  # the signed-in user through `context`. The token lives in the main
+  # checkout's .env and scripts/deploy_tooling.sh substitutes it for this
+  # placeholder at apply time; applying this file by hand deploys a portal that
+  # Infrahub answers with 401. tests/unit/test_portal_account_contract.py holds
+  # both halves.
+  INFRAHUB_API_TOKEN: "__INFRAHUB_PORTAL_TOKEN__"
 ---
 apiVersion: apps/v1
 kind: Deployment

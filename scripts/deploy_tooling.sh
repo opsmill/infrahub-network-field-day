@@ -108,10 +108,41 @@ fi
 # so a reimported image is invisible to the Deployment, and a ConfigMap change
 # does not restart the pods that read it as environment.
 # --------------------------------------------------------------------------
+# THE PORTAL'S INFRAHUB TOKEN IS RENDERED IN HERE, never committed. It is the
+# `backstage-portal` account's, minted by scripts/provision_portal_account.py
+# into the MAIN checkout's .env (a worktree's .env is a file nothing reads),
+# and it replaces the placeholder in tooling/20-backstage.yaml. Refusing when it
+# is missing is the point: the alternative is a portal that signs users in and
+# then fails every request with 401 -- or, as before, one holding the stack's
+# Super Administrator token.
+COMMON_DIR="$(git -C "$HERE" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$HERE/.git")"
+MAIN_CHECKOUT="$(dirname "$COMMON_DIR")"
+PORTAL_TOKEN="${INFRAHUB_PORTAL_TOKEN:-}"
+if [ -z "$PORTAL_TOKEN" ] && [ -f "$MAIN_CHECKOUT/.env" ]; then
+    PORTAL_TOKEN="$(sed -n 's/^INFRAHUB_PORTAL_TOKEN=//p' "$MAIN_CHECKOUT/.env" | tail -n 1)"
+fi
+if [ -z "$PORTAL_TOKEN" ]; then
+    echo "[tooling] INFRAHUB_PORTAL_TOKEN is not in $MAIN_CHECKOUT/.env -- run" \
+        "'uv run python scripts/provision_portal_account.py' first" >&2
+    exit 1
+fi
+case "$PORTAL_TOKEN" in
+    *[!A-Za-z0-9._-]*)
+        echo "[tooling] INFRAHUB_PORTAL_TOKEN has unexpected characters; refusing to render it" >&2
+        exit 1
+        ;;
+esac
+
 for manifest in "$HERE"/tooling/*.yaml; do
     log "applying $(basename "$manifest")"
-    kf apply -f - < "$manifest" >/dev/null
+    sed "s|__INFRAHUB_PORTAL_TOKEN__|${PORTAL_TOKEN}|g" "$manifest" > "$WORK/manifest.yaml"
+    if grep -q "__INFRAHUB_PORTAL_TOKEN__" "$WORK/manifest.yaml"; then
+        echo "[tooling] $(basename "$manifest") still carries the token placeholder" >&2
+        exit 1
+    fi
+    kf apply -f - < "$WORK/manifest.yaml" >/dev/null
 done
+rm -f "$WORK/manifest.yaml"
 
 # DEX FIRST, AND FULLY, BEFORE BACKSTAGE IS TOUCHED. Restarting both at once
 # raced them, and Backstage lost: its OIDC authenticator calls `Issuer.discover`

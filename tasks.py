@@ -1561,6 +1561,13 @@ def tooling(ctx: Context) -> None:
     """
     if not Path("scripts/deploy_tooling.sh").is_file():
         raise Exit("scripts/deploy_tooling.sh is missing")
+    # THE PORTAL'S OWN ACCOUNT FIRST, because the deploy renders its token into
+    # the backstage Secret and refuses without one. `backstage-portal` reads
+    # everything and writes only on branches -- the portal used to hold the
+    # stack's Super Administrator token. Idempotent: a token that still works is
+    # kept, so a re-run does not rotate what a running portal holds.
+    print(" - Provisioning the portal's own Infrahub account")
+    ctx.run("python scripts/provision_portal_account.py", pty=True)
     ctx.run("scripts/deploy_tooling.sh", pty=True)
 
     # EVERY PORTAL USER NEEDS AN INFRAHUB ACCOUNT BEFORE THEIR FIRST REQUEST.
