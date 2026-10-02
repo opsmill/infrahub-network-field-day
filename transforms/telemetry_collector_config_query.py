@@ -441,7 +441,6 @@ class TelemetryCollectorConfigQueryMonitoringCollectorEdgesNodeMonitoringProfile
         "ProfileServiceGeneric",
         "ProfileServiceGenericDevice",
         "ProfileServiceGenericInterface",
-        "ProfileServiceInternetAccess",
         "ProfileServiceL3vpn",
         "ProfileServiceNetworkSegment",
         "ProfileServiceServerPlacement",
@@ -482,7 +481,6 @@ class TelemetryCollectorConfigQueryMonitoringCollectorEdgesNodeMonitoringProfile
         "ServiceFabricApp",
         "ServiceFabricAppValuesFile",
         "ServiceFabricPeering",
-        "ServiceInternetAccess",
         "ServiceL3vpn",
         "ServiceNetworkSegment",
         "ServiceServerPlacement",
@@ -989,9 +987,7 @@ class TelemetryCollectorConfigQueryServiceGenericEdges(BaseModel):
 
 
 class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceGeneric(BaseModel):
-    typename__: Literal["ServiceGeneric", "ServiceInternetAccess"] = Field(
-        alias="__typename"
-    )
+    typename__: Literal["ServiceGeneric"] = Field(alias="__typename")
     name: Optional[
         "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceGenericName"
     ]

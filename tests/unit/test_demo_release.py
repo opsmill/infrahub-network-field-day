@@ -1,14 +1,13 @@
-"""Pins `invoke demo-release`'s naming and filter rules.
+"""Pins `invoke demo-release`'s naming and the read-only repository it relies on.
 
-The names are load-bearing in both directions: the staged branch must never be
-imported by Infrahub (it can sit on the remote for days), and the released one
-must always be. A release is a push, and a pulled commit is never rewritten, so
-two releases of the same work may not share a name.
+Infrahub tracks one ref of a read-only repository and creates no branch from Git,
+so the names matter only to the remote: the staged branch is never a ref Infrahub
+follows until a release says so. A release is a push, and a pulled commit is never
+rewritten, so two releases of the same work may not share a name.
 """
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -19,35 +18,6 @@ from solution_arista_avd import demo_release as dr
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_FILTER = ["main"]
-
-
-def test_the_staged_branch_is_never_imported_and_the_released_one_always_is() -> None:
-    patterns = json.loads(dr.demo_filter(DEFAULT_FILTER))
-
-    assert not dr.is_imported(patterns, dr.stage_branch("internet-access"))
-    assert dr.is_imported(patterns, dr.demo_branch("internet-access", 1))
-
-
-def test_the_default_filter_imports_neither() -> None:
-    """The point of `["main"]`: without the demo override nothing here syncs."""
-    assert not dr.is_imported(DEFAULT_FILTER, dr.stage_branch("internet-access"))
-    assert not dr.is_imported(DEFAULT_FILTER, dr.demo_branch("internet-access", 1))
-
-
-def test_the_override_keeps_what_was_already_allowed_and_is_idempotent() -> None:
-    once = json.loads(dr.demo_filter(DEFAULT_FILTER))
-    twice = json.loads(dr.demo_filter(once))
-
-    assert once[0] == "main"
-    assert once == twice
-    assert dr.is_imported(once, "main")
-
-
-def test_the_override_does_not_let_ordinary_feature_branches_in() -> None:
-    patterns = json.loads(dr.demo_filter(DEFAULT_FILTER))
-
-    for branch in ("feat/anything", "worktree-agent-a33a06fb0bf52bdb1", "main-backup", "stage/x", "xdemo/x"):
-        assert not dr.is_imported(patterns, branch), branch
 
 
 def test_the_refspec_publishes_the_staged_branch_under_the_synced_name() -> None:
@@ -70,20 +40,43 @@ def test_run_numbers_start_at_one(run: int) -> None:
         dr.demo_branch("x", run)
 
 
-@pytest.mark.parametrize("raw", ["main", '"main"', "{}", "[1]", ""])
-def test_a_filter_that_is_not_a_json_array_of_strings_is_refused(raw: str) -> None:
-    with pytest.raises(dr.DemoReleaseError):
-        dr.parse_patterns(raw)
-
-
 def test_the_repository_object_file_names_the_remote() -> None:
     document = yaml.safe_load(dr.render_repository("https://github.com/opsmill/infrahub-network-field-day.git"))
     (entry,) = document["spec"]["data"]
 
-    assert document["spec"]["kind"] == "CoreRepository"
+    assert document["spec"]["kind"] == "CoreReadOnlyRepository"
     assert entry["name"] == "test-repository"
+    assert entry["ref"] == "main"
     assert entry["location"] == "https://github.com/opsmill/infrahub-network-field-day.git"
     assert "credential" not in entry
+
+
+def test_the_repository_is_read_only_so_infrahub_never_pushes_or_makes_a_branch() -> None:
+    """The reason for the kind: a CoreRepository turns each remote branch into an Infrahub branch and pushes it."""
+    rendered = dr.render_repository("https://github.com/o/r.git", ref="demo/x-1")
+
+    assert yaml.safe_load(rendered)["spec"]["kind"] == "CoreReadOnlyRepository"
+    assert yaml.safe_load(rendered)["spec"]["data"][0]["ref"] == "demo/x-1"
+
+
+@pytest.mark.parametrize("ref", ["", "  "])
+def test_a_repository_without_a_ref_is_refused(ref: str) -> None:
+    with pytest.raises(dr.DemoReleaseError):
+        dr.render_repository("https://github.com/o/r.git", ref=ref)
+
+
+def test_the_ref_mutation_names_the_repository_and_quotes_the_ref() -> None:
+    mutation = dr.set_ref_mutation("abc-123", "demo/x-1")
+
+    assert "CoreReadOnlyRepositoryUpdate" in mutation
+    assert 'id: "abc-123"' in mutation
+    assert 'ref: { value: "demo/x-1" }' in mutation
+
+
+def test_the_absent_schema_marks_exactly_one_node_absent() -> None:
+    document = yaml.safe_load(dr.absent_schema("Service", "InternetAccess"))
+
+    assert document["nodes"] == [{"name": "InternetAccess", "namespace": "Service", "state": "absent"}]
 
 
 def test_the_repository_object_file_refers_to_a_credential_by_name_only() -> None:

@@ -1,6 +1,6 @@
 ---
 title: Builder demo
-description: Release a prepared capability from the Git remote into Infrahub on cue, and review it as a proposed change.
+description: Release a prepared capability from the Git remote, review its data in Infrahub, then move the repository ref to make its code live.
 audience: user
 ---
 
@@ -11,44 +11,47 @@ customer, and takes it through an Infrahub proposed change. The work is prepared
 beforehand and released on cue, so the time spent generating it is skipped and the
 review is the live part. Say so on stage: the branch is prepared output.
 
-## How a branch arrives
+## How it reaches Infrahub
 
-A pushed Git branch and an Infrahub branch are different things, and the demo uses both.
+The repository is registered as a **read-only repository** that tracks one `ref`. Infrahub
+imports that ref into its default branch. It creates no branch from Git and pushes nothing,
+so it needs no write credential on the remote. Changing the `ref` is what makes new code live.
 
-| What | How it reaches the Infrahub branch |
-| --- | --- |
-| Queries, transforms, templates, checks, menus | A push to a branch Infrahub imports |
-| Schema and the `acme-internet` object | `infrahubctl schema load` and `object load` onto that branch |
+A `CoreRepository` behaves differently: it turns each remote branch into an Infrahub branch
+and pushes it back. Measured on this stack, that push failed with no write credential and the
+branch was left `sync_with_git: False`, never imported. That is why the demo does not use one.
 
-`.infrahub.yml` has no `schemas:` or `objects:` section, so a repository import carries
-code only. `invoke demo-release` does both halves.
+A Git ref and an Infrahub branch are different things, and the demo uses both:
+
+| What | How it arrives | Reviewed in |
+| --- | --- | --- |
+| Queries, transforms, templates, checks, menus | The repository `ref` moves to the released branch | Git, on the remote |
+| Schema and the `acme-internet` object | Loaded onto a plain Infrahub branch | The Infrahub proposed change |
+
+`.infrahub.yml` has no `schemas:` or `objects:` section, so a repository import carries code
+only. The proposed change therefore shows the schema and data diff. The code takes effect
+after the merge, when the ref moves.
 
 Three branches take part:
 
 - **`main`** has the capability removed. It is the baseline.
-- **`stage/internet-access`** is the baseline plus the implementation. Its name never
-  matches the import filter, so it can sit on the remote without being imported.
-- **`demo/internet-access-<n>`** exists only after a release. Creating it is the trigger.
+- **`stage/internet-access`** is the baseline plus the implementation, kept in the local checkout.
+- **`demo/internet-access-<n>`** is the remote branch a release publishes. The `ref` points at it.
 
 ## One-time setup on a fresh stack
 
-Point Infrahub at the Git remote instead of the bind-mounted checkout, and let `demo/`
-branches in:
+Register the repository against the Git remote when the stack is first loaded:
 
 ```bash
 export INFRAHUB_REPOSITORY_URL=https://github.com/opsmill/infrahub-network-field-day.git
-# A private remote also needs a read token. It is written to a temporary file and deleted.
-export INFRAHUB_REPOSITORY_TOKEN=<read-only token>
-export INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='["main","demo/.*"]'
+# Optional. A private remote needs a read token; it is written to a temporary file and deleted.
+# export INFRAHUB_REPOSITORY_TOKEN=<read-only token>
 uv run invoke bootstrap --fresh
 ```
 
-On a running stack, `uv run invoke demo-filter --restart` applies the branch filter. It does
-not re-point an existing repository: `test-repository` stores its location and commit, so use a
-fresh stack for the demo.
-
-The repository default (`/upstream`) and the `["main"]` filter are unchanged. Every extra
-synced branch costs about 171 automations, which is why the filter is a demo-time override.
+Use a fresh stack. Infrahub refuses to change an existing repository's kind in place, and to
+delete one while trigger actions reference its generators. The default (`/upstream`, the
+bind-mounted checkout) is unchanged when the variable is not set.
 
 `main` must be pushed to the remote first, and the staged branch must descend from the
 `main` Infrahub has imported.
@@ -56,39 +59,46 @@ synced branch costs about 171 automations, which is why the filter is a demo-tim
 ## Release
 
 ```bash
-uv run invoke demo-release              # pushes stage/internet-access to demo/internet-access-1
+uv run invoke demo-release     # publish stage/internet-access as demo/internet-access-1
 ```
 
 It does these steps, and stops with a message when one fails:
 
-1. Checks `stage/internet-access` exists and that the running task worker would import
-   `demo/internet-access-1`.
-2. Runs `git push origin stage/internet-access:demo/internet-access-1`. The `source:destination`
-   form publishes the staged branch under a different name without checking it out.
-3. Waits for the Infrahub branch to appear, then for the repository import on it to reach the
-   pushed commit.
-4. Loads the staged schema and `objects/37_otternet_wan_services.yml` onto the branch, read from the
+1. Runs `git push origin stage/internet-access:demo/internet-access-1`. The `source:destination`
+   form publishes the staged branch under another name without checking it out.
+2. Creates the Infrahub branch `demo/internet-access-1`.
+3. Loads the staged schema and `objects/37_otternet_wan_services.yml` onto it, read from the
    staged commit with `git archive`.
-5. Opens the proposed change, then re-runs its checks. A first pass can race the data just
+4. Opens the proposed change, then re-runs its checks. A first pass can race the data just
    loaded, so the re-run is what makes the checks judge the final branch.
+
+Review the proposed change and merge it. Nothing reads the new kind yet, so the merge is safe.
+
+## Activate
+
+```bash
+uv run invoke demo-activate    # point the repository ref at demo/internet-access-1
+```
+
+Infrahub imports the released commit into `main`: the transform, template, check and menu.
+The `isp-pe1` artifact re-renders with `statement 30`, and the reconciler pushes it. Run it
+after the merge. The other order leaves queries on `main` naming a kind `main` does not have.
 
 ## Rehearse again
 
 ```bash
-uv run invoke demo-reset --run 1
+uv run invoke demo-reset       # ref back to main, kind and data removed, branches deleted
 uv run invoke demo-release --run 2
 ```
 
-Never reuse a name. A commit Infrahub has pulled is not rewritten, so each release takes
-the next number.
+`demo-reset` works whether or not the merge happened. Never reuse a name: a commit Infrahub
+has pulled is not rewritten, so each release takes the next number.
 
 ## Before relying on it
 
 These are not yet measured on a stack:
 
-- How long Infrahub takes to notice a pushed branch. Push early enough that the wait is not
-  on stage, and keep a second branch released as the fallback.
-- Whether merging a `sync_with_git` branch does anything on the Git side.
-- Whether the `isp-pe1` artifact diff appears on the branch. The WAN kinds have no generator,
-  so the diff comes from the proposed change's artifact checks.
-- That a read-only credential is enough for a remote with more than one branch.
+- How long Infrahub takes to import a commit after the ref moves.
+- That a merge, then `demo-activate`, produces the `statement 30` change on `isp-pe1`.
+- That `demo-reset` returns a merged stack to the baseline.
+- That a read-only credential is enough for a private remote.
