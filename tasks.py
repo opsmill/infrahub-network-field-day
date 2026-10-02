@@ -376,7 +376,10 @@ def _artifact_definition_ids(branch: str = "") -> dict[str, str]:
             "destructive against a fabric that already has cabling."
         ),
         "artifacts": "Regenerate every artifact definition once the chain completes.",
-        "merge": "Merge the branch into main when the chain succeeds, then wait for the artifacts to render.",
+        "merge": (
+            "Merge the branch into main when the chain succeeds, wait for the artifacts to render, "
+            "then delete the merged branch."
+        ),
     }
 )
 def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool = True, merge: bool = False) -> None:
@@ -442,9 +445,46 @@ def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool 
         print(f"\n - Merging '{branch}' into main")
         ctx.run(f"infrahubctl branch merge {shlex.quote(branch)}", pty=True)
         _wait_for_artifacts(ctx)
-        print(f"\n - Merged. Main now carries the chain's output; '{branch}' can be deleted.")
+        _delete_merged_branch(ctx, branch)
+        print("\n - Merged. Main now carries the chain's output.")
     elif branch:
         print(f"\n - Done on '{branch}'. Review the diff, then merge with `invoke avd --branch {branch} --merge`.")
+
+
+def _branches() -> dict[str, bool] | None:
+    """Every Infrahub branch, mapped to whether it is the default; None if Infrahub could not say."""
+    data = _graphql("{ Branch { name is_default } }")
+    if "Branch" not in data:
+        return None
+    return {row["name"]: bool(row.get("is_default")) for row in data["Branch"] or []}
+
+
+def _delete_merged_branch(ctx: Context, branch: str) -> None:
+    """Delete a branch `--merge` has just merged, idempotently.
+
+    Left behind, `build-fabric` sat in every branch picker after every
+    bootstrap: a branch whose whole content is already on main, which reads as
+    work in progress to anyone opening the UI. It is deleted only AFTER the
+    merge returned and the artifact wait finished -- `ctx.run` raises on a
+    failed merge, so a branch whose merge did not happen is never reached here.
+
+    Idempotent in both directions: a branch that is already gone is reported
+    and skipped, and when Infrahub cannot be asked the branch is LEFT, because
+    deleting a branch on a guess is the one outcome here that cannot be undone.
+    The default branch is never deleted, whatever it is called.
+    """
+    branches = _branches()
+    if branches is None:
+        print(f" - Could not list branches; leaving '{branch}'. Delete it with `infrahubctl branch delete {branch}`.")
+        return
+    if branch not in branches:
+        print(f" - Branch '{branch}' is already gone")
+        return
+    if branches[branch]:
+        print(f" - '{branch}' is the default branch; not deleting it")
+        return
+    print(f" - Deleting the merged branch '{branch}'")
+    ctx.run(f"infrahubctl branch delete {shlex.quote(branch)}", pty=True)
 
 
 def _graphql(query: str, branch: str = "") -> dict[str, Any]:
@@ -1620,7 +1660,7 @@ def bootstrap(
 
         start      the Infrahub stack
         load       schema, menus, seed data
-        avd        the generation chain ON A BRANCH, then merged to main
+        avd        the generation chain ON A BRANCH, merged to main, then deleted
         lab        the ContainerLab topology, management connectivity only
         provision  every device configured from its rendered artifact
         tooling    Dex and the Backstage portal, in the tooling cluster

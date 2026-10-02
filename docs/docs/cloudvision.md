@@ -9,6 +9,20 @@ Infrahub proposed-change validation. It also records the CloudVision workspace
 URL in the proposed change and registers a placeholder CustomWebhook handoff for
 submitting the linked workspace when the proposed change is submitted.
 
+:::note Not registered in this lab
+
+This lab has no CloudVision, so `cv-config-validation` is **not registered** in
+`.infrahub.yml` and does not run on its proposed changes. Before, it logged a skip
+and passed on every one, which read as a validation that never happened. The code,
+its query and its tests are unchanged. To use it against a fabric that has
+CloudVision, restore the commented `cv-config-validation` block under
+`check_definitions:` in `.infrahub.yml` and the matching `CoreCheckDefinition` in
+`repository_checks.yml`, then set `cloudvision_managed` on the fabric. The
+**CloudVision Workspaces** menu entry was removed with it; add it back to
+`menus/menu.yml` at the same time.
+
+:::
+
 ## Runtime configuration
 
 CloudVision credentials are read from task-worker environment variables:

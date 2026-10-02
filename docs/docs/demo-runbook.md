@@ -37,21 +37,46 @@ this lab. Replace them when they have been.
 :::note What was checked, and how
 Everything up to each merge was rehearsed against a freshly bootstrapped lab:
 the preflight, act four, act five, and acts one and two submitted through the
-portal as `alice` and read in their proposed changes. The merges themselves, and
-what follows them on the devices and in the cluster, were not re-run for this
-page; those timings come from measurements recorded in this repository's
-documentation.
+portal as `alice` and read in their proposed changes. Acts two and three were
+then rehearsed **through their merges**: the Grafana grant merged, the
+reconciler pushing `fw1` and the border leaf, `alice` signing in to Grafana from
+the branch desktop, the Revoke template, its merge, and the lab compared with a
+snapshot afterwards. Act one's merge was not re-run; its timings are act two's,
+which share every step after the merge.
 
 Rehearse before an audience does, with a request reference you do not plan to use live:
 
 ```bash
 uv run python scripts/demo_rehearsal.py          # every act up to its merge, about ten minutes
 uv run python scripts/demo_rehearsal.py --only four,five
+uv run python scripts/demo_rehearsal.py --merge  # CHANGES THE LAB: acts two and three for real, about 25 minutes
 ```
 
-It creates branches and proposed changes, deletes them afterwards even when an
-act fails, merges nothing, and touches no device. It prints a timing for every
-step, so the numbers below can be checked against the lab in front of you.
+Without `--merge` it creates branches and proposed changes, deletes them
+afterwards even when an act fails, merges nothing, and touches no device.
+
+**`--merge` changes the lab and puts it back.** It snapshots `fw1`'s and the
+border leaf's running configurations, every artifact checksum on `main`, every
+`DeploymentState` record and Grafana's pod policy; it merges a Grafana grant
+and its revocation; then it deletes the decommissioned grant and asserts that
+every one of those matches the snapshot, byte for byte, before running
+`make -C lab verify`. It refuses to start if a grant already exists on `main`,
+and stops before merging anything whose validators are not all green. If it
+ends with `THE LAB IS NOT RESTORED`, the grant merged and its revocation did not;
+the snapshot is kept on disk, and the message gives the command that finishes
+the cycle against it:
+
+```bash
+uv run python scripts/demo_rehearsal.py --resume-revoke grafana-<reference>
+uv run python scripts/demo_rehearsal.py --resume-revoke grafana-<reference> --revoke-via status
+```
+
+`--revoke-via status` revokes the way the UI does, by setting the status on a
+branch, instead of through the portal's Revoke template. See the warning in
+[act three](#act-three-revoke-it) for when that is the one to use.
+
+Either way it prints a timing for every step, so the numbers below can be
+checked against the lab in front of you.
 :::
 
 ## Before anyone is watching
@@ -353,11 +378,15 @@ checks from the **Checks** tab (the API equivalent is
 `CoreProposedChangeRunCheck` with `check_type: ARTIFACT`); that re-renders it from
 the files the pipeline wrote, in about fifteen seconds.
 
-**4. Merge, and sign in.** Once the reconciler has pushed `fw1` and the border
-leaf, reload the bookmark. That took about 2.3 minutes from the merge when the
-loop slept its whole interval; expected after the early-wake change, 30 to
-90 seconds. Watch for `pushed=2` in the reconciler log rather than the clock.
-Grafana redirects to the same Dex sign-in page the portal uses. `alice` signs in
+**4. Merge, and sign in.** The merge itself takes about 15 seconds. Vidra
+delivers Grafana's pod policy with `10.70.0.0/24` 40 to 70 seconds later, but
+the page loads only once the firewall permits it too. The reconciler pushes the
+border leaf and `fw1` as soon as the merged artifacts hold still: expected after
+the early-wake change, 30 to 90 seconds from the merge (measured before it, when
+the loop slept its whole 120-second interval: 55 to 130 seconds). Watch for
+`pushed=2` in the reconciler log rather than the clock. Then reload the bookmark.
+Grafana sends the browser straight to the same Dex sign-in page the portal uses;
+its own `/login` is a redirect, not a page. `alice` signs in
 and lands on the **Organisation** dashboard as a **Viewer**: the sign-in path
 can never make anyone an administrator.
 
@@ -398,6 +427,23 @@ the Grafana one), give a request reference, and submit. It sets the grant to
 `decommissioning` on a branch, waits for the generator to remove what the grant
 created, regenerates the fabric, and opens the proposed change.
 
+:::warning The template needs a generator that tolerates its own twin
+Setting the status fires `generate-app-access` through the event rule, and the
+template's wait step runs it a second time. Both delete the same rule, and
+before `_delete_if_present` the second one failed on `Unable to find the node
+... SecurityPolicyRule`, which stops the template at **Wait for the firewall
+objects to be removed** with no proposed change. Measured: two Revoke runs in
+three failed that way against a lab whose generator predated the fix. The
+withdrawal itself had worked; only the template failed.
+
+Infrahub runs the generator from the repository's `main`, so check the deployed
+code before relying on the template live:
+`grep -c _delete_if_present generators/generate_app_access.py` in the checkout
+Infrahub syncs from. Until it is there, revoke through the UI path described below
+and regenerate the fabric with `uv run invoke avd --branch <branch>`, or rehearse
+with `demo_rehearsal.py --merge --revoke-via status`.
+:::
+
 The change removes the rule, the address-book entry, the source prefix the grant
 added, and the border leaf's advertisement line. A rule written by hand in the
 same zone pair is left alone. `branch-to-access-portal` is one, and it sits in
@@ -405,9 +451,25 @@ the same zone pair the grant's rule left, because removal is keyed on provenance
 (`managed_by_service`) rather than on shape. A source prefix that another live
 grant still relies on is also left in place.
 
-Merge it. Once the merged artifacts hold still, the reconciler pushes both devices again (expected after the early-wake change: 30 to 90 seconds), and the VIP
-stops answering from the branch. Anyone already signed in to Grafana loses the
-page with it.
+The Revoke template takes about a minute, most of it the generator's wait and the
+fabric regeneration, and its proposed change's validators about 80 seconds more.
+
+Merge it. **The page goes before the devices change, and that is worth saying.**
+Vidra delivers Grafana's pod policy without the branch LAN 65 to 80 seconds
+after the merge, and the branch desktop loses Grafana then, 75 to 90 seconds in,
+because the pod is the gate that closes first. The firewall rule and the border
+leaf's line follow once the merged artifacts hold still: expected after the
+early-wake change, 30 to 90 seconds from the merge (measured before it: 2.5 to
+3 minutes). Anyone already signed in to Grafana loses the page with the pod
+policy.
+
+**The grant stays on `main`, `decommissioned`.** That is the record of what was
+granted and withdrawn, and it configures nothing. The Revoke picker still offers
+it, though, so before running the demo again delete it in the Infrahub UI, with
+its `generate-app-access: <name>` generator instance and its empty
+`generate-app-access-<hash>` group: deleting a grant deletes neither, and the
+orphaned instance turns `generate-app-access` red on every later proposed change
+(see [Recovery](#recovery)). `demo_rehearsal.py --merge` does all three.
 
 A grant can also be withdrawn without the portal by setting its `status` to
 `decommissioning` in the Infrahub UI, on a branch: the event rule on `status`
@@ -416,8 +478,10 @@ Rehearsed on a grant's own branch, the generator had the grant `decommissioned`,
 its rule gone and `fw1`'s configuration back to main's byte for byte about
 twelve seconds after the status changed.
 
-The **Revoke access** picker lists only grants that exist on `main`, so it can
-only be rehearsed after a real merge. Before one, it offers nothing.
+The **Revoke access** picker lists only grants that exist on `main`, so before a
+real merge it offers nothing. `demo_rehearsal.py --merge` is the rehearsal of
+it; the picker listed the merged grant within a minute of the merge, which is
+the catalogue's refresh interval.
 
 ## Act four: the review step bites
 
@@ -506,18 +570,26 @@ a proposed change, and that merging is where the human decides.
 | A single access grant through the portal | 20 to 40 s |
 | Its proposed change, opened to the border leaf's diff | about 60 s |
 | Act four, break to red check / `--revert` | 35 to 45 s / about 4 s |
-| Merge to the resource existing in Kubernetes | under a minute |
-| Merge to `fw1` and the border leaf carrying the change | 30 to 90 s, expected after the early-wake change (was up to 120 s plus the cycle) |
-| Push to both devices confirmed `in_sync` | about 70 s, expected after the early-wake change (was a further 120 s) |
-| Grafana grant, merge to Grafana answering the branch | 30 to 90 s, expected after the early-wake change (measured about 2.3 minutes before it) |
-| Revocation, merge to the rule leaving the device | 30 to 90 s, expected after the early-wake change |
+| `CoreProposedChangeMerge`, a grant or a revocation | 15 to 17 s |
+| Merge to the resource existing in Kubernetes | about a minute (Grafana's pod policy: 41 to 78 s) |
+| Grafana grant, merge to the border leaf and `fw1` carrying it | 30 to 90 s expected after the early-wake change (measured before it: 55 to 130 s) |
+| Grafana grant, merge to Grafana answering the branch | the later of the pod policy and the devices: 68 s measured before the early-wake change |
+| Grafana grant, merge to the reconciler confirming both devices | about 70 s after the push, expected after the early-wake change (measured before it: 3.3 to 4.4 minutes from the merge) |
+| Revoke template, start to proposed change | about 60 s |
+| Revocation, merge to Grafana leaving the branch | 75 to 90 s, when Vidra closes the pod policy |
+| Revocation, merge to the rule and the line leaving the devices | 30 to 90 s expected after the early-wake change (measured before it: 2.5 to 3 minutes) |
+| Revocation, merge to the reconciler confirming both devices | about 70 s after the push, expected after the early-wake change (measured before it: about 5 minutes) |
 | `uv run invoke reconcile --now` to the cycle starting | under a second; the cycle itself about 11 s, or about 25 s when it pushes |
-| A reconcile cycle with nothing to push / pushing `fw1` and a leaf | about 11 s / about 25 s (measured from the loop's own log) |
 
 Measured on this lab: a granted VIP answered `HTTP 200` from the branch desktop,
 the seeded application's VIP and an unpermitted port on the granted one were
-both refused, and after revoking, the same VIP stopped answering once the
-reconciler pushed two devices on one cycle: the firewall and the border leaf.
+both refused, and `alice` signed in to Grafana through Dex from the branch
+desktop and landed as a Viewer. After revoking, Grafana stopped answering when
+its pod policy closed, about a minute before the reconciler pushed the firewall
+and the border leaf. Once the decommissioned grant was deleted, `fw1`'s and the
+border leaf's running configurations, all 36 artifacts on `main` and all 14
+`DeploymentState` records were byte-for-byte what they had been before the
+grant, and `make -C lab verify` passed 113 of 113.
 
 ## What is already there
 
@@ -549,6 +621,13 @@ use live.
   the sync: a sync reports `Succeeded` over an empty or rejected set. A deleted
   resource is not redelivered until the `InfrahubSync` is deleted and re-applied
   from `vidra/infrahub-syncs.yaml`.
+- **`generate-app-access` is red on a request that looks fine.** Look for a
+  generator instance whose object is gone: **Generator Instance** in Infrahub,
+  or `CoreGeneratorInstance` with an empty `object`. Deleting a grant on `main`
+  leaves its `generate-app-access: <name>` instance behind, and Infrahub then
+  fails that generator on every proposed change with `Node must have at least
+  one identifier (ID or HFID) to query it`. Delete the instance; the preflight
+  checks for one.
 - **The merge reached no device.** Check the reconciler is running and look at
   `docker logs infrahub-deployment-reconciler-1`; a device the operator suspended
   shows as `suspended=1` and is left alone by design. A loop that is running

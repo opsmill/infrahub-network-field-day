@@ -27,8 +27,8 @@ Key docs to read before larger changes:
   query models.
 - `transforms/` - Python transforms, GraphQL queries, generated query models,
   and templates.
-- `checks/` - proposed-change checks (CloudVision validation and its workspace
-  lifecycle helpers).
+- `checks/` - proposed-change checks: fabric pools and the global consistency
+  checks. The CloudVision validation code is kept here but not registered.
 - `ansible/` - playbooks Semaphore runs, including ContainerLab deployment.
 - `schemas/` - Infrahub schema definitions, split between base schemas and
   project/feature extensions.
@@ -866,16 +866,36 @@ targeting the `junos_firewalls` group. Four things to know:
 - **Two attributes are local additions** in `schemas/security_extensions.yml`: `book_index` on
   `SecurityGenericAddress` and `log_session_close` on `SecurityPolicyRule`. Upstream models `log`
   as a Boolean; the device distinguishes `session-init` from `session-init` plus `session-close`.
+- **Node-level fields upstream leaves unset are supplied by re-declaring the node** in the same
+  file's `nodes:` block, never by editing `schemas/security/security.yml`: the
+  `human_friendly_id`, `display_label` and description of `SecurityPolicyRule`. The server merges
+  the re-declaration onto the adopted node and keeps upstream's label, icon, menu placement and
+  `order_by` — read back from the live schema, not assumed. An `extensions:` entry cannot do this;
+  it adds attributes and relationships only. Two costs keep it to that one node:
+  `infrahubctl protocols` does **not** merge, so the re-declared node's protocol comes out empty;
+  and a node that inherits must repeat its `inherit_from`, or the server refuses it with
+  `Node-level 'inherit_from' constraint violation`. Both are why `SecurityFirewall` still has no
+  kind description.
 
-Check definitions are `cv-config-validation` (`checks/cv_config_check.py`), with its
-workspace lifecycle and helpers in `checks/cv_workspace_lifecycle.py` and
-`checks/cv_helpers.py`; `fabric-pool-validation` (`checks/fabric_pool_check.py`); and
+Check definitions are `fabric-pool-validation` (`checks/fabric_pool_check.py`);
 `peering-consistency` (`checks/peering_consistency_check.py`); `zone-advertisement`
 (`checks/zone_advertisement_check.py`); `wan-service-consistency`
 (`checks/wan_service_check.py`); and `allocation-consistency`
-(`checks/allocation_consistency_check.py`). The first two are targeted on `fabrics`; the last
-four are **global** — they have no `targets`, because their rules are statements about the whole
+(`checks/allocation_consistency_check.py`). The first is targeted on `fabrics`; the other four
+are **global** — they have no `targets`, because their rules are statements about the whole
 graph rather than about one fabric.
+
+**`cv-config-validation` is deliberately not registered.** Its code is still here
+(`checks/cv_config_check.py`, with `checks/cv_workspace_lifecycle.py` and `checks/cv_helpers.py`),
+tested, and its query is still registered, but this lab has no CloudVision: `OTTERNET_FABRIC`
+leaves `cloudvision_managed` false, so on every proposed change the check logged a skip and
+passed — a green row that reads as "CloudVision validated this" when nothing was. The
+**Deployment → CloudVision Workspaces** menu entry went with it, because that list could only
+ever be empty. Re-enabling is two blocks, quoted in `.infrahub.yml` and `repository_checks.yml`.
+Removing a check definition needs no pre-merge cleanup: the importer deletes it, and its
+`CoreUserValidator`s cascade with it. `.infrahub.yml` cannot carry a check `description` — the
+SDK's config model forbids extra keys, so one fails the import — which is why the comments there
+do that job.
 
 `wan-service-consistency` guards the lab's central claim. The WAN service kinds **name**
 technical objects rather than creating them — which is why no generator sits beneath them, and
@@ -1040,7 +1060,7 @@ consequences — the same failure the `created` rules exist to prevent, reached 
 `ServiceAppAccess` got its rules first; `ServiceNetworkSegment`, `ServiceFabricApp`,
 `ServiceTenantOnboarding`, `ServiceServerPlacement` and `ServiceFabricPeering` followed, and
 withdrawing any of them no longer needs `infrahubctl generator` by hand. The WAN kinds have no
-generator and need none: `frr_config` reads their status at render time.
+generator and need none: `srl_config` reads their status at render time.
 
 **The rules are scoped to the INPUTS, one per field, rather than a bare `updated`.** Each
 generator writes back to its own target — a status, plus a record of what it built — so an
@@ -1062,6 +1082,24 @@ for segments, applications, onboardings and placements; an edit to a field the g
 not write back to costs one, and so does decommissioning a peering, whose generator writes no
 status at all. Anything that removes a guard turns this into a loop, which is why they are
 load bearing rather than tidy.
+
+**Two runs of one withdrawal at once is normal, so a withdrawal must tolerate its twin.** The
+portal's Revoke template sets `status` — which fires the `updated` rule — and then its
+`infrahub:generators:await` step runs `generate-app-access` again. Both read the same rule, both
+delete it, and the loser was refused `Unable to find the node ... SecurityPolicyRule`, failing the
+template at its wait step after the winner had withdrawn everything. Measured: two Revoke runs in
+three. `_delete_if_present` treats "already gone" as done; any other refusal still fails the run.
+Infrahub runs generators from the repository's `main`, so the template keeps failing until that
+reaches it.
+
+**Deleting a service object leaves its `CoreGeneratorInstance` behind, and that breaks the
+generator for everyone.** Infrahub's `request_generator_definition_run` reads every instance's
+`object.peer.id`, and on one whose object is gone raises `Node must have at least one identifier
+(ID or HFID) to query it` — so the generator's validator is red on every proposed change, the
+unrelated ones included, and Infrahub refuses to merge them. Measured: deleting one
+decommissioned grant on `main` did exactly that. Delete the instance, and the generator's empty
+tracking `CoreGeneratorGroup` (description `name: <service>`), with the object.
+`scripts/demo_rehearsal.py` does, and its preflight looks for a dangling instance.
 
 **A generator that refuses must not record `error` from a withdrawn state.** `error` is not a
 withdrawn status, so the status rule's next run takes the BUILD path. Measured with a VRF still
@@ -1257,6 +1295,17 @@ a new script against an old image fails at import.
    Regenerating after an extension-only schema change therefore produces an empty diff, and
    **no extension-added field is reachable through the generated protocols**. Code that
    needs one reads it through a generated `*_query.py` model instead.
+
+   **A generic's `order_weight` does not reach an already-loaded node.** When a generic
+   attribute changes, the server copies every property onto the inheriting nodes *except*
+   `order_weight` (`AttributeSchema.update_from_generic` excludes it). Moving
+   `ServiceGeneric.name` to 100 therefore reorders a freshly bootstrapped instance and leaves a
+   running one exactly as it was, with `schema check` reporting the change against the generic
+   alone. The same holds for inherited relationships such as `owner`.
+
+   **Give every kind a reviewer sees a `display_label`.** Without one, rows, relationship
+   pickers and proposed-change diffs read `Kind(ID: <uuid>)`, and nothing fails.
+   `tests/unit/test_demo_presentation_contract.py` pins the ones added for that reason.
 3. Implement generators, transforms, object data, menus, checks, or docs using the
    matching local Infrahub skills when a task touches those artifact types.
 4. Keep generators idempotent: use upserts/natural keys, deterministic ordering,
@@ -1370,6 +1419,13 @@ every checksum to **move** would be exact and would never terminate — an artif
 genuinely did not change never moves, which is most of them on most merges.
 
 `invoke avd --branch X --merge` does the same thing outside a bootstrap.
+
+**After the wait, `--merge` deletes the branch it merged** — `build-fabric`, in a bootstrap.
+Left behind it sat in every branch picker with all of its content already on `main`, reading as
+unfinished work. The delete is idempotent (a branch already gone is skipped), never touches the
+default branch, and is skipped rather than guessed at when Infrahub cannot list branches; a
+failed merge raises before it is reached. `tests/unit/test_merged_branch_cleanup.py` pins all
+four.
 
 ### Showing a check catch something
 

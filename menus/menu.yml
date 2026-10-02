@@ -460,9 +460,10 @@ spec:
     # --------- Deployment ---------
     # Whether intent reached the devices. One DeploymentState record covers
     # each device with a rendered configuration, across all four device
-    # kinds; its diff file is reached through the record. The CloudVision
-    # workspaces are the pre-merge half: one per proposed change the
-    # cv-config-validation check validated.
+    # kinds; its diff file is reached through the record. There is no
+    # CloudVision Workspaces entry: this lab has no CloudVision and
+    # `cv-config-validation` is not registered (.infrahub.yml), so the list
+    # would always be empty.
     - namespace: Deployment
       name: DeploymentMenu
       label: Deployment
@@ -475,12 +476,6 @@ spec:
             label: Device Sync State
             kind: DeploymentState
             icon: "mdi:cloud-check-outline"
-
-          - namespace: Cloudvision
-            name: Workspaces
-            label: CloudVision Workspaces
-            kind: CloudvisionWorkspace
-            icon: "mdi:clipboard-check-outline"
 
     # --------- Routing ---------
     # Shared by the fabric, the WAN and the firewall: the ASN pool, the

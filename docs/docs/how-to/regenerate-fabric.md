@@ -37,7 +37,7 @@ Merge from the proposed change, or let the task do it:
 uv run invoke avd --branch my-change --merge
 ```
 
-`--merge` merges the branch and then **waits for the artifacts to render** on `main`. Generation is asynchronous, and an artifact that hasn't rendered yet still reports `Ready`, so the wait requires every artifact to be non-empty and stable across consecutive samples before it returns. Once merged, the deployment reconciler pushes the new configurations to the devices on its next cycle.
+`--merge` merges the branch and then **waits for the artifacts to render** on `main`. Generation is asynchronous, and an artifact that hasn't rendered yet still reports `Ready`, so the wait requires every artifact to be non-empty and stable across consecutive samples before it returns. It then deletes the merged branch, whose content is all on `main` by then. Once merged, the deployment reconciler pushes the new configurations to the devices on its next cycle.
 
 ## Building a topology
 

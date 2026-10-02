@@ -21,16 +21,18 @@ Checks live in `checks/` and are registered under `check_definitions:` in `.infr
 
 ```yaml
 check_definitions:
-  - name: cv-config-validation
-    file_path: "./checks/cv_config_check.py"
-    class_name: CVConfigValidationCheck
+  - name: fabric-pool-validation
+    file_path: "./checks/fabric_pool_check.py"
+    class_name: FabricPoolValidationCheck
     targets: fabrics
     parameters:
       name: name__value
 ```
 
-`targets` is a group, exactly as for generators and artifact definitions — `cv-config-validation`
+`targets` is a group, exactly as for generators and artifact definitions — `fabric-pool-validation`
 runs once per member of the `fabrics` group, with the fabric name passed as the `name` parameter.
+A check definition takes no `description`: the SDK's configuration model forbids extra keys, so
+one fails the repository import.
 
 ## `cv-config-validation`
 
@@ -38,6 +40,9 @@ runs once per member of the `fabrics` group, with the fabric name passed as the 
 **Source**: [`checks/cv_config_check.py`](https://github.com/opsmill/infrahub-arista-avd/blob/main/checks/cv_config_check.py)
 **Query**: [`checks/cv_config_check.gql`](https://github.com/opsmill/infrahub-arista-avd/blob/main/checks/cv_config_check.gql) (registered as `cv_config_check`)
 **Target**: `NetworkFabric` (group `fabrics`)
+**Registered**: no, in this lab. It has no CloudVision, so the check only ever logged a skip and
+passed; the definition is commented out in `.infrahub.yml` and `repository_checks.yml` with the
+block that restores it. See [CloudVision Validation](../cloudvision.md).
 **Timeout**: 600 seconds
 
 The check deploys each device's rendered EOS configuration into a CloudVision workspace and asks
@@ -319,8 +324,7 @@ Run it against a fabric from the CLI:
 
 ```bash
 # Variables are passed as key=value; this check takes the fabric name.
-# OTTERNET_FABRIC does not set cloudvision_managed, so this logs a skip and passes.
-uv run infrahubctl check cv-config-validation name=OTTERNET_FABRIC --branch <branch-name>
+uv run infrahubctl check fabric-pool-validation name=OTTERNET_FABRIC --branch <branch-name>
 
 # List the checks the repository defines
 uv run infrahubctl check --list

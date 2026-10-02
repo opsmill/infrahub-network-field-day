@@ -89,6 +89,7 @@ from hashlib import blake2b
 from operator import itemgetter
 from typing import Any
 
+from infrahub_sdk.exceptions import GraphQLError
 from infrahub_sdk.generator import InfrahubGenerator
 
 from .artifact_render import request_artifact_render
@@ -524,7 +525,7 @@ def normalise_ports(grant: GrantNode, derived: list[int] | None = None) -> list[
     A grant that names NO ports takes the ports its application's ADVERTISED
     SERVICES answer on, because the application already knows what it serves
     and the requester mostly does not. `derived` is that list, computed by
-    `advertised_service_ports` from the manifests.
+    `advertised_service_ports` from the application's `advertised_services`.
 
     Naming ports explicitly still works, and is how you ask for a SUBSET.
 
@@ -546,8 +547,8 @@ def normalise_ports(grant: GrantNode, derived: list[int] | None = None) -> list[
     if not raw:
         msg = (
             f"grant {name!r} names no ports and no advertised Service was found on its "
-            "application to derive them from; name the ports explicitly, or give the "
-            "application a LoadBalancer Service in its manifests. An empty list is "
+            "application to derive them from; name the ports explicitly, or name the "
+            "application's advertised_services. An empty list is "
             "rejected rather than read as 'all ports', which is what a "
             "permit-everything rule would mean"
         )
@@ -985,6 +986,30 @@ class AppAccessGenerator(InfrahubGenerator):
             await grant.save(update_group_context=False)
             self.logger.info("Linked %s rule(s) to the grant", len(wanted))
 
+    async def _delete_if_present(self, kind: str, node_id: str) -> int:
+        """Delete one withdrawn object; 0 when a concurrent run already has.
+
+        TWO RUNS WITHDRAW THE SAME GRANT, routinely. Setting `status` fires the
+        `updated` event rule, and the portal's Revoke template then runs this
+        generator again from its `infrahub:generators:await` step, so both read
+        the same rule and race to delete it. The loser was refused with `Unable
+        to find the node ... SecurityPolicyRule in the database`, the run failed,
+        and the template stopped at the await step -- after the winner had
+        already withdrawn everything correctly. Measured on the lab: one revoke
+        of two failed that way, leaving the grant merged and no proposed change
+        to merge the revocation with. The object being gone is exactly the
+        outcome this delete exists to reach, so it counts as done, not as an
+        error.
+        """
+        try:
+            await self.client.delete(kind=kind, id=node_id)
+        except GraphQLError as exc:
+            if "Unable to find the node" not in str(exc):
+                raise
+            self.logger.info("%s %s was already withdrawn by a concurrent run", kind, node_id)
+            return 0
+        return 1
+
     async def _withdraw(self, parsed: GenerateAppAccessQuery, grant: GrantNode) -> None:
         """Remove what an earlier run created for this grant.
 
@@ -1015,8 +1040,7 @@ class AppAccessGenerator(InfrahubGenerator):
         for rule in _edges_of(grant.granted_rules):
             if _value(rule.name) != rule_name:
                 continue
-            await self.client.delete(kind="SecurityPolicyRule", id=rule.id)
-            removed += 1
+            removed += await self._delete_if_present("SecurityPolicyRule", rule.id)
 
         for edge in parsed.security_generic_address.edges:
             node = edge.node
@@ -1029,14 +1053,12 @@ class AppAccessGenerator(InfrahubGenerator):
                 # grant that took the derived path -- the common one -- with
                 # `exists, but it is a SecurityIPAMIPPrefix`, leaving the entry
                 # declared in the address book and referenced by nothing.
-                await self.client.delete(kind=node.typename__, id=node.id)
-                removed += 1
+                removed += await self._delete_if_present(node.typename__, node.id)
 
         for edge in parsed.security_service.edges:
             node = edge.node
             if node is not None and (_value(node.name) or "").startswith(service_prefix):
-                await self.client.delete(kind="SecurityService", id=node.id)
-                removed += 1
+                removed += await self._delete_if_present("SecurityService", node.id)
 
         # BEFORE the `if removed:` below, and deliberately outside it. The
         # firewall objects and the application's policy entry are independent:

@@ -330,12 +330,29 @@ generator_definitions:
     execute_after_merge: true
 
 check_definitions:
-  - name: cv-config-validation
-    file_path: "./checks/cv_config_check.py"
-    class_name: CVConfigValidationCheck
-    targets: fabrics
-    parameters:
-      name: name__value
+  # `cv-config-validation` (checks/cv_config_check.py) is NOT registered, and
+  # that is deliberate rather than an omission. This lab has no CloudVision:
+  # OTTERNET_FABRIC leaves `cloudvision_managed` false, so on every proposed
+  # change the check logged a skip and passed -- a green row a reviewer reads
+  # as "CloudVision validated this" when nothing was validated. The code, its
+  # query and its tests stay, so a fabric that does have CloudVision re-enables
+  # it by restoring this block (and the matching object in
+  # repository_checks.yml):
+  #
+  #   - name: cv-config-validation
+  #     file_path: "./checks/cv_config_check.py"
+  #     class_name: CVConfigValidationCheck
+  #     targets: fabrics
+  #     parameters:
+  #       name: name__value
+  #
+  # Removing the definition is safe on a synced instance: the importer deletes
+  # a check definition missing from this file, and its CoreUserValidators go
+  # with it (CoreCheckDefinition.validators is on_delete: cascade).
+  #
+  # No entry here carries a `description`: the SDK's check-definition config
+  # forbids extra keys, so one would fail the repository import. The comments
+  # are the descriptions.
   - name: fabric-pool-validation
     file_path: "./checks/fabric_pool_check.py"
     class_name: FabricPoolValidationCheck

@@ -289,9 +289,30 @@ extensions:
 # is reachable: SecurityZone.name and SecurityPolicy.name are both unique
 # upstream.
 # ---------------------------------------------------------------------------
+#
+# The same re-declaration supplies two presentational fields upstream leaves
+# unset, which Infrahub merges onto the adopted node exactly as it merges the
+# human_friendly_id above (the live schema keeps upstream's label, icon, menu
+# placement and order_by alongside it):
+#
+#   display_label  Without one, every rule in a list, a relationship picker and
+#                  a proposed-change diff reads `SecurityPolicyRule(ID: <uuid>)`.
+#   description    Upstream's is "Policy rule", the label repeated.
+#
+# SecurityFirewall has no description upstream either, and is deliberately NOT
+# given one this way. Re-declaring it needs a copy of upstream's
+# `inherit_from` (omitted, the server refuses the node with "Node-level
+# 'inherit_from' constraint violation"), and `infrahubctl protocols` reads the
+# YAML without merging, so the re-declaration replaces the node: the generated
+# SecurityFirewall protocol loses `role` and `policy`. An empty kind header is
+# the cheaper defect. (SecurityPolicyRule's protocol is already empty for the
+# same reason; nothing reads it through the protocols.)
+# ---------------------------------------------------------------------------
 nodes:
   - name: PolicyRule
     namespace: Security
+    description: "One permit or deny between a source and destination zone, matched first-match by index"
+    display_label: "{{ name__value }}"
     human_friendly_id:
       - policy__name__value
       - source_zone__name__value
