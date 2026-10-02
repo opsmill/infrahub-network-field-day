@@ -1877,6 +1877,26 @@ def load_schema(ctx: Context) -> None:
         ctx.run("infrahubctl schema load schemas", pty=True)
 
 
+@task
+def doctor(ctx: Context) -> None:  # noqa: ARG001
+    """
+    Check the environment for the known quiet failures; exit 1 on any FAIL.
+
+    Stale reconciler image, a stray reconcile process, a stale schema.graphql, a
+    wedged repository sync, dangling generator instances, branches syncing with
+    git, and a missing tooling bridge. A check that cannot run (stack down) is
+    reported as SKIP. The logic lives in solution_arista_avd.doctor.
+    """
+    from solution_arista_avd import doctor as checks
+
+    results = checks.run_checks(checks.Environment(root=compose_root()))
+    for result in results:
+        print(result.render())
+    print(f"\n{checks.summary(results)}")
+    if checks.exit_code(results):
+        raise Exit(code=1)
+
+
 @task(help={"integration": "Also run tests/integration, which starts an Infrahub stack in Docker (minutes)."})
 def test(ctx: Context, integration: bool = False) -> None:
     """Run the unit tests -- what CI runs -- and optionally the integration suite."""
