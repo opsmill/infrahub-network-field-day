@@ -501,7 +501,38 @@ def _branch_tasks(branch: str, states: tuple[str, ...]) -> list[str]:
     return [str(e["node"]["title"]) for e in edges]
 
 
-def _branch_settled(branch: str, expected: str, require_capability: bool = True) -> tuple[bool, str]:
+def _workers_have_commit(repo_id: str, branch: str, expected: str) -> bool:
+    """Whether every task worker's own clone has `expected` on its local `branch`.
+
+    A merge reads the source branch's commit from the worker's local branch, which a periodic
+    pull updates after the import is recorded in the graph. Merging inside that gap merges a
+    stale commit that the default branch already holds, and nothing happens.
+    """
+    import subprocess  # noqa: S404 - fixed argv, no shell
+
+    listing = subprocess.run(
+        ["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=task-worker"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    containers = listing.stdout.split()
+    if not containers:
+        return False
+    clone = f"/opt/infrahub/git/{repo_id}/main"
+    for container in containers:
+        head = subprocess.run(  # noqa: S603
+            ["docker", "exec", container, "git", "-C", clone, "rev-parse", f"refs/heads/{branch}"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if head.returncode != 0 or head.stdout.strip() != expected:
+            return False
+    return True
+
+
+def _branch_settled(branch: str, expected: str, require_capability: bool = True, repo_id: str = "") -> tuple[bool, str]:
     """Whether `branch` is fully imported (see `decide_settled`), and what it still waits for."""
     from solution_arista_avd import demo_release as dr
 
@@ -522,10 +553,13 @@ def _branch_settled(branch: str, expected: str, require_capability: bool = True)
         active_tasks=len(_branch_tasks(branch, dr.ACTIVE_TASK_STATES)),
         failed_tasks=_branch_tasks(branch, dr.FAILED_TASK_STATES),
         require_capability=require_capability,
+        workers_synced=_workers_have_commit(repo_id, branch, expected) if repo_id else True,
     )
 
 
-def _wait_until_settled(branch: str, expected: str, timeout: int, require_capability: bool = True) -> None:
+def _wait_until_settled(
+    branch: str, expected: str, timeout: int, require_capability: bool = True, repo_id: str = ""
+) -> None:
     """Block until the branch is fully imported, on two polls in a row.
 
     One poll is not enough: the commit is recorded before the objects and definitions
@@ -534,7 +568,7 @@ def _wait_until_settled(branch: str, expected: str, timeout: int, require_capabi
     deadline = time.monotonic() + timeout
     consecutive = 0
     while time.monotonic() < deadline:
-        settled, waiting = _branch_settled(branch, expected, require_capability)
+        settled, waiting = _branch_settled(branch, expected, require_capability, repo_id)
         if not settled and waiting.startswith("failed tasks"):
             raise Exit(f"The import of '{branch}' failed: {waiting}", code=1)
         consecutive = consecutive + 1 if settled else 0
@@ -681,7 +715,7 @@ def demo_release(
         expected = commit
 
     print(" - Waiting for the branch to be fully imported", flush=True)
-    _wait_until_settled(demo, expected, timeout)
+    _wait_until_settled(demo, expected, timeout, repo_id=repo["id"] if read_write else "")
 
     if not proposed_change:
         print(f"\nBranch '{demo}' is ready. Open a proposed change from it into main.")
@@ -744,7 +778,7 @@ def _delete_demo_branch(ctx: Context, branch: str) -> None:
 
 
 def _take_capability_back_out(
-    ctx: Context, location: str, default_branch: str, name: str, run: int, timeout: int
+    ctx: Context, repo_id: str, location: str, default_branch: str, name: str, run: int, timeout: int
 ) -> None:
     """Undo a merged release through Infrahub itself, with a branch whose merge restores the baseline.
 
@@ -765,7 +799,7 @@ def _take_capability_back_out(
     ctx.run(f"infrahubctl branch create {shlex.quote(reset)} --sync-with-git", pty=True)
     _wait_for(lambda: bool(_remote_tip(ctx, reset)), f"Infrahub to publish '{reset}'", timeout)
     tip = _restore_baseline_onto_branch(ctx, location, reset, dr.stage_branch(name), default_branch)
-    _wait_until_settled(reset, tip, timeout, require_capability=False)
+    _wait_until_settled(reset, tip, timeout, require_capability=False, repo_id=repo_id)
     for edge in (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}", reset).get(DEMO_KIND) or {}).get(
         "edges", []
     ):
@@ -810,7 +844,7 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
     merged = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"))
     if repo.get("kind") == "CoreRepository":
         if merged:
-            _take_capability_back_out(ctx, repo["location"], repo["default_branch"], name, run, timeout)
+            _take_capability_back_out(ctx, repo["id"], repo["location"], repo["default_branch"], name, run, timeout)
     elif repo.get("kind") == "CoreReadOnlyRepository" and repo["ref"] != "main":
         main_tip = _remote_tip(ctx, "main")
         print(" - Pointing the repository back at main", flush=True)

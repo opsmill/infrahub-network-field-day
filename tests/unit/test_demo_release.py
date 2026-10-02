@@ -217,3 +217,16 @@ def test_a_branch_that_takes_the_capability_back_out_does_not_wait_for_it() -> N
 def test_require_capability_off_still_waits_for_the_commit_and_the_queue() -> None:
     assert dr.decide_settled(**{**_SETTLED, "commit": "b" * 40}, require_capability=False)[0] is False
     assert dr.decide_settled(**{**_SETTLED, "active_tasks": 2}, require_capability=False)[0] is False
+
+
+def test_a_branch_is_not_settled_until_every_worker_has_pulled_the_commit() -> None:
+    """The race behind a reset that merged the data and left the code: a merge reads the worker's
+    local branch, which a periodic pull updates after the graph records the import."""
+    settled, waiting = dr.decide_settled(**_SETTLED, workers_synced=False)
+
+    assert settled is False
+    assert "worker" in waiting
+
+
+def test_the_workers_check_defaults_to_satisfied_for_modes_that_do_not_merge_git() -> None:
+    assert dr.decide_settled(**_SETTLED) == (True, "")
