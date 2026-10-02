@@ -385,3 +385,152 @@ Written to `.env` by the provisioning steps; none is committed.
 | `OTTERNET_LIFECYCLE_POLL` | you, optionally | `service-lifecycle-exporter`, seconds between polls (15) |
 | `GRAFANA_ADMIN_PASSWORD` | `invoke cluster` | Secret `grafana-admin`, for operators only |
 | `OTTERNET_EOS_USERNAME`, `OTTERNET_EOS_PASSWORD` | you, optionally | Secret `telemetry-credentials` (gNMI), defaulting to the reconciler's |
+
+## Design decisions and measured pitfalls
+
+Moved from the repository instruction file. These are the decisions that look like oversights, each with the measurement behind it.
+
+Grafana and Prometheus (`otternet-metrics`) and Telegraf (`otternet-telemetry`) are seeded
+`ServiceFabricApp`s, delivered by Vidra like `otternet-demo`. **Telegraf's whole configuration is
+an artifact**: `telemetry_collector_config` renders one ConfigMap per `MonitoringCollector` from
+the `MonitoringProfile`s that name it, and a third `InfrahubSync` delivers it into
+`otternet-telemetry`. What the lab watches is changed in Infrahub and reviewed in a proposed
+change, exactly like what it is configured with. See
+[observability](./observability.md).
+
+Seven things look like oversights and are not:
+
+- **The new name is deliberate.** `otternet-metrics` replaces the lab's `otternet-observability`,
+  which `invoke cluster` keeps out with `OTTERNET_SKIP_OBSERVABILITY`. Two kube-prometheus-stack
+  releases contend for the same CRDs, and the second fails `invalid ownership metadata`. Vidra
+  goes up before Crossplane, so both would be created in one window and deleting the lab's
+  afterwards is too late.
+- **`policy_default_deny: false` on both applications, and Grafana's pod gate still holds.**
+  Prometheus scrapes cluster internals that the composition's one selector-scoped ingress policy
+  cannot express. With `allowed_source_prefixes` non-empty the composition still renders
+  `allow-ingress` on Grafana's pods, and seeding the pod CIDR makes that policy exist from the
+  first render. So the branch is dropped at the pod until a grant adds `10.70.0.0/24`.
+- **The new address field is `telemetry_address`, never `mgmt_ip`.** To the reconciler,
+  `mgmt_ip` means "push over eAPI" (`reach = target.mgmt_ip or target.container`), and cycle 027
+  holds it on `DcimFabricSwitch` alone. The WAN routers, fw1 and the k3s nodes needed an address a
+  pod can reach, and `test_deployment_inventory_targets.py` pins that the reconciler never reads
+  the new one.
+- **The collector relationship is `monitoring_profiles`, not `profiles`.** Every node already has
+  a built-in `profiles` relationship to `CoreProfile`. A schema relationship of that name loads
+  cleanly and makes the query resolve against `CoreProfile`, failing with `Cannot query field
+  'device_groups' on type 'CoreProfile'`.
+- **`generate-monitoring-collector` writes nothing.** The artifact's target is the collector, and
+  almost nothing that changes what should be collected is a change to the collector. So it
+  re-renders the artifact on its branch, in every proposed change and after every merge. **No
+  trigger may name a `Monitoring*` kind**, for the same reason as `Deployment*`.
+- **The Dex back channel goes over the management network.** The browser uses the issuer
+  `10.90.0.11`; Grafana's token exchange goes to `172.20.41.101`, the path Vidra already uses,
+  because `10.90.0.11` from a pod crosses fw1 and no rule permits it. Grafana's VIP
+  (`10.112.240.81`) is pinned and its block seeded, because Dex names it before Infrahub
+  delivers anything.
+- **The SNMP community is in an artifact, deliberately.** The device must receive it in its
+  configuration. It is read-only, bound to `mgmt_junos` and restricted to the management
+  network: vrnetlab forwards UDP/161 with the poller's real source address, so the
+  clients are `172.20.41.0/24`, not vrnetlab's internal `10.0.0.0/24`. Unbound, or with
+  the internal subnet, every poll counts as a "Bad community use" and nothing answers.
+  It is no longer the only credential there: since cycle 035 the firewall's two login hashes
+  are too, as template content rather than data -- see `junos_config` below.
+
+Three measured facts about the device side:
+
+- **gNMI was off on every switch.** ContainerLab's boot template enables it, and provisioning's
+  `rollback clean-config` removed it. It is back through `avd_custom_hostvars` and the lab's
+  `group_vars`, with the golden files regenerated.
+- **The WAN routers stream over gNMI natively since the SR Linux re-platform**, and through the
+  SAME OpenConfig paths as the switches, so the series arrive under the same names and labels
+  (`bgp_neighbor_session_state_code{neighbor_address,name}`, `interface_counters_*`, `cpu_*`,
+  `memory_*`) and every fabric panel covers the WAN with no second query. Port 57400, TLS with
+  `default-tls-profile` — a certificate each router generates for itself — so
+  `insecure_skip_verify`; credentials are the switches' own `${GNMI_USERNAME}`/`${GNMI_PASSWORD}`,
+  because the routers render the same `NetworkLocalUser` `admin` hash. FRR 10.2-10.5 shipped no
+  SNMP and no gNMI module, which is why the `frr_exporter` sidecars existed; they are gone.
+- **The return-type generator mistypes a fragment on a generic.** `... on DcimInterface` becomes a
+  literal `__typename: "DcimInterface"` that no node reports, so every endpoint parsed as the
+  fieldless fallback and the link series came out empty with nothing raised. Use concrete kinds.
+
+Four things the first rebuilds with it measured, each of which cost an afternoon:
+
+- **Never `kubectl patch` a Helm-managed object, even to test a fix.** The patch takes
+  field ownership (`kubectl-patch` in `managedFields`), and every later Helm upgrade then
+  fails `conflict occurred while applying object ... conflict with "kubectl-patch"` --
+  visible only in the Release's status. Recovery: drop that `managedFields` entry, delete
+  the failed release secret so provider-helm retries, then restart the Deployment, because
+  the failed upgrade already moved its config checksum.
+- **With `policy_default_deny: false`, every `allow-*` flag must be off too.** The
+  composition renders a CiliumNetworkPolicy per true flag, and any policy selecting a pod
+  makes that direction deny-by-default for it -- Prometheus could reach nothing off its own
+  node until all four were off.
+- **fw1's TCP MSS is sized for the VXLAN fabric behind it**, `9214 - 50 - 20 - 20 = 9124`,
+  not for its own interface. At 9138 every full-size segment died inside the fabric and
+  Grafana's shell loaded while its JavaScript never arrived.
+- **A k3s node is one CPU** (`cpu.max 100000 100000`), so a busy Grafana starves on it.
+  The dashboards refresh each minute rather than every 30 seconds for that reason.
+
+An audit of every panel after the SR Linux rebuild found two causes no dashboard
+review could have caught, both now pinned by `tests/unit/test_dashboard_metrics_contract.py`:
+
+- **Grafana 13 unregisters its own Prometheus plugin on a read-only root** while
+  "preinstalling" an update to it, so every panel read "No data" with Prometheus full.
+  `grafana.ini` `plugins.preinstall_disabled` is what stops it.
+- **A generated release name leaves a second kubelet Service behind**, and every kubelet
+  series is then scraped twice. The values pin `prometheusOperator.kubeletService.name`.
+  A stale Service from an earlier name still needs deleting by hand, once.
+
+That test also fails when a panel queries a metric nothing produces, derived by rendering
+the collector's intent rather than from a list.
+
+**The exporter reads as `metrics-exporter`, never `admin` or `agent`.** It is built from a pinned
+upstream commit, because none is published, and runs on host port 8002, because 8001 is
+`infrahub-mcp`. `invoke metrics-exporter` provisions the account and starts it, and the bootstrap
+runs it after `mcp`.
+
+### Services are monitored because they exist (cycle 035)
+
+**OTTERNET / Services** shows every request from its branch to its health, and nobody adds
+monitoring for a service. See the Services section of
+[observability](./observability.md). Six things look like oversights:
+
+- **A service profile selects by `service_kind`, not by group, and `device_groups` is optional.**
+  A service is in a group only when a generator sits beneath its kind; the three WAN kinds are
+  in none. `ServiceGeneric` means every kind. The renderer refuses a device profile with no
+  group, a service profile with one, and a kind it does not know.
+- **Live means not `decommissioning`/`decommissioned`**, as the withdrawal table says, so a
+  revoke withdraws its monitoring in the same proposed change.
+- **Monitoring is a FOURTH gate opening, and it opens only the third gate, only for the
+  collector** (cycle 036). Cilium's `fromCIDR` never matches a pod, so no
+  `allowed_source_prefixes` entry can admit Telegraf. Measured: its pod timed out against
+  `otternet-demo` and Grafana while the host network answered. The FabricApp now carries
+  `spec.monitoring` (`collectorNamespaces`, `ports`), and the composition renders it as
+  `allow-collector`, a `fromEndpoints` rule on `io.kubernetes.pod.namespace`. It goes to the
+  `allow-ingress` endpoints with no CIDR and no entities. Four things look like oversights:
+  - **The ports are the POD's (`policy_allow_ports`), not `advertised_services`.** Cilium
+    enforces after service translation, so Grafana's VIP port 80 arrives as 3000. No pod
+    port declared means no admission, never every port.
+  - **It renders only where the gate is already closed** (`defaultDeny`, or a non-empty
+    `allowFrom`), in the transform AND in the composition's guard. On an open gate the
+    collector is admitted already, and a policy selecting the pods would make their ingress
+    deny-by-default for every other source.
+  - **One function, `telemetry_services.py::collector_admission`, decides both artifacts.**
+    The FabricApp is rendered from it, and the collector probes a gated application only
+    where it admits the collector's own namespace.
+    `tests/unit/test_probe_admission_contract.py` holds the two to each other. Removing
+    `service-reachability` from a profile removes the probe and closes the path in one
+    proposed change, with the FabricApps byte-identical to before the field existed.
+  - **The XRD and composition must reach the cluster BEFORE Vidra delivers a FabricApp
+    carrying the field.** They are the lab's, applied by `install-crossplane.sh` during
+    `invoke cluster`, not delivered by Vidra.
+- **The service-lifecycle exporter has no configuration.** `scripts/service_lifecycle_exporter.py`
+  runs on host port 8003, as `metrics-exporter`, from the bind-mounted checkout (no
+  `invoke build`). Telegraf scrapes it with `?kinds=` rendered from `services-lifecycle`, so
+  which kinds it reports is an artifact diff. It is not the Infrahub exporter because a
+  request lives on a branch nobody configured.
+- **"Deployed" is fleet-wide**: every tracked device confirmed in sync since the service last
+  changed. Only the generators know which devices a service touches.
+- **`node_metadata.updated_at` disagrees between main and a branch for an untouched node**
+  (measured), so a branch request is a status change or an edit dated after the branch cut.
+  Comparing the two timestamps marks every service on a fresh branch as changed.

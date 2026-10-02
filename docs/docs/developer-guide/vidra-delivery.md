@@ -191,3 +191,110 @@ Drift of any kind is corrected by the `VidraResource` reconcile, on `requeueReso
 
 Start at the Infrahub end. Confirm the artifact's checksum actually moved before looking at the
 cluster — half the time the answer is that the model change was real but nothing rendered from it.
+
+## The Kubernetes half and who owns which resource
+
+Moved from the repository instruction file: the install order, the handover and the failure modes.
+
+```bash
+uv run invoke cluster      # Cilium, then Vidra, then Crossplane, then the handover
+uv run invoke vidra        # the operator on its own, for a re-install
+```
+
+`invoke cluster` runs the **lab's** installers for the CNI and
+Crossplane rather than reimplementing them — those are the lab's, the same way
+the topology is. Cilium has to be first and cannot be managed by Crossplane: it
+*is* the pod network, so a controller needing a pod network cannot be what
+creates one. The k3s nodes sit `NotReady` until it lands; that is expected, not
+a fault.
+
+**Vidra goes up second, before the platform it delivers into.** Its syncs fail
+while the XRDs are absent and retry every `requeueSyncAfter`, so the ordering
+costs nothing — and it buys the thing that matters: the resources Infrahub
+models are created by Vidra first-hand rather than adopted from another writer.
+Three measured behaviours are why that is worth arranging:
+
+- **It refuses to adopt a resource it did not create** (`already exists but is
+  not managed by this operator`), so whichever writer gets there first keeps it.
+- **A resource deleted after a successful sync stays missing for up to
+  `requeueResourcesAfter` — ten minutes — while the sync reports `Succeeded`
+  throughout.** An unchanged checksum skips the download and the apply, so the
+  sync never notices the resource is gone. Verified by deleting a delivered
+  `FabricPeering` and its CRD: both the sync and the `VidraResource` read
+  `Succeeded` for two minutes with nothing in the cluster.
+- **Deleting the `VidraResource` does not cause redelivery at all.** The sync
+  still considers itself current, and there is no longer a resource to
+  reconcile, so it wedges silently. Recovery is to delete and re-apply the
+  `InfrahubSync`, which resets its checksum state — the peering came back
+  within 15 seconds of doing so.
+- **You cannot delete a resource Vidra owns; it puts it back.** That is drift
+  correction working as intended, but it means cleanup has to delete the
+  `InfrahubSync` first. Deleting the claim while the sync is live restores it
+  mid-teardown, and the new composed resources then collide with a namespace
+  still `Terminating` — which leaves two composed `Namespace` objects and a
+  `FabricApp` stuck `Ready=False`.
+
+**The handover is the remaining seam.** The lab's bootstrap applies four claims —
+`crossplane/platform/10-peering.yaml`, `crossplane/apps/10-demo.yaml`,
+`crossplane/apps/20-observability.yaml` and `crossplane/access/10-access-portal.yaml`
+— and its script has no flag to skip any of them. `invoke cluster` deletes **all
+four** afterwards, and what happens next divides them:
+
+| Resource | Owner | After the handover |
+| --- | --- | --- |
+| `fabricpeering.otternet.lab/otternet` | **Infrahub**, via `ServiceFabricPeering` | re-delivered by Vidra |
+| `fabricapp.otternet.lab/otternet-demo` | **Infrahub**, via `ServiceFabricApp` | re-delivered by Vidra |
+| `fabricapp.otternet.lab/otternet-observability` | the lab (`lab/`) | gone |
+| `fabricapp.otternet.lab/otternet-access` | the lab (`lab/`) | gone |
+
+**The bottom two are deleted because nothing models them.** A cluster carrying a
+workload no service object declares is state no proposed change can explain, which
+is the opposite of the claim this lab makes; the access broker and the
+observability stack both predate the service layer that now requests applications.
+`verify_bootstrap.sh` asserts their absence **and** counts the applications, because
+two absence checks say nothing about a third application arriving from somewhere
+else. `tests/unit/test_handover_scope.py` is the cheap version of the same claim:
+it parses the lab installer's own `kubectl apply` lines and fails when it applies
+a claim `HANDOVER_DELETIONS` does not name, so a lab that adds an application is
+caught in a second rather than at the end of a twenty-minute rebuild. Pass `--no-handover` to keep the lab in charge of all four; Vidra will then
+never adopt its two, and the other two stay up.
+
+The delete is `--wait=false` and a poll afterwards rather than four blocking
+deletes: a claim's finalizer holds the delete open until Crossplane has torn its
+composed resources down, and kube-prometheus-stack takes minutes. `_wait_for_teardown`
+waits for the same condition, so the four go in parallel.
+
+The handover then **deletes and re-applies `vidra/infrahub-syncs.yaml`**, which is
+not optional. Deleting a delivered resource does not move the artifact's checksum,
+so the next sync skips the apply, reports `Succeeded`, and leaves the cluster
+without it. Recreating the sync resets its checksum state and delivery follows in
+seconds. This was measured twice: first by deleting a resource by hand, then by
+`invoke cluster` itself walking into it before the reset was added.
+
+The wait afterwards checks **the resources**, not `syncState`, for the same
+reason — a wait on the sync state returns happily from a cluster where nothing
+was delivered.
+
+`scripts/install_vidra.sh` follows the order the
+operator requires: namespace, ConfigMap, Secret and the CRD shim **before** the
+chart, because `InitConfigWithClient` reads the configuration once at startup.
+Install the chart first and the operator keeps `queryName: ArtifactIDs`, which
+this repository does not register, and every sync returns
+`query failed with status 404 Not Found`.
+
+Three failure modes worth knowing before debugging a merge that does not arrive:
+
+- **`syncState: Succeeded` is not evidence anything arrived.** The sync compares
+  a checksum, and an `artefactName` that does not match `.infrahub.yml` exactly
+  returns an empty set — which succeeds. Check the `VidraResource` count, which
+  is what `invoke vidra` prints alongside the sync state.
+- **The Secret's label is the bare host**, no scheme and no port, because a colon
+  is not legal in a label value. `http://172.20.41.1:8000` becomes
+  `172.20.41.1`. Get it wrong and the operator reports `no secret found`, having
+  looked straight past an otherwise perfect Secret.
+- **Those are a username and password, not an API token.** The operator exchanges
+  them at `POST /api/auth/login`; an `INFRAHUB_API_TOKEN`-shaped Secret does not
+  authenticate.
+
+See [Vidra delivery](./vidra-delivery.md)
+for the full loop and its diagnostics.
