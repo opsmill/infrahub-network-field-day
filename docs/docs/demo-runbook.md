@@ -14,15 +14,14 @@ sees the merged artifacts hold still. Showing the cluster first, then the
 **Deployment state** dashboard, fills the gap the fabric would otherwise leave
 you standing in.
 
-:::note Timings marked "expected after the early-wake change"
+:::note The reconciler wakes early
 The reconciler used to sleep its whole interval between cycles, so a merge
 waited up to two minutes for a push and two more for confirmation. It now polls
 the artifacts' checksums every 10 seconds, starts a cycle once the moved ones
 hold still for two polls, and confirms a push 60 seconds later rather than an
-interval later. Numbers marked *expected* below are derived from the measured
-cycle lengths (about 11 s for a cycle that pushes nothing, about 25 s for one
-that pushes the firewall and a leaf) and have not yet been timed end to end on
-this lab. Replace them when they have been.
+interval later. The timings below were measured with it, by
+`scripts/demo_rehearsal.py --merge`, with the slower pre-change numbers beside
+them where the difference matters.
 :::
 
 | Act | What the audience sees | Changes state |
@@ -300,8 +299,8 @@ kubectl -n otter-shop get svc                    # EXTERNAL-IP is the VIP, insid
 **4. Then the devices.** Once the merged artifacts have re-rendered and held
 still for two polls, the reconciler starts a cycle without waiting out its
 interval, pushes two devices, `fw1` and the border leaf, and confirms them about
-a minute later. Expected after the early-wake change: the push lands 30 to
-90 seconds after the merge, and confirmation about a minute after that. If
+a minute later. Measured: the border leaf changes about 40 seconds after the
+merge and `fw1` about 55, and confirmation follows about 75 seconds later. If
 nothing has moved after two minutes, `uv run invoke reconcile --now`.
 
 ```bash
@@ -406,9 +405,10 @@ the files the pipeline wrote, in about fifteen seconds.
 **4. Merge, and sign in.** The merge itself takes about 15 seconds. Vidra
 delivers Grafana's pod policy with `10.70.0.0/24` 40 to 70 seconds later, but
 the page loads only once the firewall permits it too. The reconciler pushes the
-border leaf and `fw1` as soon as the merged artifacts hold still: expected after
-the early-wake change, 30 to 90 seconds from the merge (measured before it, when
-the loop slept its whole 120-second interval: 55 to 130 seconds). Watch for
+border leaf and `fw1` as soon as the merged artifacts hold still: measured 41
+and 55 seconds from the merge (before the early-wake change, when the loop slept
+its whole 120-second interval, 55 to 130 seconds). Grafana answered the branch
+desktop 75 seconds after the merge. Watch for
 `pushed=2` in the reconciler log rather than the clock. Then reload the bookmark.
 Grafana sends the browser straight to the same Dex sign-in page the portal uses;
 its own `/login` is a redirect, not a page. `alice` signs in
@@ -483,9 +483,8 @@ Merge it. **The page goes before the devices change, and that is worth saying.**
 Vidra delivers Grafana's pod policy without the branch LAN 65 to 80 seconds
 after the merge, and the branch desktop loses Grafana then, 75 to 90 seconds in,
 because the pod is the gate that closes first. The firewall rule and the border
-leaf's line follow once the merged artifacts hold still: expected after the
-early-wake change, 30 to 90 seconds from the merge (measured before it: 2.5 to
-3 minutes). Anyone already signed in to Grafana loses the page with the pod
+leaf's line follow once the merged artifacts hold still: measured 50 and 79
+seconds from the merge (before the early-wake change: 2.5 to 3 minutes). Anyone already signed in to Grafana loses the page with the pod
 policy.
 
 **The grant stays on `main`, `decommissioned`.** That is the record of what was
@@ -597,13 +596,13 @@ a proposed change, and that merging is where the human decides.
 | Act four, break to red check / `--revert` | 35 to 45 s / about 4 s |
 | `CoreProposedChangeMerge`, a grant or a revocation | 15 to 17 s |
 | Merge to the resource existing in Kubernetes | about a minute (Grafana's pod policy: 41 to 78 s) |
-| Grafana grant, merge to the border leaf and `fw1` carrying it | 30 to 90 s expected after the early-wake change (measured before it: 55 to 130 s) |
-| Grafana grant, merge to Grafana answering the branch | the later of the pod policy and the devices: 68 s measured before the early-wake change |
-| Grafana grant, merge to the reconciler confirming both devices | about 70 s after the push, expected after the early-wake change (measured before it: 3.3 to 4.4 minutes from the merge) |
+| Grafana grant, merge to the border leaf and `fw1` carrying it | 41 s and 55 s (before the early-wake change: 55 to 130 s) |
+| Grafana grant, merge to Grafana answering the branch | the later of the pod policy and the devices: 75 s |
+| Grafana grant, merge to the reconciler confirming both devices | 130 s (before the early-wake change: 3.3 to 4.4 minutes) |
 | Revoke template, start to proposed change | about 60 s |
-| Revocation, merge to Grafana leaving the branch | 75 to 90 s, when Vidra closes the pod policy |
-| Revocation, merge to the rule and the line leaving the devices | 30 to 90 s expected after the early-wake change (measured before it: 2.5 to 3 minutes) |
-| Revocation, merge to the reconciler confirming both devices | about 70 s after the push, expected after the early-wake change (measured before it: about 5 minutes) |
+| Revocation, merge to Grafana leaving the branch | 58 to 90 s, when Vidra closes the pod policy |
+| Revocation, merge to the rule and the line leaving the devices | 50 s and 79 s (before the early-wake change: 2.5 to 3 minutes) |
+| Revocation, merge to the reconciler confirming both devices | 154 s (before the early-wake change: about 5 minutes) |
 | `uv run invoke reconcile --now` to the cycle starting | under a second; the cycle itself about 11 s, or about 25 s when it pushes |
 
 Measured on this lab: a granted VIP answered `HTTP 200` from the branch desktop,
