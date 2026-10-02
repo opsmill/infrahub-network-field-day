@@ -194,6 +194,7 @@ def decide_settled(
     object_count: int,
     active_tasks: int,
     failed_tasks: list[str],
+    require_capability: bool = True,
 ) -> tuple[bool, str]:
     """Whether a released branch is fully imported, and if not, what it is still waiting for.
 
@@ -201,7 +202,9 @@ def decide_settled(
     pass over data that is not loaded yet. So "settled" needs all of: the pushed commit
     imported and in sync, the schema and the objects present (a repository import carries
     both), and no task still queued or running for the branch. A failed task is not a
-    reason to keep waiting, so it is reported separately by the caller.
+    reason to keep waiting, so it is reported separately by the caller. A branch that
+    takes the capability back out sets ``require_capability`` off: it has no schema or
+    objects of its own to wait for.
     """
     if failed_tasks:
         return False, f"failed tasks on the branch: {', '.join(failed_tasks)}"
@@ -209,9 +212,9 @@ def decide_settled(
         return False, f"the import of {expected_commit[:10]} (the branch is at {commit[:10] or 'nothing'})"
     if sync_status != "in-sync":
         return False, f"the repository to be in-sync (it is {sync_status or 'unknown'})"
-    if not kind_present:
+    if require_capability and not kind_present:
         return False, "the schema to load"
-    if object_count < 1:
+    if require_capability and object_count < 1:
         return False, "the objects to load"
     if active_tasks:
         return False, f"{active_tasks} task(s) still queued or running on the branch"

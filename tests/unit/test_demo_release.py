@@ -204,3 +204,16 @@ def test_the_task_states_that_count_as_active_and_as_failed_do_not_overlap() -> 
     assert not set(dr.ACTIVE_TASK_STATES) & set(dr.FAILED_TASK_STATES)
     assert {"RUNNING", "PENDING"} <= set(dr.ACTIVE_TASK_STATES)
     assert {"FAILED", "CRASHED"} <= set(dr.FAILED_TASK_STATES)
+
+
+def test_a_branch_that_takes_the_capability_back_out_does_not_wait_for_it() -> None:
+    """A reset branch has no schema or objects of its own, so their absence is not a reason to wait."""
+    taken_out = {**_SETTLED, "kind_present": False, "object_count": 0}
+
+    assert dr.decide_settled(**taken_out)[0] is False
+    assert dr.decide_settled(**taken_out, require_capability=False) == (True, "")
+
+
+def test_require_capability_off_still_waits_for_the_commit_and_the_queue() -> None:
+    assert dr.decide_settled(**{**_SETTLED, "commit": "b" * 40}, require_capability=False)[0] is False
+    assert dr.decide_settled(**{**_SETTLED, "active_tasks": 2}, require_capability=False)[0] is False
