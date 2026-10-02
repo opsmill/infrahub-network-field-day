@@ -47,9 +47,12 @@ class _File:
 class _Client:
     def __init__(self) -> None:
         self.downloads = 0
+        self.kinds: Counter[str] = Counter()
 
-    async def get(self, *_args: Any, **_kwargs: Any) -> _File:
+    async def get(self, *args: Any, **kwargs: Any) -> _File:
         self.downloads += 1
+        kind = kwargs.get("kind", args[0] if args else None)
+        self.kinds[str(getattr(kind, "__name__", kind))] += 1
         return _File()
 
 
@@ -256,8 +259,11 @@ def test_intended_series_carry_the_contracted_names_and_labels() -> None:
         "otternet_intended_link",
         "otternet_intended_interface_up",
     }
-    # Each switch watched for BGP had its stored structured config read once.
-    assert client.downloads == 7
+    # Each switch watched for BGP had its stored structured config read once --
+    # and each probed application its values file, for the address it pins.
+    assert client.kinds["AvdStructuredConfigFile"] == 7
+    assert client.kinds["ServiceFabricAppValuesFile"] == 2
+    assert client.downloads == 9
     # A neighbour whose description names a watched device is attributed to it;
     # one that names nothing in the model is not.
     assert any('peer_device="spine-otternet-pod1-1"' in line for line in lines)
@@ -439,15 +445,63 @@ def test_an_application_is_checked_for_its_workload_and_its_vip() -> None:
     assert not any('service="otternet-telemetry"' in line for line in vips), "an unexposed app has no VIP to check"
 
 
-def test_a_gated_application_is_not_probed_and_the_artifact_says_why() -> None:
-    """Measured: Telegraf's pod is dropped at every gated application's pod --
-    a probe there would report a healthy application down forever."""
+def test_a_gated_application_is_probed_because_its_fabricapp_admits_the_collector() -> None:
+    """Cycle 036. Both seeded exposed applications are gated -- otternet-demo by
+    default deny, Grafana by its allow-ingress -- and `services-apps` asks for
+    `service-reachability`, so each FabricApp admits otternet-telemetry and the
+    collector probes each VIP on its advertised port."""
     out, _ = _render()
-    conf = _conf(out)
-    assert "net_response" not in conf["inputs"]
+    probes = _conf(out)["inputs"]["net_response"]
+    assert sorted((p["tags"]["service"], p["address"]) for p in probes) == [
+        ("otternet-demo", "10.112.240.0:80"),
+        ("otternet-metrics", "10.112.240.80:80"),
+    ]
+    assert all(p["protocol"] == "tcp" for p in probes)
     text = out["manifest"]["data"]["telegraf.conf"]
-    assert "# not probed: otternet-demo's pod gate admits no in-cluster source" in text
+    assert "pod gate does not admit" not in text
     assert "# not probed: otternet-telemetry is not exposed, so it has no VIP" in text
+
+
+def test_turning_reachability_off_withdraws_every_probe() -> None:
+    """The same edit closes the gate in the FabricApp, so nothing is left probing
+    a path that no longer exists."""
+    data = _data()
+    profile = _profile(data, "services-apps")
+    profile["measurements"]["edges"] = [
+        m for m in profile["measurements"]["edges"] if m["node"]["name"]["value"] != "service-reachability"
+    ]
+    out, _ = _render(data)
+    assert "net_response" not in _conf(out)["inputs"]
+    assert _intended(out, "otternet_intended_service_probe") == []
+    assert _intended(out, "otternet_intended_service_workload"), "delivery is still watched"
+
+
+@pytest.mark.parametrize(
+    ("mutate", "reason"),
+    [
+        (
+            lambda app: app["policy_allow_ports"].update(value=None),
+            "declares no TCP policy_allow_ports",
+        ),
+        (
+            lambda app: app["policy_allow_ports"].update(value=[{"port": "80", "protocol": "UDP"}]),
+            "declares no TCP policy_allow_ports",
+        ),
+    ],
+)
+def test_a_gated_application_the_fabricapp_cannot_admit_is_not_probed_and_says_why(mutate: Any, reason: str) -> None:
+    """A gate is never widened to admit a probe: no TCP pod port, no admission,
+    so no probe -- which would otherwise report a healthy application down."""
+    data = _data()
+    mutate(_service(data, "otternet-demo"))
+    out, _ = _render(data)
+    services = [p["tags"]["service"] for p in _conf(out)["inputs"]["net_response"]]
+    assert services == ["otternet-metrics"]
+    text = out["manifest"]["data"]["telegraf.conf"]
+    assert (
+        f"# not probed: otternet-demo's pod gate does not admit this collector: otternet-demo's pod gate is closed and it {reason}"
+        in text
+    )
 
 
 class _ValuesClient(_Client):
@@ -484,20 +538,22 @@ def test_an_ungated_application_is_probed_on_each_advertised_tcp_port_at_its_pin
     out = _render_with(
         data, _ValuesClient('grafana:\n  service:\n    annotations:\n      lbipam.cilium.io/ips: "10.112.240.81"\n')
     )
-    probes = _conf(out)["inputs"]["net_response"]
+    probes = [p for p in _conf(out)["inputs"]["net_response"] if p["tags"]["service"] == "otternet-metrics"]
     assert [p["address"] for p in probes] == ["10.112.240.81:80"]
     assert probes[0]["protocol"] == "tcp"
     assert probes[0]["timeout"] == "3s", "the timeout is the profile's"
     assert probes[0]["interval"] == "30s", "and so is the interval"
     assert probes[0]["tags"]["service"] == "otternet-metrics"
-    assert _intended(out, "otternet_intended_service_probe") == [
+    assert [line for line in _intended(out, "otternet_intended_service_probe") if "otternet-metrics" in line] == [
         'otternet_intended_service_probe{address="10.112.240.81",port="80",service="otternet-metrics",'
         'service_kind="ServiceFabricApp"} 1'
     ]
     # Unpinned, the first address of its own block: Cilium hands an app's first
     # Service the first address of the pool the composition gives it alone.
     unpinned = _render_with(data, _ValuesClient("replicaCount: 1\n"))
-    assert [p["address"] for p in _conf(unpinned)["inputs"]["net_response"]] == ["10.112.240.80:80"]
+    assert [
+        p["address"] for p in _conf(unpinned)["inputs"]["net_response"] if p["tags"]["service"] == "otternet-metrics"
+    ] == ["10.112.240.80:80"]
 
 
 def test_the_lifecycle_scrape_asks_for_exactly_the_kinds_the_profiles_name() -> None:

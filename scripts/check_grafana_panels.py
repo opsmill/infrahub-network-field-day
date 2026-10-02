@@ -76,16 +76,6 @@ ALLOWED_EMPTY: tuple[Allowed, ...] = (
         "B",
         "per-port breakout, `> 0`: one line only for a port that is erroring; the total (A) must have data",
     ),
-    # Not a breakout: a probe the seed never renders. The collector probes an application only
-    # where its pod gate admits an in-cluster source, and every seeded exposed application is
-    # gated -- measured, a probe from Telegraf's pod is dropped at otternet-demo and at Grafana.
-    # A (how many ports are probed, 0 here) must still have data.
-    Allowed(
-        "otternet-services",
-        "Probed ports answering",
-        "B",
-        "no seeded application admits the collector at its pod gate, so no probe renders; the count (A) must have data",
-    ),
 )
 
 

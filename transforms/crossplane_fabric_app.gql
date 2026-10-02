@@ -6,6 +6,11 @@ query CrossplaneFabricAppQuery($name: String!) {
         name {
           value
         }
+        # Cycle 036: a withdrawn application is probed by nobody, so its
+        # FabricApp admits no collector.
+        status {
+          value
+        }
         namespace_name {
           value
         }
@@ -85,6 +90,26 @@ query CrossplaneFabricAppQuery($name: String!) {
             }
           }
         }
+        # Cycle 036: what the collector probes. Only an application advertising
+        # a TCP service is probed, so only one is ever admitted.
+        advertised_services {
+          edges {
+            node {
+              id
+              port {
+                value
+              }
+              ip_protocol {
+                node {
+                  id
+                  name {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
         # The payload attachments added by cycle 013. Only metadata comes back
         # here -- the content lives in object storage and is fetched with
         # download_file(), which is why this transform is async.
@@ -95,6 +120,47 @@ query CrossplaneFabricAppQuery($name: String!) {
               value
             }
             checksum {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+  # Cycle 036: WHO PROBES THIS APPLICATION. Every service profile, with its
+  # collector's namespace; the transform keeps the enabled ones asking for
+  # service-reachability of applications, and renders their namespaces as
+  # spec.monitoring.collectorNamespaces. The same derivation decides which
+  # probes the Telemetry Collector Configuration renders, so a probe and the
+  # gate it passes through cannot disagree. Ids so the artifact's query group
+  # names the profiles, and an edit to one re-renders this.
+  MonitoringProfile {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        enabled {
+          value
+        }
+        service_kind {
+          value
+        }
+        measurements {
+          edges {
+            node {
+              id
+              name {
+                value
+              }
+            }
+          }
+        }
+        collector {
+          node {
+            id
+            namespace_name {
               value
             }
           }

@@ -478,8 +478,12 @@ can never make anyone an administrator.
   **Healthy**, beside every other service. **Health of every watched service**
   lists what is checked for each and by which profile; **Routed services** joins
   the WAN and fabric services to the BGP sessions that realise them, read from
-  the same telemetry the WAN dashboard draws. Nothing on it names a service: a
-  kind or a service added tomorrow appears without an edit.
+  the same telemetry the WAN dashboard draws. **Probed ports answering** is the
+  collector's TCP probe of each exposed application's VIP: `otternet-demo` and
+  Grafana, two of two. Each passes that application's own pod gate, opened for the
+  collector's namespace alone because `services-apps` asks for
+  `service-reachability`. A grant opens nothing for it. Nothing on the dashboard
+  names a service: a kind or a service added tomorrow appears without an edit.
 
 **6. Monitoring is intent too, for services as much as devices.** In Infrahub,
 on a new branch, open **Monitoring → Profiles → `fabric-core`** and remove the
@@ -491,6 +495,12 @@ each fabric switch, and every `otternet_intended_service_bgp` line with them, an
 a comment saying `services-routing renders nothing`. No other artifact moves, and
 the application and grant checks stay. Do not merge it; delete the branch
 afterwards.
+
+To show that monitoring is a gate, not just a reader, remove `service-reachability`
+from **`services-apps`** instead. Three artifacts move. The collector loses both
+probes. `otternet-demo` and `otternet-metrics` each lose the `monitoring` block in
+their **Crossplane FabricApp**, which is the collector's admission at their pod
+gate. Turning a probe off closes the path it used.
 
 The same edit, the other way, is how a check is turned on: give
 `services-apps` a shorter **Interval**, add a measurement to a profile, or

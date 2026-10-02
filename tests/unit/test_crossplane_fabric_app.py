@@ -11,6 +11,7 @@ the whole payload round-trips and is compared with the hand-written manifest.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from transforms.crossplane_fabric_app import (
     apply_local_traffic,
     apply_sso,
     build_expose,
+    build_monitoring,
     build_policy,
     parse_selector,
 )
@@ -45,6 +47,9 @@ def _data(
     vrf: str | None = "K8S_PROD",
     intra: bool = True,
     sso: str | None = "none",
+    status: str = "active",
+    advertised: list[tuple[int, str]] | None = None,
+    profiles: list[dict[str, Any]] | None = None,
 ) -> CrossplaneFabricAppQuery:
     if service_selector is None:
         service_selector = ["otternet.lab/advertise=true"]
@@ -54,13 +59,17 @@ def _data(
         allowed = ALLOW_FROM
     if ports is None:
         ports = [{"port": "8080", "protocol": "TCP"}]
+    if advertised is None:
+        advertised = [(80, "tcp")]
     return CrossplaneFabricAppQuery(
+        MonitoringProfile={"edges": [{"node": p} for p in (profiles or [])]},
         target={
             "edges": [
                 {
                     "node": {
                         "id": "app-1",
                         "name": {"value": "otternet-demo"},
+                        "status": {"value": status},
                         "namespace_name": ({"value": namespace} if namespace else None),
                         "exposed": {"value": exposed},
                         "sso_provider": ({"value": sso} if sso else None),
@@ -84,11 +93,23 @@ def _data(
                         "allowed_source_prefixes": {
                             "edges": [{"node": {"id": f"p-{p}", "prefix": {"value": p}}} for p in allowed]
                         },
+                        "advertised_services": {
+                            "edges": [
+                                {
+                                    "node": {
+                                        "id": f"svc-{port}",
+                                        "port": {"value": port},
+                                        "ip_protocol": {"node": {"id": f"proto-{proto}", "name": {"value": proto}}},
+                                    }
+                                }
+                                for port, proto in advertised
+                            ]
+                        },
                         "values_file": {"node": None},
                     }
                 }
             ]
-        }
+        },
     )
 
 
@@ -425,3 +446,144 @@ def test_the_portal_prefill_states_local() -> None:
     }
     prefill = yaml.safe_load(fields["values_file_content"]["default"])
     assert prefill["service"]["externalTrafficPolicy"] == "Local"
+
+
+# ---------------------------------------------------------------------------
+# spec.monitoring: the collector's admission (cycle 036)
+# ---------------------------------------------------------------------------
+
+
+def _profile(
+    *,
+    name: str = "services-apps",
+    kind: str | None = "ServiceFabricApp",
+    measurements: tuple[str, ...] = ("service-delivery", "service-reachability"),
+    enabled: bool = True,
+    namespace: str | None = "otternet-telemetry",
+) -> dict[str, Any]:
+    return {
+        "id": f"profile-{name}",
+        "name": {"value": name},
+        "enabled": {"value": enabled},
+        "service_kind": {"value": kind},
+        "measurements": {"edges": [{"node": {"id": f"m-{m}", "name": {"value": m}}} for m in measurements]},
+        "collector": {"node": {"id": f"c-{namespace}", "namespace_name": {"value": namespace}}},
+    }
+
+
+def _admission(parsed: CrossplaneFabricAppQuery) -> dict[str, Any]:
+    profiles = [edge.node for edge in parsed.monitoring_profile.edges if edge.node is not None]
+    return build_monitoring(parsed.target.edges[0].node, profiles)
+
+
+def _monitoring(**kwargs: Any) -> dict[str, Any]:
+    return _admission(_data(**kwargs))
+
+
+def _with(node_fields: dict[str, Any], **kwargs: Any) -> CrossplaneFabricAppQuery:
+    """`_data`, with node fields the helper does not parameterise overridden."""
+    parsed = _data(**kwargs).model_dump(by_alias=True)
+    parsed["target"]["edges"][0]["node"].update(node_fields)
+    return CrossplaneFabricAppQuery(**parsed)
+
+
+def _manifest(**kwargs: Any) -> str:
+    """The whole transform's output, with a chart so it renders."""
+    parsed = _with(
+        {
+            "chart_repository": {"value": "https://cowboysysop.github.io/charts/"},
+            "chart_name": {"value": "whoami"},
+            "chart_version": {"value": "6.0.0"},
+        },
+        **kwargs,
+    ).model_dump(by_alias=True)
+    transform = CrossplaneFabricAppTransform.__new__(CrossplaneFabricAppTransform)
+    return asyncio.run(transform.transform(parsed))
+
+
+def test_a_probing_profile_admits_its_collector_on_the_pod_ports() -> None:
+    """The pod port (8080), not the advertised one (80): Cilium enforces after
+    service translation, so a rule naming the VIP's port would admit nothing."""
+    assert _monitoring(profiles=[_profile()]) == {
+        "collectorNamespaces": ["otternet-telemetry"],
+        "ports": [{"port": "8080", "protocol": "TCP"}],
+    }
+
+
+def test_service_generic_watches_applications_too() -> None:
+    assert _monitoring(profiles=[_profile(kind="ServiceGeneric")])["collectorNamespaces"] == ["otternet-telemetry"]
+
+
+def test_every_probing_collector_is_admitted_once_and_in_order() -> None:
+    profiles = [_profile(name="b", namespace="zz-collector"), _profile(name="a"), _profile(name="c")]
+    assert _monitoring(profiles=profiles)["collectorNamespaces"] == ["otternet-telemetry", "zz-collector"]
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [
+        _profile(measurements=("service-delivery",)),
+        _profile(enabled=False),
+        _profile(kind="ServiceAppAccess"),
+        _profile(kind=None, measurements=("interface-counters",)),
+        _profile(namespace=None),
+    ],
+    ids=["no-reachability", "disabled", "other-kind", "device-profile", "no-namespace"],
+)
+def test_a_profile_that_does_not_probe_applications_admits_nothing(profile: dict[str, Any]) -> None:
+    """Turning reachability off in Infrahub is what closes the collector's path."""
+    assert _monitoring(profiles=[profile]) == {}
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"status": "decommissioning"},
+        {"status": "decommissioned"},
+        {"exposed": False},
+        {"advertised": []},
+        {"advertised": [(53, "udp")]},
+        {"ports": [{"port": "53", "protocol": "UDP"}]},
+    ],
+    ids=["decommissioning", "decommissioned", "unexposed", "advertises-nothing", "advertises-udp", "udp-pod-port"],
+)
+def test_an_application_nothing_probes_is_admitted_nowhere(kwargs: dict[str, Any]) -> None:
+    assert _monitoring(profiles=[_profile()], **kwargs) == {}
+
+
+def test_no_pod_port_means_no_admission_rather_than_every_port() -> None:
+    """External sources are confined to policy_allow_ports; with none declared
+    the collector would be admitted on every port, wider than any grant, so it
+    is not admitted at all."""
+    assert _admission(_with({"policy_allow_ports": {"value": None}}, profiles=[_profile()])) == {}
+
+
+def test_an_open_gate_needs_no_admission() -> None:
+    """Nothing selects the pods, so the collector is admitted already -- and an
+    admission policy would make their ingress deny-by-default for everyone else."""
+    assert _admission(_with({"policy_default_deny": {"value": False}}, profiles=[_profile()], allowed=[])) == {}
+
+
+def test_a_source_prefix_alone_closes_the_gate_and_so_needs_admission() -> None:
+    """Grafana's shape: default deny off, but allow-ingress selects the pods."""
+    parsed = _with({"policy_default_deny": {"value": False}}, profiles=[_profile()], allowed=["10.111.0.0/16"])
+    assert _admission(parsed)["collectorNamespaces"] == ["otternet-telemetry"]
+
+
+def test_monitoring_follows_policy_in_the_manifest() -> None:
+    spec = yaml.safe_load(_manifest(profiles=[_profile()]))["spec"]
+    assert list(spec)[-2:] == ["policy", "monitoring"]
+    assert spec["monitoring"]["ports"][0]["port"] == "8080", "a port is a string, as the XRD types it"
+
+
+@pytest.mark.parametrize(
+    "profiles",
+    [[], [_profile(measurements=("service-delivery",))], [_profile(enabled=False)]],
+    ids=["no-profile", "delivery-only", "disabled"],
+)
+def test_an_application_monitoring_does_not_probe_renders_byte_identically(profiles: list[dict[str, Any]]) -> None:
+    """No `monitoring` key at all, so the manifest is the one rendered before
+    the field existed and Vidra delivers no change."""
+    text = _manifest(profiles=profiles)
+    assert "monitoring" not in text
+    assert text == _manifest(profiles=[])

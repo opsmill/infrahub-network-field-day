@@ -2,7 +2,8 @@
 # How a FabricApp becomes a running, reachable, policed application.
 #
 # The resource count varies with the claim -- one Object per raw manifest, one
-# CiliumNetworkPolicy per rule that was asked for, a pool and an advertisement
+# CiliumNetworkPolicy per rule that was asked for (including the collector's,
+# from spec.monitoring), a pool and an advertisement
 # only if the app is exposed. That variability is the reason this is
 # go-templating and not patch-and-transform: patch-and-transform can only patch
 # a fixed list of resources declared up front, so a variable fan-out means
@@ -31,6 +32,7 @@ spec:
             {{- $app := $xr.metadata.name }}
             {{- $ns := $spec.namespace }}
             {{- $policy := $spec.policy | default dict }}
+            {{- $monitoring := $spec.monitoring | default dict }}
             {{- /*
                 Scope the service selector to this app's namespace.
 
@@ -409,6 +411,58 @@ spec:
                       - fromEndpoints:
                           - matchLabels:
                               io.kubernetes.pod.namespace: {{ $ns }}
+            {{- end }}
+
+            {{- if and $monitoring.collectorNamespaces $monitoring.ports (or $policy.defaultDeny $policy.allowFrom) }}
+            ---
+            # Ingress from the telemetry collector, so it can probe the app.
+            #
+            # allowFrom cannot do this: Cilium matches `fromCIDR` against
+            # traffic from OUTSIDE the cluster only, so a collector pod is
+            # dropped here whatever CIDR is listed -- measured against both
+            # otternet-demo and Grafana. This names the collector by the
+            # namespace label Cilium derives from the pod itself, on the
+            # listed ports only, to the same endpoints allow-ingress protects.
+            #
+            # Its own policy rather than another rule in allow-ingress, so an
+            # app nobody monitors renders exactly the resources it did before.
+            #
+            # Rendered only where ingress is ALREADY default-deny for those
+            # endpoints -- defaultDeny, or the allow-ingress policy above
+            # selecting them. Anywhere else the collector is admitted already,
+            # and a policy selecting the pods would quietly turn their ingress
+            # into deny-by-default for every other source.
+            apiVersion: kubernetes.crossplane.io/v1alpha2
+            kind: Object
+            metadata:
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cnp-allow-collector
+            spec:
+              providerConfigRef:
+                name: otternet
+              forProvider:
+                manifest:
+                  apiVersion: cilium.io/v2
+                  kind: CiliumNetworkPolicy
+                  metadata:
+                    name: allow-collector
+                    namespace: {{ $ns }}
+                  spec:
+                    endpointSelector:
+                      matchLabels:
+                        {{- toYaml ($policy.workloadSelector | default dict) | nindent 24 }}
+                    ingress:
+                      - fromEndpoints:
+                          {{- range $monitoring.collectorNamespaces }}
+                          - matchLabels:
+                              io.kubernetes.pod.namespace: {{ . }}
+                          {{- end }}
+                        toPorts:
+                          - ports:
+                              {{- range $monitoring.ports }}
+                              - port: "{{ .port }}"
+                                protocol: {{ .protocol | default "TCP" }}
+                              {{- end }}
             {{- end }}
 
             ---

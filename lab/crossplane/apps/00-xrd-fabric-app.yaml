@@ -10,6 +10,8 @@
 #   * a BGP advertisement that puts that VIP into the leaves' VRF, and from
 #     there into EVPN as a type-5 route
 #   * a default-deny CiliumNetworkPolicy plus the specific allows the app needs
+#   * optionally, admission for a telemetry collector's namespace on the app's
+#     own ports, so it can be probed where it is served (spec.monitoring)
 #
 # The reason to bundle those together is that they are not really separable. A
 # service with no pool never gets a VIP; a VIP with no advertisement is
@@ -186,6 +188,48 @@ spec:
                         every pod in the namespace.
                       default: {}
                   default: {}
+                monitoring:
+                  type: object
+                  description: >-
+                    Admit a telemetry collector to probe this application. Set
+                    by Infrahub from the monitoring profiles that watch the app
+                    for service-reachability, and absent otherwise -- so turning
+                    a probe on in Infrahub is what opens the collector's path,
+                    and turning it off closes it. Needed because allowFrom is
+                    CIDR-only and Cilium never matches a pod against a CIDR
+                    rule: without this no in-cluster collector can reach a
+                    gated application at all. Admits the named namespaces only,
+                    on the listed ports only, to the same workloadSelector
+                    endpoints allowFrom applies to -- and renders nothing on an
+                    application with no ingress gate (defaultDeny false and no
+                    allowFrom), because there the collector is already admitted
+                    and a new policy would close ingress to everything else.
+                  properties:
+                    collectorNamespaces:
+                      type: array
+                      description: >-
+                        Namespaces whose pods are the collector. Matched as
+                        io.kubernetes.pod.namespace, the label Cilium derives
+                        from the pod itself, so a pod cannot claim it.
+                      items:
+                        type: string
+                    ports:
+                      type: array
+                      description: >-
+                        Pod ports the collector may reach. Cilium enforces
+                        after service translation, so these are the ports the
+                        advertised services' backends answer on -- the
+                        allowFromPorts list, never wider.
+                      items:
+                        type: object
+                        properties:
+                          port:
+                            type: string
+                          protocol:
+                            type: string
+                            default: TCP
+                        required: [port]
+                  required: [collectorNamespaces, ports]
               required: [namespace]
             status:
               type: object

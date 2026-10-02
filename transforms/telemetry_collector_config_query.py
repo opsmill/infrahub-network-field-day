@@ -1264,6 +1264,9 @@ class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricApp(BaseM
     policy_default_deny: Optional[
         "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricAppPolicyDefaultDeny"
     ]
+    policy_allow_ports: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricAppPolicyAllowPorts"
+    ]
     allowed_source_prefixes: "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricAppAllowedSourcePrefixes"
     vip_block: (
         "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricAppVipBlock"
@@ -1322,6 +1325,12 @@ class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricAppPolicy
     BaseModel
 ):
     value: Optional[bool]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricAppPolicyAllowPorts(
+    BaseModel
+):
+    value: Optional[Any]
 
 
 class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricAppAllowedSourcePrefixes(
