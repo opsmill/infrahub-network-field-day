@@ -630,6 +630,39 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
         print(f"   WARNING: {empty} artifact(s) still empty after {timeout}s -- `invoke provision` would push nothing")
 
 
+def _remove_orphaned_lab_nodes(ctx: Context, topology: Path) -> None:
+    """Remove containers labelled with this lab that its topology no longer declares.
+
+    `containerlab destroy -t` removes only the nodes the CURRENT file lists. A
+    node deleted from the topology -- the six FRR `-exporter` sidecars when the
+    WAN moved to SR Linux -- survives every destroy, and the next deploy is then
+    refused with "The 'otternet' lab has already been deployed", having removed
+    nothing. That is how a `bootstrap --fresh` failed after the re-platform.
+    Every ContainerLab container carries `containerlab=<lab>` and
+    `clab-node-name=<node>`, so the orphans are exactly the labelled containers
+    whose node name the file does not declare.
+    """
+    import yaml
+
+    spec = yaml.safe_load(topology.read_text(encoding="utf-8"))
+    lab = spec["name"]
+    declared = set((spec.get("topology") or {}).get("nodes") or {})
+    result = ctx.run(
+        f"docker ps -a --filter label=containerlab={shlex.quote(lab)} "
+        "--format '{{.Names}} {{.Label \"clab-node-name\"}}'",
+        hide=True,
+        warn=True,
+    )
+    orphans = [
+        line.split()[0]
+        for line in (result.stdout if result else "").splitlines()
+        if line.strip() and (len(line.split()) < 2 or line.split()[1] not in declared)
+    ]
+    if orphans:
+        print(f" - Removing {len(orphans)} container(s) the topology no longer declares: {', '.join(orphans)}")
+        ctx.run(f"docker rm -f {' '.join(shlex.quote(name) for name in orphans)}", hide=True)
+
+
 def find_lab_directory(explicit: str = "") -> Path:
     """Locate the OTTERNET lab: `lab/` in the MAIN checkout.
 
@@ -746,7 +779,12 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     if destroy:
         print(f" - Destroying lab from {topology.name}")
         ctx.run(f"{clab} destroy -t {shlex.quote(str(topology))} --cleanup", pty=True)
+        _remove_orphaned_lab_nodes(ctx, topology)
         return
+
+    # Before a deploy too: an orphan left by an earlier topology makes
+    # ContainerLab refuse the deploy outright ("already been deployed").
+    _remove_orphaned_lab_nodes(ctx, topology)
 
     # THE TOOLING BRIDGE, BEFORE THE DEPLOY, and it is not optional.
     #
