@@ -23,11 +23,6 @@
         "Placement": "toolbar"
       },
       {
-        "Title": "Access Portal (DC)",
-        "URL": "http://10.112.240.33/",
-        "Placement": "toolbar"
-      },
-      {
         "Title": "Grafana (needs access)",
         "URL": "http://10.112.240.81/",
         "Placement": "toolbar"
