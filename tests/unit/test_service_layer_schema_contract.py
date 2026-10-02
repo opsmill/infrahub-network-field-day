@@ -624,13 +624,13 @@ WAN_SERVICES_SCHEMA = "schemas/service/wan_services.yml"
 def test_wan_services_are_not_artifact_targets() -> None:
     """research.md R3.
 
-    These three render through device-scoped artifacts -- FRR on the PE and CE,
+    These two render through device-scoped artifacts -- FRR on the PE and CE,
     EOS on the fabric -- not through a cluster manifest. Marking them as
     artifact targets would imply a per-service artifact that will never exist.
     """
     schema = _load_yaml(WAN_SERVICES_SCHEMA)
 
-    for name in ("L3vpn", "InternetAccess", "TenantCloud"):
+    for name in ("L3vpn", "TenantCloud"):
         inherits = _node(schema, "Service", name)["inherit_from"]
         assert "CoreArtifactTarget" not in inherits, f"Service{name} is not artifact-rendered"
         assert "GeneratorTarget" in inherits
@@ -651,30 +651,6 @@ def test_l3vpn_spans_one_tenant_and_many_circuits() -> None:
     assert relationships["tenant"]["optional"] is False
     assert relationships["circuits"]["peer"] == "DcimCircuit"
     assert relationships["circuits"]["cardinality"] == "many"
-
-
-def test_internet_access_attaches_to_an_l3vpn() -> None:
-    """US7 acceptance scenario 2."""
-    access = _node(_load_yaml(WAN_SERVICES_SCHEMA), "Service", "InternetAccess")
-    relationships = _relationships(access)
-
-    assert relationships["l3vpn"]["peer"] == "ServiceL3vpn"
-    assert relationships["l3vpn"]["cardinality"] == "one"
-    assert relationships["l3vpn"]["optional"] is False
-
-
-def test_internet_access_duplicates_nothing_the_l3vpn_holds() -> None:
-    """SC-007 / US7 acceptance scenario 3.
-
-    acme buys internet access and globex does not. The whole difference between
-    the two tenants must be the presence of this one object -- so it may not
-    carry a tenant, a VRF, or a circuit set of its own, which would be a second
-    place for the same fact to live and a second place for it to disagree.
-    """
-    access = _node(_load_yaml(WAN_SERVICES_SCHEMA), "Service", "InternetAccess")
-    relationships = set(_relationships(access))
-
-    assert not {"tenant", "vrf", "circuits", "sites"} & relationships
 
 
 def test_tenant_cloud_couples_vrf_zone_and_prefix() -> None:

@@ -46,7 +46,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "wan_service_check"
 
 # The sections rules 1-4 never read. The synthetic L3VPNs and clouds below keep
 # their own shapes; everything else is the lab as captured.
-_RENDER_SECTIONS = ("ServiceInternetAccess", "WanSite", "DcimDevice", "WanInternetPeering", "IpamIPAddress")
+_RENDER_SECTIONS = ("WanSite", "DcimDevice", "WanInternetPeering", "IpamIPAddress")
 
 
 def _captured(name: str = "main") -> dict[str, Any]:
@@ -473,23 +473,6 @@ def test_a_tenant_cloud_with_no_live_l3vpn_renders_nowhere() -> None:
     findings = check_dependents_renderable(_parsed(data))
     assert [f.object_type for f in findings] == ["ServiceTenantCloud"]
     assert "globex-cloud" in findings[0].message
-
-
-def test_internet_access_on_a_withdrawn_l3vpn_renders_nowhere() -> None:
-    data = _captured()
-    data["ServiceInternetAccess"]["edges"][0]["node"]["l3vpn"]["node"]["status"] = _wrap("decommissioning")
-
-    findings = check_dependents_renderable(_parsed(data))
-    assert any(f.object_type == "ServiceInternetAccess" and "is not live" in f.message for f in findings)
-
-
-def test_internet_access_with_no_peering_renders_nowhere() -> None:
-    data = _captured()
-    data["WanInternetPeering"]["edges"] = []
-
-    findings = check_dependents_renderable(_parsed(data))
-    assert [f.object_type for f in findings] == ["ServiceInternetAccess"]
-    assert "no WanInternetPeering" in findings[0].message
 
 
 def test_an_l3vpn_stating_no_dc_range_takes_the_shared_one() -> None:

@@ -8,7 +8,7 @@ with a missing BGP neighbour, which loads and never comes up.
 What makes this oracle stronger than the FRR one it replaces is that it was
 BOOTED. The same files ran on a throwaway six-router SR Linux prototype with a
 stand-in border leaf, and the reachability matrix in the pull request -- tenant
-isolation, the internet product, the static site, the bridged branch LAN, full
+isolation, the static site, the bridged branch LAN, full
 MTU -- passed against them. Byte-for-byte equality here is what extends that
 evidence to the artifact Infrahub renders.
 
@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 import subprocess  # noqa: S404 - one fixed-argv call to the committed renderer
 import sys
 from pathlib import Path
@@ -78,7 +79,35 @@ def _golden(device: str) -> str:
         subprocess.run(  # noqa: S603 - a fixed argv: this interpreter and a committed script
             [sys.executable, str(LAB_WAN / "render.py")], check=True, capture_output=True
         )
-    return path.read_text(encoding="utf-8")
+    return _without_internet_product(path.read_text(encoding="utf-8"))
+
+
+def _without_internet_product(text: str) -> str:
+    """The lab's text, minus the internet-access product this repository does not model.
+
+    The lab renders `statement 30` for a tenant with `internet: true`. The
+    service kind that drives it is not part of this model, so the oracle is
+    compared with those lines, the header annotation and the two comments that
+    describe them removed. Applies to rendered output and to template source.
+    """
+    text = re.sub(r"\{% if t\.internet %\}\n.*?\{% endif %\}\n", "", text, flags=re.DOTALL)
+    text = re.sub(r"# \S+ buys internet access\n(?:set .* statement 30 .*\n)+", "", text)
+    text = text.replace(", internet: {{ 'yes' if t.internet else 'no' }})", ")")
+    text = re.sub(r", internet: (?:yes|no)\)", ")", text)
+    text = text.replace(
+        "subnet of that tenant, and a default route only if the tenant buys internet", "subnet of that tenant"
+    )
+    text = re.sub(
+        r"# Announce only the sites of tenants.*?(?=set / routing-policy policy RM-INTERNET-OUT default-action)",
+        "# No tenant buys internet access, so nothing is announced: the policy is its\n# default action alone.\n",
+        text,
+        flags=re.DOTALL,
+    )
+    return text.replace(
+        "# Shared DC services, plus the own cloud subnet of this tenant, plus a default\n"
+        "# route if it bought internet. Anything",
+        "# Shared DC services, plus the own cloud subnet of this tenant. Anything",
+    )
 
 
 def _without_provenance(text: str) -> str:
@@ -143,9 +172,9 @@ def test_the_templates_are_the_labs_with_one_line_changed() -> None:
     assert lab == hub
 
     for name in lab:
-        assert _without_provenance((LAB_TEMPLATES / name).read_text()) == _without_provenance(
-            (HUB_TEMPLATES / name).read_text()
-        ), name
+        assert _without_provenance(
+            _without_internet_product((LAB_TEMPLATES / name).read_text())
+        ) == _without_provenance((HUB_TEMPLATES / name).read_text()), name
 
 
 # ---------------------------------------------------------------------------
@@ -153,42 +182,11 @@ def test_the_templates_are_the_labs_with_one_line_changed() -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_removing_internet_access_changes_only_its_own_clause() -> None:
-    """Measured rather than reasoned about.
-
-    The three lines of `statement 30` and its comment go, and the tenant header
-    re-renders with `internet: no`. Nothing else moves.
-    """
-    with_access = await _render("isp-pe1")
-
-    fixture = _fixture("isp-pe1")
-    fixture["ServiceInternetAccess"]["edges"] = []
-    without = await _transform().transform(fixture)
-
-    changed = _changed(with_access, without)
-
-    assert len(changed) == 6, changed
-    assert "-set / routing-policy policy RM-ACME-IMPORT statement 30 match prefix prefix-set PL-DEFAULT" in changed
-    assert "+# ==== tenant acme (VRF CUST_ACME, internet: no) ====" in changed
-
-
-async def test_the_default_route_prefix_set_survives_that_removal() -> None:
-    """It is guarded by the ISP having an internet connection, not by a tenant
-    buying access, so it must stay even when no tenant has bought any.
-    """
-    fixture = _fixture("isp-pe1")
-    fixture["ServiceInternetAccess"]["edges"] = []
-    without = await _transform().transform(fixture)
+async def test_the_default_route_prefix_set_follows_the_isp_internet_connection() -> None:
+    """It is guarded by the ISP having an internet connection, not by a tenant service."""
+    without = await _render("isp-pe1")
 
     assert "set / routing-policy prefix-set PL-DEFAULT prefix 0.0.0.0/0 mask-length-range exact" in without
-
-
-async def test_globex_has_no_default_route_statement() -> None:
-    """The control. globex is configured identically apart from what it bought."""
-    rendered = await _render("isp-pe1")
-
-    assert "policy RM-ACME-IMPORT statement 30 " in rendered
-    assert "policy RM-GLOBEX-IMPORT statement 30 " not in rendered
 
 
 async def test_the_static_site_is_routed_and_put_into_bgp_not_peered() -> None:
@@ -237,30 +235,6 @@ async def test_every_tenant_import_is_restricted_to_the_provider_instance() -> N
 # ---------------------------------------------------------------------------
 # `status` withdraws, as it did under FRR
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("status", ["decommissioning", "decommissioned"])
-async def test_a_decommissioned_internet_service_renders_as_though_absent(status: str) -> None:
-    """Decommissioned is byte-identical to gone -- the strongest form of the claim."""
-    removed_fixture = _fixture("isp-pe1")
-    removed_fixture["ServiceInternetAccess"]["edges"] = []
-    removed = await _transform().transform(removed_fixture)
-
-    marked_fixture = _fixture("isp-pe1")
-    for edge in marked_fixture["ServiceInternetAccess"]["edges"]:
-        edge["node"]["status"] = {"value": status}
-    marked = await _transform().transform(marked_fixture)
-
-    assert marked == removed
-
-
-async def test_the_test_above_is_not_vacuous() -> None:
-    active = await _render("isp-pe1")
-
-    removed_fixture = _fixture("isp-pe1")
-    removed_fixture["ServiceInternetAccess"]["edges"] = []
-
-    assert active != await _transform().transform(removed_fixture)
 
 
 async def test_a_decommissioned_l3vpn_withdraws_its_tenant_and_shuts_its_ports() -> None:
@@ -467,8 +441,7 @@ async def test_a_third_tenant_renders_onto_its_port() -> None:
         "set / network-instance CUST_INITECH inter-instance-policies apply-policy import-policy [ RM-INITECH-IMPORT ]",
     ):
         assert line in rendered, line
-    # initech bought no internet access, and its portal-shaped L3VPN states no
-    # DC range -- it takes the shared one rather than emptying it.
+    # Its portal-shaped L3VPN states no DC range -- it takes the shared one rather than emptying it.
     assert "RM-INITECH-IMPORT statement 30" not in rendered
     assert "set / interface ethernet-1/5 admin-state disable" not in rendered
 

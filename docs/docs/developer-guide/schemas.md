@@ -47,7 +47,7 @@ Regenerate the typed protocol classes after any schema change (see [the command 
 | `service/service.yml` | `Service.Generic` plus the `Service.GenericDevice` / `Service.GenericInterface` binding generics, and the one extension block coupling DCIM to the service layer |
 | `service/kubernetes_services.yml` | `Service.FabricPeering`, `Service.FabricApp` |
 | `service/access_services.yml` | `Service.AppAccess` |
-| `service/wan_services.yml` | `Service.L3vpn`, `Service.InternetAccess`, `Service.TenantCloud` |
+| `service/wan_services.yml` | `Service.L3vpn`, `Service.TenantCloud` |
 | `service/network_services.yml` | `Service.NetworkSegment` — a subnet, a VLAN and a gateway, **allocated** rather than named |
 | `service/onboarding_services.yml` | `Service.TenantOnboarding`, `Service.ServerPlacement` — putting a tenant, or a machine, onto the fabric |
 | `cluster/cluster.yml` | **Marketplace** (`infrahub/cluster`): `Cluster.Generic`, `Cluster.GenericComputeUnitNodes` |
@@ -139,7 +139,7 @@ sits underneath the service layer: it targets a group of service objects and use
 `CoreArtifactTarget` is applied to `Service.FabricPeering`, `Service.FabricApp` and
 `Service.AppAccess` only. Those three render into Crossplane resources, so marking them
 now means an artifact definition can be attached later without a schema migration.
-`Service.L3vpn`, `Service.InternetAccess` and `Service.TenantCloud` render through
+`Service.L3vpn` and `Service.TenantCloud` render through
 device-scoped artifacts instead, so they are not artifact targets themselves.
 
 ### Addresses are always IPAM objects

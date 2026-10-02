@@ -49,8 +49,7 @@ rendered, so the proposed change goes red naming it:
   the firewall accept, a name SR Linux cannot carry.
 
 * **A service that renders only through a live L3VPN, without one** (rule 6):
-  a tenant cloud whose tenant has none, internet access on a withdrawn L3VPN or
-  with no internet peering, and live L3VPNs that disagree on (or all omit) the
+  a tenant cloud whose tenant has none, and live L3VPNs that disagree on (or all omit) the
   shared DC service range.
 
 These two judge LIVE services only. Rules 1-4 refuse to let a label excuse a
@@ -81,7 +80,6 @@ from .wan_service_check_query import WanServiceCheckQuery
 
 KIND_L3VPN = "ServiceL3vpn"
 KIND_CLOUD = "ServiceTenantCloud"
-KIND_INTERNET = "ServiceInternetAccess"
 
 # transforms/srl_config.py's two constants, restated rather than imported: a
 # check is loaded by Infrahub's check runner on its own, and a cross-package
@@ -448,8 +446,8 @@ def check_l3vpn_renderable(parsed: WanServiceCheckQuery) -> list[Finding]:
 def check_dependents_renderable(parsed: WanServiceCheckQuery) -> list[Finding]:
     """Rule 6: services that render only THROUGH a live L3VPN, and the shared range.
 
-    A tenant cloud and an internet-access product reach the WAN only as part of
-    their tenant's L3VPN. Without a live one they render nowhere, and nothing
+    A tenant cloud reaches the WAN only as part of its tenant's L3VPN.
+    Without a live one it renders nowhere, and nothing
     else reads them -- the same merged no-op rule 5 exists to catch.
     """
     findings: list[Finding] = []
@@ -467,25 +465,6 @@ def check_dependents_renderable(parsed: WanServiceCheckQuery) -> list[Finding]:
                     ),
                     object_id=cloud.id,
                     object_type=KIND_CLOUD,
-                )
-            )
-
-    peerings = _edges_of(parsed.wan_internet_peering)
-    for access in _edges_of(parsed.service_internet_access):
-        if not _live(access):
-            continue
-        vpn = _node_of(access.l_3_vpn)
-        reason = None
-        if vpn is None or not _live(vpn):
-            reason = "its L3VPN is not live, and presence is read only through a live one"
-        elif not peerings:
-            reason = "no WanInternetPeering is modelled, so there is no default route to import"
-        if reason:
-            findings.append(
-                Finding(
-                    message=f"Internet access {_value(access.name)!r} renders nowhere: {reason}.",
-                    object_id=access.id,
-                    object_type=KIND_INTERNET,
                 )
             )
 

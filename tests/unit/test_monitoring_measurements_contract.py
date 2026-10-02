@@ -22,7 +22,6 @@ from transforms.telemetry_collector_config import DISPATCH, FIREWALL, ROUTER, SE
 from transforms.telemetry_services import (
     APP_ACCESS,
     FABRIC_APP,
-    INTERNET,
     L3VPN,
     ONBOARDING,
     PEERING,
@@ -56,7 +55,7 @@ SERVICE_CONTRACT: dict[str, set[str]] = {
     "service-delivery": {FABRIC_APP},
     "service-reachability": {FABRIC_APP},
     "service-access": {APP_ACCESS},
-    "service-routing": {L3VPN, INTERNET, TENANT_CLOUD, ONBOARDING, SEGMENT, PEERING},
+    "service-routing": {L3VPN, TENANT_CLOUD, ONBOARDING, SEGMENT, PEERING},
     "service-cabling": {PLACEMENT},
 }
 

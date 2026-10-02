@@ -39,13 +39,12 @@ def _generator_targets() -> dict[str, str]:
     }
 
 
-# Service kinds with no generator at all. The WAN three are rendered by
+# Service kinds with no generator at all. The two WAN kinds are rendered by
 # `srl_config` from the service layer directly -- there is nothing to expand, so
 # there is no group for them to be missing from.
 WITHOUT_GENERATORS = {
     "ServiceL3vpn",
     "ServiceTenantCloud",
-    "ServiceInternetAccess",
 }
 
 

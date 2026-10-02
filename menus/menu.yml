@@ -95,12 +95,6 @@ spec:
             icon: "mdi:vpn"
 
           - namespace: Service
-            name: InternetAccessServices
-            label: Internet Access
-            kind: ServiceInternetAccess
-            icon: "mdi:web-check"
-
-          - namespace: Service
             name: TenantCloudServices
             label: Tenant Clouds
             kind: ServiceTenantCloud
