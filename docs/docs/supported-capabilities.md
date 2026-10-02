@@ -73,7 +73,7 @@ The schema still carries the roles and underlay choices the upstream examples us
 | VRF L3 interfaces (firewall / WAN handoffs) | ✅ | `Routing.VrfL3Interface` objects with inbound and outbound ACL bindings. |
 | Per-node SVI addresses + VARP gateway | ✅ | `Evpn.SviNode` plus `Evpn.Svi.ip_virtual_router_addresses`, for SVIs a workload peers BGP over. |
 | ACL, prefix-list and route-map *contents* | 🟡 | Supplied through the fabric's `avd_custom_hostvars` escape hatch; the interface and peer *bindings* are native. |
-| Prefix lists, route maps, static routes (reconciled) | 🟡 | The backfill generator still reconciles what AVD derives; authored inputs take precedence. |
+| A switch's derived routing state as objects | ⬜ | Not read back from AVD: a switch's BGP sessions, prefix lists and route maps live in its stored structured config. The `Routing.*` kinds hold the WAN routers' and the firewall's authored state. |
 
 ## Rendering & artifacts
 

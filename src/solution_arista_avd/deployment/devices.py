@@ -8,8 +8,8 @@ it. The CLI is still `scripts/provision_lab.py`; everything below it is here.
 scar from something measured against the running lab, and the ones that look
 like trivia are the expensive ones -- the trailing `end`, the per-run session
 name, `scp -O`. Two paths were deliberately rewritten since: the WAN's SR Linux
-push (below), and the firewall's `load replace`, which is a full `load override`
-now that the artifact renders `system`.
+push (below), and the firewall's, which was `load replace` on tagged hierarchies
+and is now a full `load override`, because the artifact renders `system`.
 
 Three device families, three delivery paths, because the lab gives them three
 different front doors:

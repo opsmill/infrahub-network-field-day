@@ -485,12 +485,6 @@ use live.
   the sync: a sync reports `Succeeded` over an empty or rejected set. A deleted
   resource is not redelivered until the `InfrahubSync` is deleted and re-applied
   from `vidra/infrahub-syncs.yaml`.
-- **A `backfill-structured-config` run is red in the proposed change's tasks.** It
-  is on every proposed change that regenerates the fabric, and it is not a check:
-  every check stays green. It fails writing `RoutingBGPPeerGroup.device`,
-  whose peer is `DcimDevice`, with a fabric switch, which has been a
-  `DcimFabricSwitch` since the device kinds were split. The rendered
-  configurations are unaffected; do not open the Tasks tab on screen.
 - **The merge reached no device.** Check the reconciler is running and look at
   `docker logs infrahub-deployment-reconciler-1`; a device the operator suspended
   shows as `suspended=1` and is left alone by design.

@@ -47,10 +47,13 @@ from pathlib import Path
 from infrahub_sdk import Config, InfrahubClientSync
 from infrahub_sdk.exceptions import GraphQLError
 
+from solution_arista_avd import envfile
 from solution_arista_avd.envfile import read_env, upsert_env
 
 REPO = Path(__file__).resolve().parents[1]
-ENV_FILE = REPO / ".env"
+# The MAIN checkout's `.env`, not one beside this file: from a git worktree that
+# would be a file docker compose never reads. See `envfile.main_checkout`.
+ENV_FILE = envfile.env_file(REPO)
 
 ACCOUNT = "mcp-agent"
 GROUP = "Agents"

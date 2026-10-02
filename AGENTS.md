@@ -528,8 +528,18 @@ invisible on `main`, so a proposed change that is opened and then rejected does 
 Current generator definitions are registered in `.infrahub.yml`:
 `generate-fabric`, `generate-pod`, `generate-rack`, `generate-server-cabling`,
 `generate-avd-device-hostvar`, `generate-avd-device-structured-config`,
-`backfill-structured-config`, `generate-fabric-peering`, `generate-app-access`,
-`generate-network-segment`, and `generate-monitoring-collector`.
+`generate-fabric-peering`, `generate-app-access`, `generate-network-segment`,
+`generate-fabric-app`, `generate-tenant-onboarding`, `generate-server-placement`,
+and `generate-monitoring-collector`.
+
+There is no `backfill-structured-config` any more. It read each switch's structured
+config back into `Routing*`, `IpamPrefix` and interface MTU objects that nothing
+consumed, and after the device-kind split it failed on every run — four of the
+`Routing*` kinds peer `DcimDevice` — leaving a red task in every proposed change that
+rebuilt the fabric. **Retiring a generator needs its trigger rules and action deleted
+first**: `CoreGeneratorAction.generator` is mandatory, and the repository import
+deletes queries *before* generator definitions, so a definition still held by an
+action wedges the import at `error-import`.
 
 **An application is a Helm chart, and nothing else.** Cycle 033 made `chart_repository`,
 `chart_name` and `chart_version` mandatory together — which is what the Crossplane XRD already

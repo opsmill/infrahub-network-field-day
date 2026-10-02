@@ -28,7 +28,6 @@ GENERATOR_RACK = "generate-rack"
 GENERATOR_SERVER_CABLING = "generate-server-cabling"
 GENERATOR_AVD_HOSTVAR = "generate-avd-device-hostvar"
 GENERATOR_AVD_STRUCTURED_CONFIG = "generate-avd-device-structured-config"
-GENERATOR_BACKFILL = "backfill-structured-config"
 
 # --- Artifact instance names (from .infrahub.yml `artifact_definitions` -> `artifact_name`) ---
 ARTIFACT_CABLING_PLAN = "Cabling Plan"

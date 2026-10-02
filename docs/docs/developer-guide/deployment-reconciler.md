@@ -188,9 +188,9 @@ instead of hiding it.
 
 :::note A suppression that turned out to be a bug
 
-This layer used to suppress the `fxp0` management interface. `load replace` on the
-`interfaces` hierarchy deletes everything the artifact omits, and the model owned only the data
-interfaces — so every push deleted the firewall's management interface, and vrnetlab, running
+This layer used to suppress the `fxp0` management interface. The push was then `load replace`
+on the `interfaces` hierarchy, which deleted everything the artifact omitted, and the model owned
+only the data interfaces — so every push deleted the firewall's management interface, and vrnetlab, running
 as root inside the container, restored it seconds later. An in-sync firewall reported
 `- fxp0 {...}` forever. The device's commit log showed the pair every time:
 
@@ -201,9 +201,9 @@ as root inside the container, restored it seconds later. An in-sync firewall rep
 ```
 
 The suppression was right about the diff and wrong about the cause: the push was the bug.
-`fxp0` is now modelled, so the artifact carries it, the hierarchy can be replaced wholesale
-without deleting it, and the diff — along with the suppression — went away. Under the full
-`load override` it is also the first item in the push's lifeline.
+`fxp0` is now modelled, so the artifact carries it, a replace no longer deletes it, and the
+diff — along with the suppression — went away. The push is now a full `load override` of the
+whole configuration, and `fxp0` is the first item in its lifeline.
 
 The trade is stated rather than hidden: **the model is now authoritative for the firewall's
 management address.** Its values come from an `init.conf` that vrnetlab generates inside the

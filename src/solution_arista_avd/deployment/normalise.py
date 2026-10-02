@@ -36,11 +36,11 @@ Three rules govern this module, and the third is the one that keeps it honest:
    of a gap in this file is an unnecessary push, never a missed one.
 
 **A suppression can be a bug in disguise.** This module used to suppress the
-``fxp0`` management interface, because ``load replace`` on the whole
-``interfaces`` hierarchy deleted it on every push and vrnetlab restored it. The
-suppression was right about the diff and wrong about the cause. Fixing the push
--- tagging each modelled interface rather than the stanza -- removed the diff and
-the suppression with it. Before adding a rule here, ask whether the device is
+``fxp0`` management interface, because the push of the day -- ``load replace``
+on the whole ``interfaces`` hierarchy -- deleted it every time and vrnetlab
+restored it. The suppression was right about the diff and wrong about the cause.
+Modelling ``fxp0``, so the artifact carries it, removed the diff and the
+suppression with it; the push is now a full ``load override``. Before adding a rule here, ask whether the device is
 telling you something true.
 """
 
