@@ -81,7 +81,7 @@ uv run invoke demo-activate    # point the repository ref at demo/internet-acces
 ```
 
 Infrahub imports the released commit into `main`: the transform, template, check and menu.
-The `isp-pe1` artifact re-renders with `statement 30`, and the reconciler pushes it. Run it
+The artifacts are regenerated, so `isp-pe1` renders `statement 30`, and the reconciler pushes it. Run it
 after the merge. The other order leaves queries on `main` naming a kind `main` does not have.
 
 ## Rehearse again
@@ -96,9 +96,17 @@ has pulled is not rewritten, so each release takes the next number.
 
 ## Before relying on it
 
-These are not yet measured on a stack:
+Measured on a fresh stack, the whole path took about two minutes from the ref move to the router:
 
-- How long Infrahub takes to import a commit after the ref moves.
-- That a merge, then `demo-activate`, produces the `statement 30` change on `isp-pe1`.
-- That `demo-reset` returns a merged stack to the baseline.
-- That a read-only credential is enough for a private remote.
+| Step | Measured |
+| --- | --- |
+| `demo-release` to a ready proposed change | about 1 minute, six additions, all validators green |
+| Ref move to the commit imported | 29 seconds |
+| Import to the `isp-pe1` artifact carrying `statement 30` | 20 seconds |
+| Artifact to the router (reconciler cycle) | about 30 seconds |
+| Acme's site to the internet host | HTTP 200 after, no response before; globex has none either way |
+
+Moving the ref back to `main` does not re-render the artifacts by itself, so `demo-reset`
+and `demo-activate` regenerate them explicitly.
+
+Not yet measured: a private remote needs a read token, and that path is untested.
