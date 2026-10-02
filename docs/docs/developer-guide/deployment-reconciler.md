@@ -315,3 +315,151 @@ effectively root on the host.
   writes no state.
 - **It does not change any existing workflow.** `invoke provision`, `invoke bootstrap` and the
   artifact chain behave identically whether or not it is running.
+
+## Operational notes
+
+Moved from the repository instruction file. Read these before changing the reconciler package.
+
+`src/solution_arista_avd/deployment/` compares every device against its rendered artifact on a
+timer and pushes the ones that differ — the loop half of what `invoke provision` does by hand.
+It is behind a compose profile (`--profile reconcile`) so nothing starts it by accident, and
+`invoke provision` is unchanged: cycle 030 **lifted** the push path out of
+`scripts/provision_lab.py` into `deployment/devices.py` so both callers share one copy rather
+than two that drift.
+
+**Run `invoke build` before starting the profile if dependencies have moved.** The service runs
+`python scripts/reconcile.py` with the *image's* interpreter, so it needs the project's runtime
+dependencies baked in. An image built predating `nornir-infrahub` crash-loops on
+`ModuleNotFoundError: No module named 'infrahub_sdk'` — the SDK arrives transitively through
+`nornir-infrahub`, and the host virtualenv bind-mounted at `/source` cannot stand in for it:
+the image is Python 3.13 and that virtualenv is 3.12.
+
+The device layer is **Nornir** (`deployment/inventory.py`), with the inventory built from
+Infrahub by `nornir-infrahub`: hosts are `DcimGenericDevice` so all four device kinds appear,
+and groups come from each node's `member_of_groups`, which `objects/00_groups.yml` already
+seeds. **No `schema_mappings` is configured, deliberately** — `mgmt_ip` is a relationship on
+`DcimFabricSwitch` alone, so a mapping for it against the generic is rejected outright; the
+address each device is reached by comes from `Target` instead.
+
+**Where the thread boundary sits is the design.** Nornir runs hosts in a `ThreadPoolExecutor`
+while the SDK's client context is a contextvar bound to the async task, so a Nornir task does
+device I/O only and returns plain data; every Infrahub write happens afterwards in the caller's
+coroutine. `test_the_nornir_layer_never_touches_infrahub` asserts that by walking the module's
+imports rather than trusting the comment. The firewall is never parallelised — its comparison
+takes an exclusive lock, so it runs alone after the fabric.
+
+**Read `deployment/normalise.py` before changing anything in this package.** One of the three
+device families reports a difference against an artifact the device already matches:
+
+- **Junos** reports changed lines every time: zone-pair ordering and comment round-tripping.
+- **SR Linux does not**, which is why its normaliser suppresses nothing: the comparison loads
+  the artifact as a replace in a private candidate and asks for `diff flat`, so the router
+  compares intent against running itself, and all six printed nothing but the status line
+  after boot. (FRR, before it, reported three lines on every in-sync router.)
+
+Read raw, Junos's output means "differs," and the reconciler would replace the firewall's
+configuration on every cycle forever while logging success. `differs` is therefore computed
+from normalised output, never raw text, and the rules are an **allowlist** — anything
+unrecognised counts as a difference, so a gap causes an unnecessary push rather than a missed
+one. `tests/unit/test_deployment_normalise.py` holds real captured device output for both the
+in-sync and the changed case; an empty result is only evidence when a non-empty one is proven
+beside it.
+
+Worth knowing before debugging it:
+
+- **The firewall is replaced whole: `load override`, `commit confirmed 3`, a fresh login, then
+  the confirming `commit`.** The counterpart of EOS's `rollback clean-config`, since cycle 035.
+  Two guards make it survivable, both proven on a throwaway vSRX booted exactly like `fw1`:
+  `_assert_junos_lifeline` refuses, before staging, an artifact missing an `fxp0` address,
+  `services ssh`, `services netconf ssh`, a `super-user` login for `VSRX_USERNAME` or root
+  authentication (statements, not substrings; an `inactive:` fxp0 is no fxp0; an empty artifact
+  fails it, and under `override` an empty file erases the device). And the confirmation is
+  **earned**: `_assert_vsrx_reachable` logs in again through vrnetlab's forward and asks NETCONF
+  for a hello before the confirm is sent. Measured: an artifact moving `fxp0` off vrnetlab's
+  guest address passed the lifeline, committed, failed the check, was never confirmed, and was
+  rolled back by Junos itself (`root via other`). A probe answering within 30s of the rollback is
+  refused rather than raced — a confirm issued after the rollback commits nothing and still
+  prints `commit complete`.
+- **`fxp0` is modelled, and the model is authoritative for the firewall's management
+  address.** It was modelled first because `load replace` on `interfaces` deleted it on every
+  push; under the full override it is the lifeline's first item. Its values, like the
+  `mgmt_junos` gateways (constants in `junos_config.py`), come from an `init.conf` vrnetlab
+  generates inside the container. If they drift from what vrnetlab assigns, a push now *fails
+  the post-commit check and rolls back* rather than stranding the device.
+  `FXP0_FROM_INIT_CONF` and its siblings in `tests/unit/test_junos_config.py` are hand-maintained;
+  `fixtures/junos/vsrx_booted.conf` is the captured witness they are checked against.
+  `SecurityZone` on a firewall interface became optional in `schemas/security/security.yml` to
+  allow this: a deliberate change to the upstream contract, because a management interface is in
+  no zone.
+- **Junos re-salts password hashes on load, and only proof suppresses it.** Against a freshly
+  booted vSRX, both `$6$otternetlab$…` hashes come back as `$6$<random>$…` on every load — the
+  same password. `normalise.junos_same_secret` hashes the reconciler's own password with each
+  salt (`sha_crypt`, because Python 3.13 removed `crypt`) and suppresses the pair only when both
+  match; an unexplained hash is a changed password and differs. `version` and a login's `uid` are
+  stamped by Junos on every commit and suppressed as deletions only, under the banner they were
+  measured under. Every rule has a captured in-sync *and* drifted fixture, including drift inside
+  `system`.
+- **`show | compare` cannot see a cleartext password, so the comparator asks running.** A
+  freshly booted vSRX carries `init.conf`'s two `plain-text-password-value "admin@123"` leaves.
+  `load override` deletes them, but the compare never prints that deletion — its only trace is
+  the two re-salted hash pairs, which the proof above rightly suppresses. So the whole diff
+  normalised to empty, and a fresh bootstrap recorded fw1 `in_sync` with cleartext credentials
+  on it and never pushed; a manual `invoke provision --kind junos` removed exactly those two
+  lines. `compare_junos` now runs `show configuration | display set | match
+  plain-text-password-value` in the same session and appends what it finds as deletions, and
+  `normalise_junos` keeps any statement naming the leaf **before every suppression**, redacted,
+  because the normalised diff is stored in Infrahub. An unanswered probe raises rather than
+  reading as clean. The re-salt proof is unchanged; the fix is that the leaf is now looked for,
+  not that hashes became suspicious.
+- **sr_cli stops at the first error, commits nothing, and leaves its candidate behind.** A
+  parse error or a refused commit exits 1 with running untouched — measured both — but the
+  named candidate survives the session and SR Linux holds ten. The pusher and comparator clear
+  it on failure and `sweep_srl` clears any `infrahub-*` leftovers each cycle. An aborted
+  comparison prints NO diff, so a non-zero exit raises rather than reading as in sync.
+- **An empty SR Linux artifact is an instruction to erase the router**, because the push
+  runs `delete /` before setting the file — management and the admin login included. Artifact
+  generation is asynchronous and an unrendered artifact exists, reports `Ready`, and is empty.
+  `_assert_srl_lifeline` refuses, before anything is sent, an artifact lacking any of: mgmt0
+  and its DHCP client, the `mgmt` network instance holding `mgmt0.0`, the gNMI and SSH servers
+  in it, and an admin password that is a crypt hash. Whole commands, so a comment never
+  satisfies it.
+- **Every push is `commit confirmed timeout 120`, and the reconciler confirms only what it can
+  see survived.** After the commit it checks inside the container's `srbase-mgmt` namespace
+  that `mgmt0.0` has an address and 57400 and 22 are listening, then `confirmed-accept`; else
+  `confirmed-reject`. Measured: a lifeline-passing artifact that moved gNMI to another port was
+  rejected and running went back to the artifact; a confirmed commit nobody accepted rolled
+  itself back at its timeout. Unchanged and changed full replaces left every BGP session's
+  uptime running — the commit applies only the net difference.
+- **The routers are pushed with `docker exec sr_cli`, not a gNMI Set Replace on `/`**: both
+  replace the whole tree atomically, but only sr_cli takes the artifact exactly as rendered and
+  has commit-confirm, and it needs no credential and no address, which keeps `mgmt_ip` meaning
+  eAPI and the collector's `telemetry_address` out of the reconciler. Nothing is saved to
+  startup. A `docker restart`ed router came back in sync in 16s **but without its data-plane
+  links** — a plain restart drops a container's veths and only `containerlab deploy` restores
+  them.
+- **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load override` does
+  nothing, and `show | compare` comes back empty — which reads exactly like "in sync."
+
+State goes to `DeploymentState` (cycle 029). `last_confirmed_at` moves only when the device
+reported no difference, never because a push was sent; `last_checked_at` moves every cycle so a
+stale confirmation is distinguishable from a dead loop. The service never writes `suspend` or
+`suspend_reason` — those are the operator's break-glass.
+
+**The interval is a maximum, not a sleep** (`deployment/wake.py`). Between cycles the loop polls
+the configuration artifacts' checksums on `main` (the cycle's own discovery query, no device
+I/O) and starts early once a moved set holds still for two polls, forcing the devices whose
+intent moved; a cycle that pushed is confirmed 60 seconds later rather than an interval later,
+once per push. Two things look loosenable and are not:
+
+- **Only interval-started cycles advance the firewall's one-in-N cadence.** An early cycle
+  compares `fw1` only when `fw1`'s own artifact moved or it was just pushed. Counting early
+  cycles would take the exclusive lock as often as merges land.
+- **The wake fires only on movement away from what the last cycle read, and only once it
+  stops.** Waking on the first movement compares a half-rendered fabric; treating agreement as
+  enough repeats `_wait_for_artifacts`' stale-checksum lesson. A snapshot equal to the
+  baseline is "nothing happened" and the full interval applies.
+
+`invoke reconcile --now` asks the running container for an immediate all-device cycle through a
+trigger file. A changed `wake.py` reaches the loop only after `invoke build` and recreating the
+container: `scripts/reconcile.py` comes from the bind mount and imports the image's package, so
+a new script against an old image fails at import.
