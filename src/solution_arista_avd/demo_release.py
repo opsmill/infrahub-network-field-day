@@ -195,6 +195,7 @@ def decide_settled(
     active_tasks: int,
     failed_tasks: list[str],
     require_capability: bool = True,
+    workers_synced: bool = True,
 ) -> tuple[bool, str]:
     """Whether a released branch is fully imported, and if not, what it is still waiting for.
 
@@ -205,6 +206,11 @@ def decide_settled(
     reason to keep waiting, so it is reported separately by the caller. A branch that
     takes the capability back out sets ``require_capability`` off: it has no schema or
     objects of its own to wait for.
+
+    ``workers_synced`` is whether every task worker's own clone has the commit on its local
+    branch. Measured: the graph records the import before the workers pull, and a merge made
+    in that gap reads the stale local branch, merges a commit ``demo-main`` already holds,
+    and changes nothing ("Already up to date"), so the data merges and the code does not.
     """
     if failed_tasks:
         return False, f"failed tasks on the branch: {', '.join(failed_tasks)}"
@@ -216,6 +222,8 @@ def decide_settled(
         return False, "the schema to load"
     if require_capability and object_count < 1:
         return False, "the objects to load"
+    if not workers_synced:
+        return False, "every task worker to pull the commit into its own clone"
     if active_tasks:
         return False, f"{active_tasks} task(s) still queued or running on the branch"
     return True, ""
