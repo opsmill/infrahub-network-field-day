@@ -317,7 +317,7 @@ def load(ctx: Context) -> None:
     load_menu(ctx)
     sleep(5)
     ctx.run("infrahubctl object load objects/")
-    ctx.run("infrahubctl object load repository.yml")
+    _load_repository(ctx)
     wait_for_repository_sync("test-repository")
     ctx.run("infrahubctl object load repository_checks.yml")
     ctx.run("infrahubctl object load triggers.yml")
@@ -325,6 +325,214 @@ def load(ctx: Context) -> None:
     # cannot upload file content. Without this an application loads with no
     # workload and its Crossplane artifact renders an empty manifests list.
     ctx.run("python scripts/seed_app_payloads.py --branch main")
+
+
+def _load_repository(ctx: Context) -> None:
+    """Register the CoreRepository: the checkout by default, a Git remote for the demo.
+
+    `INFRAHUB_REPOSITORY_URL` points Infrahub at a remote instead of `/upstream`,
+    which is what lets a pushed branch reach it (`invoke demo-release`). A private
+    remote also needs `INFRAHUB_REPOSITORY_TOKEN` (and `INFRAHUB_REPOSITORY_USER`);
+    the credential file is written to a temporary directory and deleted, never
+    into the repository.
+    """
+    url = os.environ.get("INFRAHUB_REPOSITORY_URL", "")
+    if not url:
+        ctx.run("infrahubctl object load repository.yml")
+        return
+    import tempfile
+
+    from solution_arista_avd import demo_release as dr
+
+    token = os.environ.get("INFRAHUB_REPOSITORY_TOKEN", "")
+    credential = "demo-remote" if token else None
+    with tempfile.TemporaryDirectory() as tmp:
+        if token:
+            cred_file = Path(tmp) / "credential.yml"
+            cred_file.write_text(
+                dr.render_credential("demo-remote", os.environ.get("INFRAHUB_REPOSITORY_USER", "git"), token),
+                encoding="utf-8",
+            )
+            cred_file.chmod(0o600)
+            ctx.run(f"infrahubctl object load {shlex.quote(str(cred_file))}", pty=True)
+        repo_file = Path(tmp) / "repository.yml"
+        repo_file.write_text(dr.render_repository(url, credential=credential), encoding="utf-8")
+        print(f" - Repository 'test-repository' -> {url}")
+        ctx.run(f"infrahubctl object load {shlex.quote(str(repo_file))}", pty=True)
+
+
+# ---------------------------------------------------------------------------
+# The demo: a staged capability branch arrives from the Git remote on cue.
+# ---------------------------------------------------------------------------
+
+DEMO_NAME = "internet-access"
+# The objects the staged capability adds. `object load` upserts, so the rest of
+# the file is already there and unchanged.
+DEMO_OBJECTS = "objects/37_otternet_wan_services.yml"
+
+
+def _wait_for(condition: Callable[[], bool], what: str, timeout: int, interval: int = 5) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return
+        print(f"   waiting for {what}")
+        sleep(interval)
+    msg = f"Timed out after {timeout}s waiting for {what}"
+    raise Exit(msg, code=1)
+
+
+def _branch_repository_commit(branch: str) -> str:
+    """The commit Infrahub has imported for the repository on this branch, or ''."""
+    data = _graphql("{ CoreRepository { edges { node { commit { value } } } } }", branch)
+    edges = (data.get("CoreRepository") or {}).get("edges") or []
+    return str(((edges[0]["node"].get("commit") or {}).get("value")) or "") if edges else ""
+
+
+def _worker_import_filter(ctx: Context) -> list[str] | None:
+    """The branch filter the running task worker carries; None if it cannot be read."""
+    from solution_arista_avd import demo_release as dr
+
+    result = ctx.run(
+        f"{compose_cmd()} exec -T task-worker printenv INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES",
+        hide=True,
+        warn=True,
+    )
+    if not result or not result.ok:
+        return None
+    return dr.parse_patterns(result.stdout.strip())
+
+
+@task(help={"restart": "Recreate infrahub-server and task-worker with the filter applied (default: only print it)"})
+def demo_filter(ctx: Context, restart: bool = False) -> None:
+    """Let `demo/*` branches into Infrahub, keeping `main`.
+
+    `["main"]` is deliberate (every extra synced branch costs ~171 automations),
+    so this is a demo-time override through the variable the compose files
+    already read, not a change to the default.
+    """
+    from solution_arista_avd import demo_release as dr
+
+    current = _worker_import_filter(ctx) or ["main"]
+    value = dr.demo_filter(current)
+    print(f"INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='{value}'")
+    if not restart:
+        print("Not applied. Re-run with --restart, or export it and run `invoke restart`.")
+        return
+    with ctx.cd(compose_root()):
+        ctx.run(
+            f"{compose_cmd()} up -d --no-deps infrahub-server task-worker",
+            env={"INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES": value},
+            pty=True,
+        )
+
+
+@task(
+    help={
+        "name": f"Capability name; releases stage/<name> (default {DEMO_NAME})",
+        "run": "Release number. Each release is a new branch name, because a pulled commit is never rewritten",
+        "objects": "Object file on the staged branch to load onto the Infrahub branch",
+        "timeout": "Seconds to wait for each step (default 600)",
+        "proposed_change": "Open the proposed change once the data is loaded (default true)",
+    }
+)
+def demo_release(
+    ctx: Context,
+    name: str = DEMO_NAME,
+    run: int = 1,
+    objects: str = DEMO_OBJECTS,
+    timeout: int = 600,
+    proposed_change: bool = True,
+) -> None:
+    """Push stage/<name> to demo/<name>-<run>, wait for Infrahub to import it, load its schema and data.
+
+    The push delivers code. Schema and objects are not part of a repository
+    import, so they are read from the staged commit and loaded onto the new
+    Infrahub branch directly. The proposed change is opened last: one opened
+    before the data lands runs its checks against a branch that is not ready.
+    """
+    import tempfile
+
+    from solution_arista_avd import demo_release as dr
+
+    stage, demo = dr.stage_branch(name), dr.demo_branch(name, run)
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        tip = ctx.run(f"git rev-parse --verify {shlex.quote(stage)}", hide=True, warn=True)
+    if not tip or not tip.ok:
+        raise Exit(f"No local branch '{stage}'. Create it first; see docs/docs/demo-builder.md.", code=1)
+    commit = tip.stdout.strip()
+
+    patterns = _worker_import_filter(ctx)
+    if patterns is None:
+        print(" - Could not read the task worker's branch filter; continuing, the wait below will say if it is wrong.")
+    elif not dr.is_imported(patterns, demo):
+        raise Exit(
+            f"The running task worker would ignore '{demo}' (filter: {patterns}). Run `invoke demo-filter --restart`.",
+            code=1,
+        )
+    if demo in (_branches() or {}):
+        raise Exit(
+            f"Infrahub already has '{demo}'. Use `--run {run + 1}`, or `invoke demo-reset --run {run}` first.", code=1
+        )
+
+    print(f"\n=== Releasing {stage} ({commit[:10]}) as {demo} ===")
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run(f"git push origin {shlex.quote(dr.refspec(name, run))}", pty=True)
+
+    print(" - Waiting for Infrahub to create the branch")
+    _wait_for(lambda: demo in (_branches() or {}), f"the Infrahub branch '{demo}'", timeout)
+    print(" - Waiting for the repository import on that branch to reach the pushed commit")
+    _wait_for(lambda: _branch_repository_commit(demo) == commit, f"the import of {commit[:10]} on '{demo}'", timeout)
+
+    with tempfile.TemporaryDirectory() as tmp, ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run(f"git archive {shlex.quote(commit)} schemas {shlex.quote(objects)} | tar -x -C {shlex.quote(tmp)}")
+        print(f" - Loading the staged schema onto '{demo}'")
+        ctx.run(f"infrahubctl schema load {shlex.quote(tmp)}/schemas --branch {shlex.quote(demo)}", pty=True)
+        sleep(5)
+        print(f" - Loading {objects} onto '{demo}'")
+        ctx.run(
+            f"infrahubctl object load {shlex.quote(tmp)}/{shlex.quote(objects)} --branch {shlex.quote(demo)}", pty=True
+        )
+
+    if not proposed_change:
+        print(f"\nBranch '{demo}' is ready. Open a proposed change from it into main.")
+        return
+    mutation = dr.proposed_change_mutation(
+        demo, f"Add {name}", f"Prepared implementation of {name}, released from {stage} at {commit[:10]}."
+    )
+    created = _graphql(mutation)
+    pc_id = ((created.get("CoreProposedChangeCreate") or {}).get("object") or {}).get("id")
+    if not pc_id:
+        print(f"\nBranch '{demo}' is ready, but the proposed change could not be opened. Open it in the UI.")
+        return
+    # Creating one starts its validators at once, and that first pass can race the
+    # data just loaded. Asking again is what makes the checks judge the final branch.
+    _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
+    print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
+
+
+@task(
+    help={
+        "name": f"Capability name (default {DEMO_NAME})",
+        "run": "The release to remove",
+    }
+)
+def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1) -> None:
+    """Remove demo/<name>-<run> from Infrahub and the remote, so the demo can be rehearsed again.
+
+    Never reuse the name afterwards: a branch Infrahub has pulled is not
+    rewritten. The next release takes `--run <n+1>`.
+    """
+    from solution_arista_avd import demo_release as dr
+
+    demo = dr.demo_branch(name, run)
+    if demo in (_branches() or {}):
+        ctx.run(f"infrahubctl branch delete {shlex.quote(demo)}", pty=True)
+    else:
+        print(f" - Infrahub has no '{demo}'")
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run(f"git push origin --delete {shlex.quote(demo)}", pty=True, warn=True)
+    print(f"\nNext release: invoke demo-release --name {name} --run {run + 1}")
 
 
 # The AVD chain, and the reason it is split in two.
