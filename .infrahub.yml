@@ -365,7 +365,10 @@ check_definitions:
   # Also global. The WAN service layer names technical objects rather than
   # creating them, so no generator sits beneath it -- and every one of its
   # references is otherwise unverified. A circuit belonging to another tenant
-  # inside an L3VPN joins two tenants' routing, and nothing errors.
+  # inside an L3VPN joins two tenants' routing, and nothing errors. It also
+  # refuses a live L3VPN srl_config could not put on a port -- a tenant with no
+  # WanSite is what a portal request for a new tenant looks like, and it used
+  # to merge green and reach no router.
   - name: wan-service-consistency
     file_path: "./checks/wan_service_check.py"
     class_name: WanServiceConsistencyCheck

@@ -70,10 +70,22 @@ ROLE_TO_TEMPLATE = {
     "branch_router": "branch-router.srl.j2",
 }
 
-# The lab's tenant order, which drives the order of the VRF blocks and import
-# policies on the provider edge. Infrahub stores no authoring order, so an
-# explicit sequence is the only way to reproduce it deterministically.
-TENANT_ORDER = ("acme", "globex")
+# NO TENANT IS NAMED HERE. This was `TENANT_ORDER = ("acme", "globex")`, which
+# was both the render order AND the render set: `_tenants` iterated it, so an
+# L3VPN for any third tenant -- the portal offers every OrganizationTenant --
+# was skipped without a word. The request merged, its proposed change was green,
+# and the provider edge never heard of it. Tenants are now every tenant with a
+# live L3VPN, ordered by name, which reproduces the lab's order (acme before
+# globex) without stating it. What a tenant needs before it CAN render is the
+# `wan-service-consistency` check's business, so a request missing a
+# prerequisite goes red in its proposed change instead of merging as a no-op.
+
+# Every name the templates splice into an SR Linux path or policy name: the
+# tenant (`RM-<TENANT>-IMPORT`, peer-group `<tenant>-<site>`), the site, and the
+# VRF. A space or a quote in one splits the `set` line, and on sr_cli a
+# malformed line aborts the whole candidate. Mirrored by SAFE_NAME in
+# checks/wan_service_check.py, which reports it before anything renders.
+SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 # A service in either state is rendered as though it did not exist. See
 # `SrlConfig._live`: `decommissioning` counts as gone rather than going, because
@@ -196,7 +208,9 @@ class SrlConfig(InfrahubTransform):
             # made router_id explicit rather than derived.
             if target.router_id is None or target.router_id.node is None:
                 raise SrlConfigError(f"{target.name.value}: no router id, so no router-id line can be rendered")
-            site["ce"]["lan_address"] = target.router_id.node.address.value
+            # Bare, because the template strips only a literal `/24` -- a CE on
+            # any other LAN size would render `router-id 10.60.30.1/25`.
+            site["ce"]["lan_address"] = _strip_mask(target.router_id.node.address.value)
             context["tenant"] = tenant
             context["site"] = site
 
@@ -389,10 +403,8 @@ class SrlConfig(InfrahubTransform):
             "edge": self._provider_device(edge, core.name.value),
             "core": self._provider_device(core, edge.name.value),
             # The shared DC service range: what every tenant may reach
-            # regardless of what it buys. Identical on every L3VPN.
-            "dc_service_prefixes": [
-                p.node.prefix.value for p in next(iter(services["l3vpn"].values())).dc_service_prefixes.edges
-            ],
+            # regardless of what it buys.
+            "dc_service_prefixes": self._shared_dc_prefixes(services["l3vpn"]),
         }
 
         isp["core"]["dc"] = self._dc_handoff(core, isp["asn"], peering_asns=self._peering_asns(result))
@@ -422,6 +434,35 @@ class SrlConfig(InfrahubTransform):
                 },
             }
         return isp
+
+    @staticmethod
+    def _shared_dc_prefixes(l3vpns: dict[str, Any]) -> list[str]:
+        """The DC service range, from every live L3VPN that states one.
+
+        This read the FIRST L3VPN the query returned, which was harmless while
+        both declared the same range and wrong the moment one did not: the
+        portal's L3VPN form cannot offer `dc_service_prefixes` (an optional
+        cardinality-many relationship), so a portal-created L3VPN states none --
+        and had it sorted first, every tenant would have lost the DC services.
+
+        An L3VPN stating none takes the shared range, because it IS shared. Two
+        that state different ranges are refused rather than merged: the range
+        is in every tenant's import policy, so one tenant's L3VPN widening it
+        would widen it for all of them.
+        """
+        declared: dict[str, list[str]] = {}
+        for tenant in sorted(l3vpns):
+            prefixes = [p.node.prefix.value for p in l3vpns[tenant].dc_service_prefixes.edges if p.node]
+            if prefixes:
+                declared[tenant] = prefixes
+        if not declared:
+            raise SrlConfigError(
+                "no live ServiceL3vpn states dc_service_prefixes, so the shared DC range has no source"
+            )
+        if len({frozenset(prefixes) for prefixes in declared.values()}) > 1:
+            detail = "; ".join(f"{tenant}: {', '.join(prefixes)}" for tenant, prefixes in declared.items())
+            raise SrlConfigError(f"live L3VPNs disagree on the shared DC service range ({detail})")
+        return next(iter(declared.values()))
 
     def _provider_device(self, device: Any, peer_name: str) -> dict[str, Any]:
         """A PE's own identity plus its session toward its partner.
@@ -474,9 +515,11 @@ class SrlConfig(InfrahubTransform):
             sites_by_tenant.setdefault(edge.node.tenant.node.name.value, []).append(edge.node)
 
         tenants = []
-        for name in TENANT_ORDER:
-            if name not in services["l3vpn"]:
-                continue
+        # Every tenant with a live L3VPN, by name -- see SAFE_NAME above for why
+        # this is no longer a fixed tuple.
+        for name in sorted(services["l3vpn"]):
+            if not SAFE_NAME.match(name):
+                raise SrlConfigError(f"tenant {name!r} cannot be spliced into an SR Linux policy or group name")
             if name not in services["cloud"]:
                 raise SrlConfigError(f"tenant {name!r} has a live L3VPN and no live tenant cloud to import")
             vpn = services["l3vpn"][name]
@@ -489,6 +532,8 @@ class SrlConfig(InfrahubTransform):
                     f"L3VPN {vpn.name.value!r} for tenant {name!r} names no provider-edge VRF, "
                     "so there is no network instance to put its sites in"
                 )
+            if not SAFE_NAME.match(vpn.vrf.node.name.value):
+                raise SrlConfigError(f"VRF {vpn.vrf.node.name.value!r} cannot be an SR Linux network-instance name")
             tenants.append(
                 {
                     "name": name,
@@ -517,16 +562,23 @@ class SrlConfig(InfrahubTransform):
             "kind": site.attachment_kind.value,
             "lan": site.lan_prefix.node.prefix.value,
         }
+        if not SAFE_NAME.match(entry["name"]):
+            raise SrlConfigError(f"site {entry['name']!r} cannot be spliced into an SR Linux policy or group name")
         if entry["kind"] == "bgp":
-            entry["asn"] = site.site_asn.value
+            entry["asn"] = site.site_asn.value if site.site_asn else None
             pe_side = self._session_from_role(site, "isp_edge")
             ce_side = self._session_from_role(site, "customer_edge")
+            # Only tenant sites reach here -- a tenant is a tenant because it
+            # has a live L3VPN, and the branch has none. This used to return a
+            # site with `None` for both addresses, which the templates rendered
+            # literally: `neighbor None peer-group ...`, a line that aborts the
+            # whole candidate on load.
             if pe_side is None or ce_side is None:
-                # The branch peers with a fabric device, so only its own side is
-                # a WAN session. It is not a tenant site on the provider edge.
-                entry["pe"] = {"address": None}
-                entry["ce"] = {"wan_address": None, "node": None}
-                return entry
+                raise SrlConfigError(
+                    f"BGP site {entry['name']!r} has no session on both a provider edge and a customer edge"
+                )
+            if entry["asn"] is None:
+                raise SrlConfigError(f"BGP site {entry['name']!r} has no site_asn, so its peer group has no peer-as")
             entry["pe"] = {"address": f"{ce_side.peer_address.value}/30"}
             entry["ce"] = {
                 "wan_address": f"{pe_side.peer_address.value}/30",
@@ -560,8 +612,18 @@ class SrlConfig(InfrahubTransform):
         raise SrlConfigError(f"{ce_name}: no WanSite names this device as its customer edge")
 
     def _branch(self, result: SrlConfigQuery, device: Any) -> dict[str, Any]:
+        # The branch's site is the one whose session sits on the branch router,
+        # not the one whose tenant happens to be called `branch` -- the last
+        # tenant name this module still spelt out.
         site = next(
-            (e.node for e in result.wan_site.edges if e.node.tenant.node.name.value == "branch"),
+            (
+                e.node
+                for e in result.wan_site.edges
+                if any(
+                    s.node.device and s.node.device.node and s.node.device.node.name.value == device.name.value
+                    for s in e.node.bgp_sessions.edges
+                )
+            ),
             None,
         )
         if site is None:

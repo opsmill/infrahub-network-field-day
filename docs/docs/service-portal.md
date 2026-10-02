@@ -75,6 +75,19 @@ removed, and the fabric is regenerated. Removal is keyed on provenance —
 hand-written rule in the same zone pair, and a source another live grant still
 needs, are both left alone.
 
+### Tenant L3VPN (generated)
+
+Any `OrganizationTenant` can be picked, and any tenant renders onto the WAN. It
+needs more than the form asks for, though: the L3VPN puts the tenant's sites in a
+provider-edge VRF, and a tenant new to the lab has no site, no circuit, no
+customer edge and no provider-edge port. Such a request opens its proposed change
+and the `wan-service-consistency` check fails, naming each missing prerequisite —
+a live tenant cloud, a `WanSite`, a port for the site's attachment address. Until
+then it merges as nothing at all. Model those first, then request the L3VPN.
+
+The form cannot offer `dc_service_prefixes`; a request without them takes the DC
+service range every other tenant already imports.
+
 ## Adding a hand-written item
 
 Three edits, not one:

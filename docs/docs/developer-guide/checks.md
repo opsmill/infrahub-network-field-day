@@ -189,7 +189,30 @@ route targets of another — but only while the services are wired correctly. Fo
    firewall policy.
 4. Two clouds share a VRF or a zone.
 
-It judges decommissioned services too, deliberately. `scripts/demo_break_isolation.sh` breaks the
+Two more ask whether a request **will render at all**. `srl_config` once rendered two tenants by
+name and skipped every other one, so an L3VPN requested through the portal for a third tenant
+merged green and changed no router. The renderer now takes any tenant; these rules name what a
+tenant still needs, so the proposed change fails instead of merging a no-op:
+
+5. A live `ServiceL3vpn` cannot be put on a port. Each finding names the missing prerequisite:
+   - no provider-edge VRF
+   - no live tenant cloud
+   - no `WanSite` for the tenant. A portal request for a new tenant looks like this, because the
+     lab has no circuit, customer edge or provider-edge port for it
+   - a BGP site without sessions on both an `isp_edge` and a `customer_edge` device
+   - a customer edge outside `srl_routers`, so no configuration renders for it
+   - a BGP site with no `site_asn`
+   - a static site whose next hop no device owns
+   - an attachment address that no provider-edge port is on
+   - a site LAN outside the peering's `customer_aggregate`, which is all `border-leaf1` accepts from
+     the WAN and all `fw1` routes back
+   - a name SR Linux cannot splice into a policy or network-instance name
+6. A service renders only through a live L3VPN and has none: a tenant cloud whose tenant has no
+   live L3VPN, internet access on a withdrawn L3VPN or with no `WanInternetPeering`, and live
+   L3VPNs that disagree on, or all omit, the shared DC service range.
+
+Rules 1–4 judge decommissioned services too, deliberately; rules 5 and 6 judge live services only,
+because a withdrawn service renders as absent by design. `scripts/demo_break_isolation.sh` breaks the
 first rule on a branch to show the check failing; see the [demo runbook](../demo-runbook.md#act-four-the-review-step-bites).
 
 Unit coverage is in
