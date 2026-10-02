@@ -24,7 +24,12 @@ from typing import Any
 import httpx
 
 from solution_arista_avd.deployment import devices as dv
-from solution_arista_avd.deployment.normalise import normalise
+from solution_arista_avd.deployment.normalise import (
+    JUNOS_CLEARTEXT_BANNER,
+    JUNOS_CLEARTEXT_PROBE,
+    junos_running_cleartext,
+    normalise,
+)
 
 # Every configuration session and staging path this service creates carries this
 # prefix, so the sweep can recognise its own leftovers and leave everything
@@ -176,6 +181,11 @@ def compare_junos(target: dv.Target, config: str) -> str:
     The candidate is rolled back and the CLI exited, which releases the
     exclusive lock. Taking that lock is why the firewall is compared on one
     cycle in four rather than every cycle.
+
+    **The same session first reads the running configuration for cleartext
+    secrets**, because `show | compare` does not print the deletion of a
+    `plain-text-password-value` -- so a freshly booted vSRX, carrying two from
+    vrnetlab's init.conf, compared as in sync. See `normalise._JUNOS_CLEARTEXT`.
     """
     if not dv.container_running(target.container):
         raise dv.ProvisionError(f"{target.device}: container {target.container} is not running")
@@ -200,17 +210,40 @@ def compare_junos(target: dv.Target, config: str) -> str:
 
     result = dv.vsrx_cli(
         target,
+        f"{JUNOS_CLEARTEXT_PROBE}\n"
         f"configure exclusive\nload override {JUNOS_REMOTE}\nshow | compare\nrollback 0\nexit\nexit\n",
     )
-    out = result.stdout or ""
+    return junos_raw(target, result.stdout or "")
+
+
+def junos_raw(target: dv.Target, out: str) -> str:
+    """The comparison's raw text from the CLI session's whole output.
+
+    The `show | compare` section, then -- under `JUNOS_CLEARTEXT_BANNER`, and
+    already redacted -- every cleartext statement the probe found in the running
+    configuration. Raises rather than returning something that could read as
+    "in sync" when either half is missing.
+    """
     if "No such file" in out:
         raise dv.ProvisionError(
             f"{target.device}: the candidate never loaded, so the comparison is meaningless. "
             "An empty `show | compare` here reads as 'in sync' and is not."
         )
-    if "show | compare" not in out:
+    if "show | compare" not in out or JUNOS_CLEARTEXT_PROBE not in out:
         raise dv.ProvisionError(f"{target.device}: unexpected CLI output from the comparison")
-    return out.split("show | compare")[1].split("rollback 0")[0]
+
+    # An unanswered probe prints nothing, exactly like a clean one, so a CLI
+    # error in its section must not be read as "no cleartext".
+    probe = out.split(JUNOS_CLEARTEXT_PROBE, 1)[1].split("configure exclusive", 1)[0]
+    unanswered = [line for line in probe.splitlines() if not line.strip().startswith("set ")]
+    if any(marker in line.lower() for line in unanswered for marker in ("error", "unknown command", "syntax")):
+        raise dv.ProvisionError(f"{target.device}: the cleartext probe failed: {probe.strip()[:200]}")
+
+    compared = out.split("show | compare", 1)[1].split("rollback 0", 1)[0]
+    cleartext = junos_running_cleartext(probe)
+    if not cleartext:
+        return compared
+    return "\n".join([compared.rstrip("\n"), JUNOS_CLEARTEXT_BANNER, *cleartext]) + "\n"
 
 
 COMPARATORS = {

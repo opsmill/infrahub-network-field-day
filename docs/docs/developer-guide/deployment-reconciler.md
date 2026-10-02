@@ -158,6 +158,17 @@ rule that reported them would push a freshly deployed firewall every cycle. So t
 hashes the reconciler's own password with each salt and suppresses the pair only when both
 match. A hash no known password explains is a changed secret, and differs.
 
+**A cleartext password is always a difference, and the comparison has to go looking for it.**
+`show | compare` never prints the deletion of a `plain-text-password-value`, and a freshly
+booted vSRX carries two from vrnetlab's `init.conf`. The re-salted pairs above were their only
+visible trace, so the booted firewall's whole diff normalised to empty: a fresh bootstrap
+recorded `fw1` as `in_sync` with cleartext credentials in its running configuration and never
+pushed it. The comparator now reads the running configuration in the same session —
+`show configuration | display set | match plain-text-password-value`, operational mode, changing
+nothing — and appends each statement found as a deletion. The normaliser keeps any statement
+naming that leaf before every other rule, with its value redacted, since the normalised diff is
+stored in Infrahub. A probe that answers with an error raises instead of reading as clean.
+
 Read raw, all of that means "this device differs." A reconciler acting on it replaces the
 firewall's configuration **on every cycle, forever**, while every log
 line says success.

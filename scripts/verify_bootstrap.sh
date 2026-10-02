@@ -132,6 +132,45 @@ check "$(docker exec clab-otternet-spine1 Cli -p 15 -c 'show ip bgp summary' 2>/
 check "$(docker exec clab-otternet-spine1 Cli -p 15 -c 'show bgp evpn summary' 2>/dev/null | grep -c Estab)" \
     "5" "spine1 EVPN sessions"
 
+# fw1 was the device "confirmed in_sync" above could be wrong about. vrnetlab's
+# init.conf boots it with two cleartext `plain-text-password-value` leaves, and
+# `show | compare` never prints their deletion -- so a comparison could confirm
+# a firewall nothing had pushed. Ask the running configuration itself: no
+# cleartext, and the newest commit is the reconciler's (`admin`), not vrnetlab's
+# boot commit (`root via other`). Read-only, both of them; and an unreachable
+# CLI reads "unreachable", never as a clean zero.
+fw1_cli() {
+    printf '%s\nexit\n' "$1" | docker exec -i clab-otternet-fw1 sshpass -p admin@123 \
+        ssh -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        admin@127.0.0.1 2>/dev/null
+}
+check "$(fw1_cli 'show configuration | display set | match plain-text-password-value' \
+    | awk '/^admin@fw1> show configuration/ {seen = 1} /^set .*plain-text-password-value/ {n++}
+           END {print seen ? n + 0 : "unreachable"}')" \
+    "0" "fw1 running configuration carries no plain-text-password-value"
+check "$(fw1_cli 'show system commit' | sed -n 's/^0 .* by \([^ ]*\) via .*/\1/p')" \
+    "admin" "fw1's newest commit is the reconciler's, so the full configuration was applied"
+
+# Every WAN router's BGP, counted against its OWN rendered artifact rather than a
+# number written here: each `neighbor <addr>` in a network-instance must be an
+# established session in that instance. A missing artifact is a failure, never
+# a vacuous 0/0.
+for router in isp-pe1 isp-pe2 internet-rtr cust-acme-ce cust-globex-ce branch-rtr; do
+    rendered="$LAB/wan/rendered/$router/config.cli"
+    want=$(grep -oE '^set / network-instance [^ ]+ protocols bgp neighbor [^ ]+ ' "$rendered" 2>/dev/null \
+        | awk '{print $4, $8}' | sort -u)
+    got=$(docker exec "clab-otternet-$router" sr_cli -d "show network-instance * protocols bgp neighbor" 2>/dev/null \
+        | awk -F'|' 'NF > 7 { gsub(/ /, "", $2); gsub(/ /, "", $3); gsub(/ /, "", $7)
+                              if ($7 == "established") print $2, $3 }' | sort -u)
+    expected=$(printf '%s' "$want" | grep -c .)
+    if [ "$expected" = "0" ]; then
+        fail "$router: no BGP neighbours in $rendered to check against"
+        continue
+    fi
+    up=$(comm -12 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | grep -c .)
+    check "$up/$expected" "$expected/$expected" "$router BGP sessions established across its network instances"
+done
+
 stage "kubernetes"
 export KUBECONFIG="$LAB/k8s/.kubeconfig/kubeconfig.yaml"
 check "$(kubectl get nodes --no-headers 2>/dev/null | grep -c ' Ready')" "3" "k3s nodes Ready"
