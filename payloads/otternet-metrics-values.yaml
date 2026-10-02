@@ -69,12 +69,28 @@ grafana:
   grafana.ini:
     dashboards:
       default_home_dashboard_path: /var/lib/grafana/dashboards/otternet/organisation.json
+    # WITHOUT THIS EVERY PANEL IS EMPTY. Grafana 13 "preinstalls" its core
+    # datasource plugins at start-up, and for one it already bundles that means
+    # updating it in place: it stops the bundled plugin, then fails to replace
+    # it -- `unlinkat /usr/share/grafana/data/plugins-bundled/prometheus:
+    # read-only file system`, because the chart runs Grafana with a read-only
+    # root. The Prometheus plugin is left unregistered, so every query returns
+    # `plugin.notRegistered` and every panel reads "No data" while Prometheus
+    # holds all of it. Measured on the live lab, and reproduced and fixed with
+    # grafana/grafana:13.2.1-distroless run read-only beside it.
+    plugins:
+      preinstall_disabled: true
   # (lab) searchNamespace ALL makes the two k8s-sidecar processes poll every
   # namespace continuously; measured as the largest CPU consumers on the node.
   sidecar:
     dashboards:
       enabled: true
       searchNamespace: otternet-metrics
+    # Alertmanager is disabled below, so a datasource pointing at it is a
+    # broken entry in every datasource picker and a dead Explore target.
+    datasources:
+      alertmanager:
+        enabled: false
   # (lab) 384Mi is not enough: Grafana registers every bundled datasource
   # plugin before opening its port, and that peak is well above its steady
   # state. Under a tight limit it is OOMKilled part-way through and restarts.
@@ -186,6 +202,16 @@ alertmanager:
   enabled: false
 
 prometheusOperator:
+  # A FIXED NAME FOR THE KUBELET SERVICE, so every kubelet series is scraped
+  # once. The operator creates this Service itself, in kube-system, named after
+  # the release by default -- and the composed release's name is generated, so a
+  # re-delivery under a new name leaves the old Service behind, unowned, with
+  # the same labels the kubelet ServiceMonitor selects. Measured after a
+  # rebuild: two kubelet Services, every kubelet and cAdvisor series twice, the
+  # biggest job in this Prometheus doubled, and every pod CPU and memory sum
+  # (the chart's recording rules included) reading exactly twice the truth.
+  kubeletService:
+    name: otternet-metrics-kubelet
   resources:
     requests:
       cpu: 50m
@@ -200,6 +226,19 @@ prometheusOperator:
 # every node twice, once by intent and once by default.
 nodeExporter:
   enabled: true
+  # The chart's per-OS node dashboards read `job="node-exporter"`, which is
+  # never scraped (see above), so they could only ever be empty -- and AIX and
+  # macOS describe no machine here at all. OTTERNET / Kubernetes nodes is the
+  # replacement. These flags gate the dashboards only, not the DaemonSet. The
+  # two "USE Method" dashboards have no such flag and stay, empty for the same
+  # reason.
+  operatingSystems:
+    linux:
+      enabled: false
+    aix:
+      enabled: false
+    darwin:
+      enabled: false
 prometheus-node-exporter:
   prometheus:
     monitor:

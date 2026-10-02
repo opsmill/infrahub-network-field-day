@@ -1,34 +1,502 @@
 {
   "uid": "otternet-organisation",
   "title": "OTTERNET / Organisation",
-  "description": "What Infrahub says the organisation is: devices, services, tenants and the changes in flight. From the Infrahub exporter, reading as metrics-exporter.",
+  "description": "The lab at a glance: what is wrong right now across every family, then what Infrahub models -- devices, services, tenants and the changes in flight. Every health tile links to the dashboard that explains it.",
   "tags": [
     "otternet",
-    "infrahub"
+    "organisation"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
+  "graphTooltip": 1,
   "refresh": "1m",
   "time": {
     "from": "now-1h",
     "to": "now"
   },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "otternet"
+      ],
+      "asDropdown": true,
+      "title": "OTTERNET dashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
-      "type": "bargauge",
-      "title": "Devices by kind",
+      "type": "row",
+      "title": "Health -- every tile is 0 or green when the lab matches its intent",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Devices not in sync",
+      "description": "Devices whose DeploymentState is anything but in_sync, from the Infrahub exporter.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(infrahub_deploymentstate_info{status!=\"in_sync\"}) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "links": [
+        {
+          "title": "Deployment state",
+          "url": "/d/otternet-fabric-state"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Fabric BGP sessions down",
+      "description": "Sessions the switches' structured configs intend that are not Established.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(otternet_intended_bgp_neighbor{kind=\"DcimFabricSwitch\"} unless on (device, vrf, peer_address) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimFabricSwitch\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6)) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "links": [
+        {
+          "title": "Fabric telemetry",
+          "url": "/d/otternet-fabric-telemetry"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "WAN BGP sessions down",
+      "description": "Sessions the SR Linux routers' modelled neighbours intend that are not Established.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(otternet_intended_bgp_neighbor{kind=\"DcimDevice\"} unless on (device, peer_address) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimDevice\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6)) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "links": [
+        {
+          "title": "WAN routing",
+          "url": "/d/otternet-wan"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Cabled fabric links down",
+      "description": "Switch interfaces a NetworkLink says are cabled and active, whose operational state is not up (or is not reported).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count((otternet_intended_interface_up{kind=\"DcimFabricSwitch\"} == 1) unless on (device, interface) (label_replace(interface_status_oper_status_code{kind=\"DcimFabricSwitch\"}, \"interface\", \"$1\", \"name\", \"(.*)\") == 1)) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "links": [
+        {
+          "title": "Fabric telemetry",
+          "url": "/d/otternet-fabric-telemetry"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Firewall handoffs down",
+      "description": "fw1 interfaces carrying a modelled description (the zone handoffs) whose ifOperStatus is not up.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(interface_ifOperStatus{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+\", ifAlias!=\"\"} != 1) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "links": [
+        {
+          "title": "Perimeter firewall",
+          "url": "/d/otternet-perimeter"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Telemetry collector",
+      "description": "Whether Prometheus can scrape Telegraf, whose whole configuration is an Infrahub artifact. Down means every device panel goes blank.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(up{job=\"telemetry\"}) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 1,
+                "color": "green"
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Down",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "links": [
+        {
+          "title": "Telemetry coverage",
+          "url": "/d/otternet-fabric-telemetry"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "What Infrahub models",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Devices by kind",
+      "description": "One series per DcimGenericDevice in Infrahub, grouped by its kind.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
         "w": 8,
-        "h": 6
+        "h": 7
       },
       "targets": [
         {
@@ -43,26 +511,47 @@
           "legendFormat": "{{kind}}"
         }
       ],
-      "description": "Every DcimGenericDevice in the graph, grouped by its concrete kind (taken from the HFID prefix).",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          }
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
     },
     {
-      "id": 2,
-      "type": "piechart",
-      "title": "Services by status",
+      "id": 10,
+      "type": "bargauge",
+      "title": "Devices reporting telemetry, by kind",
+      "description": "Devices Telegraf currently reports at least one series for, as the monitoring profiles select them. Compare with Devices by kind: the gap is what is modelled but not watched (the cloud hosts, by design).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 8,
-        "y": 0,
+        "y": 6,
         "w": 8,
-        "h": 6
+        "h": 7
       },
       "targets": [
         {
@@ -71,32 +560,53 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count by (status) (infrahub_servicegeneric_info)",
+          "expr": "count by (kind) (count by (device, kind) ({job=\"telemetry\", kind!=\"\"}))",
           "instant": true,
           "range": false,
-          "legendFormat": "{{status}}"
+          "legendFormat": "{{kind}}"
         }
       ],
-      "description": "Every service object. decommissioning and decommissioned count as gone downstream.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          }
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
     },
     {
-      "id": 3,
+      "id": 11,
       "type": "bargauge",
       "title": "Services by kind",
+      "description": "Service objects in Infrahub, grouped by kind.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 16,
-        "y": 0,
+        "y": 6,
         "w": 8,
-        "h": 6
+        "h": 7
       },
       "targets": [
         {
@@ -112,24 +622,46 @@
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          }
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
     },
     {
-      "id": 4,
-      "type": "stat",
-      "title": "Tenants",
+      "id": 12,
+      "type": "piechart",
+      "title": "Services by status",
+      "description": "Every service's lifecycle status. decommissioning and decommissioned count as withdrawn downstream.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 13,
         "w": 6,
-        "h": 4
+        "h": 6
       },
       "targets": [
         {
@@ -138,30 +670,105 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(infrahub_organizationtenant_info)",
+          "expr": "count by (status) (infrahub_servicegeneric_info)",
           "instant": true,
-          "range": false
+          "range": false,
+          "legendFormat": "{{status}}"
         }
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
     },
     {
-      "id": 5,
+      "id": 13,
       "type": "stat",
-      "title": "Open proposed changes",
+      "title": "Tenants",
+      "description": "OrganizationTenant objects.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 6,
-        "y": 6,
+        "y": 13,
+        "w": 4,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(infrahub_organizationtenant_info) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Open proposed changes",
+      "description": "Proposed changes awaiting review.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 13,
         "w": 5,
-        "h": 4
+        "h": 6
       },
       "targets": [
         {
@@ -175,26 +782,49 @@
           "range": false
         }
       ],
-      "description": "Requests waiting for review. A fresh lab has none, which reads 0 rather than No data.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
-      "id": 7,
+      "id": 15,
       "type": "stat",
       "title": "Merged proposed changes",
+      "description": "Proposed changes merged, i.e. approved: merging is the approval here.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 11,
-        "y": 6,
+        "x": 15,
+        "y": 13,
         "w": 5,
-        "h": 4
+        "h": 6
       },
       "targets": [
         {
@@ -209,24 +839,48 @@
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
-      "id": 6,
+      "id": 16,
       "type": "stat",
-      "title": "Exporter reachable",
+      "title": "Infrahub exporter",
+      "description": "Whether Prometheus can scrape the exporter every number on this row comes from.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 16,
-        "y": 6,
-        "w": 8,
-        "h": 4
+        "x": 20,
+        "y": 13,
+        "w": 4,
+        "h": 6
       },
       "targets": [
         {
@@ -235,17 +889,60 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{job=\"infrahub-exporter\"}",
+          "expr": "max(up{job=\"infrahub-exporter\"}) or vector(0)",
           "instant": true,
           "range": false
         }
       ],
-      "description": "1 while Prometheus can scrape the exporter. A 0 means the panels above are showing their last value, not the graph.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 1,
+                "color": "green"
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Down",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     }
   ]
 }

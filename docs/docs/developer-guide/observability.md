@@ -71,11 +71,24 @@ Three kinds, in `schemas/monitoring.yml`:
   - k3s nodes: node-exporter on port 9100
 
   Every input is tagged from the graph with device, kind, role, rack, pod, and profile.
+
+  Two measurements carry more than their name suggests, because the dashboards compare them with
+  intent:
+  - **`interface-counters`** also subscribes to `oper-status`, mapped onto IF-MIB's `ifOperStatus`
+    numbers (`UP` is 1). A gNMI interface and the firewall's SNMP one therefore compare with the
+    same `== 1`.
+  - **`bgp-neighbor-state`** also subscribes to the per-AFI prefix counts, so a session that is
+    Established and carries nothing is visible. `evpn-routes` uses the same subscription, and a
+    leaf asked for both subscribes once.
 - **`intended.prom`**: what Infrahub intends, read back by Telegraf so dashboards can compare it
-  with what is observed:
-  - **BGP sessions**: for switches, from each one's stored structured config; for the SR Linux routers,
-    from their modelled neighbours.
-  - **Cabled links and the interfaces expected up**: from `NetworkLink`.
+  with what is observed. Every series carries the device's `kind`, so a dashboard scopes intent
+  the way it scopes observations, and a silent device's sessions still count as intended:
+  - **BGP sessions**: for switches, from each one's stored structured config, with their VRF. For
+    the SR Linux routers, from their modelled neighbours, with no VRF, because the model does not
+    record the network instance a router neighbour lives in. A WAN dashboard therefore matches on
+    device and peer address and takes the VRF from what the router reports.
+  - **Cabled links and the interfaces expected up**: from `NetworkLink`, which records the fabric's
+    cabling. The WAN's circuits are not `NetworkLink`s.
 
 ### The freshness generator
 
@@ -109,6 +122,47 @@ renderer is pinned against:
 in its configuration whatever the model does. It is read-only, bound to `mgmt_junos` (fxp0's
 instance), and restricted to the management network `172.20.41.0/24`, because vrnetlab forwards
 the poll with its real source address.
+
+## Dashboards
+
+The dashboards are JSON files under `payloads/dashboards/`, one per file, and
+`scripts/seed_app_payloads.py` folds them into the `otternet-metrics` values attachment. Grafana
+opens on **Organisation**, whose first row is the lab's health: one tile per family, each 0 or
+green when the lab matches its intent, and each linking to the dashboard that explains it.
+
+| Dashboard | Shows |
+| --- | --- |
+| Organisation | Health tiles; then devices, services, tenants and proposed changes from the exporter |
+| Deployment state | Each device's `DeploymentState`, and how the counts moved over time |
+| Fabric telemetry | Every intended BGP session and cabled link against what the switches report; EVPN and IPv4 prefixes; throughput, errors, CPU and memory |
+| WAN routing | The same for the SR Linux routers, per VRF; prefixes received and sent per session |
+| Perimeter firewall | fw1's zone handoffs by their modelled description, sessions, and the routing engine |
+| Kubernetes nodes | Pod CPU against each node's one CPU, pod memory, node network, the lab host, and Cilium's flows and drops |
+
+Every dashboard refreshes once a minute, because a k3s node is one CPU. The per-device
+dashboards share a `device` variable listing the devices Infrahub models, rather than the ones
+currently reporting, so a silent device is still selectable.
+
+Read these before trusting a number on them:
+
+- **Containerised network operating systems report the lab host.** cEOS and SR Linux report the
+  host's CPUs and memory as their own, as does node-exporter. The CPU and memory panels are still
+  useful, because a device that leaves the pack is the signal, and they say so. A node's own load
+  is its pods' CPU from the kubelet, drawn against its one CPU.
+- **`tests/unit/test_dashboard_metrics_contract.py` holds every panel to a series that exists.**
+  It renders the collector's intent and fails when a panel queries a metric no collector,
+  exporter or scrape job produces, or filters a `kind` that never reports it.
+
+Two chart settings looked unrelated to dashboards. Without each, the dashboards were wrong:
+
+- **`grafana.ini` `plugins.preinstall_disabled`.** Grafana 13 updates its bundled datasource
+  plugins at start-up. On the chart's read-only root that stops the bundled Prometheus plugin
+  and then fails to replace it (`unlinkat ... read-only file system`). Every query then returns
+  `plugin.notRegistered`, and every panel reads "No data" while Prometheus holds all of it.
+- **A fixed `prometheusOperator.kubeletService.name`.** The operator names the kubelet Service
+  after the release, and the composed release's name is generated. A re-delivery left the old
+  Service behind, every kubelet series was scraped twice, and every pod CPU and memory sum read
+  double.
 
 ## Organisation metrics
 

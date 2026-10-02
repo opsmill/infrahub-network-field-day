@@ -1,26 +1,55 @@
 {
   "uid": "otternet-perimeter",
   "title": "OTTERNET / Perimeter firewall",
-  "description": "fw1 over SNMP, as the perimeter profile selects.",
+  "description": "fw1 over SNMP v2c, as the perimeter profile selects it: the zone handoffs Infrahub models, the sessions the firewall is holding, and its routing engine.",
   "tags": [
     "otternet",
     "telemetry",
-    "firewall"
+    "perimeter"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
+  "graphTooltip": 1,
   "refresh": "1m",
   "time": {
     "from": "now-1h",
     "to": "now"
   },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "otternet"
+      ],
+      "asDropdown": true,
+      "title": "OTTERNET dashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
-      "type": "timeseries",
+      "type": "stat",
       "title": "Current flow sessions",
+      "description": "Sessions the SPU is holding now (jnxJsSPUMonitoringCurrentFlowSession).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -28,8 +57,8 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 12,
-        "h": 8
+        "w": 6,
+        "h": 4
       },
       "targets": [
         {
@@ -38,21 +67,110 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(jnx_spu_jnxJsSPUMonitoringCurrentFlowSession)",
-          "instant": false,
-          "range": true
+          "expr": "sum(jnx_spu_jnxJsSPUMonitoringCurrentFlowSession{kind=\"SecurityFirewall\"})",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          },
+          "noValue": "Not reported"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
       "id": 2,
-      "type": "timeseries",
-      "title": "Control-plane CPU %",
+      "type": "stat",
+      "title": "Routing engine CPU",
+      "description": "jnxOperatingCPU for the Routing Engine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(jnx_operating_jnxOperatingCPU{kind=\"SecurityFirewall\", jnxOperatingDescr=\"Routing Engine\"})",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "Not reported"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Routing engine memory",
+      "description": "jnxOperatingBuffer for the Routing Engine: memory in use, percent.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -60,8 +178,8 @@
       "gridPos": {
         "x": 12,
         "y": 0,
-        "w": 12,
-        "h": 8
+        "w": 6,
+        "h": 4
       },
       "targets": [
         {
@@ -70,32 +188,341 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max by (jnxOperatingDescr) (jnx_operating_jnxOperatingCPU > 0)",
-          "instant": false,
-          "range": true,
-          "legendFormat": "{{jnxOperatingDescr}}"
+          "expr": "max(jnx_operating_jnxOperatingBuffer{kind=\"SecurityFirewall\", jnxOperatingDescr=\"Routing Engine\"})",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 80,
+                "color": "orange"
+              },
+              {
+                "value": 95,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "Not reported"
         },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Interface throughput (bits/s)",
+      "id": 4,
+      "type": "stat",
+      "title": "Zone handoffs down",
+      "description": "Interfaces carrying a modelled description whose ifOperStatus is not up.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(interface_ifOperStatus{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+\", ifAlias!=\"\"} != 1) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Physical interfaces",
+      "description": "Every physical port and fxp0, with the description junos_config renders from the model.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
-        "w": 24,
+        "y": 4,
+        "w": 10,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (ifName, ifAlias) (label_replace(interface_ifOperStatus{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+|fxp0\"}, \"ifAlias\", \"(none)\", \"ifAlias\", \"\"))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Not reported",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Down",
+                  "color": "red",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Testing",
+                  "color": "orange",
+                  "index": 3
+                },
+                "4": {
+                  "text": "Unknown",
+                  "color": "orange",
+                  "index": 4
+                },
+                "5": {
+                  "text": "Dormant",
+                  "color": "orange",
+                  "index": 5
+                },
+                "6": {
+                  "text": "Not present",
+                  "color": "red",
+                  "index": 6
+                },
+                "7": {
+                  "text": "Lower layer down",
+                  "color": "red",
+                  "index": 7
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "State"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "ifName",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "ifName": 0,
+              "ifAlias": 1,
+              "Value": 2
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "ifName",
+                "ifAlias",
+                "Value"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Throughput per handoff",
+      "description": "Bits per second in (up) and out (down) on every physical port, named by its modelled description.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 4,
+        "w": 14,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (ifName, ifAlias) (rate(interface_ifHCInOctets{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+|fxp0\"}[$__rate_interval]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{ifName}} {{ifAlias}} in"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (ifName, ifAlias) (rate(interface_ifHCOutOctets{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+|fxp0\"}[$__rate_interval]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{ifName}} {{ifAlias}} out"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* out$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Flow sessions",
+      "description": "Current flow sessions over time.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 8,
         "h": 8
       },
       "targets": [
@@ -105,19 +532,185 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (ifName) (rate(interface_ifHCInOctets{kind=\"SecurityFirewall\"}[2m]) * 8)",
+          "expr": "sum(jnx_spu_jnxJsSPUMonitoringCurrentFlowSession{kind=\"SecurityFirewall\"})",
           "instant": false,
           "range": true,
-          "legendFormat": "{{ifName}}"
+          "legendFormat": "sessions"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bps"
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Routing engine CPU and memory",
+      "description": "jnxOperatingCPU and jnxOperatingBuffer for the Routing Engine.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 13,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(jnx_operating_jnxOperatingCPU{kind=\"SecurityFirewall\", jnxOperatingDescr=\"Routing Engine\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "CPU"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(jnx_operating_jnxOperatingBuffer{kind=\"SecurityFirewall\", jnxOperatingDescr=\"Routing Engine\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "memory"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Interface errors",
+      "description": "In and out errors per second on the physical ports: the total, plus one line for each port whose rate is not zero.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 13,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(interface_ifInErrors{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+|fxp0\"}[$__rate_interval]) + rate(interface_ifOutErrors{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+|fxp0\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "all ports"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (ifName, ifAlias) (rate(interface_ifInErrors{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+|fxp0\"}[$__rate_interval]) + rate(interface_ifOutErrors{kind=\"SecurityFirewall\", ifName=~\"(ge|xe)-[0-9]+/[0-9]+/[0-9]+|fxp0\"}[$__rate_interval])) > 0",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{ifName}} {{ifAlias}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ]
 }

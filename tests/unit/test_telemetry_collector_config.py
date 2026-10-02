@@ -145,10 +145,20 @@ def test_device_role_narrows_a_profile_to_the_leaves() -> None:
     evpn = {
         block["tags"]["device"]
         for block in conf["inputs"]["gnmi"]
-        if "bgp_afi_safi" in [s["name"] for s in block["subscription"]]
+        if "fabric-leaf-evpn" in block["tags"]["profile"].split(",")
     }
     assert evpn
     assert all(name.startswith("leaf-") for name in evpn)
+
+
+def test_a_subscription_two_measurements_share_is_rendered_once() -> None:
+    """evpn-routes and bgp-neighbor-state both subscribe to the per-AFI prefixes;
+    a leaf asked for both must not report every prefix series twice."""
+    conf = _conf(_render()[0])
+    for block in conf["inputs"]["gnmi"]:
+        names = [s["name"] for s in block["subscription"]]
+        assert len(names) == len(set(names)), (block["tags"]["device"], names)
+        assert "bgp_afi_safi" in names, block["tags"]["device"]
 
 
 def test_a_disabled_profile_renders_nothing_and_says_so() -> None:
@@ -197,9 +207,10 @@ def test_credentials_are_references_and_tags_come_from_the_graph() -> None:
 def test_routers_subscribe_to_the_same_openconfig_paths_as_switches() -> None:
     """Same paths, same series names: the fabric dashboards cover the WAN unchanged.
 
-    Measured with Telegraf 1.40 against SR Linux 26.7: all four answered, and
+    Measured with Telegraf 1.40 against SR Linux 26.7: every one answered, and
     `bgp_neighbor_session_state_code` carried `neighbor_address` and the network
-    instance as `name`, as EOS does.
+    instance as `name`, as EOS does. Oper-status and the per-AFI prefixes were
+    measured the same way against both families before they were added.
     """
     conf = _conf(_render()[0])
     paths: dict[str, set[str]] = {}
@@ -207,8 +218,14 @@ def test_routers_subscribe_to_the_same_openconfig_paths_as_switches() -> None:
         paths.setdefault(block["tags"]["kind"], set()).update(
             (s["name"], s["origin"], s["path"]) for s in block["subscription"]
         )
-    assert paths["DcimDevice"] == paths["DcimFabricSwitch"] - {
-        sub for sub in paths["DcimFabricSwitch"] if sub[0] == "bgp_afi_safi"
+    assert paths["DcimDevice"] == paths["DcimFabricSwitch"]
+    assert {sub[0] for sub in paths["DcimDevice"]} == {
+        "bgp_neighbor",
+        "bgp_afi_safi",
+        "interface_counters",
+        "interface_status",
+        "cpu",
+        "memory",
     }
 
 
@@ -281,3 +298,36 @@ def test_node_exporter_series_get_the_infrahub_device_name_back() -> None:
         assert rename["tagpass"]["url"] == override["tagpass"]["url"]
         assert rename["replace"][0] == {"tag": "device", "dest": "interface"}
     assert sorted(o["tags"]["device"] for o in overrides) == ["k8s-node1", "k8s-node2", "k8s-node3"]
+
+
+def test_interface_oper_status_is_mapped_onto_if_mib_numbers() -> None:
+    """The gNMI families report oper-status as a string, which Prometheus would
+    drop; the codes are IF-MIB's, so `== 1` means up for the firewall's SNMP
+    `ifOperStatus` and for every gNMI interface alike."""
+    conf = _conf(_render()[0])
+    enum = next(e for e in conf["processors"]["enum"] if e["namepass"] == ["interface_status"])
+    mapping = enum["mapping"][0]
+    assert mapping["fields"] == ["oper_status"]
+    assert mapping["dest"] == "oper_status_code"
+    assert mapping["value_mappings"]["UP"] == 1
+    assert mapping["value_mappings"]["DOWN"] == 2
+    snmp_fields = {f["name"] for t in conf["inputs"]["snmp"][0]["table"] for f in t["field"]}
+    assert {"ifOperStatus", "ifAlias"} <= snmp_fields
+
+
+def test_intended_series_carry_the_kind_and_routers_claim_no_vrf() -> None:
+    """Intent is scoped by `kind` the way observed series are, so a silent
+    device's sessions still count as intended-but-down. A router's neighbours
+    carry no network instance in the model, so they name no VRF rather than
+    claiming `default` for a session that lives in a customer's."""
+    out, _ = _render()
+    lines = [line for line in out["manifest"]["data"]["intended.prom"].splitlines() if not line.startswith("#")]
+    assert lines
+    assert all('kind="' in line for line in lines)
+    bgp = [line for line in lines if line.startswith("otternet_intended_bgp_neighbor")]
+    routers = [line for line in bgp if 'kind="DcimDevice"' in line]
+    switches = [line for line in bgp if 'kind="DcimFabricSwitch"' in line]
+    assert routers
+    assert switches
+    assert not any("vrf=" in line for line in routers)
+    assert all("vrf=" in line for line in switches)
