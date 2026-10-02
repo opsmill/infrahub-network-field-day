@@ -1,8 +1,9 @@
-"""Pins `invoke demo-release`'s naming and the read-only repository it relies on.
+"""Pins `invoke demo-release`'s naming, import filter and repository modes.
 
-Infrahub tracks one ref of a read-only repository and creates no branch from Git,
-so the names matter only to the remote: the staged branch is never a ref Infrahub
-follows until a release says so. A release is a push, and a pulled commit is never
+The names are load-bearing: the staged branch must never be a branch Infrahub follows
+(it can sit on the remote for days), and the released one must always be. In read-write
+mode the repository's default branch is `demo-main`, which is what keeps a merge from
+ever pushing to the real `main`. A release is a push, and a pulled commit is never
 rewritten, so two releases of the same work may not share a name.
 """
 
@@ -18,6 +19,26 @@ from solution_arista_avd import demo_release as dr
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_FILTER = ["main"]
+
+
+def test_the_demo_filter_imports_a_released_branch_and_nothing_else_here() -> None:
+    patterns = dr.parse_patterns(dr.DEMO_IMPORT_FILTER)
+
+    assert dr.is_imported(patterns, dr.demo_branch("internet-access", 1))
+    for branch in (dr.stage_branch("internet-access"), "main", dr.DEFAULT_DEMO_BRANCH, "feat/x", "xdemo/x"):
+        assert not dr.is_imported(patterns, branch), branch
+
+
+def test_the_default_filter_imports_neither_branch() -> None:
+    """Without the demo override nothing here syncs."""
+    assert not dr.is_imported(["main"], dr.stage_branch("internet-access"))
+    assert not dr.is_imported(["main"], dr.demo_branch("internet-access", 1))
+
+
+@pytest.mark.parametrize("raw", ["main", '"main"', "{}", "[1]", ""])
+def test_a_filter_that_is_not_a_json_array_of_strings_is_refused(raw: str) -> None:
+    with pytest.raises(dr.DemoReleaseError):
+        dr.parse_patterns(raw)
 
 
 def test_the_refspec_publishes_the_staged_branch_under_the_synced_name() -> None:
@@ -77,6 +98,29 @@ def test_the_absent_schema_marks_exactly_one_node_absent() -> None:
     document = yaml.safe_load(dr.absent_schema("Service", "InternetAccess"))
 
     assert document["nodes"] == [{"name": "InternetAccess", "namespace": "Service", "state": "absent"}]
+
+
+def test_the_read_write_repository_pushes_to_demo_main_never_to_main() -> None:
+    """Infrahub maps its own `main` onto `default_branch` when it pushes (`_get_mapped_remote_branch`)."""
+    rendered = dr.render_repository("https://github.com/o/r.git", mode="readwrite", credential="demo-remote")
+    (entry,) = yaml.safe_load(rendered)["spec"]["data"]
+
+    assert yaml.safe_load(rendered)["spec"]["kind"] == "CoreRepository"
+    assert entry["default_branch"] == "demo-main"
+    assert entry["default_branch"] != "main"
+    assert entry["credential"] == "demo-remote"
+    assert "ref" not in entry
+
+
+def test_a_read_write_repository_without_a_credential_is_refused() -> None:
+    with pytest.raises(dr.DemoReleaseError):
+        dr.render_repository("https://github.com/o/r.git", mode="readwrite")
+
+
+@pytest.mark.parametrize("mode", ["", "rw", "READONLY"])
+def test_an_unknown_mode_is_refused(mode: str) -> None:
+    with pytest.raises(dr.DemoReleaseError):
+        dr.render_repository("https://github.com/o/r.git", mode=mode)
 
 
 def test_the_repository_object_file_refers_to_a_credential_by_name_only() -> None:

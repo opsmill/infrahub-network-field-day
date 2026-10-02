@@ -330,16 +330,20 @@ def load(ctx: Context) -> None:
 def _load_repository(ctx: Context) -> None:
     """Register the repository: the checkout by default, a Git remote for the demo.
 
-    `INFRAHUB_REPOSITORY_URL` registers a **read-only** repository on that remote
-    instead of `/upstream`, tracking `INFRAHUB_REPOSITORY_REF` (default `main`).
-    A read-only repository imports one ref into the default branch: Infrahub
-    creates no branch from Git and pushes nothing, so no write credential is
-    needed, and `invoke demo-activate` moves the ref. A private remote needs
-    `INFRAHUB_REPOSITORY_TOKEN` (and `INFRAHUB_REPOSITORY_USER`); the credential
-    file is written to a temporary directory and deleted, never into the repository.
+    `INFRAHUB_REPOSITORY_URL` registers the remote instead of `/upstream`, in the
+    mode `INFRAHUB_REPOSITORY_MODE` names:
 
-    Choose this on a fresh stack. Infrahub refuses to change a repository's kind
-    in place, and to delete one while trigger actions reference its generators.
+    * `readonly` (default): a read-only repository tracking `main`. Infrahub pushes
+      nothing and creates no branch from Git; the demo moves its ref.
+    * `readwrite`: a `CoreRepository` whose `default_branch` is `demo-main`. Infrahub
+      imports `demo/*` branches by itself and a merge pushes to `demo-main`, never to
+      the real `main`. The token in `NFD_GITHUB_TOKEN` is the credential and needs
+      write access; it goes to Infrahub through a temporary file and is not kept.
+
+    Choose the mode on a fresh stack. Infrahub refuses to change a repository's kind
+    in place, and to delete one while trigger actions reference its generators. A
+    read-write stack also needs `INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES` set to
+    `["demo/.*"]` before `invoke start`.
     """
     url = os.environ.get("INFRAHUB_REPOSITORY_URL", "")
     if not url:
@@ -349,22 +353,43 @@ def _load_repository(ctx: Context) -> None:
 
     from solution_arista_avd import demo_release as dr
 
-    token = os.environ.get("INFRAHUB_REPOSITORY_TOKEN", "")
-    credential = "demo-remote" if token else None
-    ref = os.environ.get("INFRAHUB_REPOSITORY_REF", "main")
+    mode = os.environ.get("INFRAHUB_REPOSITORY_MODE", "readonly")
+    token = os.environ.get("NFD_GITHUB_TOKEN", "")
+    if mode == "readwrite":
+        if not token:
+            raise Exit(
+                "INFRAHUB_REPOSITORY_MODE=readwrite needs NFD_GITHUB_TOKEN (write access to the remote).", code=1
+            )
+        _ensure_remote_branch(ctx, dr.DEFAULT_DEMO_BRANCH)
+    credential = "demo-remote" if mode == "readwrite" else None
     with tempfile.TemporaryDirectory() as tmp:
-        if token:
+        if credential:
             cred_file = Path(tmp) / "credential.yml"
             cred_file.write_text(
-                dr.render_credential("demo-remote", os.environ.get("INFRAHUB_REPOSITORY_USER", "git"), token),
+                dr.render_credential(credential, os.environ.get("INFRAHUB_REPOSITORY_USER", "x-access-token"), token),
                 encoding="utf-8",
             )
             cred_file.chmod(0o600)
             ctx.run(f"infrahubctl object load {shlex.quote(str(cred_file))}", pty=True)
         repo_file = Path(tmp) / "repository.yml"
-        repo_file.write_text(dr.render_repository(url, ref=ref, credential=credential), encoding="utf-8")
-        print(f" - Repository 'test-repository' -> {url} @ {ref} (read-only)")
+        repo_file.write_text(
+            dr.render_repository(
+                url, mode=mode, ref=os.environ.get("INFRAHUB_REPOSITORY_REF", "main"), credential=credential
+            ),
+            encoding="utf-8",
+        )
+        print(f" - Repository 'test-repository' -> {url} ({mode})")
         ctx.run(f"infrahubctl object load {shlex.quote(str(repo_file))}", pty=True)
+
+
+def _ensure_remote_branch(ctx: Context, branch: str) -> None:
+    """Create `branch` on the remote at the tip of `main` if it is not there yet."""
+    if _remote_tip(ctx, branch):
+        return
+    print(f" - Creating '{branch}' on the remote at the tip of main")
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run("git fetch --quiet origin main", pty=True)
+        ctx.run(f"git push origin FETCH_HEAD:refs/heads/{shlex.quote(branch)}", pty=True)
 
 
 # ---------------------------------------------------------------------------
@@ -372,13 +397,16 @@ def _load_repository(ctx: Context) -> None:
 # ---------------------------------------------------------------------------
 
 DEMO_NAME = "internet-access"
-# The objects the staged capability adds. `object load` upserts, so the rest of
-# the file is already there and unchanged.
-DEMO_OBJECTS = "objects/37_otternet_wan_services.yml"
 # The kind it adds, so a rehearsal can take it back out.
 DEMO_KIND = "ServiceInternetAccess"
 DEMO_SCHEMA_NAMESPACE = "Service"
 DEMO_SCHEMA_NAME = "InternetAccess"
+
+_REPOSITORY_QUERY = (
+    "{ CoreGenericRepository { edges { node { __typename id location { value } sync_status { value } "
+    "... on CoreRepository { commit { value } default_branch { value } } "
+    "... on CoreReadOnlyRepository { commit { value } ref { value } } } } } }"
+)
 
 
 def _wait_for(condition: Callable[[], bool], what: str, timeout: int, interval: int = 5) -> None:
@@ -392,20 +420,20 @@ def _wait_for(condition: Callable[[], bool], what: str, timeout: int, interval: 
     raise Exit(msg, code=1)
 
 
-def _repository() -> dict[str, str]:
-    """The read-only repository's id, tracked ref, imported commit and sync status; empty if there is none."""
-    data = _graphql(
-        "{ CoreReadOnlyRepository { edges { node { id ref { value } commit { value } sync_status { value } } } } }"
-    )
-    edges = (data.get("CoreReadOnlyRepository") or {}).get("edges") or []
+def _repository(branch: str = "") -> dict[str, str]:
+    """The repository as `branch` sees it: kind, id, location, commit, sync status; empty if there is none."""
+    edges = (_graphql(_REPOSITORY_QUERY, branch).get("CoreGenericRepository") or {}).get("edges") or []
     if not edges:
         return {}
     node = edges[0]["node"]
+    value = lambda key: str((node.get(key) or {}).get("value") or "")  # noqa: E731
     return {
+        "kind": str(node["__typename"]),
         "id": str(node["id"]),
-        "ref": str((node.get("ref") or {}).get("value") or ""),
-        "commit": str((node.get("commit") or {}).get("value") or ""),
-        "sync_status": str((node.get("sync_status") or {}).get("value") or ""),
+        "location": value("location"),
+        "commit": value("commit"),
+        "ref": value("ref"),
+        "sync_status": value("sync_status"),
     }
 
 
@@ -416,28 +444,23 @@ def _remote_tip(ctx: Context, branch: str) -> str:
     return line.split()[0] if line else ""
 
 
-def _point_repository_at(ref: str, tip: str, timeout: int) -> None:
-    """Change the tracked ref and wait until Infrahub has imported that commit."""
+def _worker_import_filter(ctx: Context) -> list[str] | None:
+    """The branch filter the running task worker carries; None if it cannot be read."""
     from solution_arista_avd import demo_release as dr
 
-    repo = _repository()
-    if not repo:
-        raise Exit("No read-only repository is registered. Bootstrap with INFRAHUB_REPOSITORY_URL set.", code=1)
-    if repo["ref"] != ref:
-        result = _graphql(dr.set_ref_mutation(repo["id"], ref))
-        if not (result.get("CoreReadOnlyRepositoryUpdate") or {}).get("ok"):
-            raise Exit(f"Infrahub refused to change the ref to '{ref}'.", code=1)
-    _wait_for(lambda: _repository().get("commit") == tip, f"the import of {tip[:10]} from '{ref}'", timeout)
-    _regenerate_artifacts()
+    result = ctx.run(
+        f"{compose_cmd()} exec -T task-worker printenv INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES", hide=True, warn=True
+    )
+    return dr.parse_patterns(result.stdout.strip()) if result and result.ok else None
 
 
 def _regenerate_artifacts() -> None:
     """Re-render every artifact against what `main` now holds.
 
-    Moving the ref back to `main` does not always re-render: measured, a reset left
-    the `isp-pe1` artifact (and then the router) carrying the capability it had just
-    removed until the definitions were regenerated. The call is idempotent, and the
-    reconciler pushes only what moved.
+    Moving the code back does not always re-render: measured, a reset left the `isp-pe1`
+    artifact (and then the router) carrying the capability it had just removed until the
+    definitions were regenerated. The call is idempotent, and the reconciler pushes only
+    what moved.
     """
     print(" - Regenerating artifacts", flush=True)
     for name, definition_id in sorted(_artifact_definition_ids().items()):
@@ -454,26 +477,20 @@ def _regenerate_artifacts() -> None:
     help={
         "name": f"Capability name; releases stage/<name> (default {DEMO_NAME})",
         "run": "Release number. Each release is a new branch name, because a pulled commit is never rewritten",
-        "objects": "Object file on the staged branch to load onto the Infrahub branch",
-        "proposed_change": "Open the proposed change once the data is loaded (default true)",
+        "timeout": "Seconds to wait for the import (default 600)",
+        "proposed_change": "Open the proposed change once the branch is imported (default true)",
     }
 )
 def demo_release(
-    ctx: Context,
-    name: str = DEMO_NAME,
-    run: int = 1,
-    objects: str = DEMO_OBJECTS,
-    proposed_change: bool = True,
+    ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int = 600, proposed_change: bool = True
 ) -> None:
-    """Publish stage/<name> as demo/<name>-<run>, then review its schema and data on an Infrahub branch.
+    """Publish stage/<name> as demo/<name>-<run> and wait for Infrahub to have it, schema and data included.
 
-    Nothing here changes what Infrahub runs. The code stays on the remote until
-    `invoke demo-activate` moves the repository's ref, which is done after the
-    merge. The proposed change is opened last, once the data has landed: one
-    opened earlier runs its checks against a branch that is not ready.
+    In read-write mode the push is the whole trigger and this task only watches; you can
+    run the `git push` yourself, or rename the branch on the remote. In read-only mode
+    Infrahub does not follow branches, so this also creates the Infrahub branch and sets
+    the ref on it. Either way the staged `.infrahub.yml` carries the schema and the data.
     """
-    import tempfile
-
     from solution_arista_avd import demo_release as dr
 
     stage, demo = dr.stage_branch(name), dr.demo_branch(name, run)
@@ -482,70 +499,80 @@ def demo_release(
     if not tip or not tip.ok:
         raise Exit(f"No local branch '{stage}'. Create it first; see docs/docs/demo-builder.md.", code=1)
     commit = tip.stdout.strip()
+    repo = _repository()
+    if not repo:
+        raise Exit("No repository is registered. Bootstrap with INFRAHUB_REPOSITORY_URL set.", code=1)
+    read_write = repo["kind"] == "CoreRepository"
+    if read_write:
+        patterns = _worker_import_filter(ctx)
+        if patterns is not None and not dr.is_imported(patterns, demo):
+            raise Exit(
+                f"The task worker would ignore '{demo}' (filter: {patterns}). Set "
+                f"INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='{dr.DEMO_IMPORT_FILTER}' and bootstrap a fresh stack.",
+                code=1,
+            )
     if demo in (_branches() or {}):
         raise Exit(
-            f"Infrahub already has '{demo}'. Use `--run {run + 1}`, or `invoke demo-reset --run {run}` first.",
-            code=1,
+            f"Infrahub already has '{demo}'. Use `--run {run + 1}`, or `invoke demo-reset --run {run}` first.", code=1
         )
 
     print(f"\n=== Releasing {stage} ({commit[:10]}) as {demo} ===", flush=True)
     with ctx.cd(MAIN_DIRECTORY_PATH):
         ctx.run(f"git push origin {shlex.quote(dr.refspec(name, run))}", pty=True)
 
-    print(f" - Creating the Infrahub branch '{demo}'", flush=True)
-    ctx.run(f"infrahubctl branch create {shlex.quote(demo)}", pty=True)
-    with tempfile.TemporaryDirectory() as tmp, ctx.cd(MAIN_DIRECTORY_PATH):
-        ctx.run(f"git archive {shlex.quote(commit)} schemas {shlex.quote(objects)} | tar -x -C {shlex.quote(tmp)}")
-        print(f" - Loading the staged schema onto '{demo}'", flush=True)
-        ctx.run(f"infrahubctl schema load {shlex.quote(tmp)}/schemas --branch {shlex.quote(demo)}", pty=True)
-        sleep(5)
-        print(f" - Loading {objects} onto '{demo}'", flush=True)
-        ctx.run(
-            f"infrahubctl object load {shlex.quote(tmp)}/{shlex.quote(objects)} --branch {shlex.quote(demo)}",
-            pty=True,
-        )
+    if read_write:
+        print(" - Waiting for Infrahub to sync the branch in", flush=True)
+        _wait_for(lambda: demo in (_branches() or {}), f"the Infrahub branch '{demo}'", timeout)
+    else:
+        print(f" - Creating the Infrahub branch '{demo}' and setting the repository ref on it", flush=True)
+        ctx.run(f"infrahubctl branch create {shlex.quote(demo)}", pty=True)
+        _graphql(dr.set_ref_mutation(repo["id"], demo), demo)
+
+    def _synced() -> bool:
+        current = _repository(demo)
+        return current.get("commit") == commit and current.get("sync_status") == "in-sync"
+
+    _wait_for(_synced, f"the import of {commit[:10]} on '{demo}'", timeout)
+    arrived = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}', demo).get("__type"))
+    print(f" - {DEMO_KIND} on the branch: {'yes' if arrived else 'NO (check .infrahub.yml schemas/objects)'}")
 
     if not proposed_change:
         print(f"\nBranch '{demo}' is ready. Open a proposed change from it into main.")
-    else:
-        mutation = dr.proposed_change_mutation(
-            demo, f"Add {name}", f"Prepared implementation of {name}, released from {stage} at {commit[:10]}."
-        )
-        created = _graphql(mutation)
-        pc_id = ((created.get("CoreProposedChangeCreate") or {}).get("object") or {}).get("id")
-        if not pc_id:
-            print(f"\nBranch '{demo}' is ready, but the proposed change could not be opened. Open it in the UI.")
-        else:
-            # Creating one starts its validators at once, and that first pass can race
-            # the data just loaded. Asking again makes the checks judge the final branch.
-            _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
-            print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
-    print(f"After the merge, make the code live with: invoke demo-activate --name {name} --run {run}")
+        return
+    mutation = dr.proposed_change_mutation(
+        demo, f"Add {name}", f"Prepared implementation of {name}, released from {stage} at {commit[:10]}."
+    )
+    pc_id = ((_graphql(mutation).get("CoreProposedChangeCreate") or {}).get("object") or {}).get("id")
+    if not pc_id:
+        print(f"\nBranch '{demo}' is ready, but the proposed change could not be opened. Open it in the UI.")
+        return
+    # Creating one starts its validators at once; asking again makes them judge the final branch.
+    _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
+    print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
 
 
-@task(
-    help={
-        "name": f"Capability name (default {DEMO_NAME})",
-        "run": "The release to activate",
-        "timeout": "Seconds to wait for the import (default 600)",
-    }
-)
-def demo_activate(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int = 600) -> None:
-    """Point the repository at demo/<name>-<run>, so its queries, transforms and checks go live.
+def _reset_demo_main(ctx: Context, location: str, branch: str) -> str:
+    """Put `branch`'s tree back to what `main` holds, as a new commit. Returns the new tip, or ''.
 
-    Run it after the proposed change is merged. Before the merge nothing reads the
-    staged kind, so the data can land first; after it, the code that renders it
-    can. The other order leaves queries on `main` naming a kind it does not have.
+    Forward only. Infrahub's clone has pulled the merge commit, so deleting and
+    recreating the branch would leave that commit in the clone and push it straight back.
     """
-    from solution_arista_avd import demo_release as dr
+    import tempfile
 
-    demo = dr.demo_branch(name, run)
-    tip = _remote_tip(ctx, demo)
-    if not tip:
-        raise Exit(f"The remote has no '{demo}'. Run `invoke demo-release --run {run}` first.", code=1)
-    print(f"\n=== Pointing the repository at {demo} ({tip[:10]}) ===", flush=True)
-    _point_repository_at(demo, tip, timeout)
-    print("\nThe staged code is live. The artifacts re-render; the reconciler pushes them.")
+    with tempfile.TemporaryDirectory() as tmp:
+        clone = Path(tmp) / "clone"
+        ctx.run(f"git clone --quiet --branch {shlex.quote(branch)} {shlex.quote(location)} {shlex.quote(str(clone))}")
+        with ctx.cd(clone):
+            ctx.run("git fetch --quiet origin main")
+            if ctx.run("git diff --quiet HEAD FETCH_HEAD", warn=True).ok:
+                return ""
+            ctx.run("git read-tree -u --reset FETCH_HEAD")
+            ctx.run(
+                "git -c user.name=demo-reset -c user.email=demo-reset@example.invalid "
+                f"commit --quiet -m {shlex.quote(f'Reset {branch} to main')}"
+            )
+            ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
+            return ctx.run("git rev-parse HEAD", hide=True).stdout.strip()
 
 
 @task(
@@ -558,20 +585,30 @@ def demo_activate(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: in
 def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int = 600) -> None:
     """Undo a release so the demo can be rehearsed again, merged or not.
 
-    Order matters: the ref goes back to `main` first, so no code on `main` names
-    the kind; then the kind's objects and schema node are removed if the merge
-    put them there; then the Infrahub branch and the remote branch go. Never
-    reuse the name afterwards: the next release takes `--run <n+1>`.
+    Order matters: the code goes back first, so nothing on `main` names the kind; then the
+    kind's objects and schema node are removed if the merge put them there; then the
+    Infrahub branch and the remote branch go. Never reuse the name afterwards: the next
+    release takes `--run <n+1>`.
     """
     import tempfile
 
     from solution_arista_avd import demo_release as dr
 
     demo = dr.demo_branch(name, run)
-    main_tip = _remote_tip(ctx, "main")
-    if main_tip and _repository():
+    repo = _repository()
+    if repo.get("kind") == "CoreRepository":
+        new_tip = _reset_demo_main(ctx, repo["location"], dr.DEFAULT_DEMO_BRANCH)
+        if new_tip:
+            print(
+                f" - Reset {dr.DEFAULT_DEMO_BRANCH} to main ({new_tip[:10]}); waiting for Infrahub to import it",
+                flush=True,
+            )
+            _wait_for(lambda: _repository().get("commit") == new_tip, f"the import of {new_tip[:10]}", timeout)
+    elif repo.get("kind") == "CoreReadOnlyRepository" and repo["ref"] != "main":
+        main_tip = _remote_tip(ctx, "main")
         print(" - Pointing the repository back at main", flush=True)
-        _point_repository_at("main", main_tip, timeout)
+        _graphql(dr.set_ref_mutation(repo["id"], "main"))
+        _wait_for(lambda: _repository().get("commit") == main_tip, f"the import of {main_tip[:10]}", timeout)
     if _graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"):
         for edge in (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}").get(DEMO_KIND) or {}).get(
             "edges", []
@@ -583,6 +620,7 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
             absent.write_text(dr.absent_schema(DEMO_SCHEMA_NAMESPACE, DEMO_SCHEMA_NAME), encoding="utf-8")
             print(f" - Removing the {DEMO_KIND} schema node", flush=True)
             ctx.run(f"infrahubctl schema load {shlex.quote(str(absent))}", pty=True)
+    _regenerate_artifacts()
     if demo in (_branches() or {}):
         ctx.run(f"infrahubctl branch delete {shlex.quote(demo)}", pty=True)
     else:
