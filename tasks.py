@@ -816,9 +816,13 @@ def _take_capability_back_out(
 
     from solution_arista_avd import demo_release as dr
 
-    reset = f"{dr.demo_branch(name, run)}-reset"
+    # A fresh name every attempt. Deleting a branch in Infrahub does not delete the workers' local
+    # ref, so reusing a name hands Infrahub a branch that already sits on the old commit: it sees
+    # nothing to import and waits forever.
+    reset = f"{dr.demo_branch(name, run)}-reset-{int(time.time())}"
     before = _repository().get("commit", "")
-    _delete_demo_branch(ctx, reset)  # a leftover from an interrupted reset
+    for leftover in sorted(b for b in (_branches() or {}) if b.startswith(f"{dr.demo_branch(name, run)}-reset")):
+        _delete_demo_branch(ctx, leftover)  # from an interrupted attempt
     print(f" - Creating '{reset}' with Sync with Git", flush=True)
     ctx.run(f"infrahubctl branch create {shlex.quote(reset)} --sync-with-git", pty=True)
     _wait_for(lambda: bool(_remote_tip(ctx, reset)), f"Infrahub to publish '{reset}'", timeout)
