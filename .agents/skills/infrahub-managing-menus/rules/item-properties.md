@@ -8,21 +8,34 @@ tags: item, name, namespace, label, kind, path, icon, children
 
 Impact: CRITICAL
 
-Every menu item has required and optional properties.
+Every menu item needs `name` and `namespace`; the
+other properties choose its role (link, header, or
+custom path).
+
+### Why it matters
+
+`name` and `namespace` together form the menu
+item's primary key. Two siblings sharing the same
+pair silently collapse into one entry, and an item
+that omits either is rejected by the menu loader.
+`kind` and `path` are mutually exclusive — defining
+both makes Infrahub fall back to the auto-menu for
+that branch, which usually looks like "my custom
+menu is being ignored" to the user.
 
 ### Property Reference
 
-| Property       | Type    | Required | Description               |
-| -------------- | ------- | -------- | ------------------------- |
-| `name`         | string  | Yes      | Unique identifier         |
-| `namespace`    | string  | Yes      | Organizational grouping   |
-| `label`        | string  | No       | Display text in the UI    |
-| `kind`         | string  | No       | Links to a schema node    |
-| `path`         | string  | No       | Direct URL path           |
-| `icon`         | string  | No       | MDI library icon          |
-| `order_weight` | integer | No       | Sort position             |
-| `parent`       | string  | No       | Parent menu item ref      |
-| `children`     | object  | No       | Nested items under `data` |
+| Property       | Type    | Required | Description                                                                                           |
+| -------------- | ------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `name`         | string  | Yes      | Unique identifier                                                                                     |
+| `namespace`    | string  | Yes      | Organizational grouping                                                                               |
+| `label`        | string  | No       | Display text in the UI                                                                                |
+| `kind`         | string  | No       | Links to a schema node                                                                                |
+| `path`         | string  | No       | Direct URL path                                                                                       |
+| `icon`         | string  | No       | MDI library icon                                                                                      |
+| `order_weight` | integer | No       | Sort position                                                                                         |
+| `parent`       | list    | No       | `[<Namespace>, <Name>]` of the item to nest under; see [hierarchy-nesting.md](./hierarchy-nesting.md) |
+| `children`     | object  | No       | Nested items under `data`                                                                             |
 
 ### kind vs path
 
@@ -44,7 +57,10 @@ not apply):
   path: /dashboard        # Direct URL
 ```
 
-Never use both `kind` and `path` on the same item.
+`kind` and `path` are mutually exclusive: if both
+appear on a single item, Infrahub treats the menu
+entry as invalid for that branch and quietly drops
+through to the auto-generated menu.
 
 ### Items Without kind or path
 
