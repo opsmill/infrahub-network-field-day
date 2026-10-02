@@ -12,9 +12,12 @@ import time
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from infrahub_sdk.exceptions import GraphQLError
+from infrahub_sdk.task.models import TaskFilter, TaskState
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from infrahub_sdk import InfrahubClient
 
 T = TypeVar("T")
 
@@ -98,5 +101,59 @@ async def wait_until(
                 return last
         if time.monotonic() >= deadline:
             msg = f"{describe}: timed out after {timeout}s; last observed: {_summarize(last)}"
+            raise AssertionError(msg)
+        await asyncio.sleep(interval)
+
+
+# Task states that mean "not finished yet".
+ACTIVE_TASK_STATES = [
+    TaskState.SCHEDULED,
+    TaskState.PENDING,
+    TaskState.RUNNING,
+    TaskState.PAUSED,
+    TaskState.CANCELLING,
+]
+
+# Prefect workflow that turns CoreNodeTriggerRule/CoreAction objects into live
+# automations. One run per saved trigger object, so loading triggers.yml queues
+# well over a hundred of them.
+WORKFLOW_CONFIGURE_ACTION_RULES = "configure-action-rules"
+TRIGGER_SETUP_TIMEOUT = 300
+TRIGGER_SETUP_STABLE_SAMPLES = 3
+
+
+async def wait_for_workflow_quiet(
+    client: InfrahubClient,
+    *,
+    workflow: str,
+    timeout: int,  # noqa: ASYNC109 (deliberate polling budget, not an asyncio.timeout scope)
+    interval: int,
+    stable_samples: int,
+    describe: str,
+) -> int:
+    """Wait until ``workflow`` has run at least once and has nothing left in flight.
+
+    Both halves matter. "Nothing active" alone succeeds at t=0, before the first
+    run has even been queued. So this requires at least one run, no active run,
+    and an unchanged total over ``stable_samples`` consecutive samples -- a run
+    queued between two samples resets the count. Returns the total observed.
+    """
+    deadline = time.monotonic() + timeout
+    previous_total: int | None = None
+    stable = 0
+    last: dict[str, int] = {}
+    while True:
+        total = await client.task.count(filters=TaskFilter(workflow=[workflow]))
+        active = await client.task.count(filters=TaskFilter(workflow=[workflow], state=ACTIVE_TASK_STATES))
+        last = {"total": total, "active": active}
+        if total > 0 and active == 0 and total == previous_total:
+            stable += 1
+            if stable >= stable_samples:
+                return total
+        else:
+            stable = 0
+        previous_total = total
+        if time.monotonic() >= deadline:
+            msg = f"{describe}: timed out after {timeout}s; last observed: {last}"
             raise AssertionError(msg)
         await asyncio.sleep(interval)

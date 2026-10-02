@@ -151,6 +151,10 @@
         {
           "action": "permit 10.110.0.0/24",
           "sequence": 20
+        },
+        {
+          "action": "permit 10.90.0.0/24",
+          "sequence": 30
         }
       ]
     }
@@ -903,6 +907,13 @@
                 "leaf-otternet-pod1-3-1"
               ],
               "prefix": "10.110.0.0/24"
+            },
+            {
+              "next_hop": "10.250.170.2",
+              "nodes": [
+                "leaf-otternet-pod1-3-1"
+              ],
+              "prefix": "10.90.0.0/24"
             }
           ],
           "vrf_id": 70,
