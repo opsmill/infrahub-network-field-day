@@ -14,7 +14,7 @@ those passed `verify_bootstrap.sh`, because that script proves the lab is built,
 not that the demo tells the truth about it.
 
 WHAT IT CHANGES. Branches and proposed changes in Infrahub, all of them deleted
-at the end -- including when an act fails. NOTHING IS MERGED, and nothing touches
+at the end -- including when an act fails. WITHOUT --merge NOTHING IS MERGED, and nothing touches
 a device or the cluster: the acts that end in a merge are rehearsed up to the
 merge, which is where the runbook's claims about review live. The requests go
 through the portal as `alice`, from the branch desktop, exactly as a branch user
@@ -30,6 +30,16 @@ Acts, in the order run:
   monitoring act two's step 6: a monitoring profile edit, up to the merge
   five       the MCP server, as mcp-agent: reads, a branch, a proposed change,
              and the refusal on main
+
+  merge      ONLY WITH --merge, AND IT CHANGES THE LAB. Acts two and three for
+             real: a Grafana grant merged, the reconciler pushing fw1 and the
+             border leaf, Vidra delivering the pod policy, alice signing in to
+             Grafana from the branch desktop; then the portal's Revoke template,
+             merged too; then the lab compared with a snapshot taken first and
+             `make -C lab verify` run. About twenty minutes.
+
+    uv run python scripts/demo_rehearsal.py --merge          # preflight, then the merge cycle
+    uv run python scripts/demo_rehearsal.py --resume-revoke grafana-<ref>  # finish one that stopped
 
 Exit status is non-zero when any check fails. WARN is reserved for a claim that
 held only after help, so a rehearsal that needed a retry says so.
@@ -68,6 +78,8 @@ JUNOS = "Junos Configuration"
 RESULTS: list[tuple[str, str, str]] = []
 TIMINGS: list[tuple[str, float]] = []
 CREATED_BRANCHES: list[str] = []
+# Branches whose proposed change --merge merged, until the cycle has put the lab back.
+MERGED: list[str] = []
 
 
 # ----------------------------------------------------------------- reporting
@@ -157,9 +169,9 @@ def settled_validators(branch: str, timeout: float = 600) -> list[dict[str, Any]
     return validators
 
 
-def check_all_green(validators: list[dict[str, Any]], what: str) -> None:
+def check_all_green(validators: list[dict[str, Any]], what: str) -> bool:
     red = sorted({v["display_label"] for v in validators if v["conclusion"]["value"] != "success"})
-    check(not red and bool(validators), what, ", ".join(red) or f"{len(validators)} validators")
+    return check(not red and bool(validators), what, ", ".join(red) or f"{len(validators)} validators")
 
 
 def artifacts(branch: str) -> dict[tuple[str, str], dict[str, Any]]:
@@ -281,6 +293,14 @@ def act_preflight() -> None:
 
     accounts = run("uv", "run", "python", str(REPO / "scripts" / "provision_portal_accounts.py"), "--check")
     check(accounts.returncode == 0, "every portal user has an Infrahub account")
+    # A generator instance whose target was deleted fails that generator's
+    # validator on EVERY proposed change, unrelated ones included, so a red
+    # check in act one or two would be this and not the request.
+    instances = gql("{ CoreGeneratorInstance { edges { node { name { value } object { node { id } } } } } }")[
+        "CoreGeneratorInstance"
+    ]["edges"]
+    dangling = sorted(e["node"]["name"]["value"] for e in instances if not e["node"]["object"]["node"])
+    check(not dangling, "no generator instance points at a deleted node", ", ".join(dangling))
     check(
         httpx.get(MCP_URL.replace("/mcp", "/health"), timeout=10).json().get("status") == "healthy",
         "the MCP server is healthy",
@@ -618,6 +638,528 @@ def act_five() -> None:
     check("PERMISSION_DENIED" in refused.text, "Infrahub refuses mcp-agent's write to main", refused.text[:120])
 
 
+# ------------------------------------------------- --merge: THIS CHANGES THE LAB
+#
+# Everything above stops at a merge. This half merges, lets the reconciler push
+# fw1 and the border leaf, watches Vidra deliver, signs alice in to Grafana from
+# the branch desktop, revokes through the portal's Revoke template, merges that,
+# and then proves the lab is back where it started. The Revoke template can only
+# be rehearsed this way: its picker lists grants on main.
+
+LEAF = "leaf-otternet-pod1-3-1"
+LEAF_CONTAINER = "clab-otternet-border-leaf1"
+GRAFANA = "otternet-metrics"
+GRAFANA_VIP = "10.112.240.81"
+GRAFANA_BLOCK = "10.112.240.80/28"
+FABRIC_APP = "Crossplane FabricApp"
+SNAPSHOT_FILE = Path(os.environ.get("OTTERNET_REHEARSAL_SNAPSHOT", "/tmp/otternet-demo-rehearsal-snapshot.json"))  # noqa: S108
+# Junos re-salts every `## SECRET-DATA` value on a load, so these lines may move
+# while the configuration means exactly the same thing. They are compared apart.
+SECRET = re.compile(r"## SECRET-DATA|encrypted-password|\$9\$|\$6\$")
+
+
+def main_checkout() -> Path:
+    common = run("git", "-C", str(REPO), "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+    return Path(common).parent if common else REPO
+
+
+def git_branches() -> set[str]:
+    refs = run("git", "-C", str(main_checkout()), "for-each-ref", "--format=%(refname:short)", "refs/heads")
+    return set(refs.stdout.split())
+
+
+def kubectl(*args: str) -> subprocess.CompletedProcess[str]:
+    config = os.environ.get("KUBECONFIG") or str(main_checkout() / "lab" / "k8s" / ".kubeconfig" / "kubeconfig.yaml")
+    return run("kubectl", "--kubeconfig", config, *args, timeout=60)
+
+
+def fw_config() -> str:
+    return desk_firewall("show configuration | display set")
+
+
+def leaf_config() -> str:
+    return run("docker", "exec", LEAF_CONTAINER, "Cli", "-p", "15", "-c", "show running-config").stdout
+
+
+def grafana_gate() -> dict[str, Any]:
+    """Grafana's pod-level gate: the FabricApp's allowFrom and the policy Cilium enforces."""
+    app = kubectl("get", "fabricapp", GRAFANA, "-o", "json")
+    cnp = kubectl("-n", GRAFANA, "get", "ciliumnetworkpolicy", "allow-ingress", "-o", "json")
+    allow_from = json.loads(app.stdout)["spec"]["policy"]["allowFrom"] if app.returncode == 0 else None
+    cidrs = (
+        sorted(c for rule in json.loads(cnp.stdout)["spec"]["ingress"] for c in rule.get("fromCIDR", []))
+        if cnp.returncode == 0
+        else None
+    )
+    return {"allowFrom": allow_from, "fromCIDR": cidrs}
+
+
+def desk_http(url: str) -> str:
+    return desk("curl", "-s", "-m", "8", "-o", "/dev/null", "-w", "%{http_code}", url).stdout
+
+
+def grant_bookkeeping() -> list[str]:
+    """generate-app-access's own records on main: its generator instances and tracking groups.
+
+    Deleting a grant deletes neither, and an instance left pointing at a deleted
+    grant breaks the generator for EVERY later proposed change: Infrahub's
+    `request_generator_definition_run` reads each instance's `object.peer.id` and
+    raises `Node must have at least one identifier` on the dangling one, so the
+    `generate-app-access` validator goes red on requests that have nothing to do
+    with the deleted grant. Measured: the first rehearsal of this mode did exactly
+    that, and the next grant's proposed change could not be merged.
+    """
+    return sorted(f"{kind} {label}" for kind, _, label in _grant_records())
+
+
+def _grant_records() -> list[tuple[str, str, str]]:
+    """(kind, id, label) for every generate-app-access instance and tracking group on main."""
+    data = gql(
+        """{ CoreGeneratorInstance { edges { node { id name { value } definition { node { name { value } } } } } }
+             CoreGeneratorGroup { edges { node { id name { value } description { value } } } } }"""
+    )
+    records = [
+        ("CoreGeneratorInstance", e["node"]["id"], e["node"]["name"]["value"])
+        for e in data["CoreGeneratorInstance"]["edges"]
+        if e["node"]["definition"]["node"]["name"]["value"] == "generate-app-access"
+    ]
+    records += [
+        ("CoreGeneratorGroup", e["node"]["id"], f"{e['node']['name']['value']} ({e['node']['description']['value']})")
+        for e in data["CoreGeneratorGroup"]["edges"]
+        if e["node"]["name"]["value"].startswith("generate-app-access-")
+    ]
+    return records
+
+
+def delete_grant(name: str) -> None:
+    """Delete a grant from main, and generate-app-access's records of it with it."""
+    for kind, node_id, label in _grant_records():
+        if label in {f"generate-app-access: {name}", f"name: {name}"} or label.endswith(f"(name: {name})"):
+            gql(f"mutation ($id: String!) {{ {kind}Delete(data: {{id: $id}}) {{ ok }} }}", {"id": node_id})
+    grant = gql("query ($n: String!) { ServiceAppAccess(name__value: $n) { edges { node { id } } } }", {"n": name})[
+        "ServiceAppAccess"
+    ]["edges"]
+    for edge in grant:
+        gql("mutation ($id: String!) { ServiceAppAccessDelete(data: {id: $id}) { ok } }", {"id": edge["node"]["id"]})
+
+
+def snapshot() -> dict[str, Any]:
+    """Everything the merge cycle may touch and must put back."""
+    states = gql(
+        """{ DeploymentState { edges { node { name { value } status { value }
+             last_artifact_checksum { value } suspend { value } last_error { value } } } } }"""
+    )["DeploymentState"]["edges"]
+    return {
+        "fw1": fw_config(),
+        "leaf": leaf_config(),
+        "artifacts": {
+            f"{name} / {target}": node["checksum"]["value"] for (name, target), node in artifacts("main").items()
+        },
+        "deployment": {
+            s["node"]["name"]["value"]: {
+                key: s["node"][key]["value"] for key in ("status", "last_artifact_checksum", "suspend", "last_error")
+            }
+            for s in states
+        },
+        "grants": sorted(
+            e["node"]["name"]["value"]
+            for e in gql("{ ServiceAppAccess { edges { node { name { value } } } } }")["ServiceAppAccess"]["edges"]
+        ),
+        "grant_bookkeeping": grant_bookkeeping(),
+        "gate": grafana_gate(),
+        # Not the mirrors: Infrahub copies every branch of the checkout it
+        # clones, and other sessions' worktrees create them mid-run. A mirror
+        # does not reliably say `sync_with_git`, so it is excluded by name.
+        "branches": sorted(b["name"] for b in gql("{ Branch { name } }")["Branch"] if b["name"] not in git_branches()),
+        "open_changes": sorted(
+            e["node"]["name"]["value"]
+            for e in gql('{ CoreProposedChange(state__value: "open") { edges { node { name { value } } } } }')[
+                "CoreProposedChange"
+            ]["edges"]
+        ),
+    }
+
+
+def compare_snapshots(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    """Record one PASS/FAIL per part of the lab; True when everything is back."""
+    ok = True
+    old_fw, new_fw = before["fw1"].splitlines(), after["fw1"].splitlines()
+    if old_fw == new_fw:
+        check(True, "fw1's running configuration is byte-for-byte the snapshot", f"{len(new_fw)} lines")
+    else:
+        plain = [line for line in old_fw if not SECRET.search(line)] == [
+            line for line in new_fw if not SECRET.search(line)
+        ]
+        moved = sorted(set(old_fw) ^ set(new_fw))
+        ok &= check(
+            plain,
+            "fw1's running configuration equals the snapshot, apart from re-salted secrets",
+            f"{len(moved)} lines differ: {moved[:4]}",
+        )
+    old_leaf, new_leaf = before["leaf"].splitlines(), after["leaf"].splitlines()
+    ok &= check(
+        old_leaf == new_leaf,
+        "the border leaf's running configuration is byte-for-byte the snapshot",
+        f"{len(new_leaf)} lines" if old_leaf == new_leaf else str(sorted(set(old_leaf) ^ set(new_leaf))[:6]),
+    )
+    moved_artifacts = sorted(
+        key for key in before["artifacts"].keys() | after["artifacts"].keys()
+        if before["artifacts"].get(key) != after["artifacts"].get(key)
+    )  # fmt: skip
+    ok &= check(
+        not moved_artifacts,
+        "every artifact on main has the snapshot's checksum",
+        ", ".join(moved_artifacts) or f"{len(after['artifacts'])} artifacts",
+    )
+    moved_states = sorted(
+        name for name in before["deployment"].keys() | after["deployment"].keys()
+        if before["deployment"].get(name) != after["deployment"].get(name)
+    )  # fmt: skip
+    ok &= check(
+        not moved_states,
+        "every DeploymentState matches the snapshot (status, artifact checksum, suspend, error)",
+        ", ".join(f"{n}: {before['deployment'].get(n)} -> {after['deployment'].get(n)}" for n in moved_states)[:400]
+        or f"{len(after['deployment'])} devices",
+    )
+    for key, what in (
+        ("grants", "the ServiceAppAccess objects on main are the snapshot's"),
+        ("grant_bookkeeping", "generate-app-access keeps no instance or tracking group for the grant"),
+        ("gate", "Grafana's pod policy is the snapshot's"),
+        ("branches", "the Infrahub branches are the snapshot's"),
+        ("open_changes", "the open proposed changes are the snapshot's"),
+    ):
+        ok &= check(
+            before[key] == after[key], what, f"{before[key]} -> {after[key]}" if before[key] != after[key] else ""
+        )
+    return ok
+
+
+def merge_change(branch: str) -> float:
+    """Merge the branch's proposed change; the wall-clock time the merge returned."""
+    pc = proposed_change(branch)
+    if not pc:
+        msg = f"no proposed change for {branch}"
+        raise RuntimeError(msg)
+    start = time.monotonic()
+    result = gql(
+        "mutation ($id: String!) { CoreProposedChangeMerge(data: {id: $id}, wait_until_completion: true) { ok } }",
+        {"id": pc["id"]},
+    )
+    TIMINGS.append((f"merge {branch}: CoreProposedChangeMerge", time.monotonic() - start))
+    if not result["CoreProposedChangeMerge"]["ok"]:
+        msg = f"merging {branch} returned ok=false"
+        raise RuntimeError(msg)
+    # Merged: the proposed change stays as history, so the cleanup must not delete it.
+    CREATED_BRANCHES.remove(branch)
+    MERGED.append(branch)
+    return time.time()
+
+
+def reconciler_cycles(since: float) -> list[str]:
+    logs = run("docker", "logs", "--since", str(int(since)), RECONCILER)
+    return [line for line in (logs.stdout + logs.stderr).splitlines() if re.search(r" cycle \d+: compared=", line)]
+
+
+def pushed_and_confirmed(since: float) -> bool:
+    """A cycle since `since` that pushed, followed by one that found nothing to do."""
+    cycles = reconciler_cycles(since)
+    first_push = next((i for i, line in enumerate(cycles) if not re.search(r"pushed=0\b", line)), None)
+    return first_push is not None and any("differed=0" in line for line in cycles[first_push + 1 :])
+
+
+def watch(prefix: str, since: float, conditions: dict[str, Callable[[], bool]], timeout: float) -> dict[str, float]:
+    """Poll every condition until all hold; the seconds from `since` at which each first held."""
+    pending, seen = dict(conditions), {}
+    while pending and time.time() - since < timeout:
+        for label, condition in list(pending.items()):
+            try:
+                held = bool(condition())
+            except Exception:  # noqa: BLE001 - a probe that fails has simply not held yet
+                held = False
+            if held:
+                seen[label] = time.time() - since
+                pending.pop(label)
+                print(f"    +{seen[label]:6.1f} s  {label}", flush=True)
+        if pending:
+            time.sleep(5)
+    for label in conditions:
+        if label in seen:
+            TIMINGS.append((f"{prefix}: merge until {label}", seen[label]))
+        check(label in seen, f"{prefix}: {label}", "" if label in seen else f"not within {timeout:.0f} s")
+    return seen
+
+
+def catalog_has(entity: str) -> bool:
+    """Whether the portal's catalogue lists the entity yet, asked as alice from the desktop."""
+    result = desk(
+        "sh",
+        "-c",
+        'T=$(/tmp/portal_signin.sh); curl -sk -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $T" '
+        '"https://10.90.0.11:32001/api/catalog/entities/by-name/component/default/$1"',
+        "_",
+        entity,
+    )
+    return result.stdout.strip() == "200"
+
+
+def leaf_permits(block: str) -> bool:
+    out = run("docker", "exec", LEAF_CONTAINER, "Cli", "-c", "show ip prefix-list PL-DC-ADVERTISED-BRANCH").stdout
+    return f"permit {block}" in out
+
+
+def fw_rule(name: str) -> bool:
+    return f"svc-{name}" in desk_firewall(
+        "show configuration security policies from-zone branch to-zone k8s-prod | display set"
+    )
+
+
+def grafana_signin() -> str:
+    run("docker", "cp", str(REPO / "scripts" / "portal" / "grafana_signin.sh"), f"{DESK}:/tmp/grafana_signin.sh")
+    return desk("sh", "/tmp/grafana_signin.sh", timeout=90).stdout.strip()  # noqa: S108 - inside the container
+
+
+def act_merge(reference: str, via: str = "template") -> None:
+    stage("Merge cycle: THIS CHANGES THE LAB -- grant Grafana, merge, revoke, merge, restore")
+    before = snapshot()
+    # On disk, so `--resume-revoke` can finish a cycle that stopped after the
+    # grant merged and still prove the lab came back to THIS state.
+    SNAPSHOT_FILE.write_text(json.dumps(before), encoding="utf-8")
+    print(f"    snapshot: fw1 {len(before['fw1'].splitlines())} lines, border leaf "
+          f"{len(before['leaf'].splitlines())} lines, {len(before['artifacts'])} artifacts, "
+          f"{len(before['deployment'])} devices, grants on main {before['grants']}")  # fmt: skip
+    if not check(not before["grants"], "no grant exists on main before the cycle", ", ".join(before["grants"])):
+        return
+    if not check(
+        not before["grant_bookkeeping"],
+        "generate-app-access keeps no records on main",
+        ", ".join(before["grant_bookkeeping"]),
+    ):
+        return
+    if not check(
+        all(s["status"] == "in_sync" for s in before["deployment"].values()), "every device is in_sync to start"
+    ):
+        return
+    if not check(desk_http(f"http://{GRAFANA_VIP}/api/health") == "000", "the branch cannot reach Grafana to start"):
+        return
+
+    name = f"grafana-{reference}"
+    grant_branch = f"implement_{name}"
+    CREATED_BRANCHES.append(grant_branch)
+    with timed("merge cycle: act two, portal grant, start to proposed change"):
+        result = run_template(
+            "template:default/app-access-request",
+            {
+                "mode": "create",
+                "name": name,
+                "application": f"component:default/{GRAFANA}",
+                "owner": "branch",
+                "source_site": "resource:default/branch-office",
+                "justification": "demo rehearsal, merged and then revoked",
+            },
+        )
+    if not check(result["status"] == "completed", "act two: the grant template completed as alice"):
+        return
+    with timed("merge cycle: act two, proposed change opened, until every validator is done"):
+        green = check_all_green(settled_validators(grant_branch), "act two: every validator is green")
+    if not green:  # Infrahub refuses the merge anyway; stopping here leaves the lab untouched
+        return
+    # The border leaf's diff arrives through the pipeline's hostvar pass, last.
+    # Merging before it lands would carry the attribute and not the rendered line.
+    eos = wait_until(lambda: changed_eos(grant_branch), timeout=180, interval=10)
+    if not eos:
+        rerun_artifact_checks(grant_branch)
+        eos = wait_until(lambda: changed_eos(grant_branch), timeout=120, interval=5)
+    if not check(list(eos or {}) == [LEAF], "act two: the border leaf's diff is on the proposed change", str(eos)):
+        return
+
+    merged = merge_change(grant_branch)
+    print(f"    merged {grant_branch}", flush=True)
+    watch(
+        "act two",
+        merged,
+        {
+            "Vidra delivers Grafana's pod policy with the branch LAN": lambda: (
+                BRANCH_LAN in (grafana_gate()["fromCIDR"] or [])
+            ),
+            "fw1 carries the rule": lambda: fw_rule(name),
+            f"the border leaf permits {GRAFANA_BLOCK}": lambda: leaf_permits(GRAFANA_BLOCK),
+            "Grafana answers the branch desktop with HTTP 200": lambda: (
+                desk_http(f"http://{GRAFANA_VIP}/api/health") == "200"
+            ),
+            "the reconciler has pushed and then confirmed": lambda: pushed_and_confirmed(merged),
+        },
+        timeout=600,
+    )
+    role = grafana_signin()
+    check(role == "Viewer", "act two: alice signs in to Grafana through Dex from the branch desktop", role)
+    after_grant = artifacts("main")
+    check(
+        after_grant[JUNOS, "fw1"]["checksum"]["value"] != before["artifacts"][f"{JUNOS} / fw1"],
+        "act two: fw1's artifact on main moved",
+    )
+
+    act_revoke(name, reference, before, via)
+
+
+def revoke_via_status(name: str, branch: str, before: dict[str, Any]) -> bool:
+    """The Revoke template's steps, without its `infrahub:generators:await` step.
+
+    Act three's UI path: set `status` on a branch and let the event rule's ONE
+    generator run withdraw the grant. The template's await step runs the
+    generator a second time, and until `_delete_if_present` is deployed the two
+    race and the template fails (see generators/generate_app_access.py). This is
+    the recovery that does not depend on which generator Infrahub is running.
+    """
+    gql("mutation ($b: String!) { BranchCreate(data: {name: $b, sync_with_git: false}) { ok } }", {"b": branch})
+    gql(
+        """mutation ($n: String!) { ServiceAppAccessUpdate(context: {account: {id: "alice"}},
+             data: {hfid: [$n], status: {value: "decommissioning"}}) { ok } }""",
+        {"n": name},
+        branch=branch,
+    )
+    withdrawn = wait_until(
+        lambda: (
+            artifacts(branch)[JUNOS, "fw1"]["checksum"]["value"] == before["artifacts"][f"{JUNOS} / fw1"]
+            and gql(
+                "query ($n: String!) { ServiceAppAccess(name__value: $n) { edges { node { status { value } } } } }",
+                {"n": name},
+                branch=branch,
+            )["ServiceAppAccess"]["edges"][0]["node"]["status"]["value"]
+            == "decommissioned"
+        ),
+        timeout=300,
+        interval=10,
+    )
+    if not check(bool(withdrawn), "act three (status path): the generator withdrew the grant on its branch"):
+        return False
+    for definition in ("generate-avd-device-hostvar", "generate-avd-device-structured-config"):
+        generator_id = gql(
+            "query ($n: String!) { CoreGeneratorDefinition(name__value: $n) { edges { node { id } } } }",
+            {"n": definition},
+            branch=branch,
+        )["CoreGeneratorDefinition"]["edges"][0]["node"]["id"]
+        gql(
+            """mutation ($id: String!) {
+                 CoreGeneratorDefinitionRun(data: {id: $id}, wait_until_completion: true) { ok } }""",
+            {"id": generator_id},
+            branch=branch,
+        )
+    gql(
+        """mutation ($n: String!, $b: String!) { CoreProposedChangeCreate(data: {name: {value: $n},
+             source_branch: {value: $b}, destination_branch: {value: "main"}}) { ok } }""",
+        {"n": f"Revoke {name}", "b": branch},
+    )
+    return True
+
+
+def act_revoke(name: str, reference: str, before: dict[str, Any], via: str = "template") -> None:
+    """Act three, then the restore -- for a grant merged on main."""
+    grant_branch = f"implement_{name}"
+    revoke_branch = f"revoke_{name}_{reference}"
+    CREATED_BRANCHES.append(revoke_branch)
+    if via == "status":
+        with timed("merge cycle: act three, status set on a branch, to proposed change"):
+            if not revoke_via_status(name, revoke_branch, before):
+                return
+    else:
+        wait_until(lambda: catalog_has(name), timeout=180, interval=10)
+        if not check(catalog_has(name), "act three: the Revoke picker can see the merged grant"):
+            return
+        with timed("merge cycle: act three, Revoke template, start to proposed change"):
+            result = run_template(
+                "template:default/revoke-access-request",
+                {"grant": f"component:default/{name}", "reason": "demo rehearsal", "request_reference": reference},
+            )
+        if not check(result["status"] == "completed", "act three: the Revoke template completed as alice"):
+            return
+    with timed("merge cycle: act three, proposed change opened, until every validator is done"):
+        green = check_all_green(settled_validators(revoke_branch), "act three: every validator is green")
+    if not green:  # the grant stays merged: the finally block says how to recover
+        return
+    eos = changed_eos(revoke_branch)
+    removed = [line.strip() for diff in eos.values() for line in diff[0]]
+    check(
+        list(eos) == [LEAF] and len(removed) == 1 and GRAFANA_BLOCK in removed[0],
+        "act three: the border leaf loses exactly the grant's line",
+        str(removed),
+    )
+    revoked_fw = artifacts(revoke_branch)[JUNOS, "fw1"]["checksum"]["value"]
+    check(
+        revoked_fw == before["artifacts"][f"{JUNOS} / fw1"],
+        "act three: fw1's artifact on the branch is back to the snapshot's",
+    )
+
+    merged = merge_change(revoke_branch)
+    print(f"    merged {revoke_branch}", flush=True)
+    watch(
+        "act three",
+        merged,
+        {
+            "Vidra closes Grafana's pod policy": lambda: grafana_gate() == before["gate"],
+            "fw1 no longer carries the rule": lambda: not fw_rule(name),
+            f"the border leaf no longer permits {GRAFANA_BLOCK}": lambda: not leaf_permits(GRAFANA_BLOCK),
+            "Grafana stops answering the branch desktop": lambda: (
+                desk_http(f"http://{GRAFANA_VIP}/api/health") == "000"
+            ),
+            "the reconciler has pushed and then confirmed": lambda: pushed_and_confirmed(merged),
+        },
+        timeout=600,
+    )
+
+    # RESTORE. The revocation leaves the grant on main as `decommissioned`: a
+    # record, not configuration. The demo's starting point has no grant at all,
+    # and the Revoke picker would offer this one forever, so it goes -- and its
+    # generator instance and tracking group with it (see grant_bookkeeping).
+    grant = gql(
+        "query ($n: String!) { ServiceAppAccess(name__value: $n) { edges { node { id status { value } } } } }",
+        {"n": name},
+    )["ServiceAppAccess"]["edges"]
+    check(
+        bool(grant) and grant[0]["node"]["status"]["value"] == "decommissioned",
+        "the merged revocation left the grant decommissioned on main",
+    )
+    delete_grant(name)
+    for branch in (grant_branch, revoke_branch):
+        if gql("query ($b: String!) { Branch(name: $b) { name } }", {"b": branch})["Branch"]:
+            gql("mutation ($b: String!) { BranchDelete(data: {name: $b}) { ok } }", {"b": branch})
+            print(f"    deleted the merged branch {branch}; its proposed change stays as history", flush=True)
+    MERGED.clear()
+    # One more confirmed cycle, so DeploymentState is read after the last push settled.
+    since = time.time()
+    wait_until(lambda: any("differed=0" in line for line in reconciler_cycles(since)), timeout=300, interval=10)
+    last = (reconciler_cycles(since) or [""])[-1]
+    check(
+        "compared=14 differed=0 pushed=0 failed=0" in last, "the reconciler reports compared=14 differed=0", last[-90:]
+    )
+    stage("Restore: comparing the lab with the snapshot")
+    if not compare_snapshots(before, snapshot()):
+        record("FAIL", "RESTORE FAILED: stop and recover by hand before anything else", "see the differences above")
+        return
+    with timed("merge cycle: make -C lab verify"):
+        verify = run("make", "-C", str(main_checkout() / "lab"), "verify", timeout=1200)
+    summary = next((line for line in verify.stdout.splitlines() if " passed, " in line), "")
+    if check(
+        verify.returncode == 0 and " 0 failed" in summary,
+        "make -C lab verify passes",
+        re.sub(r"\x1b\[[0-9;]*m", "", summary),
+    ):
+        SNAPSHOT_FILE.unlink(missing_ok=True)
+
+
+def act_resume_revoke(name: str, reference: str, via: str) -> None:
+    stage(f"Resuming the merge cycle: THIS CHANGES THE LAB -- revoke {name}, merge, restore")
+    if not SNAPSHOT_FILE.exists():
+        record("FAIL", "no saved snapshot to restore to", str(SNAPSHOT_FILE))
+        return
+    before = json.loads(SNAPSHOT_FILE.read_text(encoding="utf-8"))
+    MERGED.append(f"implement_{name}")
+    grant = gql(
+        "query ($n: String!) { ServiceAppAccess(name__value: $n) { edges { node { status { value } } } } }", {"n": name}
+    )["ServiceAppAccess"]["edges"]
+    if check(bool(grant) and grant[0]["node"]["status"]["value"] == "active", f"{name} is an active grant on main"):
+        act_revoke(name, reference, before, via)
+
+
 # ---------------------------------------------------------------------- main
 
 ACTS = ("preflight", "four", "one", "two", "monitoring", "five")
@@ -630,8 +1172,29 @@ def main() -> int:
         "--reference", default=f"rehearsal-{secrets.token_hex(2)}", help="request reference for the portal acts"
     )
     parser.add_argument("--keep", action="store_true", help="leave the branches and proposed changes for inspection")
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="CHANGES THE LAB: the preflight, then grant Grafana, merge, revoke, merge, and assert the lab restored",
+    )
+    parser.add_argument(
+        "--resume-revoke",
+        metavar="GRANT",
+        help="CHANGES THE LAB: finish a --merge cycle that stopped after GRANT merged -- revoke, merge, restore",
+    )
+    parser.add_argument(
+        "--revoke-via",
+        choices=("template", "status"),
+        default="template",
+        help="act three through the portal's Revoke template (the demo), or by setting status on a branch",
+    )
     args = parser.parse_args()
-    chosen = [act for act in ACTS if act in args.only.split(",")]
+    if args.resume_revoke:
+        chosen = ["resume"]
+    elif args.merge:
+        chosen = ["preflight", "merge"]
+    else:
+        chosen = [act for act in ACTS if act in args.only.split(",")]
 
     table: dict[str, Callable[[], None]] = {
         "preflight": act_preflight,
@@ -640,6 +1203,8 @@ def main() -> int:
         "two": lambda: act_two(args.reference),
         "monitoring": act_monitoring,
         "five": act_five,
+        "merge": lambda: act_merge(args.reference, args.revoke_via),
+        "resume": lambda: act_resume_revoke(args.resume_revoke, args.reference, args.revoke_via),
     }
     try:
         for act in chosen:
@@ -648,6 +1213,18 @@ def main() -> int:
             except Exception as exc:  # noqa: BLE001 - one act failing must not skip the cleanup or the rest
                 record("FAIL", f"act {act} raised", f"{type(exc).__name__}: {exc}"[:300])
     finally:
+        if MERGED:
+            print(
+                "\n\033[1;31mTHE LAB IS NOT RESTORED.\033[0m Merged and not yet undone: "
+                + ", ".join(MERGED)
+                + ".\nIf only the grant merged, finish the cycle -- revoke, merge, delete the grant, and"
+                " compare with the snapshot saved in "
+                + str(SNAPSHOT_FILE)
+                + ":\n    uv run python scripts/demo_rehearsal.py --resume-revoke "
+                + MERGED[0].removeprefix("implement_")
+                + "\nSee docs/docs/demo-runbook.md, Recovery.",
+                flush=True,
+            )
         if CREATED_BRANCHES and not args.keep:
             stage("Cleaning up")
             cleanup(CREATED_BRANCHES)

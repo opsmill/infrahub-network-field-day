@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 import yaml
+from infrahub_sdk.exceptions import GraphQLError
 
 from generators.generate_app_access import (
     BOOK_INDEX_FLOOR,
@@ -937,6 +938,45 @@ async def test_revoking_a_grant_withdraws_what_an_earlier_run_created() -> None:
     assert client.created == []
     deleted_kinds = {kind for kind, _ in client.deleted}
     assert deleted_kinds == {"SecurityPolicyRule", "SecurityIPAMIPAddress", "SecurityService"}
+
+
+class _RacedClient(_RecordingClient):
+    """A client whose deletes all lose the race to a concurrent withdrawal."""
+
+    async def delete(self, kind: str, id: str) -> None:  # noqa: A002
+        self.deleted.append((kind, id))
+        raise GraphQLError(errors=[{"message": f"Unable to find the node {id} / {kind} in the database."}])
+
+
+@pytest.mark.asyncio
+async def test_a_withdrawal_that_loses_the_race_to_a_concurrent_run_succeeds() -> None:
+    """The `updated` rule and the Revoke template's await step both run this.
+
+    Both read the same rule, and the second delete used to fail the run -- and
+    with it the template, after the first run had already withdrawn everything.
+    """
+    client = _RacedClient()
+    generator = _generator(client)
+    parsed = _query(approved=False, from_previous_run=True, granted_rule_ids=[f"svc-{GRANT}"])
+    parsed.target.edges[0].node.granted_rules.edges[0].node.name.value = f"svc-{GRANT}"
+
+    await generator.generate(parsed.model_dump(by_alias=True))
+
+    assert {kind for kind, _ in client.deleted} == {"SecurityPolicyRule", "SecurityIPAMIPAddress", "SecurityService"}
+
+
+@pytest.mark.asyncio
+async def test_a_delete_refused_for_any_other_reason_still_fails_the_run() -> None:
+    class _RefusingClient(_RecordingClient):
+        async def delete(self, kind: str, id: str) -> None:  # noqa: A002
+            raise GraphQLError(errors=[{"message": "Node is referenced and cannot be deleted"}])
+
+    generator = _generator(_RefusingClient())
+    parsed = _query(approved=False, from_previous_run=True, granted_rule_ids=[f"svc-{GRANT}"])
+    parsed.target.edges[0].node.granted_rules.edges[0].node.name.value = f"svc-{GRANT}"
+
+    with pytest.raises(GraphQLError):
+        await generator.generate(parsed.model_dump(by_alias=True))
 
 
 @pytest.mark.asyncio

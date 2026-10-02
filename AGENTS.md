@@ -1063,6 +1063,24 @@ not write back to costs one, and so does decommissioning a peering, whose genera
 status at all. Anything that removes a guard turns this into a loop, which is why they are
 load bearing rather than tidy.
 
+**Two runs of one withdrawal at once is normal, so a withdrawal must tolerate its twin.** The
+portal's Revoke template sets `status` — which fires the `updated` rule — and then its
+`infrahub:generators:await` step runs `generate-app-access` again. Both read the same rule, both
+delete it, and the loser was refused `Unable to find the node ... SecurityPolicyRule`, failing the
+template at its wait step after the winner had withdrawn everything. Measured: two Revoke runs in
+three. `_delete_if_present` treats "already gone" as done; any other refusal still fails the run.
+Infrahub runs generators from the repository's `main`, so the template keeps failing until that
+reaches it.
+
+**Deleting a service object leaves its `CoreGeneratorInstance` behind, and that breaks the
+generator for everyone.** Infrahub's `request_generator_definition_run` reads every instance's
+`object.peer.id`, and on one whose object is gone raises `Node must have at least one identifier
+(ID or HFID) to query it` — so the generator's validator is red on every proposed change, the
+unrelated ones included, and Infrahub refuses to merge them. Measured: deleting one
+decommissioned grant on `main` did exactly that. Delete the instance, and the generator's empty
+tracking `CoreGeneratorGroup` (description `name: <service>`), with the object.
+`scripts/demo_rehearsal.py` does, and its preflight looks for a dangling instance.
+
 **A generator that refuses must not record `error` from a withdrawn state.** `error` is not a
 withdrawn status, so the status rule's next run takes the BUILD path. Measured with a VRF still
 on the tenant: decommissioning an onboarding ran three times and ended `active` with the EVPN
