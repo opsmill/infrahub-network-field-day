@@ -308,6 +308,16 @@ if kube_ok; then
     else
         bad "demo VIP" "no advertised LoadBalancer Service with a VIP in otternet-demo -- kubectl -n otternet-demo get svc -l otternet.lab/advertise=true"
     fi
+    # externalTrafficPolicy: Local is what lets the pod policy see the client.
+    # With the chart default, Cluster, a request landing on a node whose chosen
+    # backend is elsewhere is SNATed to that node's address, admitted as
+    # `remote-node`, and the source-prefix rule decides nothing for it. The
+    # datapath half of this -- whoami reporting host-a's own address -- is
+    # checked under "Datapath" below.
+    if [[ -n "${demo_svc:-}" ]]; then
+        check "the demo app's Service keeps the client address (externalTrafficPolicy Local)" \
+              "^Local$" kubectl -n otternet-demo get svc "$demo_svc" -o jsonpath='{.spec.externalTrafficPolicy}'
+    fi
     check "default-deny policy is in force in the demo namespace" \
           "default-deny" bash -c 'kubectl -n otternet-demo get cnp -o name'
 
@@ -806,6 +816,22 @@ if running host-a && running k8s-node1; then
                 ok "host-a reaches the demo app's LoadBalancer VIP $demo_vip through every enforcement layer (10/10)"
             else
                 bad "end-to-end LoadBalancer path" "only $hits/10 requests to http://$demo_vip:$demo_port/ succeeded -- expect all 10"
+            fi
+
+            # Reachable is not enough: the pod must see WHO is asking, or its
+            # CiliumNetworkPolicy admits the request as `remote-node` rather than
+            # on host-a's prefix. whoami echoes the peer address it saw, so every
+            # one of ten requests must report host-a's own 10.210.0.11 -- a
+            # 10.110.0.x here is a node SNAT, the externalTrafficPolicy Cluster
+            # symptom, and it only shows on the requests that crossed a node.
+            seen=$(for _ in $(seq 1 10); do
+                       docker exec clab-otternet-host-a curl -sS --max-time 6 "http://$demo_vip:$demo_port/" 2>/dev/null \
+                           | sed -n 's/^RemoteAddr: \(.*\):[0-9]*$/\1/p'
+                   done | sort | uniq -c | awk '{printf "%s%s x%s", sep, $2, $1; sep=", "}')
+            if [[ "$seen" == "10.210.0.11 x10" ]]; then
+                ok "the demo app sees host-a's real address 10.210.0.11 on every request (10/10), not a node SNAT"
+            else
+                bad "client address at the pod" "whoami reported RemoteAddr '${seen:-nothing}' for 10 requests from host-a -- expect '10.210.0.11 x10'; a 10.110.0.x is a node SNAT (kubectl -n otternet-demo get svc ${demo_svc:-} -o jsonpath='{.spec.externalTrafficPolicy}')"
             fi
         else
             bad "end-to-end LoadBalancer path" "the demo app has no advertised VIP -- kubectl -n otternet-demo get svc -l otternet.lab/advertise=true"

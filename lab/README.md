@@ -670,7 +670,10 @@ rejects it (see below).
 With the default, a request landing on a node whose backend is elsewhere gets
 SNATed to that node's address, so CiliumNetworkPolicy sees `remote-node` instead
 of the client. Policies then fail for most requests and work for a minority,
-which reads as flakiness rather than a config error.
+which reads as flakiness rather than a config error. Infrahub's
+`crossplane_fabric_app` transform enforces it on every exposed application it
+renders, and `scripts/verify.sh` checks that whoami reports host-a's own
+address on every request.
 
 **L7 HTTP policy does not work on ingress from an external CIDR here.** Hubble
 shows `policy-verdict:L3-L4 INGRESS ALLOWED` then `to-proxy FORWARDED (SYN)`,
