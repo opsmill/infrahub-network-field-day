@@ -510,7 +510,7 @@ make wan-deploy
 ## 6c. The branch office, and access on request
 
 When Infrahub drives the lab, the portal is **Backstage** in the tooling
-cluster, `https://10.90.0.11:32001` (self-signed), with Dex beside it on
+cluster, `https://10.90.0.11:32001` (signed by a lab CA the desktop trusts), with Dex beside it on
 `http://10.90.0.11:32556`; the branch reaches both through
 `branch-to-tooling-portal`, the one standing branch permit that matters. A
 request is a `ServiceAppAccess`, reviewed in a proposed change, and merging it

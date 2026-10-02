@@ -40,6 +40,11 @@ log "X display :1 is up, starting XFCE"
 
 export DISPLAY=:1
 xsetroot -solid "#1c2733" || true
+# No screen blanking. The X server's default blanks after ten idle minutes, and
+# through Guacamole that is a black rectangle in the middle of a demo that only
+# a mouse movement nobody thinks to make brings back.
+xset s off s noblank || true
+xset -dpms 2>/dev/null || true
 
 # dbus-launch is required, not decorative: with no session bus xfce4-session
 # starts, cannot reach xfconfd, and exits after a few seconds -- which presents

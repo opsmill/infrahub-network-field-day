@@ -152,19 +152,21 @@ spec:
             - name: BACKSTAGE_TLS_KEY
               valueFrom:
                 secretKeyRef: {name: backstage-tls, key: tls.key}
-            # ... and the same certificate as a trust anchor, because Backstage
+            # ... and the CA that signed it as a trust anchor, because Backstage
             # calls ITSELF. The sign-in resolver looks the user up in the
             # catalog through `https://localhost:7007`, and Node refuses a
-            # self-signed peer. The failure arrives inside the OIDC popup as
+            # peer it cannot verify. The failure arrives inside the OIDC popup as
             #
             #   FetchError: request to https://localhost:7007/api/catalog/
             #   entities/by-name/User/default/alice failed
             #
             # which names the catalog and never mentions TLS. Pointing Node at
-            # the certificate is the fix; `NODE_TLS_REJECT_UNAUTHORIZED=0` also
-            # works and turns off verification for every outbound call.
+            # the CA is the fix; `NODE_TLS_REJECT_UNAUTHORIZED=0` also works and
+            # turns off verification for every outbound call. The CA rather
+            # than tls.crt since the pair stopped being one self-signed
+            # certificate: see scripts/deploy_tooling.sh, step 1.
             - name: NODE_EXTRA_CA_CERTS
-              value: /etc/backstage-tls/tls.crt
+              value: /etc/backstage-tls/ca.crt
           volumeMounts:
             - name: tls
               mountPath: /etc/backstage-tls

@@ -255,15 +255,21 @@ check "$(docker exec "$DESK" curl -s --max-time 10 \
 # from the host while being broken for the only audience that uses them, and
 # that is how the two-Dex detour started.
 #
-# `ssl_verify_result=0` is a second claim inside the first: the portal's
-# self-signed certificate is INSTALLED on this desktop, so a real browser gets
-# no warning. Dropping to `curl -k` here would pass while the user sees one.
+# `ssl_verify_result=0` is a second claim inside the first: the CA that signed
+# the portal's certificate is INSTALLED on this desktop. Dropping to `curl -k`
+# here would pass while the user sees a warning. It is necessary, not
+# sufficient: curl accepted the old self-signed CA:TRUE certificate too, while
+# Firefox refused it (MOZILLA_PKIX_ERROR_CA_CERT_USED_AS_END_ENTITY), so the
+# check after it asserts what Firefox needs, a server certificate that is not
+# itself a CA.
 read -r portal verify <<EOF
 $(docker exec "$DESK" curl -s -o /dev/null -w '%{http_code} %{ssl_verify_result}' \
     --max-time 10 https://10.90.0.11:32001/ 2>/dev/null)
 EOF
 check "$portal" "200" "branch desktop reaches the portal over HTTPS"
 check "$verify" "0" "portal certificate is trusted on the branch desktop"
+check "$(docker exec "$DESK" sh -c 'echo | timeout 10 openssl s_client -connect 10.90.0.11:32001 2>/dev/null | openssl x509 -noout -ext basicConstraints 2>/dev/null' | grep -c 'CA:TRUE')" \
+    "0" "portal serves a CA-signed certificate Firefox accepts, not a self-signed CA"
 check "$(docker exec "$DESK" curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
     http://10.90.0.1:8000/api/config 2>/dev/null)" "200" \
     "branch desktop reaches Infrahub (firewall rule AND return route)"

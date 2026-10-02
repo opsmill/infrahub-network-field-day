@@ -312,8 +312,11 @@ make guac              # → http://<host>:8080/   branch / branch
 
 That drops you onto a real XFCE desktop at `10.70.0.20`, on the branch LAN,
 behind the branch's private circuit. Firefox opens on the Backstage service
-portal; its **Access Portal (DC)** bookmark is the lab's own access portal — the
-one datacentre service the branch is permitted to reach without asking.
+portal, which is the Infrahub-driven lab's front door (see
+[the branch desktop](#the-branch-desktop) below). In this standalone mode the lab's
+own access portal is `http://10.112.240.33/`, typed in by hand. The desktop has no
+bookmark for it, because the Infrahub-driven lab removes it. It is the one
+datacentre service the branch is permitted to reach without asking.
 
 Before you click anything, prove the door is shut. From the desktop's terminal:
 
@@ -346,6 +349,44 @@ Then take it away:
 kubectl delete appaccess access-kanboard
 make access-status     # the policy, the address object and the app are all gone
 ```
+
+### The branch desktop
+
+What a branch user sees after signing in to Guacamole (`branch` / `branch`, one
+connection, **OTTERNET branch office desktop**):
+
+- **On the desktop and in the top panel**: *Service Portal*, which opens Firefox
+  on `https://10.90.0.11:32001/`, and *Start here*, a one-page note saying who to
+  sign in as (`alice@otternet.lab` or `bob@otternet.lab`, password `password`) and
+  what each bookmark is.
+- **Firefox's toolbar, in demo order**: *Service Portal*; *Proposed changes*
+  (`http://10.90.0.1:8000/proposed-changes`, where `alice` reads her request, signed
+  in with Dex); *Demo app (locked)* (`otternet-demo`, `10.112.240.0`); and
+  *Grafana (locked)* (`10.112.240.81`, which signs in through Dex once granted).
+  **`(locked)` is a contract, not decoration.** It means "answers only after a
+  grant", and `make verify` reads the bookmarks out of the running desktop and
+  holds each one to its label: an unlabelled bookmark must answer, and a locked
+  one must name a live LoadBalancer VIP and may answer only where fw1 permits the
+  branch.
+- **Firefox itself**: no first-run, what's-new, sponsored or telemetry pages, the
+  new tab blank, the password manager off, and pop-ups allowed for the portal, Dex,
+  Infrahub and Grafana, so the portal's Dex sign-in pop-up is never blocked.
+- **No Log Out anywhere.** The session is the container's main process, so logging
+  out stops the node, and Guacamole then has nothing to connect to until a
+  redeploy. The panel has no action buttons and the menu entry is hidden. The
+  terminal stays in the Applications menu, because it is how a presenter shows a
+  `curl` from the branch.
+
+The portal's certificate is trusted without a click, and getting that right took
+two certificates. `scripts/deploy_tooling.sh` makes a throwaway CA and a server
+certificate it signs, and installs the CA where Firefox's `Certificates.Install`
+policy reads it. A single self-signed certificate cannot work: marked as a CA,
+Firefox refuses it as a server certificate
+(`MOZILLA_PKIX_ERROR_CA_CERT_USED_AS_END_ENTITY`), and not marked, nothing can
+install it as an authority. `ImportEnterpriseRoots` does not help either, because
+Firefox does not read the system store on Linux. Firefox reads the policy when it
+starts, so a Firefox left open across `invoke tooling` has to be closed and opened
+again.
 
 **The firewall is reconciled, not configured.** Delete a generated policy by
 hand and watch it come back — the same story `make xp-drift` tells for Cilium:

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Start here
+Comment=What this desktop is for, and who to sign in as
+Exec=firefox file:///opt/branch/start-here.html
+Icon=help-browser
+Terminal=false
+Categories=Network;

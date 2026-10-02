@@ -19,10 +19,16 @@ request carries their name rather than a service account's.
 | Identity | `http://10.90.0.11:32556/dex` |
 | Lab users | `alice@otternet.lab`, `bob@otternet.lab` — password `password` |
 
-HTTPS with a self-signed certificate, and that is not about privacy: the frontend
+HTTPS with a lab certificate, and that is not about privacy: the frontend
 calls `crypto.randomUUID`, which a browser populates only in a secure context, so
-over plain HTTP sign-in succeeds and the app then dies. The branch desktop
-already trusts the certificate; other machines get a warning to click through.
+over plain HTTP sign-in succeeds and the app then dies. `invoke tooling` signs
+the certificate with a throwaway CA and installs that CA on the branch desktop,
+so its Firefox shows no warning; other machines get a warning to click through.
+It is two certificates rather than one self-signed one because Firefox refuses a
+self-signed certificate marked as a CA when a server presents it
+(`MOZILLA_PKIX_ERROR_CA_CERT_USED_AS_END_ENTITY`), and installs nothing else as
+an authority. A Firefox already open when `invoke tooling` runs keeps warning
+until it is restarted.
 
 :::warning A user must sign in to Infrahub once before requesting anything
 The portal attributes writes through the mutation's `context`, and Infrahub

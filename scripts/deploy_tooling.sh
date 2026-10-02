@@ -47,28 +47,62 @@ fi
 # back through `https://localhost:7007`. Node rejects the self-signed
 # certificate, and the error surfaces inside the OIDC popup as a `FetchError`
 # against a catalog URL, which reads as a broken catalog rather than as TLS.
-# `NODE_EXTRA_CA_CERTS` on the deployment is what closes that, and it needs a
-# certificate that is the same file on disk as the one being served.
+# `NODE_EXTRA_CA_CERTS` on the deployment is what closes that, pointed at the
+# CA below.
+#
+# WHY TWO CERTIFICATES, a throwaway CA and a server certificate it signs,
+# rather than one self-signed certificate: Firefox cannot be made to trust a
+# self-signed server certificate at all. Marked `CA:TRUE` (as this script
+# used to), Firefox trusts it as an authority and then refuses it as a server
+# with MOZILLA_PKIX_ERROR_CA_CERT_USED_AS_END_ENTITY; without that, it is not
+# an authority and nothing can install it as one. So the branch desktop showed
+# a certificate warning on every fresh profile, whatever its policies said, and
+# the "trusted" desktop was in fact one somebody had clicked through. Measured
+# with the desktop image: the CA-signed pair loads with no warning, and Node
+# accepts it through NODE_EXTRA_CA_CERTS=ca.crt (UNABLE_TO_VERIFY_LEAF_SIGNATURE
+# without). The CA's key is never stored, so nothing else can ever be signed.
+#
+# A secret from before this change has no `ca.crt`, and is replaced: the
+# restart below picks the new pair up, and the desktop step trusts the new CA.
 # --------------------------------------------------------------------------
 kf apply -f - < "$HERE/tooling/00-namespace.yaml" >/dev/null
 
-if k -n "$NAMESPACE" get secret backstage-tls >/dev/null 2>&1; then
+if k -n "$NAMESPACE" get secret backstage-tls -o jsonpath='{.data.ca\.crt}' 2>/dev/null | grep -q .; then
     log "backstage-tls already present"
 else
-    log "generating a self-signed certificate for $PORTAL_IP"
+    if k -n "$NAMESPACE" get secret backstage-tls >/dev/null 2>&1; then
+        log "backstage-tls is a self-signed certificate Firefox cannot trust -- replacing it"
+        k -n "$NAMESPACE" delete secret backstage-tls >/dev/null
+    fi
+    log "generating a lab CA and a server certificate for $PORTAL_IP"
     openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-        -keyout "$WORK/tls.key" -out "$WORK/tls.crt" \
-        -subj "/CN=otternet-portal" \
-        -addext "subjectAltName=IP:${PORTAL_IP},IP:127.0.0.1,DNS:localhost" \
-        -addext "basicConstraints=critical,CA:TRUE" \
+        -keyout "$WORK/ca.key" -out "$WORK/ca.crt" \
+        -subj "/CN=OTTERNET lab CA" \
+        -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+        -addext "keyUsage=critical,keyCertSign,cRLSign" \
         2>/dev/null
-    # Copied onto the node rather than piped: kubectl reads two files here, and
-    # `docker exec -i` gives one stdin.
+    openssl req -newkey rsa:2048 -nodes \
+        -keyout "$WORK/tls.key" -out "$WORK/tls.csr" \
+        -subj "/CN=otternet-portal" 2>/dev/null
+    # 825 days: the longest validity browsers accept for a server certificate
+    # from a private CA.
+    printf '%s\n' \
+        "subjectAltName=IP:${PORTAL_IP},IP:127.0.0.1,DNS:localhost" \
+        "basicConstraints=critical,CA:FALSE" \
+        "keyUsage=critical,digitalSignature,keyEncipherment" \
+        "extendedKeyUsage=serverAuth" > "$WORK/leaf.ext"
+    openssl x509 -req -in "$WORK/tls.csr" -CA "$WORK/ca.crt" -CAkey "$WORK/ca.key" \
+        -CAcreateserial -days 825 -extfile "$WORK/leaf.ext" \
+        -out "$WORK/tls.crt" 2>/dev/null
+    # Copied onto the node rather than piped: kubectl reads three files here,
+    # and `docker exec -i` gives one stdin.
     docker cp "$WORK/tls.crt" "$NODE:/tmp/tls.crt"
     docker cp "$WORK/tls.key" "$NODE:/tmp/tls.key"
+    docker cp "$WORK/ca.crt" "$NODE:/tmp/ca.crt"
     k -n "$NAMESPACE" create secret generic backstage-tls \
-        --from-file=tls.crt=/tmp/tls.crt --from-file=tls.key=/tmp/tls.key >/dev/null
-    docker exec "$NODE" rm -f /tmp/tls.crt /tmp/tls.key
+        --from-file=tls.crt=/tmp/tls.crt --from-file=tls.key=/tmp/tls.key \
+        --from-file=ca.crt=/tmp/ca.crt >/dev/null
+    docker exec "$NODE" rm -f /tmp/tls.crt /tmp/tls.key /tmp/ca.crt
     log "backstage-tls created"
 fi
 
@@ -171,19 +205,22 @@ k -n "$NAMESPACE" rollout status deploy/backstage --timeout=300s
 #
 # BEST EFFORT, and skipped silently when the desktop is not running: the portal
 # works without this, it just greets the user with a certificate warning they
-# have to click through. Firefox reads the system trust store only because
-# `security.enterprise_roots.enabled` is set in
-# lab/configs/branch/desktop/firefox-policies.json -- installing the certificate
-# without that preference changes nothing, and setting the preference without
-# installing the certificate changes nothing either.
+# have to click through. What is installed is the CA, not the server
+# certificate, at the one path Firefox's `Certificates.Install` policy names in
+# lab/configs/branch/desktop/firefox-policies.json. Firefox does not read the
+# system store on Linux (`ImportEnterpriseRoots` is a Windows and macOS
+# feature); update-ca-certificates is for curl and everything else on the box.
+#
+# Firefox imports the file when it STARTS. A Firefox already open when this
+# runs keeps warning until it is closed and opened again.
 # --------------------------------------------------------------------------
 DESKTOP="${OTTERNET_BRANCH_DESKTOP:-clab-otternet-branch-desktop}"
 if docker inspect "$DESKTOP" >/dev/null 2>&1; then
-    k -n "$NAMESPACE" get secret backstage-tls -o jsonpath='{.data.tls\.crt}' \
-        | base64 -d > "$WORK/portal.crt"
-    docker cp "$WORK/portal.crt" "$DESKTOP:/usr/local/share/ca-certificates/otternet-portal.crt"
+    k -n "$NAMESPACE" get secret backstage-tls -o jsonpath='{.data.ca\.crt}' \
+        | base64 -d > "$WORK/portal-ca.crt"
+    docker cp "$WORK/portal-ca.crt" "$DESKTOP:/usr/local/share/ca-certificates/otternet-portal.crt"
     docker exec "$DESKTOP" update-ca-certificates >/dev/null 2>&1
-    log "portal certificate trusted on $DESKTOP"
+    log "portal CA trusted on $DESKTOP (an open Firefox must be restarted to pick it up)"
 else
     log "$DESKTOP not running -- skipping certificate trust"
 fi

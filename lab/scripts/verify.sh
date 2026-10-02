@@ -736,6 +736,108 @@ if running branch-guac; then
     fi
 fi
 
+# What a branch user actually clicks: every Firefox bookmark and every desktop
+# launcher, probed FROM the desktop, so through branch-rtr and fw1 like a real
+# click. READ-ONLY: it reads two files out of the container and makes requests.
+#
+# The list is parsed from the policies the desktop is RUNNING, not from a list
+# kept here, so a bookmark added to firefox-policies.json is checked without
+# anyone editing this script. The label is the contract: a title containing
+# "(locked)" says "needs a grant first", so that bookmark may time out, must
+# name a live LoadBalancer VIP, and may answer only where the firewall permits
+# the branch. Any other bookmark must answer, grant or no grant.
+if running branch-desktop; then
+    desk_pol=$(docker exec clab-otternet-branch-desktop cat /etc/firefox/policies/policies.json 2>/dev/null)
+    repo_pol="$LAB_DIR/configs/branch/desktop/firefox-policies.json"
+    if [[ -z "$desk_pol" ]]; then
+        bad "desktop Firefox policies" "the desktop has no /etc/firefox/policies/policies.json -- rebuild it: make desktop-image"
+    elif python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])) != json.loads(sys.stdin.read()))' \
+            "$repo_pol" <<<"$desk_pol" 2>/dev/null; then
+        ok "the desktop runs the committed Firefox policies"
+    else
+        bad "desktop Firefox policies" "the running desktop's policies differ from configs/branch/desktop/firefox-policies.json, so its image is stale; the probes below check what users see now -- make desktop-image, or docker cp the file into /etc/firefox/policies/policies.json and restart Firefox"
+    fi
+
+    # The portal's certificate, two ways. Firefox cannot trust a server
+    # certificate that is itself a CA (MOZILLA_PKIX_ERROR_CA_CERT_USED_AS_END_ENTITY),
+    # whatever is installed, and the CA installed on the desktop must be the one
+    # that signed what is served -- a regenerated secret without a re-run of
+    # the desktop step leaves the old CA behind.
+    if running tool-node1; then
+        served=$(docker exec clab-otternet-branch-desktop sh -c \
+                   'echo | timeout 10 openssl s_client -connect 10.90.0.11:32001 2>/dev/null | openssl x509 -noout -ext basicConstraints 2>/dev/null')
+        if grep -q "CA:TRUE" <<<"$served"; then
+            bad "portal certificate" "the portal serves a self-signed CA certificate, which Firefox refuses as a server certificate whatever the desktop trusts -- re-run 'uv run invoke tooling', which replaces it with a CA-signed one"
+        elif [[ -n "$served" ]]; then
+            ok "the portal serves a CA-signed certificate (not itself a CA)"
+        fi
+        code=$(docker exec clab-otternet-branch-desktop curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+                 --cacert /usr/local/share/ca-certificates/otternet-portal.crt https://10.90.0.11:32001/ 2>/dev/null)
+        if [[ "$code" == "200" ]]; then
+            ok "the CA installed on the desktop verifies the portal's certificate"
+        else
+            bad "portal trust on the desktop" "curl --cacert /usr/local/share/ca-certificates/otternet-portal.crt https://10.90.0.11:32001/ returned ${code:-nothing} from the desktop -- re-run 'uv run invoke tooling' to reinstall the CA, then restart Firefox"
+        fi
+    fi
+
+    if [[ -n "$desk_pol" ]]; then
+        lb_vips=""
+        kube_ok && lb_vips=$(kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.status.loadBalancer.ingress[0].ip}{"\n"}{end}' 2>/dev/null)
+        fw_ready=""
+        if running fw1 && [[ "$fw_kind" == "juniper_vsrx" ]]; then load_fw_cfg; fw_ready=1; fi
+        launchers=$(docker exec clab-otternet-branch-desktop sh -c \
+                      'grep -H "^Exec=" /home/*/Desktop/*.desktop' 2>/dev/null)
+        # kind <TAB> label <TAB> url <TAB> host <TAB> port
+        while IFS=$'\t' read -r kind label url host port; do
+            [[ -z "$url" ]] && continue
+            what="$kind '$label' ($url)"
+            if [[ "$url" == file://* ]]; then
+                if docker exec clab-otternet-branch-desktop test -f "${url#file://}"; then
+                    ok "$what: the page it opens is on the desktop"
+                else
+                    bad "$what" "${url#file://} does not exist on the desktop -- the image is missing it"
+                fi
+                continue
+            fi
+            code=$(docker exec clab-otternet-branch-desktop curl -sk -o /dev/null -w '%{http_code}' \
+                     --max-time 8 "$url" 2>/dev/null)
+            answered=""; [[ "$code" =~ ^(2|3)[0-9][0-9]$|^401$ ]] && answered=1
+            if [[ "$label" != *"(locked)"* ]]; then
+                [[ -n "$answered" ]] \
+                    && ok "$what: open, answers $code" \
+                    || bad "$what" "answered ${code:-nothing} from the desktop, and nothing in its label says it needs a grant -- fix the path, label it (locked), or remove it"
+                continue
+            fi
+            if [[ -n "$lb_vips" ]] && ! grep -qxF "$host" <<<"$lb_vips"; then
+                bad "$what" "$host is not the address of any LoadBalancer Service in the cluster -- the bookmark names a stale VIP (kubectl get svc -A | grep LoadBalancer)"
+                continue
+            fi
+            fw="unknown"; [[ -n "$fw_ready" ]] && fw=$(fw_permits branch 10.70.0.20 "$host" "$port")
+            if [[ -z "$answered" ]]; then
+                ok "$what: locked, as labelled -- no answer without a grant (firewall: $fw)"
+            elif [[ "$fw" == permit* || "$fw" == "unknown" ]]; then
+                ok "$what: answers $code -- a grant exists (firewall: $fw)"
+            else
+                bad "$what" "labelled (locked) but answered $code from the desktop while the firewall says '$fw' -- the gate is not enforcing, or the branch baseline is too wide"
+            fi
+        done < <(python3 -c '
+import json, sys
+from urllib.parse import urlsplit
+def row(kind, label, url):
+    u = urlsplit(url)
+    port = u.port or (443 if u.scheme == "https" else 80)
+    print("\t".join([kind, label, url, u.hostname or "", str(port)]))
+pol, launchers = json.loads(sys.argv[1]), sys.argv[2]
+for b in pol.get("policies", {}).get("Bookmarks", []):
+    row("bookmark", b.get("Title", ""), b.get("URL", ""))
+for line in launchers.splitlines():
+    path, _, exe = line.partition(":Exec=")
+    urls = [w for w in exe.split() if "://" in w]
+    if urls: row("launcher", path.rsplit("/", 1)[-1], urls[0])
+' "$desk_pol" "$launchers" 2>/dev/null)
+    fi
+fi
+
 if [[ -f "$KUBECONFIG" ]] && command -v kubectl >/dev/null 2>&1 \
    && kubectl get nodes >/dev/null 2>&1; then
     check "the AppAccess platform API is established" \
