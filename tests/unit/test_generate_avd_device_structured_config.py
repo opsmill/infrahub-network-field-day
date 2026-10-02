@@ -1,6 +1,7 @@
 """Unit tests for AVD device structured config generator."""
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -563,7 +564,10 @@ class TestChangedConfigIsReRenderedOnItsBranch:
         gen = _make_generator()
         gen.branch = branch
         gen._init_client = AsyncMock()
-        gen._init_client.default_branch = "main"
+        # A clone pinned to the run's branch reports that branch as its default,
+        # which is the trap: the generator has to ask Infrahub instead.
+        gen._init_client.default_branch = branch
+        gen._init_client.branch.get = AsyncMock(return_value=SimpleNamespace(is_default=branch == "main"))
         gen.logger = module.logging.getLogger("test")
         calls: list[tuple[str, str, str | None]] = []
 

@@ -210,7 +210,16 @@ class AvdDeviceStructuredConfigGenerator(InfrahubGenerator):
         if not device_ids:
             return
         branch = self.branch_name
-        if not branch or branch == self._init_client.default_branch:
+        if not branch:
+            return
+        # Asked of Infrahub, not compared with `client.default_branch`: the
+        # generator's client is a clone pinned to this run's branch, so its
+        # "default" IS the branch and the comparison is always true.
+        try:
+            if (await self._init_client.branch.get(branch)).is_default:
+                return
+        except Exception as exc:  # noqa: BLE001 - delivery, not generation
+            self.logger.warning("Could not read branch %s, not requesting re-renders: %s", branch, exc)
             return
         for artifact_name in RENDERED_FROM_STRUCTURED_CONFIG:
             for device_id in device_ids:
