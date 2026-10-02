@@ -143,6 +143,38 @@ nodes:
         optional: true
         description: "If set, only group members whose role equals this are watched"
         order_weight: 1120
+      # SERVICES ARE SELECTED BY KIND, NOT BY GROUP (cycle 035). A service is
+      # in a group only when a generator sits beneath its kind -- the three WAN
+      # kinds are in none -- so a group-based selection would silently miss
+      # every L3VPN, every tenant cloud and every internet-access product, and
+      # every portal request of those kinds after them. A profile naming a
+      # service kind watches EVERY live service of that kind, wherever it sits;
+      # `ServiceGeneric` means every service kind there is, including one added
+      # after this profile was written. Live means not decommissioning and not
+      # decommissioned, exactly as every renderer reads `status`.
+      #
+      # Text rather than a Dropdown so a new service kind needs no schema
+      # change here. The renderer refuses a kind it has never been told about,
+      # rather than watching nothing.
+      - name: service_kind
+        kind: Text
+        label: Service Kind
+        optional: true
+        description: "If set, this profile watches every live service of this kind (ServiceGeneric: every kind) instead of devices"
+        order_weight: 1130
+        parameters:
+          regex: "^Service[A-Z][A-Za-z0-9]*$"
+      # How long a probe waits before calling a target unreachable. Ignored by
+      # the measurements that only subscribe.
+      - name: timeout_seconds
+        kind: Number
+        label: Timeout (seconds)
+        optional: true
+        default_value: 5
+        order_weight: 1140
+        parameters:
+          min_value: 1
+          max_value: 60
     relationships:
       - name: collector
         peer: MonitoringCollector
@@ -155,16 +187,20 @@ nodes:
       # DcimGenericDevice; a relationship to DcimDevice would reach the WAN
       # routers and miss the fabric, and nothing would say so.
       #
-      # MANDATORY MANY, because Backstage's form builder admits cardinality-one
-      # and mandatory cardinality-many relationships only. Optional, this field
-      # would silently not appear on the form.
+      # OPTIONAL SINCE CYCLE 035, because a service profile selects by
+      # `service_kind` and names no group. It was mandatory so that Backstage's
+      # form builder -- which admits cardinality-one and MANDATORY many only --
+      # would offer it; but no Monitoring kind is in the portal's catalogue
+      # (test_monitoring_schema_contract.py holds that), so the constraint
+      # protected a form that does not exist. The renderer now enforces what the
+      # schema did: a device profile with no group is refused, never rendered
+      # as nothing.
       - name: device_groups
         label: Device Groups
         peer: CoreStandardGroup
         kind: Generic
         cardinality: many
-        optional: false
-        min_count: 1
+        optional: true
         identifier: "monitoring_profile__device_groups"
         order_weight: 950
       # A relationship to a catalogue rather than a Dropdown or a List: a

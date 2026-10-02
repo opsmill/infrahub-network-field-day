@@ -18,8 +18,15 @@ So the produced set is DERIVED, not listed:
   against EOS and SR Linux on the live lab. Its keys must equal the
   subscriptions the transform renders, so a new subscription forces an entry.
 * **The exporter's series** come from metrics/exporter.yml.
-* **Cluster series** (Hubble, the kubelet) are a short list, each tied to the
-  scrape job in the otternet-metrics values that produces it.
+* **The service-lifecycle exporter's series** (cycle 035) come from the module
+  that produces them, and count only if the rendered artifact scrapes it.
+* **Probe series** come from a render in which one application admits the
+  collector at its pod gate, because the seeded ones all refuse it -- so the
+  probe panel is held to a series a probe WOULD produce, not to nothing.
+* **Cluster series** (Hubble, the kubelet, kube-state-metrics) are a short list,
+  each tied to the scrape job in the otternet-metrics values that produces it.
+
+Annotations are queries too, and are held to the same rule.
 
 This file needs no running lab.
 """
@@ -35,7 +42,9 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.unit.test_telemetry_collector_config import _render
+from solution_arista_avd.service_lifecycle import HELP as LIFECYCLE_SERIES
+from tests.unit.test_telemetry_collector_config import _data, _render
+from transforms.telemetry_services import LIFECYCLE_EXPORTER
 
 REPO = Path(__file__).resolve().parents[2]
 DASHBOARDS = sorted((REPO / "payloads" / "dashboards").glob("*.json"))
@@ -97,8 +106,17 @@ CLUSTER_SERIES: dict[str, str] = {
     "hubble_drop_total": "hubble",
     "container_cpu_usage_seconds_total": "kubelet",
     "container_memory_working_set_bytes": "kubelet",
+    # The application checks on the Services dashboard (cycle 035): pods ready
+    # and the LoadBalancer address assigned, joined to intent by namespace.
+    "kube_deployment_status_replicas_available": "kube-state-metrics",
+    "kube_deployment_status_replicas_unavailable": "kube-state-metrics",
+    "kube_service_status_load_balancer_ingress": "kube-state-metrics",
     "up": "",
 }
+
+# Telegraf's net_response fields that survive the prometheus output (result_type
+# is a string and is dropped).
+NET_RESPONSE_FIELDS = {"response_time", "result_code"}
 
 _KEYWORDS = {"by", "without", "on", "ignoring", "group_left", "group_right", "and", "or", "unless", "bool", "offset"}
 
@@ -141,14 +159,33 @@ def _targets() -> list[tuple[str, str, str]]:
             for panel in _panels(board)
             for target in panel.get("targets", [])
         )
+        found.extend(
+            (path.stem, f"annotation: {a['name']}", a["expr"])
+            for a in board.get("annotations", {}).get("list", [])
+            if a.get("expr")
+        )
     return found
 
 
-def _collector_series() -> dict[str, set[str]]:
+def _probe_render() -> dict[str, Any]:
+    """The collector's render with Grafana's pod gate open, so a probe is rendered."""
+    data = _data()
+    for edge in data["ServiceGeneric"]["edges"]:
+        if edge["node"]["name"]["value"] == "otternet-metrics":
+            edge["node"]["policy_default_deny"]["value"] = False
+            edge["node"]["allowed_source_prefixes"]["count"] = 0
+    return _render(data)[0]
+
+
+def _collector_series() -> dict[str, set[str]]:  # noqa: C901 - one artifact, every kind of input it renders
     """Metric name -> the device kinds whose inputs produce it, from the rendered artifact."""
     out, _ = _render()
     conf = tomllib.loads(out["manifest"]["data"]["telegraf.conf"])
     produced: dict[str, set[str]] = {}
+    probes = tomllib.loads(_probe_render()["manifest"]["data"]["telegraf.conf"])["inputs"].get("net_response", [])
+    assert probes, "the probe render rendered no probe"
+    for field in NET_RESPONSE_FIELDS:
+        produced.setdefault(f"net_response_{field}", set())
 
     def add(name: str, kind: str) -> None:
         produced.setdefault(name, set()).add(kind)
@@ -171,6 +208,10 @@ def _collector_series() -> dict[str, set[str]]:
                 if not field.get("is_tag"):
                     add(f"{table['name']}_{field['name']}", block["tags"]["kind"])
     for block in conf["inputs"].get("prometheus", []):
+        if any(url.startswith(LIFECYCLE_EXPORTER) for url in block["urls"]):
+            for name in LIFECYCLE_SERIES:
+                produced.setdefault(name, set())
+            continue
         for name in block["fieldinclude"]:
             add(name, block["tags"]["kind"])
     for line in out["manifest"]["data"]["intended.prom"].splitlines():
@@ -200,6 +241,8 @@ def test_every_cluster_series_has_the_scrape_job_that_produces_it() -> None:
     jobs = {job["job_name"] for job in values["prometheus"]["prometheusSpec"]["additionalScrapeConfigs"]}
     jobs.add("kubelet")  # the chart's kubelet ServiceMonitor, left enabled
     assert values.get("kubelet", {}).get("enabled", True) is not False
+    jobs.add("kube-state-metrics")  # the chart's own, left enabled
+    assert values.get("kubeStateMetrics", {}).get("enabled", True) is not False
     for metric, job in CLUSTER_SERIES.items():
         assert not job or job in jobs, f"{metric} needs the {job!r} scrape job"
 
@@ -272,3 +315,26 @@ def test_the_kubelet_is_scraped_through_one_fixed_service() -> None:
     """A generated release name left a second kubelet Service behind and every
     kubelet series was scraped twice (measured). A fixed name is reused."""
     assert _values()["prometheusOperator"]["kubeletService"]["name"] == "otternet-metrics-kubelet"
+
+
+def test_the_services_dashboard_names_no_service_and_no_kind() -> None:
+    """It needs no edit when a service or a kind appears: every panel is driven by
+    labels and the $kind/$owner/$service variables, never by a literal (cycle 035)."""
+    board = json.loads((REPO / "payloads" / "dashboards" / "services.json").read_text(encoding="utf-8"))
+    assert board["uid"] == "otternet-services"
+    assert board["title"] == "OTTERNET / Services"
+    exprs = [t["expr"] for p in _panels(board) for t in p.get("targets", [])]
+    exprs += [a["expr"] for a in board["annotations"]["list"]]
+    for expr in exprs:
+        assert not re.search(r'\bservice(_kind)?="[^"$]', expr), expr
+        assert "Service" not in re.sub(r'"[^"]*"', "", expr), f"a kind is named outside a label value: {expr}"
+    assert {v["name"] for v in board["templating"]["list"]} == {"kind", "owner", "service"}
+    assert {a["name"] for a in board["annotations"]["list"]} == {"Service events", "Proposed changes merged"}
+
+
+def test_the_organisation_home_leads_to_the_services_dashboard() -> None:
+    board = json.loads((REPO / "payloads" / "dashboards" / "organisation.json").read_text(encoding="utf-8"))
+    tiles = [p for p in board["panels"] if p["type"] == "stat" and p["gridPos"]["y"] == 1]
+    assert sum(p["gridPos"]["w"] for p in tiles) == 24, "the health row is one full row of tiles"
+    linked = [p["title"] for p in tiles if any(link["url"] == "/d/otternet-services" for link in p.get("links", []))]
+    assert linked == ["Service requests stalled", "Services failing a check"]

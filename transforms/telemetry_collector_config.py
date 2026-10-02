@@ -22,6 +22,11 @@ but down" and "up but never intended", which neither half can show alone.
 measurement catalogue. A measurement that does not apply to a matched device's
 kind is skipped *and said so* in the rendered file, never silently dropped.
 
+**Services are watched too (cycle 035).** A profile naming a ``service_kind``
+watches every live service of that kind instead of devices; how each service
+measurement renders is ``transforms/telemetry_services.py``. With no service
+profile the render is exactly the device render, line for line.
+
 Two things this refuses rather than renders:
 
 * **An empty configuration.** Telegraf with no inputs refuses to start, and an
@@ -62,6 +67,20 @@ from infrahub_sdk.transforms import InfrahubTransform
 from solution_arista_avd.protocols import AvdStructuredConfigFile
 
 from .telemetry_collector_config_query import TelemetryCollectorConfigQuery
+from .telemetry_services import (
+    SERVICE_DISPATCH,
+    Context,
+    LifecycleScrape,
+    ServiceMonitoringError,
+    ServiceWatch,
+    find_pinned,
+    intended_lines,
+    lifecycle_input,
+    probe_inputs,
+    probe_targets,
+    select,
+    series,
+)
 
 SWITCH = "DcimFabricSwitch"
 ROUTER = "DcimDevice"
@@ -315,8 +334,10 @@ class TelemetryCollectorConfig(InfrahubTransform):
 
         notes: list[str] = []
         watches = self._watches(collector, notes)
-        conf = self._render_conf(name, watches, notes)
-        intended = await self._intended(watches, parsed)
+        service_watches, scrape = self._service_watches(collector, parsed, notes)
+        probes = await self._probes(service_watches, notes)
+        intended = await self._intended(watches, parsed, service_watches, probes, notes)
+        conf = self._render_conf(name, watches, notes, scrape, service_watches, probes)
 
         manifest = {
             "apiVersion": "v1",
@@ -345,12 +366,24 @@ class TelemetryCollectorConfig(InfrahubTransform):
             if not _val(profile, "enabled"):
                 notes.append(f"# disabled: profile {pname} renders nothing")
                 continue
+            if _val(profile, "service_kind"):
+                continue  # a service profile: see _service_watches
             interval = int(_val(profile, "interval_seconds") or 30)
             role = _val(profile, "device_role")
             measurements = sorted(str(_val(m.node, "name")) for m in profile.measurements.edges if m.node)
             unknown = [m for m in measurements if m not in DISPATCH]
             if unknown:
-                msg = f"profile {pname!r} names measurements no renderer knows: {unknown}"
+                hint = (
+                    " (service measurements need the profile's service_kind)"
+                    if set(unknown) & set(SERVICE_DISPATCH)
+                    else ""
+                )
+                msg = f"profile {pname!r} names measurements no renderer knows: {unknown}{hint}"
+                raise TelemetryCollectorConfigError(msg)
+            # device_groups is optional in the schema because a service profile
+            # names none; a DEVICE profile without one would render nothing.
+            if not profile.device_groups.edges:
+                msg = f"profile {pname!r} watches devices and names no device group"
                 raise TelemetryCollectorConfigError(msg)
 
             matched = 0
@@ -378,9 +411,61 @@ class TelemetryCollectorConfig(InfrahubTransform):
                 notes.append(f"# matched nothing: profile {pname}")
         return [by_key[key] for key in sorted(by_key)]
 
+    @staticmethod
+    def _service_watches(
+        collector: Any, parsed: TelemetryCollectorConfigQuery, notes: list[str]
+    ) -> tuple[list[ServiceWatch], LifecycleScrape]:
+        """Every live service the service profiles watch (cycle 035)."""
+        profiles = sorted(
+            (
+                e.node
+                for e in collector.monitoring_profiles.edges
+                if e.node is not None and _val(e.node, "service_kind")
+            ),
+            key=lambda p: str(_val(p, "name")),
+        )
+        services = [e.node for e in parsed.service_generic.edges if e.node is not None]
+        try:
+            return select(profiles, services, notes)
+        except ServiceMonitoringError as exc:
+            raise TelemetryCollectorConfigError(str(exc)) from exc
+
+    async def _probes(self, watches: list[ServiceWatch], notes: list[str]) -> dict[str, list[tuple[str, int]]]:
+        """(address, port) per probed application.
+
+        The values file is read only for an application that will be probed,
+        for the address its values pin; the download is the expensive half.
+        """
+        probes: dict[str, list[tuple[str, int]]] = {}
+        for watch in watches:
+            if "probe" not in watch.checks():
+                continue
+            pinned = None
+            values_file = _peer(watch.node, "values_file")
+            if values_file is not None and probe_targets(watch, None, []):
+                stub = await self.client.get(kind="ServiceFabricAppValuesFile", id=values_file.id)
+                content = await stub.download_file()
+                text = content.decode() if isinstance(content, bytes) else str(content)
+                try:
+                    pinned = find_pinned(yaml.safe_load(text))
+                except yaml.YAMLError:
+                    pinned = None
+            targets = probe_targets(watch, pinned, notes)
+            if targets:
+                probes[watch.name] = targets
+        return probes
+
     # -- telegraf.conf -----------------------------------------------------
 
-    def _render_conf(self, collector: str, watches: list[Watch], notes: list[str]) -> str:
+    def _render_conf(
+        self,
+        collector: str,
+        watches: list[Watch],
+        notes: list[str],
+        scrape: LifecycleScrape | None = None,
+        service_watches: list[ServiceWatch] | None = None,
+        probes: dict[str, list[tuple[str, int]]] | None = None,
+    ) -> str:
         lines = [
             "# Rendered by Infrahub from MonitoringProfile intent for collector "
             f"{collector} -- do not edit; change the profiles instead.",
@@ -440,6 +525,20 @@ class TelemetryCollectorConfig(InfrahubTransform):
             if block:
                 lines += ["", *block]
                 rendered_inputs += 1
+        # Services (cycle 035): the lifecycle scrape, then one probe per port.
+        service_blocks = lifecycle_input(collector, scrape or LifecycleScrape())
+        for service_watch in service_watches or []:
+            service_blocks += probe_inputs(collector, service_watch, (probes or {}).get(service_watch.name, []))
+        for block in service_blocks:
+            lines += [
+                "",
+                block["comment"],
+                f"[[{block['table']}]]",
+                *_kv("  ", block["items"]),
+                f"  [{block['table']}.tags]",
+                *_kv("    ", dict(sorted(block["tags"].items()))),
+            ]
+            rendered_inputs += 1
         if rendered_inputs == 0:
             msg = f"collector {collector!r}: the profiles select no device that can be collected from"
             raise TelemetryCollectorConfigError(msg)
@@ -629,17 +728,27 @@ class TelemetryCollectorConfig(InfrahubTransform):
 
     # -- intended.prom -----------------------------------------------------
 
-    async def _intended(self, watches: list[Watch], parsed: TelemetryCollectorConfigQuery) -> str:
+    async def _intended(
+        self,
+        watches: list[Watch],
+        parsed: TelemetryCollectorConfigQuery,
+        service_watches: list[ServiceWatch] | None = None,
+        probes: dict[str, list[tuple[str, int]]] | None = None,
+        notes: list[str] | None = None,
+    ) -> str:
         bgp = sorted({(w.device.name, w.device.kind) for w in watches if "bgp-neighbor-state" in w.measurements})
         links = {w.device.name for w in watches if "interface-counters" in w.measurements}
         devices = {w.device.name: w.device for w in watches}
+        # Downloaded once per device: the service checks join to the same
+        # sessions, and only to sessions the collector observes.
+        neighbors = {name: await self._intended_neighbors(devices[name]) for name, _kind in bgp}
 
         lines = [
             "# TYPE otternet_intended_bgp_neighbor gauge",
             "# HELP otternet_intended_bgp_neighbor A BGP session Infrahub intends this device to hold.",
         ]
         for name, kind in bgp:
-            for vrf, peer, description in await self._intended_neighbors(devices[name]):
+            for vrf, peer, description in neighbors[name]:
                 # `kind` so a dashboard scopes intent the way it scopes what is
                 # observed, without joining on a device that may be silent.
                 labels = {"device": name, "kind": kind, "peer_address": peer}
@@ -699,6 +808,14 @@ class TelemetryCollectorConfig(InfrahubTransform):
             "# HELP otternet_intended_interface_up 1 when Infrahub intends the cabled interface to be up.",
             *sorted(set(up_lines)),
         ]
+        if service_watches:
+            context = Context(
+                neighbors={name: [(vrf, peer) for vrf, peer, _ in found] for name, found in neighbors.items()},
+                device_kinds={name: device.kind for name, device in devices.items()},
+                site_sessions=_site_sessions(parsed),
+                cabled_to=_cabled_to(parsed),
+            )
+            lines += intended_lines(service_watches, context, probes or {}, notes if notes is not None else [])
         return "\n".join(lines) + "\n"
 
     async def _intended_neighbors(self, device: Device) -> list[tuple[str, str, str]]:
@@ -725,13 +842,40 @@ class TelemetryCollectorConfig(InfrahubTransform):
         return sorted(set(found))
 
 
-def _series(metric: str, labels: dict[str, str], value: int) -> str:
-    rendered = ",".join(f'{key}="{_escape(labels[key])}"' for key in sorted(labels))
-    return f"{metric}{{{rendered}}} {value}"
+_series = series
 
 
-def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+def _site_sessions(parsed: TelemetryCollectorConfigQuery) -> dict[str, list[tuple[str, str]]]:
+    """Circuit id -> (device, peer address) for each session the WAN site over it records."""
+    found: dict[str, list[tuple[str, str]]] = {}
+    for edge in parsed.wan_site.edges:
+        site = edge.node
+        circuit = _peer(site, "circuit") if site is not None else None
+        if circuit is None:
+            continue
+        for session in (e.node for e in site.bgp_sessions.edges if e.node is not None):
+            device = _val(_peer(session, "device"), "name")
+            if device and _val(session, "peer_address"):
+                found.setdefault(circuit.id, []).append((str(device), str(_val(session, "peer_address"))))
+    return found
+
+
+def _cabled_to(parsed: TelemetryCollectorConfigQuery) -> dict[str, list[tuple[str, str, str]]]:
+    """Device name -> (switch, switch kind, switch port) at the far end of each of its cables."""
+    found: dict[str, list[tuple[str, str, str]]] = {}
+    for link in parsed.network_link.edges:
+        ends = [
+            (_peer(e.node, "device"), _val(e.node, "name"))
+            for e in ((link.node.connected_endpoints.edges or []) if link.node else [])
+            if e.node is not None and getattr(e.node, "typename__", None) is not None
+        ]
+        ends = [(device, port) for device, port in ends if device is not None and port]
+        if len(ends) != 2:
+            continue
+        for (near, _), (far, far_port) in (ends, ends[::-1]):
+            if getattr(far, "typename__", None) == SWITCH:
+                found.setdefault(str(_val(near, "name")), []).append((str(_val(far, "name")), SWITCH, str(far_port)))
+    return found
 
 
 class _BlockDumper(yaml.SafeDumper):

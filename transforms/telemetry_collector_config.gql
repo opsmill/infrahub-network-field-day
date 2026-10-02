@@ -24,6 +24,8 @@ query TelemetryCollectorConfigQuery($name: String!) {
               enabled { value }
               interval_seconds { value }
               device_role { value }
+              service_kind { value }
+              timeout_seconds { value }
               measurements { edges { node { name { value } } } }
               device_groups {
                 edges {
@@ -99,6 +101,102 @@ query TelemetryCollectorConfigQuery($name: String!) {
             }
           }
         }
+      }
+    }
+  }
+  # SERVICES (cycle 035), every one of them: a service profile selects by kind,
+  # and the WAN kinds are in no group, so there is nothing narrower to ask for.
+  # One fragment per concrete kind, for exactly what its measurements join on --
+  # the transform never decides WHETHER a service is watched from these fields,
+  # only HOW a measurement a profile asked for is rendered for it.
+  ServiceGeneric {
+    edges {
+      node {
+        __typename
+        name { value }
+        status { value }
+        owner { node { __typename display_label } }
+        ... on ServiceFabricApp {
+          namespace_name { value }
+          exposed { value }
+          policy_default_deny { value }
+          allowed_source_prefixes { count }
+          vip_block { node { prefix { value } } }
+          values_file { node { id } }
+          advertised_services {
+            edges { node { name { value } port { value } ip_protocol { node { name { value } } } } }
+          }
+        }
+        ... on ServiceAppAccess {
+          requester { value }
+          application { node { name { value } } }
+          source_zone { node { name { value } } }
+          source_site { node { name { value } } }
+          granted_rules {
+            edges {
+              node {
+                name { value }
+                destination_zone { node { name { value } } }
+                policy { node { device_target { node { name { value } } } } }
+              }
+            }
+          }
+        }
+        ... on ServiceL3vpn {
+          circuits { edges { node { id } } }
+        }
+        ... on ServiceInternetAccess {
+          peering {
+            node {
+              bgp_sessions { edges { node { peer_address { value } device { node { name { value } } } } } }
+            }
+          }
+        }
+        ... on ServiceTenantCloud {
+          vrf { node { name { value } } }
+        }
+        ... on ServiceTenantOnboarding {
+          evpn_tenant { node { vrfs { edges { node { name { value } } } } } }
+        }
+        ... on ServiceNetworkSegment {
+          svi { node { svi_id { value } vrf { node { name { value } } } } }
+          avd_tags {
+            edges {
+              node {
+                racks {
+                  edges {
+                    node {
+                      devices { edges { node { __typename ... on DcimFabricSwitch { name { value } } } } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        ... on ServiceServerPlacement {
+          server { node { name { value } } }
+        }
+        ... on ServiceFabricPeering {
+          peerings {
+            edges {
+              node {
+                peer_device { node { __typename name { value } } }
+                svi { node { vrf { node { name { value } } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  # The attachment sessions of every WAN site, keyed by circuit: an L3VPN names
+  # circuits, and a site records both ends of the session that runs over one.
+  WanSite {
+    edges {
+      node {
+        circuit { node { id } }
+        bgp_sessions { edges { node { peer_address { value } device { node { name { value } } } } } }
       }
     }
   }

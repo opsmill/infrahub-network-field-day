@@ -1623,6 +1623,11 @@ def metrics_exporter(ctx: Context) -> None:
     Super Administrator's credential.
 
     Built from a pinned upstream commit, because none is published. Idempotent.
+
+    Also starts the service-lifecycle exporter (cycle 035) on 8003, with the same
+    token: every service request's stage, across branches, which the Infrahub
+    exporter cannot report because it reads one branch. Telegraf scrapes it, as
+    the `service-lifecycle` monitoring profile says.
     """
     ctx.run("python scripts/provision_metrics_exporter.py", pty=True)
     # --build, because the image comes from a git context and a first run has
@@ -1632,19 +1637,34 @@ def metrics_exporter(ctx: Context) -> None:
         f"{compose_cmd()} --profile metrics up -d --build --no-deps --force-recreate infrahub-exporter",
         pty=True,
     )
-    deadline = time.time() + 120
-    while time.time() < deadline:
-        try:
-            body = httpx.get("http://127.0.0.1:8002/metrics", timeout=5).text
-        except httpx.HTTPError:
-            body = ""
-        if "infrahub_dcimgenericdevice_info" in body:
-            print(" - Infrahub exporter: http://127.0.0.1:8002/metrics")
-            return
-        sleep(5)
-    print(
-        " - WARNING: the exporter answered no device series within 120s; check `docker compose logs infrahub-exporter`"
+    # The service-lifecycle exporter (cycle 035), beside it and with the same
+    # token. The project image, so no --build: it runs the bind-mounted checkout.
+    ctx.run(
+        f"{compose_cmd()} --profile metrics up -d --no-deps --force-recreate service-lifecycle-exporter",
+        pty=True,
     )
+    for url, marker, name, service in (
+        ("http://127.0.0.1:8002/metrics", "infrahub_dcimgenericdevice_info", "Infrahub exporter", "infrahub-exporter"),
+        (
+            "http://127.0.0.1:8003/metrics",
+            "otternet_service_lifecycle_up 1",
+            "Service-lifecycle exporter",
+            "service-lifecycle-exporter",
+        ),
+    ):
+        # 300s for the lifecycle exporter: its first poll reads a day of events.
+        deadline = time.time() + 300
+        while time.time() < deadline:
+            try:
+                body = httpx.get(url, timeout=5).text
+            except httpx.HTTPError:
+                body = ""
+            if marker in body:
+                print(f" - {name}: {url}")
+                break
+            sleep(5)
+        else:
+            print(f" - WARNING: the {name} answered nothing useful in time; check `docker compose logs {service}`")
 
 
 # `bootstrap` takes a --cluster flag, which shadows the task of the same name

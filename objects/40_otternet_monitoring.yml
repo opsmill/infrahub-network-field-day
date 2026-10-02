@@ -38,6 +38,30 @@ spec:
     - name: node-resources
       label: Node resources
       description: "CPU, memory and network of a Kubernetes node, from node-exporter"
+    # ---- Services (cycle 035) ----------------------------------------------
+    #
+    # Measured on SERVICES, by a profile that names a service_kind. The
+    # renderer knows how each one applies to each service kind
+    # (transforms/telemetry_services.py::SERVICE_DISPATCH); whether it applies
+    # at all is the profiles' decision, below.
+    - name: service-lifecycle
+      label: Service lifecycle
+      description: "Each request's stage -- requested, merged, deployed, decommissioning, removed -- from the service-lifecycle exporter"
+    - name: service-delivery
+      label: Service delivery
+      description: "An application's pods ready in its namespace and its LoadBalancer address assigned"
+    - name: service-reachability
+      label: Service reachability
+      description: "A TCP probe of an exposed application's VIP on each port it advertises, where its pod gate admits the collector"
+    - name: service-access
+      label: Service access
+      description: "A grant's firewall rules, and whether the firewall holding them is confirmed in sync"
+    - name: service-routing
+      label: Service routing
+      description: "The BGP sessions a service is realised by, joined to the sessions the devices report"
+    - name: service-cabling
+      label: Service cabling
+      description: "A placed machine's cabled switch ports, joined to their operational state"
 ---
 apiVersion: infrahub.app/v1
 kind: Object
@@ -115,3 +139,46 @@ spec:
         - kubernetes_nodes
       measurements:
         - node-resources
+    # ---- Services (cycle 035) ----------------------------------------------
+    #
+    # SELECTED BY KIND, NOT BY GROUP. A service profile names a service_kind
+    # and no device group, and watches every LIVE service of that kind --
+    # including one a portal request creates tomorrow, and including the WAN
+    # kinds, which are in no group at all. Nothing here names a service: a new
+    # one is monitored because it exists, and stops being monitored in the same
+    # proposed change that withdraws it.
+    #
+    # Four profiles rather than one, so each can be switched off, re-timed or
+    # narrowed to one kind on its own -- which is the demo: the artifact diff of
+    # that edit is exactly the monitoring that moves.
+    - name: services-lifecycle
+      description: "Every service kind's requests through the pipeline: requested, merged, deployed, removed"
+      collector: otternet-telegraf
+      service_kind: ServiceGeneric
+      interval_seconds: 30
+      measurements:
+        - service-lifecycle
+    - name: services-apps
+      description: "Every application: delivered and ready, addressed, and probed where its pod gate admits the collector"
+      collector: otternet-telegraf
+      service_kind: ServiceFabricApp
+      interval_seconds: 30
+      timeout_seconds: 5
+      measurements:
+        - service-delivery
+        - service-reachability
+    - name: services-access
+      description: "Every access grant: its firewall rules, on a firewall confirmed in sync"
+      collector: otternet-telegraf
+      service_kind: ServiceAppAccess
+      interval_seconds: 60
+      measurements:
+        - service-access
+    - name: services-routing
+      description: "Every routed service: the BGP sessions that realise it, and a placed machine's cabling"
+      collector: otternet-telegraf
+      service_kind: ServiceGeneric
+      interval_seconds: 60
+      measurements:
+        - service-routing
+        - service-cabling

@@ -93,7 +93,7 @@ def test_plugin_not_registered_fails_every_panel(exchanges: list[dict[str, Any]]
     assert panel_failures
     assert all("HTTP 404" in f for f in panel_failures)
     assert any(f.startswith("OTTERNET / Organisation / Tenants [A] error") for f in report.failures)
-    assert "OTTERNET / Organisation: 0/14 panels with data" in report.notes
+    assert "OTTERNET / Organisation: 0/16 panels with data" in report.notes
 
 
 def test_an_empty_panel_is_named(exchanges: list[dict[str, Any]], failures: dict[str, Any]) -> None:
@@ -202,7 +202,9 @@ def test_every_allowlist_entry_names_a_breakout_beside_a_total() -> None:
         assert entry.reason
         panel = committed[entry.dashboard_uid][entry.panel_title]
         targets = {t["refId"]: t for t in panel["targets"]}
-        assert targets[entry.ref_id]["expr"].rstrip().endswith("> 0"), entry
+        # A breakout (`> 0`, beside its total) or a subset of a count beside it (`== 0)`).
+        expr = targets[entry.ref_id]["expr"].rstrip()
+        assert expr.endswith(("> 0", "== 0)")), entry
         assert set(targets) - {entry.ref_id}, f"{entry} has no total to require data from"
 
 

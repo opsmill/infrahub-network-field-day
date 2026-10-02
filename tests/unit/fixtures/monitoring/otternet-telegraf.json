@@ -341,6 +341,12 @@
                   },
                   "name": {
                     "value": "fabric-core"
+                  },
+                  "service_kind": {
+                    "value": null
+                  },
+                  "timeout_seconds": {
+                    "value": 5
                   }
                 }
               },
@@ -662,6 +668,12 @@
                   },
                   "name": {
                     "value": "fabric-leaf-evpn"
+                  },
+                  "service_kind": {
+                    "value": null
+                  },
+                  "timeout_seconds": {
+                    "value": 5
                   }
                 }
               },
@@ -950,6 +962,12 @@
                   },
                   "name": {
                     "value": "wan-routing"
+                  },
+                  "service_kind": {
+                    "value": null
+                  },
+                  "timeout_seconds": {
+                    "value": 5
                   }
                 }
               },
@@ -1027,6 +1045,12 @@
                   },
                   "name": {
                     "value": "perimeter"
+                  },
+                  "service_kind": {
+                    "value": null
+                  },
+                  "timeout_seconds": {
+                    "value": 5
                   }
                 }
               },
@@ -1123,6 +1147,170 @@
                   },
                   "name": {
                     "value": "cluster-nodes"
+                  },
+                  "service_kind": {
+                    "value": null
+                  },
+                  "timeout_seconds": {
+                    "value": 5
+                  }
+                }
+              },
+              {
+                "node": {
+                  "name": {
+                    "value": "services-lifecycle"
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 30
+                  },
+                  "device_role": {
+                    "value": null
+                  },
+                  "service_kind": {
+                    "value": "ServiceGeneric"
+                  },
+                  "timeout_seconds": {
+                    "value": 5
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "service-lifecycle"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_groups": {
+                    "edges": []
+                  }
+                }
+              },
+              {
+                "node": {
+                  "name": {
+                    "value": "services-apps"
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 30
+                  },
+                  "device_role": {
+                    "value": null
+                  },
+                  "service_kind": {
+                    "value": "ServiceFabricApp"
+                  },
+                  "timeout_seconds": {
+                    "value": 5
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "service-delivery"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "name": {
+                            "value": "service-reachability"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_groups": {
+                    "edges": []
+                  }
+                }
+              },
+              {
+                "node": {
+                  "name": {
+                    "value": "services-access"
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 60
+                  },
+                  "device_role": {
+                    "value": null
+                  },
+                  "service_kind": {
+                    "value": "ServiceAppAccess"
+                  },
+                  "timeout_seconds": {
+                    "value": 5
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "service-access"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_groups": {
+                    "edges": []
+                  }
+                }
+              },
+              {
+                "node": {
+                  "name": {
+                    "value": "services-routing"
+                  },
+                  "enabled": {
+                    "value": true
+                  },
+                  "interval_seconds": {
+                    "value": 60
+                  },
+                  "device_role": {
+                    "value": null
+                  },
+                  "service_kind": {
+                    "value": "ServiceGeneric"
+                  },
+                  "timeout_seconds": {
+                    "value": 5
+                  },
+                  "measurements": {
+                    "edges": [
+                      {
+                        "node": {
+                          "name": {
+                            "value": "service-routing"
+                          }
+                        }
+                      },
+                      {
+                        "node": {
+                          "name": {
+                            "value": "service-cabling"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "device_groups": {
+                    "edges": []
                   }
                 }
               }
@@ -1915,6 +2103,522 @@
                   },
                   "status": {
                     "value": "active"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "ServiceGeneric": {
+    "edges": [
+      {
+        "node": {
+          "__typename": "ServiceTenantCloud",
+          "name": {
+            "value": "acme-cloud"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationProvider",
+              "display_label": "OTTERNET-ISP"
+            }
+          },
+          "vrf": {
+            "node": {
+              "name": {
+                "value": "TENANT_ACME"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "ServiceInternetAccess",
+          "name": {
+            "value": "acme-internet"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationProvider",
+              "display_label": "OTTERNET-ISP"
+            }
+          },
+          "peering": {
+            "node": {
+              "bgp_sessions": {
+                "edges": [
+                  {
+                    "node": {
+                      "peer_address": {
+                        "value": "10.52.0.1"
+                      },
+                      "device": {
+                        "node": {
+                          "name": {
+                            "value": "internet-rtr"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "node": {
+                      "peer_address": {
+                        "value": "10.52.0.2"
+                      },
+                      "device": {
+                        "node": {
+                          "name": {
+                            "value": "isp-pe2"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "ServiceL3vpn",
+          "name": {
+            "value": "acme-l3vpn"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationProvider",
+              "display_label": "OTTERNET-ISP"
+            }
+          },
+          "circuits": {
+            "edges": [
+              {
+                "node": {
+                  "id": "18daad09-2350-3b53-3030-1187a9a55295"
+                }
+              },
+              {
+                "node": {
+                  "id": "18daad08-d85b-cd64-3035-118738be95a9"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "ServiceTenantCloud",
+          "name": {
+            "value": "globex-cloud"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationProvider",
+              "display_label": "OTTERNET-ISP"
+            }
+          },
+          "vrf": {
+            "node": {
+              "name": {
+                "value": "TENANT_GLOBEX"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "ServiceL3vpn",
+          "name": {
+            "value": "globex-l3vpn"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationProvider",
+              "display_label": "OTTERNET-ISP"
+            }
+          },
+          "circuits": {
+            "edges": [
+              {
+                "node": {
+                  "id": "18daad09-32f8-bc0c-303b-11871bfbd2c0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "ServiceFabricApp",
+          "name": {
+            "value": "otternet-demo"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationTenant",
+              "display_label": "branch"
+            }
+          },
+          "namespace_name": {
+            "value": "otternet-demo"
+          },
+          "exposed": {
+            "value": true
+          },
+          "policy_default_deny": {
+            "value": true
+          },
+          "allowed_source_prefixes": {
+            "count": 3
+          },
+          "vip_block": {
+            "node": {
+              "prefix": {
+                "value": "10.112.240.0/28"
+              }
+            }
+          },
+          "values_file": {
+            "node": {
+              "id": "18daad12-3b34-56fe-3035-1187ac3e9291"
+            }
+          },
+          "advertised_services": {
+            "edges": [
+              {
+                "node": {
+                  "name": {
+                    "value": "junos-http"
+                  },
+                  "port": {
+                    "value": 80
+                  },
+                  "ip_protocol": {
+                    "node": {
+                      "name": {
+                        "value": "tcp"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "ServiceFabricPeering",
+          "name": {
+            "value": "otternet-fabric-peering"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationTenant",
+              "display_label": "branch"
+            }
+          },
+          "peerings": {
+            "edges": [
+              {
+                "node": {
+                  "peer_device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-1"
+                      }
+                    }
+                  },
+                  "svi": {
+                    "node": {
+                      "vrf": {
+                        "node": {
+                          "name": {
+                            "value": "K8S_PROD"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "node": {
+                  "peer_device": {
+                    "node": {
+                      "__typename": "DcimFabricSwitch",
+                      "name": {
+                        "value": "leaf-otternet-pod1-1-2"
+                      }
+                    }
+                  },
+                  "svi": {
+                    "node": {
+                      "vrf": {
+                        "node": {
+                          "name": {
+                            "value": "K8S_PROD"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "ServiceFabricApp",
+          "name": {
+            "value": "otternet-metrics"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationTenant",
+              "display_label": "branch"
+            }
+          },
+          "namespace_name": {
+            "value": "otternet-metrics"
+          },
+          "exposed": {
+            "value": true
+          },
+          "policy_default_deny": {
+            "value": false
+          },
+          "allowed_source_prefixes": {
+            "count": 1
+          },
+          "vip_block": {
+            "node": {
+              "prefix": {
+                "value": "10.112.240.80/28"
+              }
+            }
+          },
+          "values_file": {
+            "node": {
+              "id": "18daad12-4e6e-da04-3039-11876535e799"
+            }
+          },
+          "advertised_services": {
+            "edges": [
+              {
+                "node": {
+                  "name": {
+                    "value": "junos-http"
+                  },
+                  "port": {
+                    "value": 80
+                  },
+                  "ip_protocol": {
+                    "node": {
+                      "name": {
+                        "value": "tcp"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "ServiceFabricApp",
+          "name": {
+            "value": "otternet-telemetry"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationTenant",
+              "display_label": "branch"
+            }
+          },
+          "namespace_name": {
+            "value": "otternet-telemetry"
+          },
+          "exposed": {
+            "value": false
+          },
+          "policy_default_deny": {
+            "value": false
+          },
+          "allowed_source_prefixes": {
+            "count": 0
+          },
+          "vip_block": {
+            "node": null
+          },
+          "values_file": {
+            "node": {
+              "id": "18daad12-5722-81e7-303c-11872d1c8a09"
+            }
+          },
+          "advertised_services": {
+            "edges": []
+          }
+        }
+      }
+    ]
+  },
+  "WanSite": {
+    "edges": [
+      {
+        "node": {
+          "circuit": {
+            "node": {
+              "id": "18daad09-2350-3b53-3030-1187a9a55295"
+            }
+          },
+          "bgp_sessions": {
+            "edges": []
+          }
+        }
+      },
+      {
+        "node": {
+          "circuit": {
+            "node": {
+              "id": "18daad08-d85b-cd64-3035-118738be95a9"
+            }
+          },
+          "bgp_sessions": {
+            "edges": [
+              {
+                "node": {
+                  "peer_address": {
+                    "value": "10.51.10.1"
+                  },
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "cust-acme-ce"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "node": {
+                  "peer_address": {
+                    "value": "10.51.10.2"
+                  },
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "isp-pe1"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "circuit": {
+            "node": {
+              "id": "18daad09-32f8-bc0c-303b-11871bfbd2c0"
+            }
+          },
+          "bgp_sessions": {
+            "edges": [
+              {
+                "node": {
+                  "peer_address": {
+                    "value": "10.51.20.1"
+                  },
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "cust-globex-ce"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "node": {
+                  "peer_address": {
+                    "value": "10.51.20.2"
+                  },
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "isp-pe1"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "node": {
+          "circuit": {
+            "node": null
+          },
+          "bgp_sessions": {
+            "edges": [
+              {
+                "node": {
+                  "peer_address": {
+                    "value": "10.250.70.1"
+                  },
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "branch-rtr"
+                      }
+                    }
                   }
                 }
               }

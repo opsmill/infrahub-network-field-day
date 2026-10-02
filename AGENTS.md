@@ -557,6 +557,36 @@ upstream commit, because none is published, and runs on host port 8002, because 
 `infrahub-mcp`. `invoke metrics-exporter` provisions the account and starts it, and the bootstrap
 runs it after `mcp`.
 
+### Services are monitored because they exist (cycle 035)
+
+**OTTERNET / Services** shows every request from its branch to its health, and nobody adds
+monitoring for a service. See the Services section of
+[observability.md](docs/docs/developer-guide/observability.md). Six things look like oversights:
+
+- **A service profile selects by `service_kind`, not by group, and `device_groups` is optional.**
+  A service is in a group only when a generator sits beneath its kind; the three WAN kinds are
+  in none. `ServiceGeneric` means every kind. The renderer refuses a device profile with no
+  group, a service profile with one, and a kind it does not know.
+- **Live means not `decommissioning`/`decommissioned`**, as the withdrawal table says, so a
+  revoke withdraws its monitoring in the same proposed change.
+- **The collector does not probe a gated application, deliberately.** Cilium's `fromCIDR`
+  never matches a pod, and the composition admits nothing else from another namespace.
+  Measured: Telegraf's pod timed out against `otternet-demo` and Grafana, and the same rendered
+  probe from the host network answered. Grafana's seeded `10.111.0.0/16` admits no pod. So
+  `service-reachability` renders only where the gate is open, says `# not probed` otherwise,
+  and app health comes from kube-state-metrics (`service-delivery`). Admitting the collector
+  needs a new composition field in the lab repository, not a wider `allowed_source_prefixes`.
+- **The service-lifecycle exporter has no configuration.** `scripts/service_lifecycle_exporter.py`
+  runs on host port 8003, as `metrics-exporter`, from the bind-mounted checkout (no
+  `invoke build`). Telegraf scrapes it with `?kinds=` rendered from `services-lifecycle`, so
+  which kinds it reports is an artifact diff. It is not the Infrahub exporter because a
+  request lives on a branch nobody configured.
+- **"Deployed" is fleet-wide**: every tracked device confirmed in sync since the service last
+  changed. Only the generators know which devices a service touches.
+- **`node_metadata.updated_at` disagrees between main and a branch for an untouched node**
+  (measured), so a branch request is a status change or an edit dated after the branch cut.
+  Comparing the two timestamps marks every service on a fresh branch as changed.
+
 ## Generator and transform inventory
 
 The service layer offers seven kinds, each described where its generator or renderer is.
