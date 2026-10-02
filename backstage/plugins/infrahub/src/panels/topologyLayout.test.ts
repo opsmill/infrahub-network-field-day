@@ -1,6 +1,8 @@
 import {
   buildTopology,
   ConnectorNode,
+  domainOf,
+  filterTopology,
   groupOf,
   shortPort,
   summarise,
@@ -277,6 +279,68 @@ describe('cables between devices in one row', () => {
     expect(link.sideways).toBe(false);
     expect(link.fromHandle).toMatch(/^out-/);
     expect(link.toHandle).toMatch(/^in-/);
+  });
+});
+
+describe('domainOf', () => {
+  it('splits the lab into data centre, WAN and branch', () => {
+    expect(domainOf('DcimFabricSwitch', 'leaf')).toBe('dc');
+    expect(domainOf('ComputePhysicalServer', 'compute')).toBe('dc');
+    expect(domainOf('SecurityFirewall', 'firewall')).toBe('dc');
+    expect(domainOf('DcimDevice', 'isp_core')).toBe('wan');
+    expect(domainOf('DcimDevice', 'customer_edge')).toBe('wan');
+    expect(domainOf('DcimDevice', 'internet_edge')).toBe('wan');
+    expect(domainOf('DcimDevice', 'branch_router')).toBe('branch');
+  });
+
+  it('puts an unrecognised router with the WAN rather than the fabric', () => {
+    expect(domainOf('DcimDevice', 'mystery')).toBe('wan');
+  });
+});
+
+describe('filterTopology', () => {
+  const BR: Dev = {
+    id: 'b1',
+    name: 'branch-rtr',
+    role: 'branch_router',
+    kind: 'DcimDevice',
+  };
+  const PE2: Dev = {
+    id: 'p2',
+    name: 'isp-pe2',
+    role: 'isp_core',
+    kind: 'DcimDevice',
+  };
+  const all = buildTopology(
+    data(
+      cable('a', end(SPINE1, 'Ethernet1'), end(LEAF1, 'Ethernet1')),
+      cable('b', end(LEAF1, 'Ethernet12'), end(PE2, 'ethernet-1/2')),
+      cable('c', end(LEAF1, 'Ethernet13'), end(BR, 'ethernet-1/1')),
+    ),
+  );
+
+  it('keeps everything when every domain is on', () => {
+    const t = filterTopology(all, new Set(['dc', 'wan', 'branch']));
+    expect(t.devices).toHaveLength(4);
+    expect(t.links).toHaveLength(3);
+  });
+
+  it('drops a domain and the cables that ran to it, and only those', () => {
+    const t = filterTopology(all, new Set(['dc', 'branch']));
+    expect(t.devices.map(d => d.id).sort()).toEqual(['b1', 'l1', 's1']);
+    expect(t.links.map(l => l.id).sort()).toEqual(['a', 'c']);
+  });
+
+  it('shows no cable between devices when one end is hidden', () => {
+    expect(filterTopology(all, new Set(['wan'])).links).toEqual([]);
+  });
+
+  it('leaves positions alone, so toggling never moves what is still there', () => {
+    const t = filterTopology(all, new Set(['dc']));
+    for (const d of t.devices) {
+      const before = all.devices.find(x => x.id === d.id)!;
+      expect([d.x, d.y]).toEqual([before.x, before.y]);
+    }
   });
 });
 
