@@ -335,7 +335,8 @@ class TelemetryCollectorConfig(InfrahubTransform):
         notes: list[str] = []
         watches = self._watches(collector, notes)
         service_watches, scrape = self._service_watches(collector, parsed, notes)
-        probes = await self._probes(service_watches, notes)
+        profiles = [e.node for e in collector.monitoring_profiles.edges if e.node is not None]
+        probes = await self._probes(service_watches, notes, namespace=str(namespace), profiles=profiles)
         intended = await self._intended(watches, parsed, service_watches, probes, notes)
         conf = self._render_conf(name, watches, notes, scrape, service_watches, probes)
 
@@ -430,8 +431,15 @@ class TelemetryCollectorConfig(InfrahubTransform):
         except ServiceMonitoringError as exc:
             raise TelemetryCollectorConfigError(str(exc)) from exc
 
-    async def _probes(self, watches: list[ServiceWatch], notes: list[str]) -> dict[str, list[tuple[str, int]]]:
+    async def _probes(
+        self, watches: list[ServiceWatch], notes: list[str], *, namespace: str, profiles: list[Any]
+    ) -> dict[str, list[tuple[str, int]]]:
         """(address, port) per probed application.
+
+        A gated application is probed only where its own FabricApp admits this
+        collector's namespace -- decided by ``collector_admission`` over this
+        collector's profiles, the derivation ``crossplane_fabric_app`` renders
+        the admission from.
 
         The values file is read only for an application that will be probed,
         for the address its values pin; the download is the expensive half.
@@ -442,7 +450,7 @@ class TelemetryCollectorConfig(InfrahubTransform):
                 continue
             pinned = None
             values_file = _peer(watch.node, "values_file")
-            if values_file is not None and probe_targets(watch, None, []):
+            if values_file is not None and probe_targets(watch, None, [], namespace=namespace, profiles=profiles):
                 stub = await self.client.get(kind="ServiceFabricAppValuesFile", id=values_file.id)
                 content = await stub.download_file()
                 text = content.decode() if isinstance(content, bytes) else str(content)
@@ -450,7 +458,7 @@ class TelemetryCollectorConfig(InfrahubTransform):
                     pinned = find_pinned(yaml.safe_load(text))
                 except yaml.YAMLError:
                     pinned = None
-            targets = probe_targets(watch, pinned, notes)
+            targets = probe_targets(watch, pinned, notes, namespace=namespace, profiles=profiles)
             if targets:
                 probes[watch.name] = targets
         return probes

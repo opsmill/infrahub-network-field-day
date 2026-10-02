@@ -26,13 +26,17 @@ What each measurement renders, and why it is that and not something else:
   by design (``fromEntities: host``).
 * ``service-reachability`` -- a Telegraf ``net_response`` TCP probe of the VIP
   on every TCP port the application advertises, BUT ONLY WHERE THE
-  APPLICATION'S POD GATE ADMITS THE COLLECTOR. The composition admits ingress
-  by CIDR (which Cilium matches against traffic from OUTSIDE the cluster only),
-  from the application's own namespace, and from node entities -- so a probe
-  from Telegraf's pod is dropped at every gated application, measured against
-  both otternet-demo and Grafana, whose seeded pod CIDR ``10.111.0.0/16`` does
-  not admit a pod at all. Rendering those probes would report a healthy
-  application as down forever; they are skipped and the artifact says why.
+  APPLICATION'S POD GATE ADMITS THE COLLECTOR. ``allowFrom`` cannot: Cilium
+  matches ``fromCIDR`` against traffic from OUTSIDE the cluster only, so a
+  probe from Telegraf's pod was dropped at every gated application (measured
+  against otternet-demo and Grafana). Since cycle 036 the FabricApp itself
+  carries ``spec.monitoring`` -- the collector namespaces and the pod ports --
+  and the composition renders ``allow-collector`` from it. Both halves come from
+  ONE function, ``collector_admission``: ``crossplane_fabric_app`` renders the
+  admission from it, and this renders a probe only where it says this
+  collector's namespace is admitted. So a probe is never rendered against a
+  gate that drops it, and turning a profile's reachability off closes the
+  path in the same proposed change that removes the probe.
 * ``service-access`` -- a grant's rules and the firewall holding them,
   ``otternet_intended_service_access``, joined to that firewall's
   ``DeploymentState``: the rule is on the device once the device is confirmed
@@ -248,36 +252,154 @@ def lifecycle_input(collector: str, scrape: LifecycleScrape) -> list[dict[str, A
     ]
 
 
-def probe_targets(watch: ServiceWatch, pinned: str | None, notes: list[str]) -> list[tuple[str, int]]:
-    """(address, port) for every TCP port the application advertises, or none and why."""
+REACHABILITY = "service-reachability"
+
+# The ports a collector probes, and so may be admitted on, are TCP: a
+# `net_response` TCP probe is the only reachability check rendered.
+_TCP = "TCP"
+
+
+@dataclass(frozen=True)
+class Admission:
+    """Which collectors an application's pod gate admits, on which pod ports.
+
+    Empty ``namespaces`` means none, and ``reason`` says why -- in the same
+    words the telemetry artifact uses to explain a probe it did not render.
+    """
+
+    namespaces: tuple[str, ...] = ()
+    ports: tuple[tuple[str, str], ...] = ()
+    reason: str = ""
+
+
+def gate_closed(app: Any) -> bool:
+    """Whether the application's pods are deny-by-default for ingress.
+
+    True under ``policy_default_deny``, or when ``allowed_source_prefixes`` is
+    non-empty -- the composition then renders ``allow-ingress`` selecting the
+    workload, and a policy selecting an endpoint makes its ingress
+    deny-by-default. Otherwise nothing selects the pods, the collector is
+    already admitted, and an admission policy would CLOSE ingress to every
+    other source -- which is why the composition renders one only here.
+    """
+    rel = getattr(app, "allowed_source_prefixes", None)
+    count = getattr(rel, "count", None)
+    if count is None:
+        count = len(edges(app, "allowed_source_prefixes"))
+    return bool(val(app, "policy_default_deny")) or count > 0
+
+
+def advertised_tcp_ports(app: Any) -> list[int]:
+    """The VIP ports the application advertises over TCP: what is probed."""
+    return sorted(
+        {
+            int(val(svc, "port"))
+            for svc in edges(app, "advertised_services")
+            if val(svc, "port") and str(val(peer(svc, "ip_protocol"), "name") or "").lower() == "tcp"
+        }
+    )
+
+
+def pod_ports(app: Any) -> list[tuple[str, str]]:
+    """The TCP pod ports the application's backends answer on.
+
+    ``policy_allow_ports``, the same list the composition confines external
+    sources to. Not ``advertised_services``: Cilium enforces AFTER service
+    translation, so a probe of the VIP's port 80 reaches Grafana's pod as 3000,
+    and a rule naming 80 would admit nothing.
+    """
+    entries = val(app, "policy_allow_ports") or []
+    ports = {
+        (str(entry.get("port")), str(entry.get("protocol") or _TCP).upper())
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("port") is not None
+    }
+    return sorted(port for port in ports if port[1] == _TCP)
+
+
+def watches_reachability(profile: Any) -> bool:
+    """An enabled service profile asking for ``service-reachability`` of applications."""
+    return (
+        bool(val(profile, "enabled"))
+        and str(val(profile, "service_kind")) in (FABRIC_APP, SERVICE_GENERIC)
+        and REACHABILITY in {str(val(m, "name")) for m in edges(profile, "measurements")}
+    )
+
+
+def collector_admission(app: Any, watchers: list[tuple[Any, str | None]]) -> Admission:
+    """THE ONE DERIVATION both transforms use: which collectors may probe ``app``.
+
+    ``watchers`` is (profile, the namespace of the collector holding it). The
+    FabricApp renders the namespaces returned here as ``spec.monitoring``; the
+    telemetry artifact renders a probe of a gated application only when its own
+    namespace is among them. A probe and the gate it passes through therefore
+    cannot disagree.
+
+    Nothing here widens a gate: an application whose gate is open needs no
+    admission, and one that declares no pod port is not admitted on every port.
+    """
+    name = str(val(app, "name"))
+    if str(val(app, "status")) in WITHDRAWN:
+        return Admission(reason=f"{name} is withdrawn")
+    if not val(app, "exposed"):
+        return Admission(reason=f"{name} is not exposed, so it has no VIP")
+    block = peer(app, "vip_block")
+    if block is None or not val(block, "prefix"):
+        return Admission(reason=f"{name} is exposed and has no vip_block yet")
+    if not advertised_tcp_ports(app):
+        return Admission(reason=f"{name} advertises no TCP service")
+    if not gate_closed(app):
+        return Admission(reason=f"{name}'s pod gate is open, so the collector needs no admission")
+    ports = pod_ports(app)
+    if not ports:
+        return Admission(
+            reason=(
+                f"{name}'s pod gate is closed and it declares no TCP policy_allow_ports, and admitting the "
+                "collector on every port would be wider than any external source is allowed"
+            )
+        )
+    namespaces = sorted({str(ns) for profile, ns in watchers if ns and watches_reachability(profile)})
+    if not namespaces:
+        return Admission(reason=f"no enabled profile watches {name} for {REACHABILITY}")
+    return Admission(namespaces=tuple(namespaces), ports=tuple(ports))
+
+
+def probe_targets(
+    watch: ServiceWatch,
+    pinned: str | None,
+    notes: list[str],
+    *,
+    namespace: str | None = None,
+    profiles: list[Any] | None = None,
+) -> list[tuple[str, int]]:
+    """(address, port) for every TCP port the application advertises, or none and why.
+
+    A gated application is probed only where ``collector_admission`` -- the
+    derivation its own FabricApp is rendered from -- admits ``namespace``, the
+    collector's, through ``profiles``, the collector's.
+    """
     node = watch.node
     if not val(node, "exposed"):
         notes.append(f"# not probed: {watch.name} is not exposed, so it has no VIP")
-        return []
-    if val(node, "policy_default_deny") or (getattr(node.allowed_source_prefixes, "count", 0) or 0) > 0:
-        notes.append(
-            f"# not probed: {watch.name}'s pod gate admits no in-cluster source (the composition admits CIDRs "
-            "from outside the cluster, its own namespace and node entities); service-delivery reports its health"
-        )
         return []
     block = peer(node, "vip_block")
     prefix = val(block, "prefix") if block is not None else None
     if not prefix:
         notes.append(f"# not probed: {watch.name} is exposed and has no vip_block yet")
         return []
+    ports = advertised_tcp_ports(node)
+    if not ports:
+        notes.append(f"# not probed: {watch.name} advertises no TCP service")
+        return []
+    if gate_closed(node):
+        admission = collector_admission(node, [(profile, namespace) for profile in profiles or []])
+        if namespace not in admission.namespaces:
+            notes.append(f"# not probed: {watch.name}'s pod gate does not admit this collector: {admission.reason}")
+            return []
     # Cilium LB-IPAM hands an application's first Service the first address of
     # the application's own pool -- the composition gives each one a pool of
     # its block alone -- unless its values pin one.
     address = pinned or str(ipaddress.ip_network(prefix, strict=False).network_address)
-    ports = sorted(
-        {
-            int(val(svc, "port"))
-            for svc in edges(node, "advertised_services")
-            if val(svc, "port") and str(val(peer(svc, "ip_protocol"), "name") or "").lower() == "tcp"
-        }
-    )
-    if not ports:
-        notes.append(f"# not probed: {watch.name} advertises no TCP service")
     return [(address, port) for port in ports]
 
 

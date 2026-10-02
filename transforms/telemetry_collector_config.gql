@@ -120,6 +120,9 @@ query TelemetryCollectorConfigQuery($name: String!) {
           namespace_name { value }
           exposed { value }
           policy_default_deny { value }
+          # The pod ports a probe arrives on, after service translation: the
+          # ports the FabricApp admits the collector on (cycle 036).
+          policy_allow_ports { value }
           allowed_source_prefixes { count }
           vip_block { node { prefix { value } } }
           values_file { node { id } }

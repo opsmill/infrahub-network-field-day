@@ -2296,6 +2296,14 @@
           "policy_default_deny": {
             "value": true
           },
+          "policy_allow_ports": {
+            "value": [
+              {
+                "port": "80",
+                "protocol": "TCP"
+              }
+            ]
+          },
           "allowed_source_prefixes": {
             "count": 3
           },
@@ -2425,6 +2433,14 @@
           "policy_default_deny": {
             "value": false
           },
+          "policy_allow_ports": {
+            "value": [
+              {
+                "port": "3000",
+                "protocol": "TCP"
+              }
+            ]
+          },
           "allowed_source_prefixes": {
             "count": 1
           },
@@ -2486,6 +2502,9 @@
           },
           "policy_default_deny": {
             "value": false
+          },
+          "policy_allow_ports": {
+            "value": null
           },
           "allowed_source_prefixes": {
             "count": 0

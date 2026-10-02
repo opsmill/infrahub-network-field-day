@@ -583,13 +583,29 @@ monitoring for a service. See the Services section of
   group, a service profile with one, and a kind it does not know.
 - **Live means not `decommissioning`/`decommissioned`**, as the withdrawal table says, so a
   revoke withdraws its monitoring in the same proposed change.
-- **The collector does not probe a gated application, deliberately.** Cilium's `fromCIDR`
-  never matches a pod, and the composition admits nothing else from another namespace.
-  Measured: Telegraf's pod timed out against `otternet-demo` and Grafana, and the same rendered
-  probe from the host network answered. Grafana's seeded `10.111.0.0/16` admits no pod. So
-  `service-reachability` renders only where the gate is open, says `# not probed` otherwise,
-  and app health comes from kube-state-metrics (`service-delivery`). Admitting the collector
-  needs a new composition field in the lab repository, not a wider `allowed_source_prefixes`.
+- **Monitoring is a FOURTH gate opening, and it opens only the third gate, only for the
+  collector** (cycle 036). Cilium's `fromCIDR` never matches a pod, so no
+  `allowed_source_prefixes` entry can admit Telegraf. Measured: its pod timed out against
+  `otternet-demo` and Grafana while the host network answered. The FabricApp now carries
+  `spec.monitoring` (`collectorNamespaces`, `ports`), and the composition renders it as
+  `allow-collector`, a `fromEndpoints` rule on `io.kubernetes.pod.namespace`. It goes to the
+  `allow-ingress` endpoints with no CIDR and no entities. Four things look like oversights:
+  - **The ports are the POD's (`policy_allow_ports`), not `advertised_services`.** Cilium
+    enforces after service translation, so Grafana's VIP port 80 arrives as 3000. No pod
+    port declared means no admission, never every port.
+  - **It renders only where the gate is already closed** (`defaultDeny`, or a non-empty
+    `allowFrom`), in the transform AND in the composition's guard. On an open gate the
+    collector is admitted already, and a policy selecting the pods would make their ingress
+    deny-by-default for every other source.
+  - **One function, `telemetry_services.py::collector_admission`, decides both artifacts.**
+    The FabricApp is rendered from it, and the collector probes a gated application only
+    where it admits the collector's own namespace.
+    `tests/unit/test_probe_admission_contract.py` holds the two to each other. Removing
+    `service-reachability` from a profile removes the probe and closes the path in one
+    proposed change, with the FabricApps byte-identical to before the field existed.
+  - **The XRD and composition must reach the cluster BEFORE Vidra delivers a FabricApp
+    carrying the field.** They are the lab's, applied by `install-crossplane.sh` during
+    `invoke cluster`, not delivered by Vidra.
 - **The service-lifecycle exporter has no configuration.** `scripts/service_lifecycle_exporter.py`
   runs on host port 8003, as `metrics-exporter`, from the bind-mounted checkout (no
   `invoke build`). Telegraf scrapes it with `?kinds=` rendered from `services-lifecycle`, so

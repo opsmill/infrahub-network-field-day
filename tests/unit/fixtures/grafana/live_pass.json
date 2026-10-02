@@ -14350,7 +14350,7 @@
            1790941612890
           ],
           [
-           0
+           2
           ]
          ]
         }
@@ -14364,19 +14364,50 @@
         "schema": {
          "refId": "B",
          "meta": {
+          "type": "numeric-multi",
           "typeVersion": [
            0,
-           0
+           1
           ],
           "custom": {
-           "calculatedMinStep": 30000
+           "calculatedMinStep": 30000,
+           "resultType": "vector"
           },
           "executedQueryString": "Expr: count(net_response_result_code{service_kind=~\".*\", service=~\".*\"} == 0)\nStep: 30s"
          },
-         "fields": []
+         "fields": [
+          {
+           "name": "Time",
+           "type": "time",
+           "typeInfo": {
+            "frame": "time.Time"
+           },
+           "config": {
+            "interval": 30000
+           }
+          },
+          {
+           "name": "Value",
+           "type": "number",
+           "typeInfo": {
+            "frame": "float64"
+           },
+           "labels": {},
+           "config": {
+            "displayNameFromDS": "count(net_response_result_code{service_kind=~\".*\", service=~\".*\"} == 0)"
+           }
+          }
+         ]
         },
         "data": {
-         "values": []
+         "values": [
+          [
+           1790941612890
+          ],
+          [
+           2
+          ]
+         ]
         }
        }
       ]

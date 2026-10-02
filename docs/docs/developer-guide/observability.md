@@ -160,12 +160,12 @@ Read these before trusting a number on them:
   `OTTERNET` folder through Grafana's `/api/ds/query` over the last 30 minutes, with the
   dashboard's own variables. It fails naming every panel that returns no data or an error.
   `verify_bootstrap.sh` runs it, and it works against any running Grafana through a
-  port-forward. Three queries are allowed to be empty, all listed in its `ALLOWED_EMPTY`.
-  Two are the per-port breakouts on Fabric telemetry's "Errors and discards" and the
-  firewall's "Interface errors", each filtered with `> 0`, so a healthy lab has no series.
-  The third is the probe results on Services' "Probed ports answering": no seeded
-  application admits the collector at its pod gate, so no probe renders. Each panel's other
-  query must still return data.
+  port-forward. Two queries are allowed to be empty, both listed in its `ALLOWED_EMPTY`:
+  the per-port breakouts on Fabric telemetry's "Errors and discards" and the firewall's
+  "Interface errors", each filtered with `> 0`, so a healthy lab has no series. Each panel's
+  other query must still return data. Services' "Probed ports answering" was a third until
+  the collector was admitted at the applications' pod gates; both of its queries now
+  return data.
 
 **The chart's own dashboards are off** (`grafana.defaultDashboardsEnabled: false`). The
 kube-prometheus-stack chart ships 21 of them into Grafana's `General` folder, beside the seven
@@ -211,7 +211,7 @@ each kind; whether it applies is the profiles' business.
 | --- | --- | --- |
 | `service-lifecycle` | every kind | one scrape of the lifecycle exporter, `?kinds=` from the profile |
 | `service-delivery` | `ServiceFabricApp` | the namespace whose pods must be ready, and the VIP block an address must be assigned from |
-| `service-reachability` | `ServiceFabricApp` | a TCP probe of the VIP per advertised TCP port, where the pod gate admits the collector |
+| `service-reachability` | `ServiceFabricApp` | a TCP probe of the VIP per advertised TCP port, and the application's own FabricApp admitting the collector |
 | `service-access` | `ServiceAppAccess` | each granted rule and the firewall holding it |
 | `service-routing` | the WAN kinds, tenant cloud, onboarding, segment, peering | the BGP sessions that realise the service |
 | `service-cabling` | `ServiceServerPlacement` | the switch ports the machine is cabled to |
@@ -237,20 +237,85 @@ for a service:
   and the grant's application must pass its own checks. The branch-side session is
   not probed: no collector sits at the branch.
 
-**Probes from the collector are dropped at a gated application, by design.** The
-composition admits ingress by CIDR, which Cilium matches against traffic from
-outside the cluster only, from the application's own namespace, and from node
-entities. Measured from a throwaway pod: Telegraf's pod network timed out against
-`otternet-demo` and Grafana, while the same rendered probes from the host network
-answered in 8 ms. Grafana's seeded `10.111.0.0/16` source does not admit a pod at
-all; it only makes the policy exist. The collector therefore probes only an application
-whose gate is open, says `# not probed: ...` for the rest, and those report health
-through `service-delivery`. Admitting the collector would take a new field in the
-lab's composition, a selector-scoped `fromEndpoints` rule for the collector's
-namespace; widening `allowed_source_prefixes` cannot do it. A probe's address is
-the one the application's values pin with `lbipam.cilium.io/ips`, else the first
-address of its block, which is what Cilium LB-IPAM gives the first Service of a
-pool the composition makes for that application alone.
+### Monitoring opens a fourth gate, and only for the collector
+
+A session to an application passes three gates: the route, the firewall, and the
+application's own CiliumNetworkPolicy. A grant opens all three for one source. The
+collector probing the application from inside the cluster needs the third alone,
+and `allowed_source_prefixes` cannot give it. Cilium matches `fromCIDR` against
+traffic from outside the cluster only. Measured from a throwaway pod before this
+change: Telegraf's pod timed out against `otternet-demo` and Grafana, while the
+same probes from the host network answered in 8 ms.
+
+The FabricApp therefore carries `spec.monitoring`, and the composition renders it as
+one more policy, `allow-collector`:
+
+```yaml
+spec:
+  monitoring:
+    collectorNamespaces: [otternet-telemetry]
+    ports:
+      - port: "3000"     # Grafana's pod port; its VIP answers on 80
+        protocol: TCP
+```
+
+Four rules keep this from weakening anything:
+
+- **Infrahub decides it, from monitoring intent.** `crossplane_fabric_app` renders
+  the field from every enabled service profile that asks for `service-reachability`
+  of applications. The value is the namespace of each profile's collector. Take the
+  measurement off `services-apps` and, in one proposed change, each FabricApp loses
+  its admission and the collector's artifact loses its probes. Measured on a scratch
+  branch: with the measurement removed, both FabricApps rendered byte-identical to
+  `main`.
+- **Only the collector's namespace.** The rule is `fromEndpoints` on
+  `io.kubernetes.pod.namespace`, a label Cilium derives from the pod rather than one
+  a pod can set. It goes to the same endpoints `allow-ingress` protects, with no
+  `fromCIDR` and no `fromEntities`.
+- **Only the application's own ports.** Cilium enforces after service translation,
+  so a probe of Grafana's VIP on 80 reaches the pod as 3000. The admission therefore
+  names the pod ports, `policy_allow_ports`, which external sources are already
+  confined to. An application declaring none is not admitted, rather than admitted
+  on every port.
+- **Only where the gate is closed.** With neither `policy_default_deny` nor a source
+  prefix, nothing selects the pods and the collector is admitted already. A policy
+  selecting them would turn their ingress deny-by-default for every other source.
+  The composition renders `allow-collector` only under `defaultDeny` or a non-empty
+  `allowFrom`, and the transform omits the field there too.
+
+**One function decides both halves.** `telemetry_services.py::collector_admission`
+is what `crossplane_fabric_app` renders the admission from. The Telemetry Collector
+Configuration renders a probe of a gated application only where that same function
+admits the collector's own namespace, and a probe never targets a gate that drops it.
+`tests/unit/test_probe_admission_contract.py` renders both artifacts from one intent
+across each change that should move them, and holds them to each other.
+
+Measured on the live cluster, through a copy of the composition and a scratch claim
+gated like `otternet-demo`, with Service port 80 mapped to pod port 8080 and a
+second listener on 9090:
+
+| Source | Pod `8080` / VIP `80` | Pod `9090` / VIP `90` |
+| --- | --- | --- |
+| collector namespace, from either node | answered | dropped |
+| any other namespace, from either node | dropped | dropped |
+| collector namespace, `spec.monitoring` removed | dropped | dropped |
+
+Telegraf's own `net_response` from the collector namespace read `result_code=0` on
+port 80 and `timeout` on port 90. With the gate open, no `allow-collector` was
+rendered at all.
+
+An application that is not exposed, has no VIP block yet, advertises no TCP
+service, or is withdrawn is neither probed nor admitted. Each artifact says why in
+a `# not probed:` comment. A probe's address is the one the application's values pin
+with `lbipam.cilium.io/ips`. Otherwise it is the first address of its block, which
+Cilium LB-IPAM gives the first Service of a pool the composition makes for that
+application alone.
+
+**Delivery order matters once.** The XRD field and the composition must be applied
+to the cluster before Vidra delivers a FabricApp carrying `spec.monitoring`. They
+are the lab's, applied by `install-crossplane.sh`. An XRD without the field either
+refuses a FabricApp carrying it or silently prunes it, depending on how the writer
+validates. A pruned field renders no admission, so the probe times out.
 
 ### The lifecycle exporter
 

@@ -20,9 +20,9 @@ So the produced set is DERIVED, not listed:
 * **The exporter's series** come from metrics/exporter.yml.
 * **The service-lifecycle exporter's series** (cycle 035) come from the module
   that produces them, and count only if the rendered artifact scrapes it.
-* **Probe series** come from a render in which one application admits the
-  collector at its pod gate, because the seeded ones all refuse it -- so the
-  probe panel is held to a series a probe WOULD produce, not to nothing.
+* **Probe series** come from the seeded render, in which both exposed
+  applications admit the collector at their pod gate (cycle 036) -- so the
+  probe panel is held to the series the seeded probes produce.
 * **Cluster series** (Hubble, the kubelet, kube-state-metrics) are a short list,
   each tied to the scrape job in the otternet-metrics values that produces it.
 
@@ -168,13 +168,9 @@ def _targets() -> list[tuple[str, str, str]]:
 
 
 def _probe_render() -> dict[str, Any]:
-    """The collector's render with Grafana's pod gate open, so a probe is rendered."""
-    data = _data()
-    for edge in data["ServiceGeneric"]["edges"]:
-        if edge["node"]["name"]["value"] == "otternet-metrics":
-            edge["node"]["policy_default_deny"]["value"] = False
-            edge["node"]["allowed_source_prefixes"]["count"] = 0
-    return _render(data)[0]
+    """The seeded render: since cycle 036 both exposed applications admit the
+    collector at their pod gate, so it probes each of them."""
+    return _render(_data())[0]
 
 
 def _collector_series() -> dict[str, set[str]]:  # noqa: C901 - one artifact, every kind of input it renders

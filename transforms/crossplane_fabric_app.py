@@ -37,6 +37,7 @@ from .crossplane_fabric_app_query import (
     CrossplaneFabricAppQuery,
     CrossplaneFabricAppQueryTargetEdgesNode,
 )
+from .telemetry_services import collector_admission
 
 AppNode = CrossplaneFabricAppQueryTargetEdgesNode
 
@@ -170,6 +171,36 @@ def build_policy(app: AppNode) -> dict[str, Any]:
         policy["workloadSelector"] = workload
 
     return policy
+
+
+def build_monitoring(app: AppNode, profiles: list[Any]) -> dict[str, Any]:
+    """``spec.monitoring``: the collectors this application's pod gate admits.
+
+    THE FOURTH GATE OPENING, and the only one opened by monitoring rather than
+    by a grant. ``allowFrom`` is CIDR-only and Cilium never matches a pod
+    against a CIDR rule, so an in-cluster collector cannot reach a gated
+    application through it at all. The composition admits the namespaces named
+    here, on the ports named here, to the endpoints ``allow-ingress`` protects
+    -- and nothing else.
+
+    Derived by ``collector_admission``, the function the Telemetry Collector
+    Configuration uses to decide which applications it probes, from every
+    service profile and its collector's namespace. So enabling
+    ``service-reachability`` for applications is what opens the path, and
+    disabling it closes it in the same proposed change that removes the probe.
+
+    An empty dict -- and so a manifest byte-identical to one rendered before
+    this field existed -- for every application no profile probes, and for one
+    whose gate is open, which admits the collector already.
+    """
+    watchers = [(profile, _value(getattr(_node_of(profile.collector), "namespace_name", None))) for profile in profiles]
+    admission = collector_admission(app, watchers)
+    if not admission.namespaces:
+        return {}
+    return {
+        "collectorNamespaces": list(admission.namespaces),
+        "ports": [{"port": port, "protocol": protocol} for port, protocol in admission.ports],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -455,6 +486,10 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
         if expose:
             spec["expose"] = expose
         spec["policy"] = build_policy(app)
+        profiles = [edge.node for edge in parsed.monitoring_profile.edges if edge.node is not None]
+        monitoring = build_monitoring(app, profiles)
+        if monitoring:
+            spec["monitoring"] = monitoring
 
         manifest = {
             "apiVersion": API_VERSION,

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CrossplaneFabricAppQuery(BaseModel):
     target: "CrossplaneFabricAppQueryTarget"
+    monitoring_profile: "CrossplaneFabricAppQueryMonitoringProfile" = Field(
+        alias="MonitoringProfile"
+    )
 
 
 class CrossplaneFabricAppQueryTarget(BaseModel):
@@ -20,6 +23,7 @@ class CrossplaneFabricAppQueryTargetEdges(BaseModel):
 class CrossplaneFabricAppQueryTargetEdgesNode(BaseModel):
     id: str
     name: Optional["CrossplaneFabricAppQueryTargetEdgesNodeName"]
+    status: Optional["CrossplaneFabricAppQueryTargetEdgesNodeStatus"]
     namespace_name: Optional["CrossplaneFabricAppQueryTargetEdgesNodeNamespaceName"]
     exposed: Optional["CrossplaneFabricAppQueryTargetEdgesNodeExposed"]
     sso_provider: Optional["CrossplaneFabricAppQueryTargetEdgesNodeSsoProvider"]
@@ -53,10 +57,15 @@ class CrossplaneFabricAppQueryTargetEdgesNode(BaseModel):
     allowed_source_prefixes: (
         "CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixes"
     )
+    advertised_services: "CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServices"
     values_file: "CrossplaneFabricAppQueryTargetEdgesNodeValuesFile"
 
 
 class CrossplaneFabricAppQueryTargetEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class CrossplaneFabricAppQueryTargetEdgesNodeStatus(BaseModel):
     value: Optional[str]
 
 
@@ -173,6 +182,51 @@ class CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixesEdgesNodePrefi
     value: Optional[str]
 
 
+class CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServices(BaseModel):
+    edges: list["CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdges"]
+
+
+class CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdges(BaseModel):
+    node: Optional["CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNode"]
+
+
+class CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNode(BaseModel):
+    id: str
+    port: Optional[
+        "CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodePort"
+    ]
+    ip_protocol: (
+        "CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodeIpProtocol"
+    )
+
+
+class CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodePort(BaseModel):
+    value: Optional[Any]
+
+
+class CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodeIpProtocol(
+    BaseModel
+):
+    node: Optional[
+        "CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodeIpProtocolNode"
+    ]
+
+
+class CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodeIpProtocolNode(
+    BaseModel
+):
+    id: str
+    name: Optional[
+        "CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodeIpProtocolNodeName"
+    ]
+
+
+class CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodeIpProtocolNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
 class CrossplaneFabricAppQueryTargetEdgesNodeValuesFile(BaseModel):
     node: Optional["CrossplaneFabricAppQueryTargetEdgesNodeValuesFileNode"]
 
@@ -191,6 +245,79 @@ class CrossplaneFabricAppQueryTargetEdgesNodeValuesFileNodeChecksum(BaseModel):
     value: Optional[str]
 
 
+class CrossplaneFabricAppQueryMonitoringProfile(BaseModel):
+    edges: list["CrossplaneFabricAppQueryMonitoringProfileEdges"]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdges(BaseModel):
+    node: Optional["CrossplaneFabricAppQueryMonitoringProfileEdgesNode"]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNode(BaseModel):
+    id: str
+    name: Optional["CrossplaneFabricAppQueryMonitoringProfileEdgesNodeName"]
+    enabled: Optional["CrossplaneFabricAppQueryMonitoringProfileEdgesNodeEnabled"]
+    service_kind: Optional[
+        "CrossplaneFabricAppQueryMonitoringProfileEdgesNodeServiceKind"
+    ]
+    measurements: "CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurements"
+    collector: "CrossplaneFabricAppQueryMonitoringProfileEdgesNodeCollector"
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeEnabled(BaseModel):
+    value: Optional[bool]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeServiceKind(BaseModel):
+    value: Optional[str]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurements(BaseModel):
+    edges: list["CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurementsEdges"]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurementsEdges(BaseModel):
+    node: Optional[
+        "CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurementsEdgesNode"
+    ]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurementsEdgesNode(
+    BaseModel
+):
+    id: str
+    name: Optional[
+        "CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurementsEdgesNodeName"
+    ]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurementsEdgesNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeCollector(BaseModel):
+    node: Optional["CrossplaneFabricAppQueryMonitoringProfileEdgesNodeCollectorNode"]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeCollectorNode(BaseModel):
+    id: str
+    namespace_name: Optional[
+        "CrossplaneFabricAppQueryMonitoringProfileEdgesNodeCollectorNodeNamespaceName"
+    ]
+
+
+class CrossplaneFabricAppQueryMonitoringProfileEdgesNodeCollectorNodeNamespaceName(
+    BaseModel
+):
+    value: Optional[str]
+
+
 CrossplaneFabricAppQuery.model_rebuild()
 CrossplaneFabricAppQueryTarget.model_rebuild()
 CrossplaneFabricAppQueryTargetEdges.model_rebuild()
@@ -202,5 +329,18 @@ CrossplaneFabricAppQueryTargetEdgesNodeVipBlockNode.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixes.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixesEdges.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeAllowedSourcePrefixesEdgesNode.model_rebuild()
+CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServices.model_rebuild()
+CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdges.model_rebuild()
+CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNode.model_rebuild()
+CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodeIpProtocol.model_rebuild()
+CrossplaneFabricAppQueryTargetEdgesNodeAdvertisedServicesEdgesNodeIpProtocolNode.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeValuesFile.model_rebuild()
 CrossplaneFabricAppQueryTargetEdgesNodeValuesFileNode.model_rebuild()
+CrossplaneFabricAppQueryMonitoringProfile.model_rebuild()
+CrossplaneFabricAppQueryMonitoringProfileEdges.model_rebuild()
+CrossplaneFabricAppQueryMonitoringProfileEdgesNode.model_rebuild()
+CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurements.model_rebuild()
+CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurementsEdges.model_rebuild()
+CrossplaneFabricAppQueryMonitoringProfileEdgesNodeMeasurementsEdgesNode.model_rebuild()
+CrossplaneFabricAppQueryMonitoringProfileEdgesNodeCollector.model_rebuild()
+CrossplaneFabricAppQueryMonitoringProfileEdgesNodeCollectorNode.model_rebuild()
