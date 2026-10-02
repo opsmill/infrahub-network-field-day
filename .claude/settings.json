@@ -9,5 +9,31 @@
   },
   "enabledPlugins": {
     "infrahub@opsmill": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest*)",
+      "Bash(uv run ruff*)",
+      "Bash(uv run mypy*)",
+      "Bash(uv run invoke lint*)",
+      "Bash(uv run invoke test*)",
+      "Bash(uv run invoke --list)",
+      "Bash(uv run infrahubctl branch list*)",
+      "Bash(uv run infrahubctl repository list*)",
+      "Bash(uv run infrahubctl schema check*)",
+      "Bash(uv run infrahubctl graphql export-schema*)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs*)",
+      "Bash(kubectl get*)",
+      "Bash(kubectl describe*)",
+      "Bash(kubectl logs*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git fetch*)",
+      "Bash(git worktree list*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr checks*)"
+    ]
   }
 }
