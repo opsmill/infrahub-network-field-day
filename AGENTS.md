@@ -419,6 +419,20 @@ Three things about it look like oversights and are not:
   topology gain the links, and the Telegraf configuration gains `otternet_intended_link` and
   `otternet_intended_interface_up` series for them, which Vidra then delivers.
 
+**The page has two controls, and both are deliberately modest.** The *Data centre / WAN / Branch* toggles
+hide devices and the cables that ran to them but never re-lay-out what is left, so nothing moves while you look
+at it; a cable between two domains disappears unless both ends are showing. The domain comes from kind and role
+(`domainOf`), not from `location`, which most devices here do not have. The *Deployment state* overlay colours each
+device by its `DeploymentState` record, re-read every 30 seconds while it is on. Two readings are on purpose:
+an `in_sync` not checked for 20 minutes is shown as **stale**, because the loop that wrote it may be dead, and a
+device with no record (the servers, and `cust-acme-dr-ce`, which the reconciler does not manage) is **no
+record**, not a fault. `DeploymentState` is branch-agnostic, so the overlay describes the devices as they are
+whichever branch is selected.
+
+**There is no BGP overlay, because the portal cannot reach the data.** Session state lives in Prometheus, which
+is a `ClusterIP` Service in `otternet-metrics`; only Grafana has a LoadBalancer VIP, and reaching either from the
+tooling zone would need the same three gates a `ServiceAppAccess` grant opens (route, firewall rule, pod policy).
+
 Not drawn, because Infrahub has no object for the other end: `fw1` `ge-0/0/6` (the tooling bridge) and the hosts
 behind the customer, internet and branch routers.
 

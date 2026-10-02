@@ -1,4 +1,6 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
+import ToggleButton from '@material-ui/lab/ToggleButton';
+import ToggleButtonGroup from '@material-ui/lab/ToggleButtonGroup';
 import { useTheme } from '@material-ui/core/styles';
 import {
   Background,
@@ -14,6 +16,7 @@ import {
   NodeProps,
   Position,
   ReactFlow,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -28,7 +31,19 @@ import {
 import { useInfrahubQuery } from '../client';
 import { useKindColours, useStatusColours } from '../colours';
 import {
+  Badge,
+  DEPLOYMENT_QUERY,
+  DeploymentData,
+  describeState,
+  indexByName,
+  Tone,
+} from '../panels/deployment';
+import {
   buildTopology,
+  Domain,
+  DOMAIN_LABELS,
+  DOMAINS,
+  filterTopology,
   NODE_HEIGHT,
   NODE_WIDTH,
   shortPort,
@@ -50,6 +65,9 @@ type DeviceData = {
   right: number;
   colour: string;
   dimmed: boolean;
+  /** Deployment overlay: the state, and the colour the border takes for it. */
+  badge?: Badge;
+  ring?: string;
 };
 
 type CableData = {
@@ -75,7 +93,7 @@ const DeviceNode = memo(({ data }: NodeProps<Node<DeviceData>>) => {
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
         boxSizing: 'border-box',
-        border: `2px solid ${data.colour}`,
+        border: `2px solid ${data.ring ?? data.colour}`,
         borderRadius: 8,
         padding: '6px 10px',
         background: theme.palette.background.paper,
@@ -96,8 +114,17 @@ const DeviceNode = memo(({ data }: NodeProps<Node<DeviceData>>) => {
           style={{ ...hidden, left: spread(i, data.up) }}
         />
       ))}
-      <div style={{ fontSize: 10, opacity: 0.7, textTransform: 'uppercase' }}>
-        {data.role.replace(/_/g, ' ')}
+      <div
+        style={{ fontSize: 10, textTransform: 'uppercase' }}
+        title={data.badge?.detail}
+      >
+        <span style={{ opacity: 0.7 }}>{data.role.replace(/_/g, ' ')}</span>
+        {data.badge && (
+          <span style={{ color: data.ring, fontWeight: 700 }}>
+            {' · '}
+            {data.badge.label}
+          </span>
+        )}
       </div>
       <div
         style={{
@@ -223,18 +250,74 @@ const groupColours = (kinds: ReturnType<typeof useKindColours>) => ({
   server: kinds.address,
 });
 
+/** The colour each deployment tone is drawn in; `drifted` is a warning, not a fault. */
+function useToneColours(): Record<Tone, string> {
+  const status = useStatusColours();
+  const theme = useTheme();
+  return {
+    ok: status.ok,
+    pending: status.pending,
+    warn: theme.palette.warning.main,
+    error: status.error,
+    idle: status.idle,
+  };
+}
+
+/** What a device's node shows when the overlay is on. */
+function overlay(
+  state: Parameters<typeof describeState>[0],
+  tones: Record<Tone, string>,
+) {
+  const badge = describeState(state, Date.now());
+  return { badge, ring: tones[badge.tone] };
+}
+
 // Outside the component: React Flow warns, and remounts every node, when these
 // objects change identity between renders.
 const nodeTypes = { device: DeviceNode };
 const edgeTypes = { cable: CableEdge };
 
-export function TopologyView(props: { topology: Topology; height?: number }) {
+/** Re-frames the view when a domain is toggled, so what is left fills the canvas. */
+function FitOnChange(props: { watch: string }) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    // After React Flow has taken the new nodes, not before.
+    const timer = setTimeout(
+      () => fitView({ padding: 0.15, duration: 300 }),
+      50,
+    );
+    return () => clearTimeout(timer);
+  }, [props.watch, fitView]);
+  return null;
+}
+
+export function TopologyView(props: {
+  topology: Topology;
+  domains: Set<Domain>;
+  /** When given, every device wears its deployment state. */
+  deployment?: DeploymentData;
+  height?: number;
+}) {
   const theme = useTheme();
   const kinds = useKindColours();
   const status = useStatusColours();
   const [hovered, setHovered] = useState<string | undefined>();
 
   const colourFor = (group: Group) => groupColours(kinds)[group];
+  const tones = useToneColours();
+  const records = useMemo(
+    () => (props.deployment ? indexByName(props.deployment) : undefined),
+    [props.deployment],
+  );
+  const hiddenDevices = useMemo(
+    () =>
+      new Set(
+        props.topology.devices
+          .filter(d => !props.domains.has(d.domain))
+          .map(d => d.id),
+      ),
+    [props.topology.devices, props.domains],
+  );
 
   // A hovered device lights its own cables and the devices at their far ends;
   // everything else steps back. Hovering nothing dims nothing.
@@ -253,6 +336,7 @@ export function TopologyView(props: { topology: Topology; height?: number }) {
     type: 'device',
     position: { x: device.x, y: device.y },
     draggable: true,
+    hidden: hiddenDevices.has(device.id),
     data: {
       label: device.label,
       role: device.role,
@@ -263,6 +347,7 @@ export function TopologyView(props: { topology: Topology; height?: number }) {
       right: device.right,
       colour: colourFor(device.group),
       dimmed: related ? !related.has(device.id) : false,
+      ...(records && overlay(records.get(device.label), tones)),
     },
   }));
 
@@ -271,6 +356,7 @@ export function TopologyView(props: { topology: Topology; height?: number }) {
     return {
       id: link.id,
       type: 'cable',
+      hidden: hiddenDevices.has(link.from) || hiddenDevices.has(link.to),
       source: link.from,
       target: link.to,
       sourceHandle: link.fromHandle,
@@ -308,6 +394,7 @@ export function TopologyView(props: { topology: Topology; height?: number }) {
         onNodeMouseLeave={() => setHovered(undefined)}
         colorMode={theme.palette.type === 'dark' ? 'dark' : 'light'}
       >
+        <FitOnChange watch={[...props.domains].sort().join(',')} />
         <Background color={theme.palette.divider} />
         <Controls showInteractive={false} />
         <MiniMap
@@ -322,9 +409,18 @@ export function TopologyView(props: { topology: Topology; height?: number }) {
   );
 }
 
-function Legend() {
+const TONE_WORDS: Record<Tone, string> = {
+  ok: 'in sync',
+  pending: 'pending',
+  warn: 'drifted',
+  error: 'failed',
+  idle: 'unknown or stale',
+};
+
+function Legend(props: { deployment: boolean }) {
   const kinds = useKindColours();
   const status = useStatusColours();
+  const tones = useToneColours();
   const swatch = (colour: string, dashed = false) => (
     <span
       style={{
@@ -348,10 +444,29 @@ function Legend() {
       <span style={{ marginRight: 16 }}>
         {swatch(status.error, true)}Not active
       </span>
+      {props.deployment &&
+        (['ok', 'pending', 'warn', 'error', 'idle'] as Tone[]).map(tone => (
+          <span key={tone} style={{ marginRight: 16 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                background: tones[tone],
+                marginRight: 6,
+              }}
+            />
+            {TONE_WORDS[tone]}
+          </span>
+        ))}
       <span>Hover a device to follow its cables</span>
     </div>
   );
 }
+
+/** How often the deployment overlay re-reads; the reconciler's loop is minutes. */
+const REFRESH_MS = 30_000;
 
 export function TopologyPage() {
   const { data, loading, error } = useInfrahubQuery<TopologyData>(
@@ -364,6 +479,29 @@ export function TopologyPage() {
     [data],
   );
 
+  const [domains, setDomains] = useState<Domain[]>([...DOMAINS]);
+  const [showDeployment, setShowDeployment] = useState(false);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!showDeployment) return undefined;
+    const timer = setInterval(() => setTick(n => n + 1), REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [showDeployment]);
+
+  // Only asked for while the overlay is on, and re-asked as it stays on.
+  const deployment = useInfrahubQuery<DeploymentData>(
+    DEPLOYMENT_QUERY,
+    {},
+    [tick],
+    !showDeployment,
+  );
+
+  const enabled = useMemo(() => new Set(domains), [domains]);
+  const visible = useMemo(
+    () => (topology ? filterTopology(topology, enabled) : undefined),
+    [topology, enabled],
+  );
+
   return (
     <Page themeId="tool">
       <Header
@@ -371,23 +509,65 @@ export function TopologyPage() {
         subtitle="Every cable, read straight from Infrahub"
       />
       <Content>
-        <ContentHeader title={topology ? summarise(topology) : 'Topology'}>
+        <ContentHeader title={visible ? summarise(visible) : 'Topology'}>
           <SupportButton>
             Drawn from the cable objects on the selected branch, so a link added
             on a branch shows up here before it is merged. Only cables Infrahub
             models are drawn: a device wired to something with no Infrahub
             object, such as the tooling bridge, shows fewer cables than the lab
-            has.
+            has. Deployment state is the reconciler&apos;s last comparison of
+            each device with the configuration Infrahub renders for it; it
+            describes the devices as they are now, whichever branch is selected.
           </SupportButton>
         </ContentHeader>
 
         {loading && <Progress />}
         {error && <ResponseErrorPanel error={error} />}
+        {showDeployment && deployment.error && (
+          <ResponseErrorPanel error={deployment.error} />
+        )}
 
         {topology && topology.devices.length > 0 && (
           <>
-            <Legend />
-            <TopologyView topology={topology} />
+            <div
+              style={{
+                display: 'flex',
+                gap: 16,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                marginTop: 8,
+              }}
+            >
+              <ToggleButtonGroup
+                size="small"
+                value={domains}
+                // Never empty: a blank canvas is not a view, it is a mistake.
+                onChange={(_event, next: Domain[]) =>
+                  next.length > 0 && setDomains(next)
+                }
+                aria-label="Show"
+              >
+                {DOMAINS.map(domain => (
+                  <ToggleButton key={domain} value={domain}>
+                    {DOMAIN_LABELS[domain]}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+              <ToggleButton
+                size="small"
+                value="deployment"
+                selected={showDeployment}
+                onChange={() => setShowDeployment(on => !on)}
+              >
+                Deployment state
+              </ToggleButton>
+            </div>
+            <Legend deployment={showDeployment} />
+            <TopologyView
+              topology={topology}
+              domains={enabled}
+              deployment={showDeployment ? deployment.data : undefined}
+            />
           </>
         )}
         {topology && topology.devices.length === 0 && (

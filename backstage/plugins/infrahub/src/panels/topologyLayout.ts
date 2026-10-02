@@ -103,6 +103,37 @@ export function tierOf(role: string | null | undefined): Tier {
 /** What a device is, for colour and for the summary. */
 export type Group = 'spine' | 'leaf' | 'firewall' | 'wan' | 'server';
 
+/**
+ * Where a device lives, for the toggles. Decided by kind and role rather than
+ * by `location`, which most devices here do not have. The firewall is the data
+ * centre's perimeter, so it belongs to the data centre.
+ */
+export type Domain = 'dc' | 'wan' | 'branch';
+
+export const DOMAINS: Domain[] = ['dc', 'wan', 'branch'];
+
+export const DOMAIN_LABELS: Record<Domain, string> = {
+  dc: 'Data centre',
+  wan: 'WAN',
+  branch: 'Branch',
+};
+
+const WAN_ROLES = new Set([
+  'isp_edge',
+  'isp_core',
+  'internet_edge',
+  'customer_edge',
+]);
+
+export function domainOf(kind: string, role: string): Domain {
+  if (role === 'branch_router') return 'branch';
+  if (kind === 'DcimDevice' && WAN_ROLES.has(role)) return 'wan';
+  // An unrecognised router is not the data centre's; showing it with the WAN is
+  // wrong less often than hiding it with the fabric.
+  if (kind === 'DcimDevice') return 'wan';
+  return 'dc';
+}
+
 export const GROUP_LABELS: Record<Group, string> = {
   spine: 'Spine',
   leaf: 'Leaf',
@@ -125,6 +156,7 @@ export type TopologyDevice = {
   kind: string;
   role: string;
   group: Group;
+  domain: Domain;
   tier: Tier;
   /** Cables on each side of the node, for handle spacing. */
   up: number;
@@ -256,6 +288,7 @@ export function buildTopology(data: TopologyData): Topology {
       kind: device.__typename,
       role,
       group: groupOf(device.__typename, role),
+      domain: domainOf(device.__typename, role),
       tier: tierOf(role),
       up: 0,
       down: 0,
@@ -426,4 +459,23 @@ export function summarise(topology: Topology): string {
   const down = topology.links.filter(l => !l.healthy).length;
   if (down) parts.push(`${down} not active`);
   return parts.join(' · ');
+}
+
+/**
+ * Only the devices in the chosen domains, and only the cables with both ends
+ * still showing. Positions are untouched: toggling a domain hides it rather than
+ * redrawing the rest, so nothing jumps while you look at it.
+ */
+export function filterTopology(
+  topology: Topology,
+  domains: Set<Domain>,
+): Topology {
+  const shown = new Set(
+    topology.devices.filter(d => domains.has(d.domain)).map(d => d.id),
+  );
+  return {
+    devices: topology.devices.filter(d => shown.has(d.id)),
+    links: topology.links.filter(l => shown.has(l.from) && shown.has(l.to)),
+    skipped: topology.skipped,
+  };
 }
