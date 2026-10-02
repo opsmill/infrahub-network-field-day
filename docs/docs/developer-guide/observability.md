@@ -151,6 +151,15 @@ Read these before trusting a number on them:
 - **`tests/unit/test_dashboard_metrics_contract.py` holds every panel to a series that exists.**
   It renders the collector's intent and fails when a panel queries a metric no collector,
   exporter or scrape job produces, or filters a `kind` that never reports it.
+- **`scripts/check_grafana_panels.py` holds every panel to data as Grafana returns it.** It
+  checks the datasource's health, then runs each visible query of each dashboard in the
+  `OTTERNET` folder through Grafana's `/api/ds/query` over the last 30 minutes, with the
+  dashboard's own variables. It fails naming every panel that returns no data or an error.
+  `verify_bootstrap.sh` runs it, and it works against any running Grafana through a
+  port-forward. Two queries are allowed to be empty, both listed in its `ALLOWED_EMPTY`: the
+  per-port breakouts on Fabric telemetry's "Errors and discards" and the firewall's
+  "Interface errors". Each is filtered with `> 0`, so a healthy lab has no series, and each
+  panel's total must still return data.
 
 Two chart settings looked unrelated to dashboards. Without each, the dashboards were wrong:
 

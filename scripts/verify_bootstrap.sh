@@ -28,6 +28,9 @@
 #     generation is asynchronous and an empty one still reports Ready.
 #   - the Vidra checks look at the resources, because `syncState: Succeeded`
 #     over an empty set is still Succeeded.
+#   - the dashboard check runs every panel's queries THROUGH Grafana, because
+#     Prometheus holding the data says nothing about Grafana being able to show
+#     it (scripts/check_grafana_panels.py).
 #
 # Usage:  scripts/verify_bootstrap.sh [run-label]
 # Env:    INFRAHUB_ADDRESS     default http://localhost:8000
@@ -403,27 +406,28 @@ curl -s -b "$J" -c "$J" -o /dev/null --max-time 20 "http://127.0.0.1:13000/login
 curl -s -b "$J" --max-time 10 http://127.0.0.1:13000/api/user/orgs \
     | python3 -c "import json,sys; print(json.load(sys.stdin)[0][\"role\"])"
 ' 2>/dev/null)
-kill "$pf" 2>/dev/null
 check "$grafana_role" "Viewer" "alice signs in to Grafana through Dex and lands as Viewer"
+
+# EVERY PANEL OF EVERY OTTERNET DASHBOARD HAS DATA, ASKED THROUGH GRAFANA. This used
+# to query Prometheus directly and passed while every panel on the lab read "No
+# data": Grafana's Prometheus plugin was not registered, so each `/api/ds/query`
+# answered `plugin.notRegistered` while Prometheus held everything. The helper runs
+# the datasource health check, then every visible query of every panel in the
+# OTTERNET folder through `/api/ds/query`, with the dashboards' own variables, and
+# names each panel that returns no data or an error. Its allowlist is the one place
+# a query may be empty, with a reason per entry.
+if uv run python scripts/check_grafana_panels.py --url http://127.0.0.1:13000; then
+    pass "every OTTERNET dashboard panel returns data through Grafana"
+else
+    fail "an OTTERNET dashboard panel returns no data or an error through Grafana (listed above)"
+fi
+kill "$pf" 2>/dev/null
 
 # ORGANISATION METRICS, counted against Infrahub itself rather than a number
 # written here: one exporter series per DcimGenericDevice in the graph.
 want_devices=$(count DcimGenericDevice)
 check "$(promql 'count(infrahub_dcimgenericdevice_info)')" "$want_devices" \
     "the organisation dashboard's device series match Infrahub's device count"
-
-# EVERY ORGANISATION PANEL HAS DATA. A dashboard that loads and shows "No data"
-# looks exactly like one whose exporter has nothing to say, so each panel's own
-# query is run, taken from the committed dashboard rather than written here.
-empty_panels=0
-while IFS= read -r expr; do
-    [ "$(promql "count(($expr))")" -ge 1 ] 2>/dev/null || { empty_panels=$((empty_panels + 1)); printf '      empty: %s\n' "$expr"; }
-done < <(python3 -c '
-import json
-for p in json.load(open("payloads/dashboards/organisation.json"))["panels"]:
-    for t in p.get("targets", []):
-        print(t["expr"])')
-check "$empty_panels" "0" "every organisation dashboard panel returns data"
 
 # DEVICE TELEMETRY, PER FAMILY, so a family that collects nothing fails by name.
 # The expected numbers are the seeded monitoring profiles' reach -- every member
