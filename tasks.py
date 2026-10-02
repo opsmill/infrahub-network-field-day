@@ -500,7 +500,7 @@ def _branch_tasks(branch: str, states: tuple[str, ...]) -> list[str]:
     return [str(e["node"]["title"]) for e in edges]
 
 
-def _branch_settled(branch: str, expected: str) -> tuple[bool, str]:
+def _branch_settled(branch: str, expected: str, require_capability: bool = True) -> tuple[bool, str]:
     """Whether `branch` is fully imported (see `decide_settled`), and what it still waits for."""
     from solution_arista_avd import demo_release as dr
 
@@ -520,10 +520,11 @@ def _branch_settled(branch: str, expected: str) -> tuple[bool, str]:
         object_count=objects,
         active_tasks=len(_branch_tasks(branch, dr.ACTIVE_TASK_STATES)),
         failed_tasks=_branch_tasks(branch, dr.FAILED_TASK_STATES),
+        require_capability=require_capability,
     )
 
 
-def _wait_until_settled(branch: str, expected: str, timeout: int) -> None:
+def _wait_until_settled(branch: str, expected: str, timeout: int, require_capability: bool = True) -> None:
     """Block until the branch is fully imported, on two polls in a row.
 
     One poll is not enough: the commit is recorded before the objects and definitions
@@ -532,7 +533,7 @@ def _wait_until_settled(branch: str, expected: str, timeout: int) -> None:
     deadline = time.monotonic() + timeout
     consecutive = 0
     while time.monotonic() < deadline:
-        settled, waiting = _branch_settled(branch, expected)
+        settled, waiting = _branch_settled(branch, expected, require_capability)
         if not settled and waiting.startswith("failed tasks"):
             raise Exit(f"The import of '{branch}' failed: {waiting}", code=1)
         consecutive = consecutive + 1 if settled else 0
@@ -696,13 +697,11 @@ def demo_release(
     print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
 
 
-def _reset_demo_main(ctx: Context, location: str, branch: str, stage: str) -> str:
-    """Put `branch`'s tree back to the baseline the staged branch was cut from, as a new commit.
+def _restore_baseline_onto_branch(ctx: Context, location: str, branch: str, stage: str) -> str:
+    """Put the baseline the staged branch was cut from onto `branch` as one commit, and push it.
 
-    Returns the new tip, or '' when nothing was merged. The baseline is the merge-base of
-    `branch` and the local `stage` branch, not today's `main`: the merge is the only thing to undo.
-    Forward only. Infrahub's clone has pulled the merge commit, so deleting and recreating the
-    branch would leave that commit in the clone and push it straight back.
+    The baseline is the merge-base of `branch` and the local `stage` branch. Returns the tip,
+    which is the branch's current one when it already holds the baseline.
     """
     import tempfile
 
@@ -712,15 +711,65 @@ def _reset_demo_main(ctx: Context, location: str, branch: str, stage: str) -> st
         with ctx.cd(clone):
             ctx.run(f"git fetch --quiet {shlex.quote(str(MAIN_DIRECTORY_PATH))} {shlex.quote(f'refs/heads/{stage}')}")
             base = ctx.run("git merge-base HEAD FETCH_HEAD", hide=True).stdout.strip()
-            if ctx.run(f"git diff --quiet HEAD {shlex.quote(base)}", warn=True).ok:
-                return ""
-            ctx.run(f"git read-tree -u --reset {shlex.quote(base)}")
-            ctx.run(
-                "git -c user.name=demo-reset -c user.email=demo-reset@example.invalid "
-                f"commit --quiet -m {shlex.quote(f'Reset {branch} to {base[:10]}')}"
-            )
-            ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
+            if not ctx.run(f"git diff --quiet HEAD {shlex.quote(base)}", warn=True).ok:
+                ctx.run(f"git read-tree -u --reset {shlex.quote(base)}")
+                ctx.run(
+                    "git -c user.name=demo-reset -c user.email=demo-reset@example.invalid "
+                    f"commit --quiet -m {shlex.quote(f'Restore the baseline {base[:10]}')}"
+                )
+                ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
             return ctx.run("git rev-parse HEAD", hide=True).stdout.strip()
+
+
+def _delete_demo_branch(ctx: Context, branch: str) -> None:
+    """Delete `branch` in Infrahub and on the remote, whichever of them still has it."""
+    if branch in (_branches() or {}):
+        ctx.run(f"infrahubctl branch delete {shlex.quote(branch)}", pty=True)
+    else:
+        print(f" - Infrahub has no '{branch}'")
+    if _remote_tip(ctx, branch):
+        with ctx.cd(MAIN_DIRECTORY_PATH):
+            ctx.run(f"git push origin --delete {shlex.quote(branch)}", pty=True, warn=True)
+
+
+def _take_capability_back_out(ctx: Context, location: str, name: str, run: int, timeout: int) -> None:
+    """Undo a merged release through Infrahub itself, with a branch whose merge restores the baseline.
+
+    Infrahub never imports a commit pushed to `demo-main` from outside: the remote `main`
+    shadows it ("Ignoring import of mismatched default branch"), and a stray commit there makes
+    Infrahub's next merge push non-fast-forward. Its own merges are the path that works, so the
+    reset is one: a branch with Sync with Git on, the baseline tree committed on it, the kind's
+    data and schema node removed on it, then merged.
+    """
+    import tempfile
+
+    from solution_arista_avd import demo_release as dr
+
+    reset = f"{dr.demo_branch(name, run)}-reset"
+    before = _repository().get("commit", "")
+    print(f" - Creating '{reset}' with Sync with Git", flush=True)
+    ctx.run(f"infrahubctl branch create {shlex.quote(reset)} --sync-with-git", pty=True)
+    _wait_for(lambda: bool(_remote_tip(ctx, reset)), f"Infrahub to publish '{reset}'", timeout)
+    tip = _restore_baseline_onto_branch(ctx, location, reset, dr.stage_branch(name))
+    _wait_until_settled(reset, tip, timeout, require_capability=False)
+    for edge in (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}", reset).get(DEMO_KIND) or {}).get(
+        "edges", []
+    ):
+        print(f" - Deleting {DEMO_KIND} {edge['node']['id']} on '{reset}'", flush=True)
+        _graphql(f'mutation {{ {DEMO_KIND}Delete(data: {{id: "{edge["node"]["id"]}"}}) {{ ok }} }}', reset)
+    with tempfile.TemporaryDirectory() as tmp:
+        absent = Path(tmp) / "absent.yml"
+        absent.write_text(dr.absent_schema(DEMO_SCHEMA_NAMESPACE, DEMO_SCHEMA_NAME), encoding="utf-8")
+        print(f" - Removing the {DEMO_KIND} schema node on '{reset}'", flush=True)
+        ctx.run(f"infrahubctl schema load {shlex.quote(str(absent))} --branch {shlex.quote(reset)}", pty=True)
+    print(f" - Merging '{reset}'", flush=True)
+    ctx.run(f"infrahubctl branch merge {shlex.quote(reset)}", pty=True)
+    _wait_for(
+        lambda: _repository().get("commit") not in {"", before} and _repository().get("sync_status") == "in-sync",
+        "Infrahub's main to take the restored baseline",
+        timeout,
+    )
+    _delete_demo_branch(ctx, reset)
 
 
 @task(
@@ -744,20 +793,16 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
 
     demo = dr.demo_branch(name, run)
     repo = _repository()
+    merged = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"))
     if repo.get("kind") == "CoreRepository":
-        new_tip = _reset_demo_main(ctx, repo["location"], dr.DEFAULT_DEMO_BRANCH, dr.stage_branch(name))
-        if new_tip:
-            print(
-                f" - Reset {dr.DEFAULT_DEMO_BRANCH} to its baseline ({new_tip[:10]}); waiting for Infrahub to import it",
-                flush=True,
-            )
-            _wait_for(lambda: _repository().get("commit") == new_tip, f"the import of {new_tip[:10]}", timeout)
+        if merged:
+            _take_capability_back_out(ctx, repo["location"], name, run, timeout)
     elif repo.get("kind") == "CoreReadOnlyRepository" and repo["ref"] != "main":
         main_tip = _remote_tip(ctx, "main")
         print(" - Pointing the repository back at main", flush=True)
         _graphql(dr.set_ref_mutation(repo["id"], "main"))
         _wait_for(lambda: _repository().get("commit") == main_tip, f"the import of {main_tip[:10]}", timeout)
-    if _graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"):
+    if merged and repo.get("kind") != "CoreRepository":
         for edge in (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}").get(DEMO_KIND) or {}).get(
             "edges", []
         ):
@@ -769,13 +814,7 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
             print(f" - Removing the {DEMO_KIND} schema node", flush=True)
             ctx.run(f"infrahubctl schema load {shlex.quote(str(absent))}", pty=True)
     _regenerate_artifacts()
-    if demo in (_branches() or {}):
-        ctx.run(f"infrahubctl branch delete {shlex.quote(demo)}", pty=True)
-    else:
-        print(f" - Infrahub has no '{demo}'")
-    if _remote_tip(ctx, demo):
-        with ctx.cd(MAIN_DIRECTORY_PATH):
-            ctx.run(f"git push origin --delete {shlex.quote(demo)}", pty=True, warn=True)
+    _delete_demo_branch(ctx, demo)
     print(f"\nNext release: invoke demo-release --name {name} --run {run + 1}")
 
 

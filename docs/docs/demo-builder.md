@@ -108,9 +108,15 @@ uv run invoke demo-release --run 2
 `demo-reset` works whether or not the merge happened. It puts the code back first, removes the
 kind's objects and schema node, regenerates the artifacts and deletes the branches.
 
-In read-write mode a merge leaves the capability on `demo-main`. Reset commits the baseline's
-tree on top of it and pushes that. Deleting `demo-main` and recreating it would not work: the
-Infrahub clone has already pulled the merge commit, and the next merge would push it back.
+In read-write mode a merge leaves the capability on `demo-main`, and the reset takes it back out
+through Infrahub, not around it. It creates a second branch with Sync with Git on, commits the
+baseline's tree on it, removes the kind's data and schema node there, and merges it. Infrahub's own
+merge then pushes the restored `demo-main`.
+
+Do not push to `demo-main` yourself. Infrahub never imports a commit pushed there from outside: the
+remote `main` shadows it (the worker logs "Ignoring import of mismatched default branch"), and a
+stray commit makes Infrahub's next merge push non-fast-forward. Deleting `demo-main` and recreating it
+would not work either, since the clone has already pulled the merge commit.
 Never reuse a branch name either, since a commit Infrahub has pulled is not rewritten.
 
 ## Measured, read-only mode
