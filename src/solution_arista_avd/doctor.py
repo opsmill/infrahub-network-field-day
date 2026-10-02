@@ -87,6 +87,10 @@ def parse_timestamp(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+# The reconciler never imports the doctor, so a change to it does not make the image stale.
+IMAGE_PATH_EXCLUDES = (":(exclude)src/solution_arista_avd/doctor.py",)
+
+
 def decide_image_staleness(image_created: datetime, newest_source_commit: datetime) -> Result:
     """The reconciler runs the IMAGE's installed copy of the package, not the bind mount."""
     name = "reconciler image is current"
@@ -140,18 +144,23 @@ def decide_reconcile_processes(host_pids: list[int], container_running: bool) ->
 
 
 _FIELD_WITH_ARGS = re.compile(r"^(\s*\w+)\((.*)\)(:.*)$")
+_IMPLEMENTS = re.compile(r"^(.*? implements )(.+?)( \{)$")
 
 
 def normalise_schema(text: str) -> list[str]:
     """The SDL as a sorted list of lines with each field's arguments sorted.
 
     Measured: two exports of the same loaded schema differ only in the ORDER of
-    attributes (so of field arguments) and of fields inside a type, depending on
-    the order the server loaded them in. The exporter is deterministic for a given
+    attributes (so of field arguments), of fields inside a type, and of the
+    interfaces in `type X implements A & B`, depending on the order the server
+    loaded them in. The exporter is deterministic for a given
     load, not across loads, so comparing bytes reports drift that is not there.
     """
     lines = []
     for raw in text.splitlines():
+        implements = _IMPLEMENTS.match(raw)
+        if implements:
+            raw = f"{implements.group(1)}{' & '.join(sorted(implements.group(2).split(' & ')))}{implements.group(3)}"  # noqa: PLW2901
         match = _FIELD_WITH_ARGS.match(raw)
         if match:
             args = ", ".join(sorted(match.group(2).split(", ")))
@@ -332,7 +341,10 @@ def probe_image_staleness(env: Environment) -> Result:
     if not created:
         msg = "could not read the image's build time"
         raise Unavailable(msg)
-    log = _run(["git", "log", "-1", "--format=%cI", "--", "pyproject.toml", "uv.lock", "src/"], cwd=env.root)
+    log = _run(
+        ["git", "log", "-1", "--format=%cI", "--", "pyproject.toml", "uv.lock", "src/", *IMAGE_PATH_EXCLUDES],
+        cwd=env.root,
+    )
     if not log.stdout.strip():
         msg = "git reports no commit touching pyproject.toml, uv.lock or src/"
         raise Unavailable(msg)

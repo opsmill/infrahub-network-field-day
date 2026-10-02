@@ -61,6 +61,18 @@ def test_schema_freshness_ignores_argument_and_field_order_only() -> None:
     assert d.decide_schema_freshness(a, changed).status is Status.WARN
 
 
+def test_schema_freshness_ignores_interface_order_but_not_membership() -> None:
+    a = "type T implements A & B & C {\n  f: Int\n}"
+    reordered = "type T implements C & A & B {\n  f: Int\n}"
+    dropped = "type T implements A & B {\n  f: Int\n}"
+    assert d.decide_schema_freshness(a, reordered).status is Status.PASS
+    assert d.decide_schema_freshness(a, dropped).status is Status.WARN
+
+
+def test_image_staleness_ignores_the_doctor_itself() -> None:
+    assert ":(exclude)src/solution_arista_avd/doctor.py" in d.IMAGE_PATH_EXCLUDES
+
+
 def test_schema_freshness() -> None:
     assert d.decide_schema_freshness("a", "a").status is Status.PASS
     stale = d.decide_schema_freshness("a", "b")
