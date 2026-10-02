@@ -84,7 +84,10 @@ check "$?" "0" "invoke bootstrap exit status"
 
 stage "infrahub data"
 check "$(count DcimGenericDevice)" "22" "devices"
-check "$(count NetworkLink)" "17" "links (server cabling plus the spine-leaf fabric)"
+# 34 = the 17 the rack generators cable (server cabling plus spine-leaf), the 13
+# objects/41_otternet_cabling.yml seeds (border leaf to firewall, and the WAN),
+# and the 4 MLAG links objects_post_topology/ loads once the racks exist (#51).
+check "$(count NetworkLink)" "34" "links (generated fabric and server cabling, seeded border/WAN, MLAG)"
 check "$(count AvdStructuredConfigFile)" "7" "structured configs on main"
 
 stage "artifacts"
