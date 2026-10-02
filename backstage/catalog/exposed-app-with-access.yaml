@@ -369,6 +369,9 @@ spec:
         parentId: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
         content: ${{ parameters.values_file_content }}
         fileName: values.yaml
+        # Attributed to the requester like the two creates, rather than to the
+        # portal's service account.
+        account: ${{ user.entity.metadata.name }}
 
     # ------------------------------------------------------------- the barrier
     - id: await_app

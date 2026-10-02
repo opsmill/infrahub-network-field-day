@@ -116,7 +116,21 @@ const SCHEMA: Record<string, any> = {
         label: 'Payload File',
       },
       { name: 'profiles', peer: 'CoreProfile', cardinality: 'many' },
+      // A Core peer, but MANDATORY -- like `ServiceServerPlacement.template`.
+      {
+        name: 'template',
+        peer: 'CoreObjectTemplate',
+        cardinality: 'one',
+        optional: false,
+      },
     ],
+  },
+  '/api/schema/CoreObjectTemplate': {
+    name: 'ObjectTemplate',
+    namespace: 'Core',
+    human_friendly_id: ['template_name__value'],
+    attributes: [],
+    relationships: [],
   },
   '/api/schema/ServiceWirelessPayloadFile': {
     name: 'WirelessPayloadFile',
@@ -514,6 +528,8 @@ describe('InfrahubEntityProvider', () => {
     // Read from the peer's own schema: nothing else knows it says `service`,
     // and guessing `app` would work for one kind and no others.
     expect(step.input.parentField).toBe('service');
+    // Attributed to the requester like the create, not to the service account.
+    expect(step.input.account).toBe('${{ user.entity.metadata.name }}');
     // The parent comes from the create step's OUTPUT, because the file's hfid
     // is derived from its parent and cannot be looked up before it exists.
     expect(step.input.parentId).toContain(
@@ -681,9 +697,67 @@ describe('InfrahubEntityProvider', () => {
     const step = (template.spec!.steps as any[]).find(s => s.id === 'create');
     expect(step.input.query).toContain('$vip: [String]!');
     expect(step.input.query).toContain('vip: { hfid: $vip }');
-    // A single-element peer is untouched.
+    // A single-element peer is untouched: still one string. `location` is a
+    // picker, so it goes by id -- see the next test.
     expect(step.input.query).toContain('$location: String!');
-    expect(step.input.query).toContain('location: { hfid: [$location] }');
+    expect(step.input.query).toContain('provider: { hfid: [$provider] }');
+  });
+
+  it('resolves a picked peer by its Infrahub id, never by its entity name', async () => {
+    // An EntityPicker yields `resource:default/k8s_leafs`, and entity names are
+    // lowercased. `parseEntityRef | pick('name')` therefore sent `k8s_leafs`
+    // for the rack `K8S_LEAFS`, and every server placement failed with
+    //
+    //   Unable to find the node k8s_leafs/LocationRack in the database.
+    const template = (await run())['Template:wireless-request'];
+    const steps = template.spec!.steps as any[];
+    const ids = steps.map(s => s.id);
+
+    const lookup = steps.find(s => s.id === 'location_entity');
+    expect(lookup).toMatchObject({
+      action: 'catalog:fetch',
+      if: '${{ parameters.location }}',
+      input: { entityRef: '${{ parameters.location }}' },
+    });
+    // Before anything that uses it.
+    expect(ids.indexOf('location_entity')).toBeLessThan(ids.indexOf('create'));
+
+    const create = steps.find(s => s.id === 'create');
+    expect(create.input.query).toContain('location: { id: $location }');
+    expect(create.input.variables.location).toBe(
+      '${{ steps.location_entity.output.entity.metadata.annotations["infrahub.opsmill.com/id"] }}',
+    );
+    expect(JSON.stringify(steps)).not.toContain('parseEntityRef');
+    // A typed identifier is not a picker and gets no lookup.
+    expect(ids).not.toContain('provider_entity');
+  });
+
+  it('links a change to the entity it changed, not to an empty name', async () => {
+    const template = (await run())['Template:wireless-request'];
+    const link = (template.spec!.output as any).links.find((l: any) =>
+      l.title.endsWith('in the catalog'),
+    );
+    // A change has no identifier parameter; the picked target's entity does.
+    expect(link.url).toContain('steps.fetch.output.entity.metadata.name');
+  });
+
+  it('offers a mandatory relationship to a Core peer', async () => {
+    // `ServiceServerPlacement.template` peers `CoreObjectTemplate`, and every
+    // `Core*` peer was dropped as bookkeeping -- so the create failed with
+    // `template is mandatory for ServiceServerPlacement at template`.
+    const template = (await run())['Template:wireless-request'];
+    const [parameters] = template.spec!.parameters as any[];
+    const create = parameters.dependencies.mode.oneOf.find(
+      (branch: any) => branch.properties.mode.enum[0] === 'create',
+    );
+
+    expect(create.properties.template).toMatchObject({ type: 'string' });
+    expect(create.required).toEqual(expect.arrayContaining(['template']));
+    // Optional bookkeeping is still left off.
+    expect(create.properties.profiles).toBeUndefined();
+
+    const step = (template.spec!.steps as any[]).find(s => s.id === 'create');
+    expect(step.input.query).toContain('template: { hfid: [$template] }');
   });
 
   it('lets the schema decide a new object\'s status', async () => {

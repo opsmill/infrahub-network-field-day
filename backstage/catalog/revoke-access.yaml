@@ -53,11 +53,18 @@ spec:
           # and an hfid no grant has. The `fetch` step resolves it, and the
           # update goes by the Infrahub id the provider annotates -- entity names
           # are lowercased, so even the name part is not reliably the hfid.
+          #
+          # `spec.type` IS THE PROVIDER'S SLUG, `app-access`, never the kind
+          # lowercased. This said `serviceappaccess`, which no entity carries, so
+          # the picker offered nothing and no grant could be revoked through the
+          # portal at all -- with an empty dropdown as the only symptom.
+          # tests/unit/test_revoke_template_contract.py derives the slug the way
+          # `slugFor` does and holds this filter to it.
           ui:field: EntityPicker
           ui:options:
             catalogFilter:
               kind: Component
-              spec.type: serviceappaccess
+              spec.type: app-access
           description: The grant to withdraw. Its rule and source are removed on merge.
         reason:
           title: Why

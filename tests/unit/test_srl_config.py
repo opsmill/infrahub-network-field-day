@@ -399,6 +399,39 @@ async def test_an_absent_router_id_key_fails_in_the_typed_model() -> None:
         await _transform().transform(fixture)
 
 
+async def test_an_l3vpn_without_a_vrf_is_refused_by_name() -> None:
+    """The portal's L3VPN form lets `vrf` be omitted; the render must say so.
+
+    It used to raise AttributeError, which Infrahub reports as "Unable to find the
+    class SrlConfig" -- an artifact failure on every WAN router naming neither the
+    service nor the field.
+    """
+    fixture = _fixture("isp-pe1")
+    for edge in fixture["ServiceL3vpn"]["edges"]:
+        if edge["node"]["tenant"]["node"]["name"]["value"] == "acme":
+            edge["node"]["vrf"] = {"node": None}
+
+    with pytest.raises(SrlConfigError, match="names no provider-edge VRF"):
+        await _transform().transform(fixture)
+
+
+async def test_a_second_live_l3vpn_for_a_tenant_is_refused_not_folded_in() -> None:
+    fixture = _fixture("isp-pe1")
+    acme = next(
+        edge for edge in fixture["ServiceL3vpn"]["edges"] if edge["node"]["tenant"]["node"]["name"]["value"] == "acme"
+    )
+    second = json.loads(json.dumps(acme))
+    second["node"]["name"] = {"value": "acme-second"}
+    fixture["ServiceL3vpn"]["edges"].append(second)
+
+    with pytest.raises(SrlConfigError, match="two live L3VPNs"):
+        await _transform().transform(fixture)
+
+    # A decommissioned second one is absent, so it is not a conflict.
+    second["node"]["status"] = {"value": "decommissioned"}
+    assert await _transform().transform(fixture) == await _render("isp-pe1")
+
+
 async def test_an_unmapped_role_raises() -> None:
     fixture = _fixture("cust-acme-ce")
     fixture["target"]["edges"][0]["node"]["role"]["value"] = "firewall"

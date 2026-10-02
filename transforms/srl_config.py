@@ -347,7 +347,24 @@ class SrlConfig(InfrahubTransform):
 
     @classmethod
     def _services(cls, result: SrlConfigQuery) -> dict[str, Any]:
-        l3vpn = {e.node.tenant.node.name.value: e.node for e in result.service_l_3_vpn.edges if cls._live(e.node)}
+        # ONE LIVE L3VPN PER TENANT, and a second one is refused rather than
+        # folded in. This was a dict comprehension, so a second L3VPN for the same
+        # tenant silently REPLACED the first in the provider edge's policy --
+        # whichever the query returned last won, and the other tenant's VRF,
+        # import policy and ports went with it. A request through the portal for
+        # another `acme` L3VPN reached exactly that.
+        l3vpn: dict[str, Any] = {}
+        for edge in result.service_l_3_vpn.edges:
+            if not cls._live(edge.node):
+                continue
+            tenant = edge.node.tenant.node.name.value
+            if tenant in l3vpn:
+                raise SrlConfigError(
+                    f"tenant {tenant!r} has two live L3VPNs ({l3vpn[tenant].name.value!r} and "
+                    f"{edge.node.name.value!r}); the provider edge carries one per tenant, so one would "
+                    "silently replace the other"
+                )
+            l3vpn[tenant] = edge.node
         cloud = {e.node.tenant.node.name.value: e.node for e in result.service_tenant_cloud.edges if cls._live(e.node)}
         # Presence is the datum. A tenant is in this set if it bought internet
         # access, and that is the only place the fact lives -- so a
@@ -462,10 +479,20 @@ class SrlConfig(InfrahubTransform):
                 continue
             if name not in services["cloud"]:
                 raise SrlConfigError(f"tenant {name!r} has a live L3VPN and no live tenant cloud to import")
+            vpn = services["l3vpn"][name]
+            # `vrf` is optional in the schema, so the portal's L3VPN form lets a
+            # request omit it. Dereferenced blind, that raised AttributeError --
+            # which Infrahub reports as "Unable to find the class SrlConfig in
+            # transforms/srl_config.py", naming neither the service nor the field.
+            if vpn.vrf is None or vpn.vrf.node is None:
+                raise SrlConfigError(
+                    f"L3VPN {vpn.name.value!r} for tenant {name!r} names no provider-edge VRF, "
+                    "so there is no network instance to put its sites in"
+                )
             tenants.append(
                 {
                     "name": name,
-                    "vrf": services["l3vpn"][name].vrf.node.name.value,
+                    "vrf": vpn.vrf.node.name.value,
                     "internet": name in services["internet"],
                     "dc": {"subnet": services["cloud"][name].prefix.node.prefix.value},
                     "sites": [

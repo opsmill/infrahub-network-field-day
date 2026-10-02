@@ -131,6 +131,15 @@ export const infrahubActionsModule = createBackendModule({
                     .string()
                     .optional()
                     .describe('Infrahub branch, defaults to main'),
+                account: z =>
+                  z
+                    .string()
+                    .optional()
+                    .describe(
+                      'The Infrahub account the write is attributed to, by ' +
+                        'name or id -- the mutation context every other step ' +
+                        'of a request already carries',
+                    ),
               },
               output: {
                 id: z => z.string().describe('The created file node'),
@@ -154,9 +163,19 @@ export const infrahubActionsModule = createBackendModule({
               // its content are created in ONE call, so there is no window in
               // which a file node exists with nothing in it.
               const body = new FormData();
+              // ATTRIBUTED LIKE EVERY OTHER WRITE OF THE REQUEST. Without the
+              // context the file was the one object on a portal branch whose
+              // `InfrahubEvent` named the service account rather than the
+              // person -- measured: the application and the grant `alice`, the
+              // values file beside them `admin`. Multipart carries the
+              // argument exactly as a JSON post does.
+              const account = ctx.input.account;
               const query = [
-                `mutation ($parent: String!, $file: Upload!) {`,
+                `mutation ($parent: String!, $file: Upload!${
+                  account ? ', $account: String!' : ''
+                }) {`,
                 `  ${ctx.input.kind}Create(`,
+                ...(account ? ['    context: { account: { id: $account } }'] : []),
                 `    data: { ${ctx.input.parentField}: { id: $parent } }`,
                 `    file: $file`,
                 `  ) {`,
@@ -169,7 +188,11 @@ export const infrahubActionsModule = createBackendModule({
                 'operations',
                 JSON.stringify({
                   query,
-                  variables: { parent: ctx.input.parentId, file: null },
+                  variables: {
+                    parent: ctx.input.parentId,
+                    file: null,
+                    ...(account ? { account } : {}),
+                  },
                 }),
               );
               body.append('map', JSON.stringify({ '0': ['variables.file'] }));
