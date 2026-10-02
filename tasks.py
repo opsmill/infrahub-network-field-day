@@ -360,6 +360,7 @@ def _load_repository(ctx: Context) -> None:
             raise Exit(
                 "INFRAHUB_REPOSITORY_MODE=readwrite needs NFD_GITHUB_TOKEN (write access to the remote).", code=1
             )
+        _check_push_access(ctx, url, token)
         _ensure_remote_branch(ctx, dr.DEFAULT_DEMO_BRANCH)
     credential = "demo-remote" if mode == "readwrite" else None
     with tempfile.TemporaryDirectory() as tmp:
@@ -380,6 +381,41 @@ def _load_repository(ctx: Context) -> None:
         )
         print(f" - Repository 'test-repository' -> {url} ({mode})")
         ctx.run(f"infrahubctl object load {shlex.quote(str(repo_file))}", pty=True)
+
+
+def _check_push_access(ctx: Context, url: str, token: str) -> None:
+    """Fail now, not after a bootstrap, if `token` cannot push to `url`.
+
+    Infrahub pushes the branches it syncs and the merges it makes, so a token that can
+    only read lets the stack come up and then fail at the first merge. A dry-run push
+    must authenticate for write, so it tells the two apart without creating anything.
+    The token reaches git through GIT_ASKPASS reading the environment, not a command line.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        askpass = Path(tmp) / "askpass"
+        askpass.write_text('#!/bin/sh\necho "$NFD_GITHUB_TOKEN"\n', encoding="utf-8")
+        askpass.chmod(0o700)
+        user = os.environ.get("INFRAHUB_REPOSITORY_USER", "x-access-token")
+        with ctx.cd(MAIN_DIRECTORY_PATH):
+            result = ctx.run(
+                f"git -c credential.helper= -c credential.username={shlex.quote(user)} "
+                f"push --dry-run {shlex.quote(url)} HEAD:refs/heads/demo-push-check",
+                env={"GIT_ASKPASS": str(askpass), "GIT_TERMINAL_PROMPT": "0", "NFD_GITHUB_TOKEN": token},
+                hide=True,
+                warn=True,
+            )
+    if result is None or not result.ok:
+        # A failed invoke Result is falsy, so test for None, not truthiness, to keep its stderr.
+        detail = (result.stderr if result is not None else "").strip().splitlines()
+        raise Exit(
+            "NFD_GITHUB_TOKEN cannot push to the remote, and a read-write repository needs it to.\n"
+            f"  git said: {detail[0] if detail else 'no output'}\n"
+            "  A fine-grained token needs 'Contents: Read and write' on this repository, and the "
+            "organisation may need to approve it. The username does not matter.",
+            code=1,
+        )
 
 
 def _ensure_remote_branch(ctx: Context, branch: str) -> None:
@@ -471,6 +507,45 @@ def _regenerate_artifacts() -> None:
         )
         if response.status_code >= 400:
             print(f"   {name}: HTTP {response.status_code}", flush=True)
+
+
+@task(help={"user": "Username to store (default INFRAHUB_REPOSITORY_USER, else x-access-token)"})
+def demo_credential(ctx: Context, user: str = "") -> None:
+    """Replace the stored `demo-remote` credential with the current NFD_GITHUB_TOKEN, in place.
+
+    For a running read-write stack whose token turned out to be unable to push, or has
+    expired: the repository keeps its link to the credential, so nothing is re-registered.
+    """
+    token = os.environ.get("NFD_GITHUB_TOKEN", "")
+    if not token:
+        raise Exit("NFD_GITHUB_TOKEN is not set. Run `source ~/.zshrc` first.", code=1)
+    repo = _repository()
+    if repo.get("kind") != "CoreRepository":
+        raise Exit("The registered repository is not read-write; there is no push credential to replace.", code=1)
+    _check_push_access(ctx, repo["location"], token)
+    edges = (
+        _graphql('{ CorePasswordCredential(name__value: "demo-remote") { edges { node { id } } } }').get(
+            "CorePasswordCredential"
+        )
+        or {}
+    ).get("edges") or []
+    if not edges:
+        raise Exit("No 'demo-remote' credential is registered.", code=1)
+    username = user or os.environ.get("INFRAHUB_REPOSITORY_USER", "x-access-token")
+    mutation = (
+        "mutation($id: String!, $user: String!, $secret: String!) { CorePasswordCredentialUpdate(data: "
+        "{id: $id, username: {value: $user}, password: {value: $secret}}) { ok } }"
+    )
+    response = httpx.post(
+        f"{INFRAHUB_ADDRESS}/graphql",
+        json={"query": mutation, "variables": {"id": edges[0]["node"]["id"], "user": username, "secret": token}},
+        headers={"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")},
+        timeout=30,
+    )
+    ok = ((response.json().get("data") or {}).get("CorePasswordCredentialUpdate") or {}).get("ok")
+    if not ok:
+        raise Exit("Infrahub refused to update the credential.", code=1)
+    print("The demo-remote credential now holds the current token.")
 
 
 @task(

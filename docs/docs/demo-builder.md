@@ -53,8 +53,15 @@ export INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='["demo/.*"]'
 uv run invoke bootstrap --fresh
 ```
 
-Bootstrap creates `demo-main` on the remote at the tip of `main` if it is missing. The token
-reaches Infrahub through a temporary file and is not kept in the repository.
+Bootstrap checks first that the token can push (a dry-run push, which must authenticate for
+write) and stops with git's message if it cannot. A fine-grained token needs **Contents: Read and
+write** on the repository, and the organisation may need to approve it. The username does not
+matter: GitHub identifies the owner from the token. The API's `permissions` field shows your own
+role on the repository, not what the token may do, so it cannot be used to check.
+
+It then creates `demo-main` on the remote at the tip of `main` if it is missing. The token
+reaches Infrahub through a temporary file and is not kept in the repository. To replace it on a
+running stack, for example after the token expired, run `uv run invoke demo-credential`.
 
 Turn on branch protection for `main` on the remote. Infrahub only pushes `demo-main`, but a
 token with write access could push anywhere, and protection makes that a guarantee.
