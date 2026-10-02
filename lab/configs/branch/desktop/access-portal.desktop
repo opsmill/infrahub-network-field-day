@@ -1,9 +1,0 @@
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Request application access
-Comment=Self-service access to datacentre applications
-Exec=firefox http://10.112.240.33/
-Icon=firefox
-Terminal=false
-Categories=Network;

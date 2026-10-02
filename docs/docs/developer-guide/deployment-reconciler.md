@@ -29,15 +29,45 @@ introduced by hand. Read [Blast radius](#blast-radius) before enabling it.
 sweep leftovers → read intent → per device: compare → push if it differs → record → sweep orphans
 ```
 
-Every 600 seconds by default, matching Vidra's `requeueResourcesAfter` so both reconcilers in
-the environment drift at the same rate and you learn one number.
+At most every 600 seconds by default, matching Vidra's `requeueResourcesAfter` so both
+reconcilers in the environment drift at the same rate and you learn one number.
 
 ```bash
 uv run invoke reconcile --converge                  # cycle until every device is confirmed
 uv run invoke reconcile --once                      # one cycle, then stop
 uv run invoke reconcile --dry-run --branch my-work  # report, change nothing
 uv run invoke reconcile                             # the loop
+uv run invoke reconcile --now                       # ask the running loop for a cycle now
 ```
+
+### When the next cycle starts
+
+The interval is the **maximum** between cycles, not a fixed sleep. Without that, a merge waited
+out the whole interval before any device changed, and a second interval before the push was
+confirmed. `src/solution_arista_avd/deployment/wake.py` decides when the next cycle starts:
+
+- **Intent moved.** Every `OTTERNET_RECONCILE_POLL` seconds (default 10) the loop runs the
+  cycle's own discovery query and compares the configuration artifacts' checksums with the
+  ones the last cycle read. It reaches no device. Once a moved set has been seen unchanged on
+  two consecutive polls, a cycle starts, comparing the fabric and **forcing** the devices whose
+  intent moved, the firewall included.
+- **A push needs confirming.** After a cycle that pushed, the next comes after 60 seconds, the
+  interval's floor, and compares the pushed devices. `last_confirmed_at` still moves only on a
+  comparison that finds no difference. A device gets this once per push; one that is pushed
+  again by the confirming cycle waits for the interval.
+- **Someone asked.** `invoke reconcile --now` touches a trigger file inside the container
+  (`OTTERNET_RECONCILE_TRIGGER`, default `/tmp/otternet-reconcile-now`) through `docker compose
+  exec`. The loop checks it every second and answers with a cycle over every device.
+- **The interval elapsed.** Only these cycles count towards the firewall's one-in-N cadence,
+  so waking early for a leaf never takes the firewall's exclusive lock on its own account.
+
+Two rules keep the early wake from pushing something half-rendered. A merge re-renders the
+artifacts one after another, so any further movement resets the two-poll count. And the wake
+fires only on movement **away from** what the last cycle read: two polls agreeing on the old
+checksums, which is how `_wait_for_artifacts` was once fooled, is "nothing happened", and the
+interval still applies. A render still moving when the interval runs out holds the cycle for up
+to five minutes more. An empty artifact is refused where it always was, in
+`compare.read_intent`.
 
 Or as a service, which is deliberately behind a compose profile so `docker compose up` does not
 start it:
@@ -255,7 +285,9 @@ Three things bound that, and one thing does not:
 
 - `suspend` exempts a single device without stopping the service.
 - The interval has a hard floor of 60 seconds; the service **refuses to start** below it rather
-  than clamping.
+  than clamping. The early wake does not get around it: a cycle starts early only when intent
+  moved, once after a push, or on request, and the checksum poll (floor 5 seconds) reaches
+  Infrahub only, never a device.
 - `--dry-run` reports differences and changes nothing, on a device or in Infrahub.
 - **Least privilege does not bound it. None applies here.** The service authenticates as the
   same lab admin `invoke provision` uses.

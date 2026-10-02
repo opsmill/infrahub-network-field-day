@@ -59,11 +59,11 @@ RUN useradd -m -u ${DESKTOP_UID} -s /bin/bash ${DESKTOP_USER}
 
 COPY firefox-policies.json /etc/firefox/policies/policies.json
 COPY xfce-desktop.xml /home/${DESKTOP_USER}/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
-COPY access-portal.desktop /home/${DESKTOP_USER}/Desktop/access-portal.desktop
+COPY service-portal.desktop /home/${DESKTOP_USER}/Desktop/service-portal.desktop
 COPY start-desktop.sh /opt/start-desktop.sh
 COPY session.sh /opt/session.sh
 
-RUN chmod +x /opt/start-desktop.sh /opt/session.sh /home/${DESKTOP_USER}/Desktop/access-portal.desktop \
+RUN chmod +x /opt/start-desktop.sh /opt/session.sh /home/${DESKTOP_USER}/Desktop/service-portal.desktop \
     && chown -R ${DESKTOP_USER}:${DESKTOP_USER} /home/${DESKTOP_USER}
 
 ENV DESKTOP_USER=${DESKTOP_USER}

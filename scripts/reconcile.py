@@ -7,6 +7,7 @@ matching it. Until now that gap was a human typing `uv run invoke provision`.
     uv run python scripts/reconcile.py --once              # one cycle, then stop
     uv run python scripts/reconcile.py --dry-run --branch X  # report, change nothing
     uv run python scripts/reconcile.py                     # the loop
+    uv run python scripts/reconcile.py --now               # ask a running loop for a cycle now
 
 Normally invoked as `uv run invoke reconcile`.
 
@@ -14,6 +15,13 @@ Normally invoked as `uv run invoke reconcile`.
 introduced by hand. Two controls bound that and both are deliberate: a device
 whose `DeploymentState.suspend` is set is skipped entirely, and the interval has
 a hard floor the service refuses to start below.
+
+The interval is the loop's MAXIMUM. Between cycles it polls the configuration
+artifacts' checksums every `OTTERNET_RECONCILE_POLL` seconds (default 10) and
+starts as soon as a moved set holds still; `--now` asks it for a cycle over
+every device, firewall included, within a second. `--now` only touches the
+trigger file the loop watches, so it must run where the loop runs -- `invoke
+reconcile --now` does that through `docker compose exec`.
 """
 
 from __future__ import annotations
@@ -26,6 +34,7 @@ import sys
 
 from infrahub_sdk import Config, InfrahubClient
 
+from solution_arista_avd.deployment import wake
 from solution_arista_avd.deployment.devices import INFRAHUB_ADDRESS, INFRAHUB_API_TOKEN
 from solution_arista_avd.deployment.reconcile import (
     DEFAULT_INTERVAL,
@@ -34,6 +43,7 @@ from solution_arista_avd.deployment.reconcile import (
     run_cycle,
     run_forever,
     validate_interval,
+    validate_poll,
 )
 
 
@@ -70,7 +80,7 @@ async def _run(args: argparse.Namespace) -> int:
         print(f"Cycle complete: {report.summary()}")
         return 1 if report.failed else 0
 
-    await run_forever(client, args.interval)
+    await run_forever(client, args.interval, poll_seconds=args.poll)
     return 0
 
 
@@ -82,15 +92,31 @@ def main() -> int:
         action="store_true",
         help="Cycle until every device is confirmed, then stop. Used to bootstrap a cold fabric.",
     )
+    parser.add_argument(
+        "--now",
+        action="store_true",
+        help="Ask the loop running on this machine (or in this container) for an immediate cycle",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Report differences, change nothing")
     parser.add_argument("--branch", default="", help="Compare against this branch (dry run only)")
     parser.add_argument(
         "--interval",
         type=int,
         default=int(os.getenv("OTTERNET_RECONCILE_INTERVAL", str(DEFAULT_INTERVAL))),
-        help=f"Seconds between cycles (default {DEFAULT_INTERVAL})",
+        help=f"Maximum seconds between cycles (default {DEFAULT_INTERVAL})",
+    )
+    parser.add_argument(
+        "--poll",
+        type=int,
+        default=wake.POLL_SECONDS,
+        help=f"Seconds between artifact checksum polls (default {wake.POLL_SECONDS})",
     )
     args = parser.parse_args()
+
+    if args.now:
+        wake.FileTrigger().request()
+        print(f"Requested an immediate cycle ({wake.TRIGGER_PATH}); the loop picks it up within a second.")
+        return 0
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -104,6 +130,7 @@ def main() -> int:
 
     try:
         validate_interval(args.interval)
+        validate_poll(args.poll)
     except ConfigurationError as error:
         print(str(error), file=sys.stderr)
         return 2

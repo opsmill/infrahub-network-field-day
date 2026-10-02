@@ -161,6 +161,15 @@ Read these before trusting a number on them:
   "Interface errors". Each is filtered with `> 0`, so a healthy lab has no series, and each
   panel's total must still return data.
 
+**The chart's own dashboards are off** (`grafana.defaultDashboardsEnabled: false`). The
+kube-prometheus-stack chart ships 21 of them into Grafana's `General` folder, beside the six
+above. They were turned off rather than moved to a `Platform` folder, for four reasons. No
+OTTERNET dashboard links to one, and `test_no_otternet_dashboard_links_outside_the_folder`
+keeps it that way. No runbook step opens one. Several cannot show anything here: the USE Method
+dashboards read a node-exporter job that is never scraped, and the API server latency panels
+read histogram buckets dropped at scrape time. And Kubernetes nodes replaces the node-level
+views. Explore still reaches every series.
+
 Two chart settings looked unrelated to dashboards. Without each, the dashboards were wrong:
 
 - **`grafana.ini` `plugins.preinstall_disabled`.** Grafana 13 updates its bundled datasource

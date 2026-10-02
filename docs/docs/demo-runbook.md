@@ -9,9 +9,21 @@ This is the script for showing the lab to an audience. It assumes a finished
 root unless it says otherwise.
 
 The order is not preference. It follows from the measured timings: a merge
-reaches the **cluster** in under a minute and a **device** on the reconciler's
-next cycle. Showing the cluster first fills the gap the fabric would otherwise
-leave you standing in.
+reaches the **cluster** in under a minute and a **device** once the reconciler
+sees the merged artifacts hold still. Showing the cluster first, then the
+**Deployment state** dashboard, fills the gap the fabric would otherwise leave
+you standing in.
+
+:::note Timings marked "expected after the early-wake change"
+The reconciler used to sleep its whole interval between cycles, so a merge
+waited up to two minutes for a push and two more for confirmation. It now polls
+the artifacts' checksums every 10 seconds, starts a cycle once the moved ones
+hold still for two polls, and confirms a push 60 seconds later rather than an
+interval later. Numbers marked *expected* below are derived from the measured
+cycle lengths (about 11 s for a cycle that pushes nothing, about 25 s for one
+that pushes the firewall and a leaf) and have not yet been timed end to end on
+this lab. Replace them when they have been.
+:::
 
 | Act | What the audience sees | Changes state |
 | --- | --- | --- |
@@ -87,6 +99,18 @@ OTTERNET_RECONCILE_FIREWALL_EVERY=1
 ```
 
 and a recent line ending `compared=14 differed=0 pushed=0 failed=0 suspended=0 not-due=0`.
+The start-up line should read `interval=120s (the maximum) poll=10s`; one
+without `poll=` is an image built before the early-wake change, which waits the
+whole interval after every merge. `uv run invoke build`, then recreate the
+container.
+
+The interval is now a maximum. To start a cycle over every device, firewall
+included, without waiting for anything, for example after editing a device by
+hand to show drift being put back:
+
+```bash
+uv run invoke reconcile --now
+```
 
 **Without the loop, a merge reaches no device**, and the deployment view still
 shows the green it recorded during the build. That reading is identical whether
@@ -164,6 +188,11 @@ docker exec -i clab-otternet-fw1 sshpass -p 'admin@123' ssh -o StrictHostKeyChec
 | The branch desktop, through Guacamole | `http://<host>:8080/` (over Tailscale from a remote laptop) | `branch` / `branch` |
 | Infrahub, as the operator | `http://<host>:8000/` | the local `admin` account |
 | A terminal on the host | | |
+| Grafana, as the operator | `make -C lab grafana-forward`, then `http://localhost:13000/` | `admin`, password `GRAFANA_ADMIN_PASSWORD` in `.env` |
+
+The operator's Grafana is for act one, before the branch can reach Grafana at
+all: it crosses no firewall, so showing it proves nothing about a grant. Open
+**OTTERNET / Deployment state** there before the first merge.
 
 The portal (`https://10.90.0.11:32001`) and Dex are reachable **only from the
 branch side**, so open the portal inside the branch desktop. Its Firefox starts
@@ -242,14 +271,34 @@ kubectl get fabricapp otter-shop                 # SYNCED True, READY True
 kubectl -n otter-shop get svc                    # EXTERNAL-IP is the VIP, inside the allocated block
 ```
 
-**4. Then the devices.** On the next reconcile cycle, two minutes at demo cadence,
-the reconciler pushes two devices, `fw1` and the border leaf, and confirms them
-on the cycle after:
+**4. Then the devices.** Once the merged artifacts have re-rendered and held
+still for two polls, the reconciler starts a cycle without waiting out its
+interval, pushes two devices, `fw1` and the border leaf, and confirms them about
+a minute later. Expected after the early-wake change: the push lands 30 to
+90 seconds after the merge, and confirmation about a minute after that. If
+nothing has moved after two minutes, `uv run invoke reconcile --now`.
 
 ```bash
 docker logs -f infrahub-deployment-reconciler-1 2>&1 | grep --line-buffered cycle
+# ... starting cycle N (artifacts, intent moved on fw1, leaf-otternet-pod1-3-1)
 # ... compared=14 differed=2 pushed=2 ...
+# ... starting cycle N (confirmation)
+# ... compared=14 differed=0 pushed=0 ...
 ```
+
+Fill the wait with **OTTERNET / Deployment state** in the operator's Grafana.
+It draws the `DeploymentState` records the reconciler writes: **Deployment state
+per device** lists the fourteen devices and their status, and **Not in sync**
+counts the ones that are not `in_sync`. Between the push and the confirming
+comparison the two pushed devices read `pending`, and they return to `in_sync`
+only when a later comparison finds no difference. That is the point to make:
+green means the device *said* it matches, never that something was sent to it.
+
+The dashboard lags the log. The exporter reads Infrahub once a minute and
+Prometheus scrapes it once a minute, so a status reaches the panel up to two
+minutes late. The `pending` window is now about a minute, so the panel can skip
+it and go straight to green. Narrate from the log and use the dashboard to show
+the end state.
 
 Show the rule and the advertisement landing:
 
@@ -332,12 +381,12 @@ the files the pipeline wrote, in about fifteen seconds.
 **4. Merge, and sign in.** The merge itself takes about 15 seconds. Vidra
 delivers Grafana's pod policy with `10.70.0.0/24` 40 to 70 seconds later, but
 the page loads only once the firewall permits it too. The reconciler pushes the
-border leaf and `fw1` on its next cycle, so that is 1 to 2.2 minutes from the
-merge at demo cadence, depending on where in the 120-second cycle the merge
-lands; measured twice, Grafana answered the branch desktop 68 seconds after one
-merge, and the devices took 130 seconds after the other. Then reload the bookmark. Grafana sends the browser straight to the
-same Dex sign-in page the portal uses; its own `/login` is a redirect, not a
-page. `alice` signs in
+border leaf and `fw1` as soon as the merged artifacts hold still: expected after
+the early-wake change, 30 to 90 seconds from the merge (measured before it, when
+the loop slept its whole 120-second interval: 55 to 130 seconds). Watch for
+`pushed=2` in the reconciler log rather than the clock. Then reload the bookmark.
+Grafana sends the browser straight to the same Dex sign-in page the portal uses;
+its own `/login` is a redirect, not a page. `alice` signs in
 and lands on the **Organisation** dashboard as a **Viewer**: the sign-in path
 can never make anyone an administrator.
 
@@ -353,6 +402,16 @@ can never make anyone an administrator.
 - **OTTERNET / WAN routing**: the SR Linux routers, also over gNMI. They answer
   the same OpenConfig paths as the switches, so their series carry the same names
   and labels.
+- **OTTERNET / Perimeter firewall**: `fw1` over SNMP, its zone handoffs named
+  by their modelled descriptions. **Zone handoffs down** should read 0;
+  **Flow sessions** and **Throughput per handoff** are the traffic the rule the
+  grant created now lets through, alice's browser session among it. The
+  firewall the proposed change configured is the firewall this dashboard reads.
+- **OTTERNET / Deployment state**: every device's `DeploymentState`. The two
+  devices this grant pushed are `in_sync` again, which means the confirming
+  comparison found no difference, not merely that a push was sent. If a step
+  above leaves you waiting on the reconciler, open this one first; it is the
+  dashboard about the wait.
 
 **6. Monitoring is intent too.** In Infrahub, on a new branch, open
 **Monitoring → Profiles → `fabric-core`** and remove the measurement
@@ -399,8 +458,10 @@ Merge it. **The page goes before the devices change, and that is worth saying.**
 Vidra delivers Grafana's pod policy without the branch LAN 65 to 80 seconds
 after the merge, and the branch desktop loses Grafana then, 75 to 90 seconds in,
 because the pod is the gate that closes first. The firewall rule and the border
-leaf's line follow on the next reconcile cycle, 2.5 to 3 minutes from the merge.
-Anyone already signed in to Grafana loses the page with the pod policy.
+leaf's line follow once the merged artifacts hold still: expected after the
+early-wake change, 30 to 90 seconds from the merge (measured before it: 2.5 to
+3 minutes). Anyone already signed in to Grafana loses the page with the pod
+policy.
 
 **The grant stays on `main`, `decommissioned`.** That is the record of what was
 granted and withdrawn, and it configures nothing. The Revoke picker still offers
@@ -499,7 +560,7 @@ the MCP server does not block it, so `mcp-agent` merged its own proposed change
 when tested. Say instead that every change the agent makes lands on a branch as
 a proposed change, and that merging is where the human decides.
 
-## Timings, measured
+## Timings
 
 | Step | Wall clock |
 | --- | --- |
@@ -511,13 +572,14 @@ a proposed change, and that merging is where the human decides.
 | Act four, break to red check / `--revert` | 35 to 45 s / about 4 s |
 | `CoreProposedChangeMerge`, a grant or a revocation | 15 to 17 s |
 | Merge to the resource existing in Kubernetes | about a minute (Grafana's pod policy: 41 to 78 s) |
-| Grafana grant, merge to the border leaf and `fw1` carrying it | 1 to 2.2 minutes, the next reconcile cycle |
-| Grafana grant, merge to Grafana answering the branch | the later of those two: 68 s measured |
-| Grafana grant, merge to the reconciler confirming both devices | 3.3 to 4.4 minutes, the cycle after |
+| Grafana grant, merge to the border leaf and `fw1` carrying it | 30 to 90 s expected after the early-wake change (measured before it: 55 to 130 s) |
+| Grafana grant, merge to Grafana answering the branch | the later of the pod policy and the devices: 68 s measured before the early-wake change |
+| Grafana grant, merge to the reconciler confirming both devices | about 70 s after the push, expected after the early-wake change (measured before it: 3.3 to 4.4 minutes from the merge) |
 | Revoke template, start to proposed change | about 60 s |
 | Revocation, merge to Grafana leaving the branch | 75 to 90 s, when Vidra closes the pod policy |
-| Revocation, merge to the rule and the line leaving the devices | 2.5 to 3 minutes, the next reconcile cycle |
-| Revocation, merge to the reconciler confirming both devices | about 5 minutes |
+| Revocation, merge to the rule and the line leaving the devices | 30 to 90 s expected after the early-wake change (measured before it: 2.5 to 3 minutes) |
+| Revocation, merge to the reconciler confirming both devices | about 70 s after the push, expected after the early-wake change (measured before it: about 5 minutes) |
+| `uv run invoke reconcile --now` to the cycle starting | under a second; the cycle itself about 11 s, or about 25 s when it pushes |
 
 Measured on this lab: a granted VIP answered `HTTP 200` from the branch desktop,
 the seeded application's VIP and an unpermitted port on the granted one were
@@ -568,4 +630,6 @@ use live.
   checks for one.
 - **The merge reached no device.** Check the reconciler is running and look at
   `docker logs infrahub-deployment-reconciler-1`; a device the operator suspended
-  shows as `suspended=1` and is left alone by design.
+  shows as `suspended=1` and is left alone by design. A loop that is running
+  but has not started a cycle since the merge is still waiting for the
+  artifacts to hold still; `uv run invoke reconcile --now` starts one at once.

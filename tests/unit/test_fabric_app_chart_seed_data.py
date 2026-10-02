@@ -316,6 +316,33 @@ def test_dashboards_are_folded_into_the_metrics_payload_deterministically() -> N
     assert module.assemble_payload("otternet-demo", demo) == demo.read_bytes()
 
 
+def test_the_stock_dashboards_are_off() -> None:
+    """Grafana shows the OTTERNET folder and nothing beside it.
+
+    kube-prometheus-stack ships 21 dashboards into "General" by default, next to
+    the six this lab is about, and several of them can only read "No data" here.
+    """
+    values = yaml.safe_load((PAYLOAD_DIR / "otternet-metrics-values.yaml").read_text(encoding="utf-8"))
+    assert values["grafana"]["defaultDashboardsEnabled"] is False
+
+
+def test_no_otternet_dashboard_links_outside_the_folder() -> None:
+    """Turning the stock dashboards off is only safe while nothing links to one.
+
+    Every `/d/<uid>` an OTTERNET dashboard names must be a committed OTTERNET
+    dashboard, so a link to a stock dashboard -- which would now be a 404 on
+    stage -- fails here instead.
+    """
+    import json
+    import re
+
+    boards = sorted((PAYLOAD_DIR / "dashboards").glob("*.json"))
+    committed = {json.loads(b.read_text(encoding="utf-8"))["uid"] for b in boards}
+    for board in boards:
+        linked = set(re.findall(r"/d/([A-Za-z0-9_-]+)", board.read_text(encoding="utf-8")))
+        assert linked <= committed, f"{board.name} links to {sorted(linked - committed)}"
+
+
 def test_the_observability_apps_render_no_policy_but_grafanas_gate() -> None:
     """With default deny off, every `allow-*` flag must be off too.
 

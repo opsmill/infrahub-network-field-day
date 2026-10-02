@@ -905,9 +905,16 @@ def reconcile(
     dry_run: bool = False,
     branch: str = "",
     interval: int = 0,
+    now: bool = False,
 ) -> None:
     """
     Reconcile the running lab against Infrahub, continuously.
+
+    `--now` starts nothing itself: it asks the RUNNING loop, in the
+    `deployment-reconciler` container, for a cycle over every device within a
+    second. The loop already wakes early when an artifact's checksum moves and
+    holds still; this is for when you do not want to wait for that, or for a
+    device someone changed by hand.
 
     The difference from `invoke provision` is who decides when. `provision`
     pushes because you asked; this compares every device against its rendered
@@ -922,6 +929,16 @@ def reconcile(
     **It pushes without asking.** Set `suspend` on a device's `DeploymentState`
     to take that one device out of the loop without stopping the service.
     """
+    if now:
+        # The trigger file lives inside the container, so the request is made
+        # there; a container that is not running fails here, loudly, rather
+        # than leaving a file no loop will ever read.
+        ctx.run(
+            f"{compose_cmd()} --profile reconcile exec -T deployment-reconciler python scripts/reconcile.py --now",
+            pty=True,
+        )
+        return
+
     flags = []
     if once:
         flags.append("--once")
