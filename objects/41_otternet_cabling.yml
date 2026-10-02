@@ -1,0 +1,144 @@
+---
+# ============================================================================
+# OTTERNET -- the cables objects/28 does not record, so the topology view
+# shows the perimeter and the WAN as well as the fabric.
+#
+# objects/28 records the spine-leaf and workload links. These are the rest of
+# lab/otternet.clab.yml that Infrahub can express: the border leaf's six
+# handoffs to the firewall, and the WAN (provider edge, customer edges, internet
+# and branch routers). Both ends of every one are interfaces this directory
+# already declares, which is what makes them safe to load here -- a link to an
+# interface that does not exist yet fails the whole load.
+#
+# NOT HERE: the MLAG peer links between leaf pairs. Their ports are created by
+# the rack generator, after this directory loads, so they are in
+# objects_post_topology/ and loaded by `invoke avd --topology`.
+# Also not here: fw1 ge-0/0/6 and tool-node1 (the tooling bridge, not a device
+# in the model), and the hosts behind the customer, internet and branch routers
+# (containers with no Infrahub object).
+#
+# A link is created bare and the INTERFACES point at it, because a link's
+# `connected_endpoints` takes one interface kind per block and the firewall's
+# ports are not the switches' kind.
+# ============================================================================
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: NetworkLink
+  data:
+    - name: otternet-leaf-otternet-pod1-3-1-Ethernet10--fw1-ge-0_0_0
+      medium: copper
+    - name: otternet-leaf-otternet-pod1-3-1-Ethernet11--fw1-ge-0_0_1
+      medium: copper
+    - name: otternet-leaf-otternet-pod1-3-1-Ethernet14--fw1-ge-0_0_2
+      medium: copper
+    - name: otternet-leaf-otternet-pod1-3-1-Ethernet15--fw1-ge-0_0_3
+      medium: copper
+    - name: otternet-leaf-otternet-pod1-3-1-Ethernet16--fw1-ge-0_0_4
+      medium: copper
+    - name: otternet-leaf-otternet-pod1-3-1-Ethernet17--fw1-ge-0_0_5
+      medium: copper
+    - name: otternet-isp-pe1-ethernet-1_1--isp-pe2-ethernet-1_1
+      medium: copper
+    - name: otternet-isp-pe2-ethernet-1_2--leaf-otternet-pod1-3-1-Ethernet12
+      medium: copper
+    - name: otternet-cust-acme-ce-ethernet-1_1--isp-pe1-ethernet-1_2
+      medium: copper
+    - name: otternet-cust-globex-ce-ethernet-1_1--isp-pe1-ethernet-1_3
+      medium: copper
+    - name: otternet-cust-acme-dr-ce-eth1--isp-pe1-ethernet-1_4
+      medium: copper
+    - name: otternet-internet-rtr-ethernet-1_1--isp-pe2-ethernet-1_3
+      medium: copper
+    - name: otternet-branch-rtr-ethernet-1_1--leaf-otternet-pod1-3-1-Ethernet13
+      medium: copper
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: InterfacePhysical
+  data:
+    - name: Ethernet10
+      device: leaf-otternet-pod1-3-1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet10--fw1-ge-0_0_0
+    - name: Ethernet11
+      device: leaf-otternet-pod1-3-1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet11--fw1-ge-0_0_1
+    - name: Ethernet14
+      device: leaf-otternet-pod1-3-1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet14--fw1-ge-0_0_2
+    - name: Ethernet15
+      device: leaf-otternet-pod1-3-1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet15--fw1-ge-0_0_3
+    - name: Ethernet16
+      device: leaf-otternet-pod1-3-1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet16--fw1-ge-0_0_4
+    - name: Ethernet17
+      device: leaf-otternet-pod1-3-1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet17--fw1-ge-0_0_5
+    - name: ethernet-1/1
+      device: isp-pe1
+      connector: otternet-isp-pe1-ethernet-1_1--isp-pe2-ethernet-1_1
+    - name: ethernet-1/1
+      device: isp-pe2
+      connector: otternet-isp-pe1-ethernet-1_1--isp-pe2-ethernet-1_1
+    - name: ethernet-1/2
+      device: isp-pe2
+      connector: otternet-isp-pe2-ethernet-1_2--leaf-otternet-pod1-3-1-Ethernet12
+    - name: Ethernet12
+      device: leaf-otternet-pod1-3-1
+      connector: otternet-isp-pe2-ethernet-1_2--leaf-otternet-pod1-3-1-Ethernet12
+    - name: ethernet-1/1
+      device: cust-acme-ce
+      connector: otternet-cust-acme-ce-ethernet-1_1--isp-pe1-ethernet-1_2
+    - name: ethernet-1/2
+      device: isp-pe1
+      connector: otternet-cust-acme-ce-ethernet-1_1--isp-pe1-ethernet-1_2
+    - name: ethernet-1/1
+      device: cust-globex-ce
+      connector: otternet-cust-globex-ce-ethernet-1_1--isp-pe1-ethernet-1_3
+    - name: ethernet-1/3
+      device: isp-pe1
+      connector: otternet-cust-globex-ce-ethernet-1_1--isp-pe1-ethernet-1_3
+    - name: eth1
+      device: cust-acme-dr-ce
+      connector: otternet-cust-acme-dr-ce-eth1--isp-pe1-ethernet-1_4
+    - name: ethernet-1/4
+      device: isp-pe1
+      connector: otternet-cust-acme-dr-ce-eth1--isp-pe1-ethernet-1_4
+    - name: ethernet-1/1
+      device: internet-rtr
+      connector: otternet-internet-rtr-ethernet-1_1--isp-pe2-ethernet-1_3
+    - name: ethernet-1/3
+      device: isp-pe2
+      connector: otternet-internet-rtr-ethernet-1_1--isp-pe2-ethernet-1_3
+    - name: ethernet-1/1
+      device: branch-rtr
+      connector: otternet-branch-rtr-ethernet-1_1--leaf-otternet-pod1-3-1-Ethernet13
+    - name: Ethernet13
+      device: leaf-otternet-pod1-3-1
+      connector: otternet-branch-rtr-ethernet-1_1--leaf-otternet-pod1-3-1-Ethernet13
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: SecurityFirewallInterface
+  data:
+    - name: ge-0/0/0
+      device: fw1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet10--fw1-ge-0_0_0
+    - name: ge-0/0/1
+      device: fw1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet11--fw1-ge-0_0_1
+    - name: ge-0/0/2
+      device: fw1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet14--fw1-ge-0_0_2
+    - name: ge-0/0/3
+      device: fw1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet15--fw1-ge-0_0_3
+    - name: ge-0/0/4
+      device: fw1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet16--fw1-ge-0_0_4
+    - name: ge-0/0/5
+      device: fw1
+      connector: otternet-leaf-otternet-pod1-3-1-Ethernet17--fw1-ge-0_0_5

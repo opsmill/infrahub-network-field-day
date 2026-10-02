@@ -417,6 +417,10 @@ def avd(ctx: Context, branch: str = "", topology: bool = False, artifacts: bool 
     if topology:
         print(" - Building the topology")
         _run_topology_generators(ctx, branch, target)
+        # Cables to ports the rack generator has just created, so they cannot
+        # be in objects/. An upsert, so safe against a fabric already built.
+        print(" - Cabling the MLAG peer links")
+        ctx.run(f"infrahubctl object load objects_post_topology/{target}", pty=True)
 
     for generator in AVD_GENERATORS:
         print(f" - Running {generator}")

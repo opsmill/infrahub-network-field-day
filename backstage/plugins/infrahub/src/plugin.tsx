@@ -1,4 +1,5 @@
 import DnsIcon from '@material-ui/icons/Dns';
+import DeviceHubIcon from '@material-ui/icons/DeviceHub';
 import {
   createFrontendModule,
   createFrontendPlugin,
@@ -100,13 +101,25 @@ const racksPage = PageBlueprint.make({
   },
 });
 
+/** Every cable in the fabric, as one drawing. Needs no catalog entity either. */
+const topologyPage = PageBlueprint.make({
+  name: 'topology',
+  params: {
+    path: '/topology',
+    title: 'Topology',
+    icon: <DeviceHubIcon />,
+    noHeader: true,
+    loader: () => import('./pages/TopologyPage').then(m => <m.TopologyPage />),
+  },
+});
+
 /**
  * Its own plugin rather than a module extension, so the page gets the default
  * page id for the plugin and therefore a sidebar entry.
  */
 export const infrahubPlugin = createFrontendPlugin({
   pluginId: 'infrahub',
-  extensions: [racksPage],
+  extensions: [racksPage, topologyPage],
 });
 
 export const infrahubModule = createFrontendModule({

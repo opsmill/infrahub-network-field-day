@@ -10,6 +10,7 @@ import { NavContentBlueprint } from '@backstage/plugin-app-react';
 import { SidebarLogo } from './SidebarLogo';
 import { BranchPicker } from '@opsmill/backstage-plugin-infrahub';
 import DnsIcon from '@material-ui/icons/Dns';
+import DeviceHubIcon from '@material-ui/icons/DeviceHub';
 import MenuIcon from '@material-ui/icons/Menu';
 import SearchIcon from '@material-ui/icons/Search';
 import { SidebarSearchModal } from '@backstage/plugin-search';
@@ -41,6 +42,7 @@ export const SidebarContent = NavContentBlueprint.make({
             {/* Added explicitly: the Racks page is a standalone Infrahub view,
                 and auto-discovery did not surface a nav item for it. */}
             <SidebarItem icon={DnsIcon} to="racks" text="Racks" />
+            <SidebarItem icon={DeviceHubIcon} to="topology" text="Topology" />
             <SidebarDivider />
             {/* Which Infrahub branch the panels query. */}
             <BranchPicker />
