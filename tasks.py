@@ -777,6 +777,30 @@ def _delete_demo_branch(ctx: Context, branch: str) -> None:
             ctx.run(f"git push origin --delete {shlex.quote(branch)}", pty=True, warn=True)
 
 
+def _code_is_merged(ctx: Context, default_branch: str, stage: str) -> bool:
+    """Whether the default branch's tree differs from the baseline the staged branch was cut from.
+
+    The kind existing is not enough: an interrupted reset can have removed the data and left the
+    merged code, or the other way round. The baseline is the merge-base of the default branch and
+    the local staged branch.
+    """
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        fetched = ctx.run(
+            f"git fetch --quiet origin {shlex.quote(f'refs/heads/{default_branch}:refs/tmp/default')}",
+            warn=True,
+            hide=True,
+        )
+        if not fetched or not fetched.ok:
+            return True
+        base = ctx.run(
+            f"git merge-base refs/tmp/default {shlex.quote(f'refs/heads/{stage}')}", hide=True, warn=True
+        ).stdout.strip()
+        return (
+            bool(base)
+            and not ctx.run(f"git diff --quiet {shlex.quote(base)} refs/tmp/default", warn=True, hide=True).ok
+        )
+
+
 def _take_capability_back_out(
     ctx: Context, repo_id: str, location: str, default_branch: str, name: str, run: int, timeout: int
 ) -> None:
@@ -800,16 +824,17 @@ def _take_capability_back_out(
     _wait_for(lambda: bool(_remote_tip(ctx, reset)), f"Infrahub to publish '{reset}'", timeout)
     tip = _restore_baseline_onto_branch(ctx, location, reset, dr.stage_branch(name), default_branch)
     _wait_until_settled(reset, tip, timeout, require_capability=False, repo_id=repo_id)
-    for edge in (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}", reset).get(DEMO_KIND) or {}).get(
-        "edges", []
-    ):
-        print(f" - Deleting {DEMO_KIND} {edge['node']['id']} on '{reset}'", flush=True)
-        _graphql(f'mutation {{ {DEMO_KIND}Delete(data: {{id: "{edge["node"]["id"]}"}}) {{ ok }} }}', reset)
-    with tempfile.TemporaryDirectory() as tmp:
-        absent = Path(tmp) / "absent.yml"
-        absent.write_text(dr.absent_schema(DEMO_SCHEMA_NAMESPACE, DEMO_SCHEMA_NAME), encoding="utf-8")
-        print(f" - Removing the {DEMO_KIND} schema node on '{reset}'", flush=True)
-        ctx.run(f"infrahubctl schema load {shlex.quote(str(absent))} --branch {shlex.quote(reset)}", pty=True)
+    if _graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}', reset).get("__type"):
+        for edge in (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}", reset).get(DEMO_KIND) or {}).get(
+            "edges", []
+        ):
+            print(f" - Deleting {DEMO_KIND} {edge['node']['id']} on '{reset}'", flush=True)
+            _graphql(f'mutation {{ {DEMO_KIND}Delete(data: {{id: "{edge["node"]["id"]}"}}) {{ ok }} }}', reset)
+        with tempfile.TemporaryDirectory() as tmp:
+            absent = Path(tmp) / "absent.yml"
+            absent.write_text(dr.absent_schema(DEMO_SCHEMA_NAMESPACE, DEMO_SCHEMA_NAME), encoding="utf-8")
+            print(f" - Removing the {DEMO_KIND} schema node on '{reset}'", flush=True)
+            ctx.run(f"infrahubctl schema load {shlex.quote(str(absent))} --branch {shlex.quote(reset)}", pty=True)
     print(f" - Merging '{reset}'", flush=True)
     ctx.run(f"infrahubctl branch merge {shlex.quote(reset)}", pty=True)
     _wait_for(
@@ -843,7 +868,8 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
     repo = _repository()
     merged = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"))
     if repo.get("kind") == "CoreRepository":
-        if merged:
+        # An interrupted reset can leave the data removed and the code merged, so ask git as well.
+        if merged or _code_is_merged(ctx, repo["default_branch"], dr.stage_branch(name)):
             _take_capability_back_out(ctx, repo["id"], repo["location"], repo["default_branch"], name, run, timeout)
     elif repo.get("kind") == "CoreReadOnlyRepository" and repo["ref"] != "main":
         main_tip = _remote_tip(ctx, "main")
