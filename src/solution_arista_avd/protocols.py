@@ -649,6 +649,8 @@ class MonitoringProfile(CoreNode):
     enabled: Boolean
     interval_seconds: Integer
     name: String
+    service_kind: StringOptional
+    timeout_seconds: Integer
     collector: RelationshipAttribute[MonitoringCollector]
     device_groups: RelationshipManager[CoreStandardGroup]
     measurements: RelationshipManager[MonitoringMeasurement]
