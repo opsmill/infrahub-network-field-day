@@ -44,10 +44,17 @@ does, unpacked, so you can watch it rather than trust it.
 kubectl -n otternet-demo get deploy,svc,pods -o wide
 ```
 
-Expect `frontend` (3 replicas, one per node) with a **LoadBalancer** service
-holding VIP `10.112.240.0`, and `backend` (2 replicas) with a **ClusterIP only**.
-That difference is the point: `frontend` carries the label
-`otternet.lab/advertise: "true"`, `backend` does not.
+When Infrahub drives the lab, the demo application is the `whoami` Helm chart
+that Vidra delivers: one Deployment of three replicas, one per node, behind a
+**LoadBalancer** Service named `otternet-demo-<hash>-whoami` holding VIP
+`10.112.240.0`. Its Service carries the label `otternet.lab/advertise: "true"`,
+which is what gets it a VIP and an advertisement at all; `make verify` finds it
+by that label rather than by name.
+
+A lab deployed without Infrahub runs the lab's own claim instead: `frontend`
+(3 replicas) on the LoadBalancer and `backend` (2 replicas) with a
+**ClusterIP only**. The chart is one tier, so the backend has no Infrahub
+equivalent ([§3](#3-the-negative-case) uses another ClusterIP as the control).
 
 ## 2. The headline path
 
@@ -57,15 +64,20 @@ A request from the classic app tenant, across the firewall, into a pod:
 docker exec clab-otternet-host-a curl -s http://10.112.240.0/ | grep -E 'Hostname|RemoteAddr'
 ```
 
-```
-Hostname: frontend-84d445b76-pcctn
-RemoteAddr: 10.210.0.11:41360
+```text
+Hostname: otternet-demo-da28581ff356-whoami-df5999546-hn7v6
+RemoteAddr: 10.210.0.11:36066
 ```
 
 Two things worth noticing. `Hostname` tells you which pod answered — repeat the
 command and it changes, because the fabric ECMPs the VIP across the nodes
-advertising it. `RemoteAddr` is the **original client IP**, not a node address,
-which is what makes CIDR-based network policy meaningful here.
+advertising it. `RemoteAddr` is the **original client IP** only when the
+Service sets `externalTrafficPolicy: Local`, as the lab's `frontend` does and
+Grafana does. The `whoami` chart's Service keeps the default, `Cluster`, so a
+request that lands on a node whose chosen pod is elsewhere arrives SNATed to
+that node (`RemoteAddr: 10.110.0.x`) and is admitted by the policy's
+`remote-node` entity rather than by its CIDR list. That is a known gap in the
+delivered demo, not a verification artefact.
 
 ```bash
 for i in 1 2 3; do docker exec clab-otternet-host-a curl -s http://10.112.240.0/ | grep Hostname; done
@@ -73,10 +85,20 @@ for i in 1 2 3; do docker exec clab-otternet-host-a curl -s http://10.112.240.0/
 
 ## 3. The negative case
 
-`backend` is ClusterIP-only and must never be reachable from the app tenant:
+A ClusterIP is never advertised, so it must never be reachable from the app
+tenant. Look the address up, because a ClusterIP is assigned at create time:
 
 ```bash
-docker exec clab-otternet-host-a curl -s --max-time 5 http://10.112.179.103:8080/ \
+# Infrahub-driven: the demo Service's OWN ClusterIP -- the same pods, admitted by
+# the same policy, answering on the VIP above
+CIP=$(kubectl -n otternet-demo get svc -l otternet.lab/advertise=true \
+        -o jsonpath='{.items[0].spec.clusterIP}')
+docker exec clab-otternet-host-a curl -s --max-time 5 "http://$CIP/" \
+  && echo "REACHABLE — bad" || echo "unreachable — correct"
+
+# lab-only: the ClusterIP-only backend, on 8080
+CIP=$(kubectl -n otternet-demo get svc backend -o jsonpath='{.spec.clusterIP}')
+docker exec clab-otternet-host-a curl -s --max-time 5 "http://$CIP:8080/" \
   && echo "REACHABLE — bad" || echo "unreachable — correct"
 ```
 
@@ -149,9 +171,13 @@ CE, and `branch-rtr`↔`border-leaf1` (eBGP into VRF BRANCH).
 ### A customer consumes a DC service
 
 ```bash
-docker exec clab-otternet-cust-acme-host curl -sS http://10.112.240.16/api/health
-# {"database":"ok","version":"..."}
+docker exec clab-otternet-cust-acme-host curl -sS http://10.112.240.0/ | grep Hostname
+# Hostname: otternet-demo-...-whoami-...
 ```
+
+The demo application, because its pod policy names the WAN customers
+(`10.60.0.0/16`). Grafana's does not, so the same request to Grafana stops at
+its pod — see [the real application](#the-real-application-on-a-bgp-advertised-vip).
 
 That request crossed the customer LAN, an eBGP session into a VRF on the
 provider's edge, two AS hops of provider, an eBGP session into the DC's WAN
@@ -338,13 +364,28 @@ make grafana
 Grafana came from the upstream `kube-prometheus-stack` chart — pulled and
 installed by `provider-helm`, with no manifests in this repo. Its VIP was
 allocated from the pool its own claim defined and advertised into EVPN by the
-advertisement its own claim defined. Reach it from the **other** tenant, across
-the firewall:
+advertisement its own claim defined.
+
+When Infrahub drives the lab it is `otternet-metrics`, on the pinned VIP
+`10.112.240.81`, and its pod policy admits **only the cluster's pod prefix**
+until a grant names another source. So it answers from inside the cluster, and
+the **other** tenant is dropped at the pod even though the firewall permits the
+session (`app-to-k8s-services`):
 
 ```bash
-docker exec clab-otternet-host-a curl -sS http://10.112.240.16/api/health
+docker exec clab-otternet-k8s-node1 wget -qO- http://10.112.240.81/api/health
 # {"database":"ok","version":"..."}
+docker exec clab-otternet-host-a curl -sS -m5 http://10.112.240.81/api/health
+# times out -- Grafana's own allow-ingress, not the firewall
+kubectl -n otternet-metrics get cnp allow-ingress -o jsonpath='{.spec.ingress[0].fromCIDR}'
+# ["10.111.0.0/16"]
 ```
+
+`make verify` derives that expectation from fw1's policy and the pod's
+CiliumNetworkPolicy and then requires the datapath to agree, so a grant that
+adds the app tenant turns the same check into a positive. On the lab-only
+`otternet-observability` claim, which admits the app tenant from the start,
+the request from `host-a` answers on that application's VIP.
 
 Then confirm the two apps did not collide, which is the failure this design had
 to be fixed for:
@@ -364,8 +405,14 @@ And what Grafana is showing you is the datapath that carried you to it:
 make prometheus-forward   # then http://localhost:19090/targets
 ```
 
-Expect `cilium-agent` (3), `cilium-operator` (1) and `hubble` (3) among the
-targets, all up.
+Expect `cilium-agent` (3) and `hubble` (3) among the targets, all up.
+`make verify` asks the same question through the API server's service proxy, so
+it needs no port-forward:
+
+```bash
+kubectl get --raw "/api/v1/namespaces/otternet-metrics/services/http:$(kubectl -n otternet-metrics \
+  get svc -l app=kube-prometheus-stack-prometheus -o jsonpath='{.items[0].metadata.name}'):9090/proxy/api/v1/targets"
+```
 
 ## 5c. Tenants: multi-site, isolated cloud, and internet as a product
 
@@ -462,7 +509,18 @@ make wan-deploy
 
 ## 6c. The branch office, and access on request
 
-A grant is a named policy appended to the `branch` -> `k8s-prod` zone pair, and
+When Infrahub drives the lab, the portal is **Backstage** in the tooling
+cluster, `https://10.90.0.11:32001` (self-signed), with Dex beside it on
+`http://10.90.0.11:32556`; the branch reaches both through
+`branch-to-tooling-portal`, the one standing branch permit that matters. A
+request is a `ServiceAppAccess`, reviewed in a proposed change, and merging it
+opens the firewall rule, the fabric advertisement and the application's pod
+policy together. The handover deleted the lab's own access broker by design, so
+`make verify` asserts its absence instead of skipping it.
+
+The rest of this section is that lab-only broker, which runs when the lab is
+deployed without Infrahub or with `invoke cluster --no-handover`. There, a
+grant is a named policy appended to the `branch` -> `k8s-prod` zone pair, and
 `kubectl get firewallaccess` reports exactly where it landed:
 
 ```
@@ -493,11 +551,20 @@ docker exec clab-otternet-branch-rtr tcpdump -ni e1-3 tcp port 5901
 From a terminal on the desktop, or equivalently:
 
 ```bash
+docker exec clab-otternet-branch-desktop curl -k -m5 -o /dev/null -w '%{http_code}\n' \
+    https://10.90.0.11:32001/      # 200 — Backstage, branch-to-tooling-portal
 docker exec clab-otternet-branch-desktop curl -m5 -o /dev/null -w '%{http_code}\n' \
-    http://10.112.240.33/          # 200 — the access portal, policy 6
+    http://10.112.240.81/          # times out — Grafana, no grant for it
 docker exec clab-otternet-branch-desktop curl -m5 -o /dev/null -w '%{http_code}\n' \
-    http://10.112.240.16/          # times out — Grafana, no policy for it
+    http://10.112.240.0/           # times out — the demo app, no grant either
 ```
+
+On the lab-only broker the portal is `http://10.112.240.33/` instead, and
+Grafana is that claim's own VIP.
+
+The demo application is the sharper of the two: its pod policy already names
+the branch LAN, so the firewall is the only thing refusing it. Grafana is
+refused at both. `make verify` prints which gate refused each one.
 
 The branch has a *route* to `10.112.240.0/24` — it is advertised to the branch
 by `RM-DC-TO-BRANCH` — so this is the firewall denying the session, not the
@@ -505,7 +572,7 @@ fabric failing to route. Confirm which:
 
 ```bash
 docker exec clab-otternet-branch-rtr \
-  sr_cli -d "show network-instance default ipv4 route 10.112.240.16"
+  sr_cli -d "show network-instance default ipv4 route 10.112.240.81"
 make fw-log | grep deny
 ```
 
@@ -651,6 +718,11 @@ broker re-asserts those every twenty seconds, which is the point of
 make verify
 ```
 
+```text
+111 passed, 0 failed, 0 skipped
 ```
-61 passed, 0 failed, 0 skipped
-```
+
+That is the full lab as Infrahub drives it. A skip names an optional component
+that is not deployed and says which — a WAN customer site, the lab-only access
+broker, the tooling cluster — and is never how a check that disagrees with the
+design gets out of the way.
