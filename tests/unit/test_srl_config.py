@@ -35,6 +35,7 @@ from typing import Any
 
 import pytest
 
+from transforms import srl_config
 from transforms.srl_config import (
     LAN_MAC_VRF,
     ROLE_TO_TEMPLATE,
@@ -430,6 +431,129 @@ async def test_a_second_live_l3vpn_for_a_tenant_is_refused_not_folded_in() -> No
     # A decommissioned second one is absent, so it is not a conflict.
     second["node"]["status"] = {"value": "decommissioned"}
     assert await _transform().transform(fixture) == await _render("isp-pe1")
+
+
+# ---------------------------------------------------------------------------
+# Any tenant, not two named ones
+#
+# srl_config iterated `TENANT_ORDER = ("acme", "globex")`, so that tuple was
+# both the render order and the render SET: an L3VPN for any third tenant was
+# skipped without a word. Measured on a scratch branch before the fix: with a
+# third tenant fully modelled -- cloud, static site, CE, provider-edge port --
+# isp-pe1 rendered byte-identical to main apart from that port, shut, because
+# it matched no tenant the renderer would look at.
+# ---------------------------------------------------------------------------
+
+THIRD_TENANT = FIXTURES / "third-tenant"
+
+
+def test_the_tenant_set_is_not_a_constant() -> None:
+    assert not hasattr(srl_config, "TENANT_ORDER")
+
+
+async def test_a_third_tenant_renders_onto_its_port() -> None:
+    """Captured from the scratch branch; the render there is the one asserted here."""
+    fixture = json.loads((THIRD_TENANT / "isp-pe1.json").read_text(encoding="utf-8"))
+    rendered = await _transform().transform(fixture)
+
+    for line in (
+        "set / interface ethernet-1/5 subinterface 0 ipv4 address 10.51.30.1/30",
+        "set / network-instance CUST_INITECH type ip-vrf",
+        "set / network-instance CUST_INITECH interface ethernet-1/5.0",
+        "set / network-instance CUST_INITECH static-routes route 10.60.30.0/24 next-hop-group initech-hq",
+        "set / routing-policy prefix-set PL-INITECH-CLOUD prefix 10.220.30.0/24 mask-length-range exact",
+        "set / routing-policy policy RM-INITECH-IMPORT default-action policy-result reject",
+        "set / routing-policy policy IMPORT-TENANT-VRFS statement 30 match origin-network-instance CUST_INITECH",
+        "set / network-instance CUST_INITECH inter-instance-policies apply-policy import-policy [ RM-INITECH-IMPORT ]",
+    ):
+        assert line in rendered, line
+    # initech bought no internet access, and its portal-shaped L3VPN states no
+    # DC range -- it takes the shared one rather than emptying it.
+    assert "RM-INITECH-IMPORT statement 30" not in rendered
+    assert "set / interface ethernet-1/5 admin-state disable" not in rendered
+
+
+async def test_adding_a_tenant_only_adds_lines() -> None:
+    """acme and globex are untouched: every changed line is an addition."""
+    fixture = json.loads((THIRD_TENANT / "isp-pe1.json").read_text(encoding="utf-8"))
+    changed = _changed(_golden("isp-pe1"), await _transform().transform(fixture))
+
+    assert changed
+    assert [line for line in changed if line.startswith("-") and "-- do not edit." not in line] == []
+
+
+async def test_tenant_order_does_not_depend_on_query_order() -> None:
+    fixture = _fixture("isp-pe1")
+    fixture["ServiceL3vpn"]["edges"].reverse()
+    fixture["ServiceTenantCloud"]["edges"].reverse()
+
+    assert await _transform().transform(fixture) == await _render("isp-pe1")
+
+
+async def test_an_l3vpn_stating_no_dc_range_takes_the_shared_one() -> None:
+    """The portal's L3VPN form cannot offer dc_service_prefixes.
+
+    The renderer read the FIRST L3VPN's range, so one that stated none and
+    came first would have emptied PL-DC-SERVICES for every tenant.
+    """
+    fixture = _fixture("isp-pe1")
+    for edge in fixture["ServiceL3vpn"]["edges"]:
+        if edge["node"]["tenant"]["node"]["name"]["value"] == "acme":
+            edge["node"]["dc_service_prefixes"]["edges"] = []
+
+    assert await _transform().transform(fixture) == await _render("isp-pe1")
+
+
+async def test_disagreeing_dc_ranges_are_refused() -> None:
+    fixture = _fixture("isp-pe1")
+    fixture["ServiceL3vpn"]["edges"][0]["node"]["dc_service_prefixes"]["edges"] = [
+        {"node": {"prefix": {"value": "10.112.0.0/16"}}}
+    ]
+    with pytest.raises(SrlConfigError, match="disagree on the shared DC service range"):
+        await _transform().transform(fixture)
+
+
+async def test_a_tenant_name_srl_cannot_carry_is_refused() -> None:
+    fixture = _fixture("isp-pe1")
+    for edge in fixture["ServiceL3vpn"]["edges"] + fixture["ServiceTenantCloud"]["edges"]:
+        if edge["node"]["tenant"]["node"]["name"]["value"] == "globex":
+            edge["node"]["tenant"]["node"]["name"] = {"value": "Globex Corp"}
+    with pytest.raises(SrlConfigError, match="cannot be spliced"):
+        await _transform().transform(fixture)
+
+
+async def test_a_bgp_site_without_a_customer_edge_session_is_refused_not_rendered_as_none() -> None:
+    """It rendered `neighbor None peer-group globex-hq`, which aborts the candidate."""
+    fixture = _fixture("isp-pe1")
+    for edge in fixture["WanSite"]["edges"]:
+        site = edge["node"]
+        if site["tenant"]["node"]["name"]["value"] == "globex":
+            site["bgp_sessions"]["edges"] = [
+                s for s in site["bgp_sessions"]["edges"] if s["node"]["device"]["node"]["role"]["value"] == "isp_edge"
+            ]
+    with pytest.raises(SrlConfigError, match="no session on both a provider edge and a customer edge"):
+        await _transform().transform(fixture)
+
+
+async def test_the_branch_is_found_by_its_router_not_by_its_tenant_name() -> None:
+    fixture = _fixture("branch-rtr")
+    for edge in fixture["WanSite"]["edges"]:
+        if edge["node"]["tenant"]["node"]["name"]["value"] == "branch":
+            edge["node"]["tenant"]["node"]["name"] = {"value": "head-office"}
+
+    rendered = await _transform().transform(fixture)
+    assert _without_provenance(rendered.replace("head-office", "branch")) == _without_provenance(
+        await _render("branch-rtr")
+    )
+
+
+async def test_a_customer_edge_router_id_renders_bare_whatever_the_lan_size() -> None:
+    """The template strips a literal `/24`; any other LAN would leak its mask."""
+    fixture = _fixture("cust-acme-ce")
+    fixture["target"]["edges"][0]["node"]["router_id"]["node"]["address"]["value"] = "10.60.10.1/25"
+
+    rendered = await _transform().transform(fixture)
+    assert "set / network-instance default protocols bgp router-id 10.60.10.1\n" in rendered
 
 
 async def test_an_unmapped_role_raises() -> None:

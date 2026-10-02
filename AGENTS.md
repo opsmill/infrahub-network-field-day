@@ -723,6 +723,31 @@ the WAN reachability matrix. It replaced `frr_config`. Things to know before cha
   `ServiceTenantCloud.prefix` and whether a `ServiceInternetAccess` exists. That is the
   documented exception to "renderers read technical objects" — the provider edge's policy *is*
   the service intent.
+- **No tenant is named in it, and for a while two were — which made every other tenant a
+  silent no-op.** `TENANT_ORDER = ("acme", "globex")` was both the render order and the render
+  *set*, so an L3VPN the portal created for any third tenant was skipped: the request merged
+  green and no router changed. Measured on a scratch branch with a third tenant fully modelled
+  (cloud, static site, CE, provider-edge port): `isp-pe1` rendered byte-identical to `main` except
+  for that port, rendered *shut* because it matched no tenant the renderer looked at. Tenants are
+  now every tenant with a live L3VPN, ordered by name (which reproduces acme-before-globex
+  without stating it), and the same branch rendered `CUST_INITECH`, its port, its static route
+  and its `RM-INITECH-IMPORT` policy, with acme and globex untouched — additions only, held by
+  `test_adding_a_tenant_only_adds_lines`. Everything else was already derived: the VRF from
+  `ServiceL3vpn.vrf`, the policy names from the tenant's name, ports from attachment addresses.
+  SR Linux leaks between instances by policy, not by route target or RD, so there is none to
+  allocate. The branch router's site is found by its router, not by a tenant called `branch`.
+- **What a tenant still needs before it can render is `wan-service-consistency`'s business**, so
+  a request that cannot reach a router fails its proposed change naming the gap rather than
+  merging as a no-op. The renderer refuses the same things (two live L3VPNs, no tenant cloud, a
+  BGP site with no CE session — it used to render `neighbor None` — a name SR Linux cannot carry),
+  and a refusal fails the artifact for every tenant on that router, so the check is the gate that
+  matters.
+- **The shared DC range comes from every live L3VPN that states one**, not from the first the
+  query returns. The portal's L3VPN form cannot offer `dc_service_prefixes` (optional
+  cardinality-many), so a portal-created L3VPN states none and takes the shared range; had it
+  come first, the old code would have emptied `PL-DC-SERVICES` for every tenant. Two live L3VPNs
+  stating different ranges are refused rather than merged, because the range is in every
+  tenant's import policy.
 - Its templates are copies of `lab/wan/templates/*.srl.j2` with exactly one line changed, the
   provenance header, and `test_the_templates_are_the_labs_with_one_line_changed` holds every
   line. Every comment is deliberate; they are most of the teaching value of those configs.
@@ -842,10 +867,30 @@ correctly, and nothing checked that they were. Four rules:
   silently writes grants into a policy for somewhere else.
 - **Two clouds sharing a VRF or a zone** — the one that most looks like tidy reuse.
 
-**It judges decommissioned services too**, deliberately. Everywhere except
-`generate-network-segment`, `status` is inert, so a decommissioned `ServiceL3vpn` still
-assembles the provider edge's import policy; skipping it would excuse a live misconfiguration
-because of a label.
+Two more ask whether a request **will render at all**, because a portal request for a third
+tenant used to merge green and reach no router (see `srl_config` above):
+
+- **A live L3VPN that cannot be put on a port.** No provider-edge VRF; no live tenant cloud; no
+  `WanSite` for the tenant — which is what a portal request for a new tenant looks like, since
+  the lab has no circuit, CE or provider-edge port for it; or a site that cannot attach: a BGP
+  site without sessions on both an `isp_edge` and a `customer_edge`, a CE outside `srl_routers`
+  (no artifact, so the session never comes up), no `site_asn`, a static site whose next hop no
+  device owns, an attachment address no provider-edge port is on, a LAN outside the peering's
+  `customer_aggregate` (`10.60.0.0/16` — all `border-leaf1` accepts from the WAN and all `fw1`
+  routes back), or a name SR Linux cannot splice into a policy.
+- **A service that renders only through a live L3VPN, without one**: a tenant cloud whose tenant
+  has none, internet access on a withdrawn L3VPN or with no `WanInternetPeering`, and live
+  L3VPNs that disagree on, or all omit, the shared DC range.
+
+Measured on a scratch branch: a portal-shaped L3VPN for `initech` failed naming the missing
+tenant cloud and the missing `WanSite`; the same tenant fully modelled passed and rendered.
+`SAFE_NAME` and the decommissioned statuses are restated from `srl_config` rather than imported
+(a check loads on its own), and a test holds the copies equal.
+
+**Rules 1–4 judge decommissioned services too**, deliberately; rules 5–6 do not, because a
+withdrawn service renders as absent by design and needs no attachment. For rules 1–4, skipping a
+decommissioned service would excuse a misconfiguration because of a label — one that returns the
+moment the status is set back.
 
 A thing worth knowing before extending it: **`IpamVRF.tenant` cannot identify a tenant here.**
 Every tenant VRF in this lab points at the `EvpnTenant` named `TENANT_CLOUD`, not at the

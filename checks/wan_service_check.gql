@@ -28,6 +28,17 @@ query WanServiceCheckQuery {
             }
           }
         }
+        # The shared DC range. srl_config refuses two live L3VPNs stating
+        # different ones, so rule 6 reports it first.
+        dc_service_prefixes {
+          edges {
+            node {
+              prefix {
+                value
+              }
+            }
+          }
+        }
         # `tenant` on a circuit resolves to the OrganizationTenant, which is what
         # makes rule 1 possible. The same field on IpamVRF does NOT -- every
         # tenant VRF in this lab points at the EvpnTenant `TENANT_CLOUD` -- so a
@@ -108,6 +119,242 @@ query WanServiceCheckQuery {
             id
             prefix {
               value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # ---- what rule 5 and rule 6 read: can the request actually be rendered? --
+  #
+  # Everything below mirrors what transforms/srl_config.gql reads, because the
+  # question these rules answer is "would srl_config render this service, and
+  # render it onto a port?" -- asked in the proposed change, before a request
+  # that cannot reach a router merges as a green no-op.
+
+  # Presence is the datum for internet access, and it only renders through a
+  # live L3VPN and an internet peering.
+  ServiceInternetAccess {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        l3vpn {
+          node {
+            id
+            name {
+              value
+            }
+            status {
+              value
+            }
+            tenant {
+              node {
+                id
+                name {
+                  value
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # A tenant's attachments. srl_config finds a tenant's sites by the tenant,
+  # not through the L3VPN's circuits, so this is what decides whether its VRF
+  # has anything in it.
+  WanSite {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        attachment_kind {
+          value
+        }
+        site_asn {
+          value
+        }
+        tenant {
+          node {
+            id
+            name {
+              value
+            }
+          }
+        }
+        lan_prefix {
+          node {
+            prefix {
+              value
+            }
+          }
+        }
+        bgp_sessions {
+          edges {
+            node {
+              peer_address {
+                value
+              }
+              device {
+                node {
+                  name {
+                    value
+                  }
+                  role {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
+        static_routes {
+          edges {
+            node {
+              next_hop {
+                value
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # The provider edge's ports (a site needs one whose subnet holds its
+  # attachment address, or its VRF has no interface) and the customer edges
+  # (a BGP site's CE needs a router id and a place in `srl_routers`, or no
+  # configuration is rendered for it at all).
+  DcimDevice(role__values: ["isp_edge", "customer_edge"]) {
+    edges {
+      node {
+        name {
+          value
+        }
+        role {
+          value
+        }
+        router_id {
+          node {
+            address {
+              value
+            }
+          }
+        }
+        # Filtered to the one group that matters: a switch-sized device is in a
+        # dozen generator groups this rule has no use for.
+        member_of_groups(name__value: "srl_routers") {
+          edges {
+            node {
+              __typename
+              name {
+                value
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              # Concrete kinds, for the reason srl_config.gql gives: the
+              # generated model discriminates on __typename.
+              ... on InterfacePhysical {
+                name {
+                  value
+                }
+                ip_addresses {
+                  edges {
+                    node {
+                      address {
+                        value
+                      }
+                    }
+                  }
+                }
+              }
+              ... on InterfaceVirtual {
+                name {
+                  value
+                }
+                ip_addresses {
+                  edges {
+                    node {
+                      address {
+                        value
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # The aggregate the fabric and the firewall accept customer LANs inside:
+  # border-leaf1 permits `10.60.0.0/16 le 24` from the WAN, fw1 routes the
+  # /16 back, and internet-rtr accepts it. A site LAN outside it reaches the
+  # provider edge and is dropped at the next hop.
+  WanInternetPeering {
+    edges {
+      node {
+        name {
+          value
+        }
+        customer_aggregate {
+          node {
+            prefix {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Address -> device, so a static site's next hop can be resolved to the CE
+  # that owns it, as srl_config does.
+  IpamIPAddress {
+    edges {
+      node {
+        address {
+          value
+        }
+        interface {
+          node {
+            __typename
+            ... on InterfacePhysical {
+              device {
+                node {
+                  __typename
+                  name {
+                    value
+                  }
+                }
+              }
+            }
+            ... on InterfaceVirtual {
+              device {
+                node {
+                  __typename
+                  name {
+                    value
+                  }
+                }
+              }
             }
           }
         }

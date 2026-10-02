@@ -291,6 +291,24 @@ globex has no `statement 30` because globex bought no internet access. Deleting 
 three lines of the statement, and the tenant header re-rendering from `internet: yes` to
 `internet: no`.
 
+**Any tenant renders, and none is named.** The transform once iterated a fixed
+`("acme", "globex")`, so an L3VPN requested for a third tenant was skipped without a word: the
+proposed change was green and no router changed. It now renders every tenant with a live
+`ServiceL3vpn`, ordered by name. The VRF comes from `ServiceL3vpn.vrf`, the policy and peer-group
+names from the tenant and site names, and each provider-edge port's VRF from the attachment
+address on its subnet. SR Linux leaks routes between network instances by policy, so there is no
+route target or route distinguisher to allocate. Measured on a scratch branch, adding a third
+tenant with a statically routed site added its network instance, port, static route and
+`RM-<TENANT>-IMPORT` policy to `isp-pe1`, its cloud subnet and LAN to `isp-pe2`, and changed no
+existing line.
+
+A tenant the lab cannot attach, such as one with no `WanSite` and so no circuit, customer edge
+or provider-edge port, is reported by the
+[`wan-service-consistency`](./checks.md#wan-service-consistency) check, which names the missing
+prerequisite. The shared DC range comes from every live L3VPN that states one. The portal's L3VPN
+form cannot offer `dc_service_prefixes`, so a request that omits it takes the shared range, and
+two that disagree are refused.
+
 **Things that will bite a change here:**
 
 - **No quote characters in a comment.** `sr_cli` tokenises quotes before it recognises `#`, so

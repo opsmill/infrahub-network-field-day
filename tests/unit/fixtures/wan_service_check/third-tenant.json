@@ -1,0 +1,2197 @@
+{
+  "DcimDevice": {
+    "edges": [
+      {
+        "node": {
+          "interfaces": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.51.10.2/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/1"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.60.10.1/24"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/2"
+                  }
+                }
+              }
+            ]
+          },
+          "member_of_groups": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "CoreStandardGroup",
+                  "name": {
+                    "value": "srl_routers"
+                  }
+                }
+              }
+            ]
+          },
+          "name": {
+            "value": "cust-acme-ce"
+          },
+          "role": {
+            "value": "customer_edge"
+          },
+          "router_id": {
+            "node": {
+              "address": {
+                "value": "10.60.10.1/24"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "interfaces": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.51.11.2/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "eth1"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.60.11.1/24"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "eth2"
+                  }
+                }
+              }
+            ]
+          },
+          "member_of_groups": {
+            "edges": []
+          },
+          "name": {
+            "value": "cust-acme-dr-ce"
+          },
+          "role": {
+            "value": "customer_edge"
+          },
+          "router_id": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "interfaces": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.51.20.2/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/1"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.60.20.1/24"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/2"
+                  }
+                }
+              }
+            ]
+          },
+          "member_of_groups": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "CoreStandardGroup",
+                  "name": {
+                    "value": "srl_routers"
+                  }
+                }
+              }
+            ]
+          },
+          "name": {
+            "value": "cust-globex-ce"
+          },
+          "role": {
+            "value": "customer_edge"
+          },
+          "router_id": {
+            "node": {
+              "address": {
+                "value": "10.60.20.1/24"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "interfaces": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.51.30.2/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "eth1"
+                  }
+                }
+              }
+            ]
+          },
+          "member_of_groups": {
+            "edges": []
+          },
+          "name": {
+            "value": "cust-initech-ce"
+          },
+          "role": {
+            "value": "customer_edge"
+          },
+          "router_id": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "interfaces": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.50.255.1/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/1"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.51.10.1/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/2"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.51.20.1/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/3"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.51.11.1/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/4"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfacePhysical",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.51.30.1/30"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "ethernet-1/5"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "__typename": "InterfaceVirtual",
+                  "ip_addresses": {
+                    "edges": [
+                      {
+                        "node": {
+                          "address": {
+                            "value": "10.50.0.1/32"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "name": {
+                    "value": "lo0"
+                  }
+                }
+              }
+            ]
+          },
+          "member_of_groups": {
+            "edges": [
+              {
+                "node": {
+                  "__typename": "CoreStandardGroup",
+                  "name": {
+                    "value": "srl_routers"
+                  }
+                }
+              }
+            ]
+          },
+          "name": {
+            "value": "isp-pe1"
+          },
+          "role": {
+            "value": "isp_edge"
+          },
+          "router_id": {
+            "node": {
+              "address": {
+                "value": "10.50.0.1/32"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "IpamIPAddress": {
+    "edges": [
+      {
+        "node": {
+          "address": {
+            "value": "10.0.0.15/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.110.0.2/24"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfaceVirtual",
+              "device": {
+                "node": {
+                  "__typename": "DcimFabricSwitch",
+                  "name": {
+                    "value": "leaf-otternet-pod1-1-1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.110.0.3/24"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfaceVirtual",
+              "device": {
+                "node": {
+                  "__typename": "DcimFabricSwitch",
+                  "name": {
+                    "value": "leaf-otternet-pod1-1-2"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.112.240.10/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.112.240.33/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.10.1/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.10.2/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.110.1/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.110.2/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.150.1/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.150.2/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.170.1/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.170.2/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.20.1/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.20.2/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.210.1/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.210.2/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.50.1/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.50.2/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe2"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.70.1/30"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.250.70.2/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "branch-rtr"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.0.1/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.0.11/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.0.12/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.0.13/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.0.14/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.0.15/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.0.2/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.1.11/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.1.13/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.1.15/32"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.0/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.1/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.10/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.11/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.12/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.13/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.14/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.15/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.16/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.17/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.18/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.19/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.2/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.3/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.4/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.5/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.6/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.7/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.8/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.41.255.9/31"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.50.0.1/32"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfaceVirtual",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.50.0.2/32"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfaceVirtual",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe2"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.50.255.1/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.50.255.2/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe2"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.51.10.1/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.51.10.2/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "cust-acme-ce"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.51.11.1/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.51.11.2/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "cust-acme-dr-ce"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.51.20.1/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.51.20.2/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "cust-globex-ce"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.51.30.1/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe1"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.51.30.2/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "cust-initech-ce"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.52.0.1/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "isp-pe2"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.52.0.2/30"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "internet-rtr"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.60.10.1/24"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "cust-acme-ce"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.60.11.1/24"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "cust-acme-dr-ce"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.60.20.1/24"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "cust-globex-ce"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.70.0.1/24"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfaceVirtual",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "branch-rtr"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.70.255.1/32"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfaceVirtual",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "branch-rtr"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "10.90.0.254/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.11/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.12/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.21/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.22/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.23/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.24/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.25/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.31/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.41/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.42/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.43/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.61/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.62/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.71/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.73/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.81/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "172.20.41.91/24"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "198.51.100.1/24"
+          },
+          "interface": {
+            "node": {
+              "__typename": "InterfacePhysical",
+              "device": {
+                "node": {
+                  "__typename": "DcimDevice",
+                  "name": {
+                    "value": "internet-rtr"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "address": {
+            "value": "2001:db8::2/64"
+          },
+          "interface": {
+            "node": null
+          }
+        }
+      }
+    ]
+  },
+  "ServiceInternetAccess": {
+    "edges": [
+      {
+        "node": {
+          "id": "18da994d-7d02-08e2-38bd-1187a3a096af",
+          "l3vpn": {
+            "node": {
+              "id": "18da994d-6b36-0bc6-38b5-11878853b3a6",
+              "name": {
+                "value": "acme-l3vpn"
+              },
+              "status": {
+                "value": "active"
+              },
+              "tenant": {
+                "node": {
+                  "id": "18da9947-ad39-c8d3-38b8-118746538965",
+                  "name": {
+                    "value": "acme"
+                  }
+                }
+              }
+            }
+          },
+          "name": {
+            "value": "acme-internet"
+          },
+          "status": {
+            "value": "active"
+          }
+        }
+      }
+    ]
+  },
+  "ServiceL3vpn": {
+    "edges": [
+      {
+        "node": {
+          "circuits": {
+            "edges": [
+              {
+                "node": {
+                  "circuit_id": {
+                    "value": "acme-dr"
+                  },
+                  "id": "18da994c-36c3-647a-38b4-1187b8567547",
+                  "tenant": {
+                    "node": {
+                      "id": "18da9947-ad39-c8d3-38b8-118746538965",
+                      "name": {
+                        "value": "acme"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "node": {
+                  "circuit_id": {
+                    "value": "acme-hq"
+                  },
+                  "id": "18da994b-ef9f-d4d4-38b4-11870ac94590",
+                  "tenant": {
+                    "node": {
+                      "id": "18da9947-ad39-c8d3-38b8-118746538965",
+                      "name": {
+                        "value": "acme"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "dc_service_prefixes": {
+            "edges": [
+              {
+                "node": {
+                  "prefix": {
+                    "value": "10.112.240.0/24"
+                  }
+                }
+              }
+            ]
+          },
+          "id": "18da994d-6b36-0bc6-38b5-11878853b3a6",
+          "name": {
+            "value": "acme-l3vpn"
+          },
+          "status": {
+            "value": "active"
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9947-ad39-c8d3-38b8-118746538965",
+              "name": {
+                "value": "acme"
+              }
+            }
+          },
+          "vrf": {
+            "node": {
+              "id": "18da9949-8f58-bb4b-38b0-1187e643990c",
+              "name": {
+                "value": "CUST_ACME"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "circuits": {
+            "edges": [
+              {
+                "node": {
+                  "circuit_id": {
+                    "value": "globex-hq"
+                  },
+                  "id": "18da994c-455f-4d9d-38b5-1187a39ab10f",
+                  "tenant": {
+                    "node": {
+                      "id": "18da9947-b4b2-c21a-38bf-118735235bc6",
+                      "name": {
+                        "value": "globex"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "dc_service_prefixes": {
+            "edges": [
+              {
+                "node": {
+                  "prefix": {
+                    "value": "10.112.240.0/24"
+                  }
+                }
+              }
+            ]
+          },
+          "id": "18da994d-79a3-1705-38b0-1187c77fed5f",
+          "name": {
+            "value": "globex-l3vpn"
+          },
+          "status": {
+            "value": "active"
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9947-b4b2-c21a-38bf-118735235bc6",
+              "name": {
+                "value": "globex"
+              }
+            }
+          },
+          "vrf": {
+            "node": {
+              "id": "18da9949-94c3-5377-38b2-1187c6089c91",
+              "name": {
+                "value": "CUST_GLOBEX"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "circuits": {
+            "edges": []
+          },
+          "dc_service_prefixes": {
+            "edges": []
+          },
+          "id": "18da9ae7-5335-92bb-38b0-1187367694fe",
+          "name": {
+            "value": "initech-l3vpn"
+          },
+          "status": {
+            "value": "active"
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9ae7-3ad1-ca4b-38b5-118789bef2a7",
+              "name": {
+                "value": "initech"
+              }
+            }
+          },
+          "vrf": {
+            "node": {
+              "id": "18da9ae7-4347-ea7c-38bd-1187d0bec0c9",
+              "name": {
+                "value": "CUST_INITECH"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "ServiceTenantCloud": {
+    "edges": [
+      {
+        "node": {
+          "id": "18da994d-900b-5e57-38b5-1187369bc42e",
+          "name": {
+            "value": "acme-cloud"
+          },
+          "prefix": {
+            "node": {
+              "id": "18da9947-2a30-e96c-38ba-11872ce65a58",
+              "prefix": {
+                "value": "10.220.10.0/24"
+              }
+            }
+          },
+          "status": {
+            "value": "active"
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9947-ad39-c8d3-38b8-118746538965",
+              "name": {
+                "value": "acme"
+              }
+            }
+          },
+          "vrf": {
+            "node": {
+              "id": "18da993d-94a5-b8a4-38bb-118708d133d1",
+              "name": {
+                "value": "TENANT_ACME"
+              }
+            }
+          },
+          "zone": {
+            "node": {
+              "id": "18da9949-c89e-ec75-38bd-11871a12ce52",
+              "name": {
+                "value": "acme-cloud"
+              },
+              "vrf": {
+                "node": {
+                  "id": "18da993d-94a5-b8a4-38bb-118708d133d1",
+                  "name": {
+                    "value": "TENANT_ACME"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "id": "18da994d-9a38-29c9-38b6-11878286a3e6",
+          "name": {
+            "value": "globex-cloud"
+          },
+          "prefix": {
+            "node": {
+              "id": "18da9947-2dc1-8723-38b2-1187708df8f2",
+              "prefix": {
+                "value": "10.220.20.0/24"
+              }
+            }
+          },
+          "status": {
+            "value": "active"
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9947-b4b2-c21a-38bf-118735235bc6",
+              "name": {
+                "value": "globex"
+              }
+            }
+          },
+          "vrf": {
+            "node": {
+              "id": "18da993d-9b09-fff3-38b0-1187f44c278a",
+              "name": {
+                "value": "TENANT_GLOBEX"
+              }
+            }
+          },
+          "zone": {
+            "node": {
+              "id": "18da9949-ca50-12f8-38b9-1187b70ac380",
+              "name": {
+                "value": "globex-cloud"
+              },
+              "vrf": {
+                "node": {
+                  "id": "18da993d-9b09-fff3-38b0-1187f44c278a",
+                  "name": {
+                    "value": "TENANT_GLOBEX"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "id": "18da9af5-6bbb-c569-38be-11875141c7e7",
+          "name": {
+            "value": "initech-cloud"
+          },
+          "prefix": {
+            "node": {
+              "id": "18da9af4-aa68-76f6-38ba-1187b8ed9693",
+              "prefix": {
+                "value": "10.220.30.0/24"
+              }
+            }
+          },
+          "status": {
+            "value": "active"
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9ae7-3ad1-ca4b-38b5-118789bef2a7",
+              "name": {
+                "value": "initech"
+              }
+            }
+          },
+          "vrf": {
+            "node": {
+              "id": "18da9af5-448a-378a-38bf-1187fd1c8a10",
+              "name": {
+                "value": "TENANT_INITECH"
+              }
+            }
+          },
+          "zone": {
+            "node": {
+              "id": "18da9af5-52b4-e2dd-38b9-11871ecb5007",
+              "name": {
+                "value": "initech-cloud"
+              },
+              "vrf": {
+                "node": {
+                  "id": "18da9af5-448a-378a-38bf-1187fd1c8a10",
+                  "name": {
+                    "value": "TENANT_INITECH"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "WanInternetPeering": {
+    "edges": [
+      {
+        "node": {
+          "customer_aggregate": {
+            "node": {
+              "prefix": {
+                "value": "10.60.0.0/16"
+              }
+            }
+          },
+          "name": {
+            "value": "isp-to-internet"
+          }
+        }
+      }
+    ]
+  },
+  "WanSite": {
+    "edges": [
+      {
+        "node": {
+          "attachment_kind": {
+            "value": "static"
+          },
+          "bgp_sessions": {
+            "edges": []
+          },
+          "id": "18da994c-9828-9dfa-38b1-11876f1c0381",
+          "lan_prefix": {
+            "node": {
+              "prefix": {
+                "value": "10.60.11.0/24"
+              }
+            }
+          },
+          "name": {
+            "value": "dr"
+          },
+          "site_asn": {
+            "value": null
+          },
+          "static_routes": {
+            "edges": [
+              {
+                "node": {
+                  "next_hop": {
+                    "value": "10.51.11.2/32"
+                  }
+                }
+              }
+            ]
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9947-ad39-c8d3-38b8-118746538965",
+              "name": {
+                "value": "acme"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "attachment_kind": {
+            "value": "bgp"
+          },
+          "bgp_sessions": {
+            "edges": [
+              {
+                "node": {
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "cust-acme-ce"
+                      },
+                      "role": {
+                        "value": "customer_edge"
+                      }
+                    }
+                  },
+                  "peer_address": {
+                    "value": "10.51.10.1"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "isp-pe1"
+                      },
+                      "role": {
+                        "value": "isp_edge"
+                      }
+                    }
+                  },
+                  "peer_address": {
+                    "value": "10.51.10.2"
+                  }
+                }
+              }
+            ]
+          },
+          "id": "18da994c-6d4e-983e-38bc-11870c496a2f",
+          "lan_prefix": {
+            "node": {
+              "prefix": {
+                "value": "10.60.10.0/24"
+              }
+            }
+          },
+          "name": {
+            "value": "hq"
+          },
+          "site_asn": {
+            "value": 65010
+          },
+          "static_routes": {
+            "edges": []
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9947-ad39-c8d3-38b8-118746538965",
+              "name": {
+                "value": "acme"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "attachment_kind": {
+            "value": "bgp"
+          },
+          "bgp_sessions": {
+            "edges": [
+              {
+                "node": {
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "cust-globex-ce"
+                      },
+                      "role": {
+                        "value": "customer_edge"
+                      }
+                    }
+                  },
+                  "peer_address": {
+                    "value": "10.51.20.1"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "isp-pe1"
+                      },
+                      "role": {
+                        "value": "isp_edge"
+                      }
+                    }
+                  },
+                  "peer_address": {
+                    "value": "10.51.20.2"
+                  }
+                }
+              }
+            ]
+          },
+          "id": "18da994c-a707-8b3b-38b2-1187b9aecedc",
+          "lan_prefix": {
+            "node": {
+              "prefix": {
+                "value": "10.60.20.0/24"
+              }
+            }
+          },
+          "name": {
+            "value": "hq"
+          },
+          "site_asn": {
+            "value": 65020
+          },
+          "static_routes": {
+            "edges": []
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9947-b4b2-c21a-38bf-118735235bc6",
+              "name": {
+                "value": "globex"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "attachment_kind": {
+            "value": "static"
+          },
+          "bgp_sessions": {
+            "edges": []
+          },
+          "id": "18da9af6-431b-647d-38b8-1187aa5dd262",
+          "lan_prefix": {
+            "node": {
+              "prefix": {
+                "value": "10.60.30.0/24"
+              }
+            }
+          },
+          "name": {
+            "value": "hq"
+          },
+          "site_asn": {
+            "value": null
+          },
+          "static_routes": {
+            "edges": [
+              {
+                "node": {
+                  "next_hop": {
+                    "value": "10.51.30.2/32"
+                  }
+                }
+              }
+            ]
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9ae7-3ad1-ca4b-38b5-118789bef2a7",
+              "name": {
+                "value": "initech"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "attachment_kind": {
+            "value": "bgp"
+          },
+          "bgp_sessions": {
+            "edges": [
+              {
+                "node": {
+                  "device": {
+                    "node": {
+                      "name": {
+                        "value": "branch-rtr"
+                      },
+                      "role": {
+                        "value": "branch_router"
+                      }
+                    }
+                  },
+                  "peer_address": {
+                    "value": "10.250.70.1"
+                  }
+                }
+              }
+            ]
+          },
+          "id": "18da994c-aaa7-33d9-38bf-1187fa171544",
+          "lan_prefix": {
+            "node": {
+              "prefix": {
+                "value": "10.70.0.0/24"
+              }
+            }
+          },
+          "name": {
+            "value": "office"
+          },
+          "site_asn": {
+            "value": 65030
+          },
+          "static_routes": {
+            "edges": []
+          },
+          "tenant": {
+            "node": {
+              "id": "18da9947-b5da-110d-38b0-1187004f67f6",
+              "name": {
+                "value": "branch"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}
