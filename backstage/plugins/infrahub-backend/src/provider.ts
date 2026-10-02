@@ -199,7 +199,17 @@ const GENERATED_FORM_EXCLUDES = ['status', 'checksum'];
 const relationshipsOf = (schema: KindSchema): SchemaRelationship[] =>
   (schema.relationships ?? []).filter(
     relationship =>
-      !relationship.peer.startsWith('Core') &&
+      // Infrahub's own bookkeeping peers `Core*` -- groups, profiles -- and is
+      // never a request input. A MANDATORY one is, though: dropping it made the
+      // create fail outright, the same way a dropped `avd_tags` did below.
+      // `ServiceServerPlacement.template` peers `CoreObjectTemplate`, so every
+      // server placement through the portal failed with
+      //
+      //   template is mandatory for ServiceServerPlacement at template
+      //
+      // -- after its branch had already been created.
+      (!relationship.peer.startsWith('Core') ||
+        relationship.optional === false) &&
       // Cardinality-one, plus a MANDATORY cardinality-many. An optional many is
       // still left off -- there are a lot of them, most are derived, and a form
       // asking for every one would be unusable. A mandatory one cannot be
@@ -244,6 +254,22 @@ const ACCOUNT_VALUE = '${{ user.entity.metadata.name }}';
 /** A mandatory cardinality-many relationship: one field, many hfids. */
 const isMultiple = (relationship: SchemaRelationship): boolean =>
   relationship.cardinality === 'many';
+
+/**
+ * Whether a relationship's field is an EntityPicker, whose value is an entity
+ * ref rather than an Infrahub identifier.
+ *
+ * Only a single-element, cardinality-one peer gets one; a composite hfid or a
+ * many is collected as an array of typed identifiers instead.
+ */
+const usesPicker = (relationship: ResolvedRelationship): boolean =>
+  relationship.picker !== undefined &&
+  !isMultiple(relationship) &&
+  (relationship.hfidLength ?? 1) <= 1;
+
+/** The `catalog:fetch` step that resolves a picked entity to its Infrahub id. */
+const pickerStepId = (relationship: SchemaRelationship): string =>
+  `${relationship.name}_entity`;
 
 /** A mapped kind with the schema needed to read it and form a template. */
 type LoadedKind = {
@@ -1452,6 +1478,23 @@ export class InfrahubEntityProvider implements EntityProvider {
             action: 'catalog:fetch',
             input: { entityRef: '${{ parameters.target }}' },
           },
+          // A PICKED PEER IS RESOLVED BY ITS INFRAHUB ID, never by its name.
+          //
+          // An EntityPicker yields `resource:default/k8s_leafs`, and entity
+          // names are lowercased -- so the name part is not the hfid whenever
+          // the Infrahub identifier has a capital in it. Every rack here does
+          // (`K8S_LEAFS`), so a server placement naming any rack failed with
+          // `Unable to find the node k8s_leafs/LocationRack`. The provider
+          // annotates every entity with its node id, and reading it back is the
+          // only lossless way from a ref to the node. Guarded, so an optional
+          // picker left empty fetches nothing.
+          ...formRels.filter(usesPicker).map(relationship => ({
+            id: pickerStepId(relationship),
+            name: `Look up the ${(relationship.label ?? this.fieldTitle(relationship.name)).toLowerCase()}`,
+            if: `\${{ parameters.${relationship.name} }}`,
+            action: 'catalog:fetch',
+            input: { entityRef: `\${{ parameters.${relationship.name} }}` },
+          })),
           {
             id: 'branch',
             name: 'Create Infrahub branch',
@@ -1561,6 +1604,7 @@ export class InfrahubEntityProvider implements EntityProvider {
               parentId: '${{ steps.create.output.data.' + `${kind.kind}Create.object.id }}`,
               content: `\${{ parameters.${relationship.name}_content }}`,
               fileName: `\${{ parameters.${idField} }}-${relationship.name}.yaml`,
+              ...(this.catalog.actAsUser ? { account: ACCOUNT_VALUE } : {}),
             },
           })),
           // An optional relationship is set the same guarded way, in either mode.
@@ -1575,6 +1619,7 @@ export class InfrahubEntityProvider implements EntityProvider {
                 kind.kind,
                 relationship.name,
                 relationship.hfidLength,
+                usesPicker(relationship),
               ),
               variables: {
                 ...this.contextVariables(),
@@ -1658,7 +1703,10 @@ export class InfrahubEntityProvider implements EntityProvider {
             },
             {
               title: `${kind.label} in the catalog`,
-              url: `/catalog/default/${kind.mapping.entity.toLowerCase()}/\${{ parameters.${idField} | lower }}`,
+              // A change has no identifier parameter -- the target is picked --
+              // so reading `parameters.<id>` there linked to
+              // `/catalog/default/component/`, an empty entity name.
+              url: `/catalog/default/${kind.mapping.entity.toLowerCase()}/\${{ (parameters.${idField} | lower) if parameters.mode === "create" else steps.fetch.output.entity.metadata.name }}`,
             },
             {
               title: `${kind.label} in Infrahub`,
@@ -1725,6 +1773,10 @@ export class InfrahubEntityProvider implements EntityProvider {
           // hfids the form collected. See `relatedNodeLists`.
           return `      ${relationship.name}: $${relationship.name}`;
         }
+        if (usesPicker(relationship)) {
+          // The picker step hands back the node id; see relationshipValue.
+          return `      ${relationship.name}: { id: $${relationship.name} }`;
+        }
         return (relationship.hfidLength ?? 1) > 1
           ? `      ${relationship.name}: { hfid: $${relationship.name} }`
           : `      ${relationship.name}: { hfid: [$${relationship.name}] }`;
@@ -1786,8 +1838,13 @@ export class InfrahubEntityProvider implements EntityProvider {
     kind: string,
     field: string,
     hfidLength = 1,
+    byId = false,
   ): string {
     const composite = hfidLength > 1;
+    // A picked peer arrives as its node id rather than its hfid.
+    const peer = byId
+      ? '{ id: $value }'
+      : `{ hfid: ${composite ? '$value' : '[$value]'} }`;
     const account = this.catalog.actAsUser ? `, $${ACCOUNT_VAR}: String!` : '';
     const context = this.catalog.actAsUser
       ? `context: { account: { id: $${ACCOUNT_VAR} } }, `
@@ -1796,9 +1853,7 @@ export class InfrahubEntityProvider implements EntityProvider {
       `mutation ($id: String!, $value: ${
         composite ? '[String]' : 'String'
       }!${account}) {`,
-      `  ${kind}Update(${context}data: { hfid: [$id], ${field}: { hfid: ${
-        composite ? '$value' : '[$value]'
-      } } }) {`,
+      `  ${kind}Update(${context}data: { hfid: [$id], ${field}: ${peer} }) {`,
       '    ok',
       '  }',
       '}',
@@ -1830,12 +1885,17 @@ export class InfrahubEntityProvider implements EntityProvider {
   }
 
   /**
-   * A picker yields an entity ref, so the Infrahub identifier has to be pulled
-   * back out of it. An hfid typed by hand is already the identifier.
+   * A picker yields an entity ref, so the Infrahub node has to be recovered
+   * from it: its id, read off the entity the picker step fetched. An hfid typed
+   * by hand is already the identifier.
+   *
+   * This used to be `parameters.x | parseEntityRef | pick('name')`, which is the
+   * LOWERCASED entity name -- right only for peers whose hfid happens to be
+   * lower case already, and refused for every rack in this lab.
    */
   private relationshipValue(relationship: ResolvedRelationship): string {
-    return relationship.picker
-      ? `\${{ parameters.${relationship.name} | parseEntityRef | pick('name') }}`
+    return usesPicker(relationship)
+      ? `\${{ steps.${pickerStepId(relationship)}.output.entity.metadata.annotations["${INFRAHUB_ANNOTATIONS.id}"] }}`
       : `\${{ parameters.${relationship.name} }}`;
   }
 
