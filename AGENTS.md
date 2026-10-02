@@ -94,6 +94,11 @@ One-paragraph summaries:
 Local Infrahub skills live in `.claude/skills/`. If the Skill tool says `Unknown skill: infrahub-managing-*`
 (or any `infrahub-*` name), read `.claude/skills/<name>/SKILL.md` directly with the Read tool and follow it.
 
+The `infrahub-managing-*` skills must not declare `paths:` in their frontmatter: a `paths:` key makes Claude
+Code treat a skill as conditional, so the Skill tool reports `Unknown skill` until a matching file has been
+touched. The skills live in `.agents/skills/` (symlinked from `.claude/skills/`). `infrahub@opsmill` is enabled
+but not installed, so these committed copies are the only source; re-check for `paths:` after any skills update.
+
 ## Workflow
 
 Before opening a pull request:
