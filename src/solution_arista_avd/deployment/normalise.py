@@ -13,6 +13,14 @@ non-empty difference against an artifact the device already matched:
   `version` and `uid` Junos stamps on every commit, and -- against a freshly
   booted vSRX -- both password hashes re-salted.
 
+The Junos comparison is also BLIND in one place, which is the opposite failure:
+`show | compare` never prints a `plain-text-password-value` it is about to
+delete. A freshly booted vSRX carries two of them from vrnetlab's `init.conf`,
+and its whole diff normalised to empty, so the reconciler confirmed `fw1`
+in sync with cleartext credentials on it and never pushed. The comparator
+therefore asks the running configuration directly (`JUNOS_CLEARTEXT_PROBE`),
+and a cleartext secret is a difference by a rule no suppression can override.
+
 Read as-is, that means "this device differs", and a reconciler acting on it
 replaces the firewall's configuration **on every cycle, forever**, while every
 log line says success.
@@ -121,6 +129,58 @@ _JUNOS_COMMIT_STAMPED = (
 
 # A hashed secret. `## SECRET-DATA` is how Junos marks it in `show | compare`.
 _JUNOS_SECRET = re.compile(r'^(encrypted-password) "([^"]+)";\s*## SECRET-DATA$')
+
+# A CLEARTEXT secret, and the one rule here that runs before every suppression.
+#
+# vrnetlab's init.conf writes both logins as `plain-text-password-value
+# "admin@123"`, and Junos keeps that leaf verbatim when the file is the boot
+# configuration. A full `load override` deletes it -- measured: the first push
+# onto a booted vSRX removed exactly those two `display set` lines -- but
+# `show | compare` does NOT print the deletion. The only visible trace in the
+# freshly-booted capture is the two re-salted `encrypted-password` pairs, which
+# `junos_same_secret` correctly proves to be the same password and suppresses.
+# So the whole diff normalised to empty, and fw1 was confirmed `in_sync` with
+# cleartext credentials in its running configuration -- after every reboot.
+#
+# Hence two things. The comparator probes the running configuration for the
+# leaf (`JUNOS_CLEARTEXT_PROBE`) and appends what it finds as deletions, because
+# the push removes them. And any statement naming the leaf, from the probe or
+# from `show | compare` itself, is kept whatever its sign and whatever else
+# would match it, with the value redacted: the normalised diff is stored in
+# Infrahub, and a credential must never be copied there.
+_JUNOS_CLEARTEXT = re.compile(r"\bplain-text-password-value\b")
+_JUNOS_CLEARTEXT_VALUE = re.compile(r'(\bplain-text-password-value\s+)("[^"]*"|[^\s;]+)')
+_JUNOS_COMMENT_TEXT = ("/*", "*", "#")
+
+# Operational mode, so it reads the COMMITTED configuration -- the thing a
+# booted device carries -- and changes nothing. `| match` keeps the secret's
+# neighbours, and everything else, out of the output.
+JUNOS_CLEARTEXT_PROBE = "show configuration | display set | match plain-text-password-value"
+
+# Locates the probe's lines in the raw comparison. Not an `[edit` banner, and
+# carries no sign, so the normaliser never mistakes it for configuration.
+JUNOS_CLEARTEXT_BANNER = "[running configuration: cleartext secrets the push removes]"
+
+JUNOS_REDACTED = '"<redacted>"'
+
+
+def redact_junos_cleartext(line: str) -> str:
+    """The line with every `plain-text-password-value` value replaced."""
+    return _JUNOS_CLEARTEXT_VALUE.sub(lambda m: m.group(1) + JUNOS_REDACTED, line)
+
+
+def junos_running_cleartext(probe_output: str) -> list[str]:
+    """Each cleartext statement the probe found, as a redacted deletion.
+
+    Only `set` lines naming the leaf count; the echoed command and the prompts
+    around it do not. Deletions, because that is what the push does to them.
+    """
+    return [
+        f"- {redact_junos_cleartext(line.strip())}"
+        for line in probe_output.splitlines()
+        if line.strip().startswith("set ") and _JUNOS_CLEARTEXT.search(line)
+    ]
+
 
 # NOTE: there was an `fxp0` suppression here, and its removal is the point.
 #
@@ -262,6 +322,10 @@ def _known_passwords() -> tuple[str, ...]:
 def normalise_junos(raw: str, passwords: tuple[str, ...] | None = None) -> list[str]:
     """Significant lines from `show | compare` after a `load override`.
 
+    `raw` is what `compare.compare_junos` returns: the compare output, then
+    any cleartext statements the running configuration carries under
+    `JUNOS_CLEARTEXT_BANNER`. A cleartext statement is always significant.
+
     `passwords` are the secrets a re-salted hash may be proven against; by
     default the reconciler's own login password.
     """
@@ -286,6 +350,10 @@ def normalise_junos(raw: str, passwords: tuple[str, ...] | None = None) -> list[
         if _JUNOS_BANNER.match(line):
             flush()
             banner = line.strip()
+            continue
+        # Before every suppression, whatever its sign -- see _JUNOS_CLEARTEXT.
+        if _JUNOS_CLEARTEXT.search(text) and not text.startswith(_JUNOS_COMMENT_TEXT):
+            kept.append(redact_junos_cleartext(line.rstrip()))
             continue
         if not text or _JUNOS_MOVED.match(line):
             continue

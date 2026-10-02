@@ -1,0 +1,6 @@
+admin@fw1> show configuration | display set | match plain-text-password-value 
+set system root-authentication plain-text-password-value "admin@123"
+set system login user admin authentication plain-text-password-value "admin@123"
+
+admin@fw1> exit 
+

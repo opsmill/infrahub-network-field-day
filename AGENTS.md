@@ -1083,6 +1083,18 @@ Worth knowing before debugging it:
   stamped by Junos on every commit and suppressed as deletions only, under the banner they were
   measured under. Every rule has a captured in-sync *and* drifted fixture, including drift inside
   `system`.
+- **`show | compare` cannot see a cleartext password, so the comparator asks running.** A
+  freshly booted vSRX carries `init.conf`'s two `plain-text-password-value "admin@123"` leaves.
+  `load override` deletes them, but the compare never prints that deletion — its only trace is
+  the two re-salted hash pairs, which the proof above rightly suppresses. So the whole diff
+  normalised to empty, and a fresh bootstrap recorded fw1 `in_sync` with cleartext credentials
+  on it and never pushed; a manual `invoke provision --kind junos` removed exactly those two
+  lines. `compare_junos` now runs `show configuration | display set | match
+  plain-text-password-value` in the same session and appends what it finds as deletions, and
+  `normalise_junos` keeps any statement naming the leaf **before every suppression**, redacted,
+  because the normalised diff is stored in Infrahub. An unanswered probe raises rather than
+  reading as clean. The re-salt proof is unchanged; the fix is that the leaf is now looked for,
+  not that hashes became suspicious.
 - **sr_cli stops at the first error, commits nothing, and leaves its candidate behind.** A
   parse error or a refused commit exits 1 with running untouched — measured both — but the
   named candidate survives the session and SR Linux holds ten. The pusher and comparator clear
@@ -1288,6 +1300,13 @@ every bug this found was quiet:
   an empty artifact still reports `Ready`.
 - It checks the **delivered resources**, not `syncState`. A sync over an empty
   set is still `Succeeded`.
+- It asks **fw1's running configuration**, not `DeploymentState`, whether the full
+  configuration was applied: no `plain-text-password-value`, and the newest commit by
+  `admin` (the reconciler) rather than vrnetlab's `root via other`. `in_sync` once came
+  from a comparison that could not see cleartext.
+- It counts every **SR Linux WAN router's established BGP sessions** per network instance
+  against the `neighbor` statements of that router's own `lab/wan/rendered/<n>/config.cli`,
+  so the expected count comes from the artifact rather than from a number in the script.
 
 Six runs of it found the tolerated-502, the topology double-run and the CoreDNS
 race, none of which failed in a way that pointed at its cause.

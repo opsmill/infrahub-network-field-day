@@ -27,6 +27,12 @@ the lab, which still ran FRR when they were captured. Each is the router's own
 `_clean_<router>` straight after booting from it, `srl_drifted` branch-rtr after
 hand edits inside /system and outside it, and `srl_changed` the artifact moving
 while isp-pe1 stands still.
+
+The `junos_cleartext_probe_*` fixtures are the comparator's running-configuration
+probe. `_clean` was captured on live fw1 after its first full push; `_boot` is
+the same CLI output holding the two `plain-text-password-value` lines of
+`fixtures/junos/vsrx_booted.set` -- the running configuration captured on the
+booted vSRX the `junos_clean_boot.diff` comparison was taken against.
 """
 
 from __future__ import annotations
@@ -36,7 +42,11 @@ from pathlib import Path
 
 import pytest
 
+from solution_arista_avd.deployment import devices as dv
+from solution_arista_avd.deployment.compare import junos_raw
 from solution_arista_avd.deployment.normalise import (
+    JUNOS_CLEARTEXT_BANNER,
+    junos_running_cleartext,
     junos_same_secret,
     normalise,
     normalise_eos,
@@ -50,6 +60,23 @@ FIXTURES = Path(__file__).parent / "fixtures" / "deployment"
 
 def _fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+FW1 = dv.Target(device="fw1", artifact_name=dv.ARTIFACT_JUNOS, artifact_id="a", status="Ready", mgmt_ip=None)
+
+
+def _fw1_session(probe: str, diff: str) -> str:
+    """The whole CLI output `compare_junos` reads: the probe, then the comparison.
+
+    The probe fixture is a session of its own and ends with `exit`; here the
+    configuration commands follow it in the same session, as they do live.
+    """
+    answered = _fixture(probe).split("admin@fw1> exit")[0]
+    return (
+        f"{answered}admin@fw1> configure exclusive \nEntering configuration mode\n\n"
+        "[edit]\nadmin@fw1# load override /var/tmp/infrahub-reconcile.conf \nload complete\n\n"
+        f"[edit]\nadmin@fw1# show | compare {_fixture(diff)}rollback 0 \nload complete\n"
+    )
 
 
 class TestInSyncDevicesAreSilent:
@@ -76,15 +103,26 @@ class TestInSyncDevicesAreSilent:
         assert "- version " in raw and "uid 2000;" in raw, "fixture should carry the real non-empty output"
         assert normalise_junos(raw) == []
 
-    def test_a_freshly_booted_junos_normalises_to_empty(self) -> None:
-        """The state every lab deploy starts in, and the first comparison live
-        fw1 will see: booted from vrnetlab's init.conf plus junos.conf, never
-        pushed. Its raw diff is the noisiest one measured -- comment blocks
-        round-tripping, zone pairs moved, and BOTH password hashes re-salted:
-        the lab's `$6$otternetlab$...` shown as `$6$<random>$...`."""
+    def test_a_freshly_booted_junos_compare_alone_is_blind(self) -> None:
+        """The state every lab deploy starts in: booted from vrnetlab's init.conf
+        plus junos.conf, never pushed. Its raw diff is the noisiest one measured
+        -- comment blocks round-tripping, zone pairs moved, and BOTH password
+        hashes re-salted: the lab's `$6$otternetlab$...` shown as
+        `$6$<random>$...` -- and every line of it is rightly suppressed.
+
+        This used to be asserted as "a booted firewall is in sync", and it is
+        the bug: that device carried two `plain-text-password-value` leaves
+        which the push deletes and `show | compare` never prints. The compare
+        section alone normalising to empty is WHY the comparator probes the
+        running configuration -- see TestCleartextIsAlwaysDrift.
+        """
         raw = _fixture("junos_clean_boot.diff")
         assert len(raw.splitlines()) > 150, "fixture should carry the real non-empty output"
         assert raw.count("## SECRET-DATA") == 4
+        statements = [line for line in raw.splitlines() if "plain-text-password-value" in line]
+        assert statements and all(line.lstrip("- ").startswith("*") for line in statements), (
+            "the compare mentions the leaf only inside the artifact's comments, never as a statement"
+        )
         assert normalise_junos(raw) == []
 
 
@@ -214,6 +252,76 @@ class TestReSaltedSecrets:
     def test_an_unpaired_secret_is_never_suppressed(self) -> None:
         raw = f'[edit system root-authentication]\n+   encrypted-password "{self.LAB_HASH}"; ## SECRET-DATA\n'
         assert normalise_junos(raw) == [f'+   encrypted-password "{self.LAB_HASH}"; ## SECRET-DATA']
+
+
+class TestCleartextIsAlwaysDrift:
+    """A configured `plain-text-password-value` is a difference, whatever else
+    the comparison says. Found on a fresh bootstrap: fw1 carried vrnetlab's two
+    cleartext `admin@123` leaves, the reconciler recorded it `in_sync` and never
+    pushed, and a manual `invoke provision --kind junos` removed exactly those
+    two lines."""
+
+    def test_a_freshly_booted_firewall_differs(self) -> None:
+        """The reproduction: the booted device's probe plus its real comparison."""
+        raw = junos_raw(FW1, _fw1_session("junos_cleartext_probe_boot.txt", "junos_clean_boot.diff"))
+        assert normalise_junos(raw) == [
+            '- set system root-authentication plain-text-password-value "<redacted>"',
+            '- set system login user admin authentication plain-text-password-value "<redacted>"',
+        ]
+
+    def test_a_pushed_firewall_is_still_in_sync(self) -> None:
+        """The other half: live fw1 after its push, probe and comparison both clean."""
+        raw = junos_raw(FW1, _fw1_session("junos_cleartext_probe_clean.txt", "junos_clean.diff"))
+        assert JUNOS_CLEARTEXT_BANNER not in raw
+        assert normalise_junos(raw) == []
+
+    def test_the_credential_never_reaches_the_diff(self) -> None:
+        """The normalised diff is stored in Infrahub; the raw text is logged."""
+        raw = junos_raw(FW1, _fw1_session("junos_cleartext_probe_boot.txt", "junos_clean_boot.diff"))
+        assert "admin@123" not in raw.split(JUNOS_CLEARTEXT_BANNER)[1]
+        assert not [line for line in normalise_junos(raw) if "admin@123" in line]
+
+    def test_the_resalt_proof_still_holds_beside_it(self) -> None:
+        """Cleartext must not be fixed by making re-salted hashes differ: the
+        same-password capture stays silent, and so does the booted one's pairs."""
+        assert normalise_junos(_fixture("junos_resalted_same_password.diff")) == []
+        booted = normalise_junos(
+            junos_raw(FW1, _fw1_session("junos_cleartext_probe_boot.txt", "junos_clean_boot.diff"))
+        )
+        assert not [line for line in booted if "encrypted-password" in line]
+
+    @pytest.mark.parametrize("sign", ["+", "-", ""])
+    def test_no_suppression_can_swallow_it(self, sign: str) -> None:
+        """In `show | compare` itself, under a banner with a stamp rule, in any
+        sign, beside a provable re-salted pair: still kept, still redacted."""
+        lab = "$6$otternetlab$1ni88meu2WmQvWmveReLJXVojb6LSSOmcM75qXpzCLKzUzoU63yFywA2YQLoFI2QDjo4RXF28DbWY9wg9gKT71"
+        resalted = _fixture("junos_resalted_same_password.diff").split('encrypted-password "')[1].split('"')[0]
+        raw = (
+            "[edit system login user admin authentication]\n"
+            f'{sign}     plain-text-password-value "admin@123"; ## SECRET-DATA\n'
+            f'-     encrypted-password "{resalted}"; ## SECRET-DATA\n'
+            f'+     encrypted-password "{lab}"; ## SECRET-DATA\n'
+        )
+        assert normalise_junos(raw) == [f'{sign}     plain-text-password-value "<redacted>"; ## SECRET-DATA']
+
+    def test_a_comment_mentioning_it_is_still_a_comment(self) -> None:
+        """The artifact's own comments name the leaf; those are not configuration."""
+        assert normalise_junos("[edit]\n-  * vrnetlab writes `plain-text-password-value`\n") == []
+
+    def test_only_set_lines_count_from_the_probe(self) -> None:
+        assert junos_running_cleartext(_fixture("junos_cleartext_probe_clean.txt")) == []
+        assert len(junos_running_cleartext(_fixture("junos_cleartext_probe_boot.txt"))) == 2
+
+    def test_an_unanswered_probe_is_never_read_as_clean(self) -> None:
+        session = _fw1_session("junos_cleartext_probe_clean.txt", "junos_clean.diff").replace(
+            "match plain-text-password-value \n", "match plain-text-password-value \nerror: permission denied\n", 1
+        )
+        with pytest.raises(dv.ProvisionError, match="cleartext probe failed"):
+            junos_raw(FW1, session)
+
+    def test_a_session_without_the_probe_raises(self) -> None:
+        with pytest.raises(dv.ProvisionError, match="unexpected CLI output"):
+            junos_raw(FW1, "admin@fw1# show | compare \n[edit]\n- version 22.3R1.11;\nrollback 0")
 
 
 class TestFailNoisy:
