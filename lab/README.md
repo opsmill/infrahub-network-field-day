@@ -554,11 +554,15 @@ each fails differently enough to be its own debugging session. See
 ## Verified state
 
 Deployed and validated on this host with ceOS 4.36.0.1F, Junos 22.3R1.11,
-FRR 10.2.1 and Cilium 1.18.6. `make verify` reports **108 passed, 0 failed**,
-covering the list below. That run predates the WAN moving to SR Linux 26.7.2;
-since then the WAN and tenant sections of `verify.sh` have passed (23 of 23)
-against a standalone six-router SR Linux prototype with a stand-in border leaf,
-and the full count has not been re-measured on this topology:
+SR Linux 26.7.2 and Cilium 1.18.6. On the lab as Infrahub drives it — built by
+`invoke bootstrap`, applications delivered by Vidra, the handover done —
+`make verify` reports **111 passed, 0 failed, 0 skipped**, covering the list
+below. Each skip the script can still print names an optional component that is
+not deployed (a WAN customer site, the lab-only access broker, the tooling
+cluster); none is reachable on a full build. A lab deployed without Infrahub, or
+with `invoke cluster --no-handover`, is detected rather than assumed: the script
+looks for `otternet-metrics` or `otternet-observability`, and for the lab's own
+access broker, and checks whichever is there.
 
 - 5/5 underlay BGP and 5/5 EVPN overlay sessions, MLAG Active and consistent
 - symmetric IRB: the firewall handoff learned as an EVPN type-5 route
@@ -566,24 +570,29 @@ and the full count has not been re-measured on this topology:
 - Cilium BGP established to both leaves with MD5 auth, all three pod CIDRs and
   the LoadBalancer VIP installed in the fabric's VRF table
 - the headline path, ten times out of ten: `host-a` -> firewall -> EVPN ->
-  LoadBalancer VIP -> pod, through the leaf ACL, the firewall zone policy and
-  the CiliumNetworkPolicy
-- negatives that must fail: the ClusterIP-only backend unreachable from the app
-  tenant, SSH to a k8s node dropped by the firewall (1755 packets on its deny
-  counter), and an out-of-namespace pod denied by Cilium with a Hubble verdict
+  the demo application's LoadBalancer VIP -> pod, through the leaf ACL, the
+  firewall zone policy and the CiliumNetworkPolicy, with the VIP checked to lie
+  inside that application's own block
+- negatives that must fail: a ClusterIP unreachable from the app tenant (the
+  lab's `backend`, or, for the one-tier chart Infrahub delivers, the demo
+  Service's own ClusterIP while its VIP answers), SSH to a k8s node dropped by
+  the firewall, and an out-of-namespace pod denied by Cilium with a Hubble
+  verdict
 - the Crossplane control plane: both providers and both composition functions
   healthy, both XRDs established, every claim ready, every composed resource
   synced, and the `CiliumBGPClusterConfig` Cilium is actually running confirmed
   to be one of them rather than an orphan
 - `kube-prometheus-stack` installed by `provider-helm` as a real release, with
-  Prometheus scraping Cilium, and Grafana answering HTTP 200 on its
-  BGP-advertised VIP from the app tenant, five times out of five
+  Prometheus reporting every `cilium-agent` target up (asked through its own
+  API, not read from its configuration), and Grafana answering on its
+  BGP-advertised VIP from inside the cluster — and dropped at its pod from the
+  app tenant even though the firewall permits that session, because
+  `otternet-metrics` admits only the pod prefix until a grant names a source
 - the WAN: every BGP session from CE through both ISP PEs to the border leaf,
   both customers learning the DC service prefix and **neither learning the
   other's LAN**, and no customer learning the pod CIDR
-- both customer hosts and the branch host reaching the DC service VIP five
-  times out of five — a WAN customer across two AS hops of provider, the
-  branch over its private circuit
+- both customer hosts reaching the demo application's VIP five times out of
+  five, across two AS hops of provider
 - the trust asymmetry: the branch may ping a k8s node, a WAN customer has no
   route to one and is denied by policy, and neither can reach the app tenant
 - the tenant model: acme's two sites reach each other across one VRF with
@@ -595,17 +604,23 @@ and the full count has not been re-measured on this topology:
 - internet as a product: both of acme's sites get HTTP 200 from the internet,
   globex has no default route and cannot, and globex's prefixes are never
   announced to AS 64500 so nothing out there has a route back to it
-- the branch office as a site: a bridged LAN with three devices on it, an XFCE
+- the branch office as a site: a LAN of three devices bridged in SR Linux
+  mac-vrf `lan`, with `irb0.0` as its gateway, an XFCE
   session serving VNC, guacd reaching that session across the LAN and returning
   its RFB banner, and Guacamole authenticating from `user-mapping.xml` with no
   database behind it
-- the access broker closed by default: the branch desktop reaches the portal
-  with no grant at all, and **cannot** reach Grafana until one exists — the
-  negative is asserted, because if it ever passes by accident every grant
-  becomes a no-op that still looks like it worked
+- access closed by default: the branch desktop reaches the portal (Backstage
+  and Dex in the tooling cluster, or the lab's broker where it is installed)
+  with no grant at all, and **cannot** reach Grafana or the demo application
+  until a grant exists. The expectation is derived from fw1's policy and the
+  pods' CiliumNetworkPolicy and the datapath must agree with it either way, so
+  a grant made while the lab runs moves the expectation instead of failing the
+  check. The demo application's pod policy already names the branch, which
+  isolates the firewall gate; Grafana's isolates both
 - the firewall: it really is a vSRX, four zones bound to their handoffs, a
   deny-all default policy, routes back into both tenants, no NAT anywhere, and
-  the TCP MSS clamp that compensates for the 9192-byte interface MTU ceiling
+  the TCP MSS clamp of 9124, sized for the VXLAN fabric behind it
+  (9214 − 50 − 20 − 20) rather than for its own 9192-byte interface
 
 Exercised by hand, end to end from the branch desktop's browser:
 
@@ -1057,8 +1072,8 @@ clear tell; the limit is now 768Mi.
 The knock-on is worth knowing because it points away from the cause: while
 Grafana churns, no node has a ready backend, so `externalTrafficPolicy: Local`
 withdraws the VIP from BGP and the *fabric* demo fails. `make verify` reports
-"only 0/5 requests to the Grafana VIP returned 200", which looks like a routing
-or policy problem and is a memory limit.
+that Grafana's VIP is missing from the fabric and that Grafana no longer answers
+on it, which looks like a routing or policy problem and is a memory limit.
 
 **containerlab refuses VM-based kinds outright without `vmx` or `svm`.** It does
 not try and fail, it checks `/proc/cpuinfo` during topology validation and stops

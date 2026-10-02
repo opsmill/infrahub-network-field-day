@@ -51,6 +51,142 @@ jnpr() {
         -o ConnectTimeout=10 admin@127.0.0.1 "$1" 2>/dev/null
 }
 
+kube_ok() {
+    [[ -f "$KUBECONFIG" ]] && command -v kubectl >/dev/null 2>&1 && kubectl get nodes >/dev/null 2>&1
+}
+ns_exists() { kubectl get ns "$1" >/dev/null 2>&1; }
+
+# The first advertised LoadBalancer Service in namespace $1, as
+# "<name> <vip> <clusterIP> <port>". Looked up by the advertisement label rather
+# than by name, because the name is not stable across the two ways this lab is
+# driven: the lab's own claim calls it `frontend`, the Helm chart Infrahub
+# delivers calls it `<release>-whoami`.
+advertised_svc() {
+    kubectl -n "$1" get svc -l otternet.lab/advertise=true -o json 2>/dev/null | python3 -c '
+import json,sys
+for s in json.load(sys.stdin)["items"]:
+    if s["spec"].get("type") != "LoadBalancer": continue
+    ing=(s.get("status",{}).get("loadBalancer",{}).get("ingress") or [{}])[0].get("ip","")
+    print(s["metadata"]["name"], ing or "-", s["spec"].get("clusterIP","-"), s["spec"]["ports"][0]["port"]); break'
+}
+
+# Does the FabricApp deploying into namespace $1 own the VIP $2? Prints the block.
+vip_in_block() {
+    kubectl get fabricapp -o json 2>/dev/null | python3 -c '
+import json,sys,ipaddress
+ns,vip=sys.argv[1],ipaddress.ip_address(sys.argv[2])
+for a in json.load(sys.stdin)["items"]:
+    if a["spec"].get("namespace")!=ns: continue
+    b=(a["spec"].get("expose") or {}).get("vipBlock")
+    if b and vip in ipaddress.ip_network(b): print(b)' "$1" "$2"
+}
+
+# THE POD GATE: would the CiliumNetworkPolicies in namespace $1 admit source
+# address $3 to the pods behind Service $2? Read from the policies themselves
+# rather than from the FabricApp, because the lab-only access path adds its own
+# policy beside the composed one while the Infrahub path widens the composed
+# one -- both end up here. A pod no policy selects is admitted, as Cilium does.
+pod_admits() {
+    python3 - "$1" "$2" "$3" <<'PY'
+import ipaddress, json, subprocess, sys
+ns, svc, src = sys.argv[1], sys.argv[2], ipaddress.ip_address(sys.argv[3])
+k = lambda *a: json.loads(subprocess.run(["kubectl", "-n", ns, *a, "-o", "json"],
+                                         capture_output=True, text=True).stdout or "{}")
+sel = k("get", "svc", svc).get("spec", {}).get("selector") or {}
+pods = k("get", "pods", "-l", ",".join(f"{a}={b}" for a, b in sel.items())).get("items", [])
+labels = pods[0]["metadata"].get("labels", {}) if pods else {}
+selected = admitted = False
+for p in k("get", "cnp").get("items", []):
+    want = p["spec"].get("endpointSelector", {}).get("matchLabels", {})
+    if not all(labels.get(a) == b for a, b in want.items()):
+        continue
+    rules = p["spec"].get("ingress")
+    if rules is None:
+        continue
+    selected = True
+    for r in rules:
+        cidrs = list(r.get("fromCIDR", [])) + [c.get("cidr") for c in r.get("fromCIDRSet", [])]
+        if any(c and src in ipaddress.ip_network(c) for c in cidrs):
+            admitted = True
+print("admit" if admitted or not selected else "drop")
+PY
+}
+
+# THE FIREWALL GATE: does fw1's policy, evaluated first-match as Junos does,
+# permit source $2 in zone $1 to $3:$4/tcp in zone k8s-prod? Derived from the
+# running configuration so that a grant -- which is a new policy, not a change
+# to the baseline -- is recognised whatever the grant is called. Reads the
+# configuration from $fw_cfg, which load_fw_cfg fills once: every call would
+# otherwise be two more SSH sessions to a box whose sessions are not cheap.
+fw_cfg=""
+load_fw_cfg() {
+    [[ -n "$fw_cfg" ]] && return
+    fw_cfg=$(jnpr "show configuration security | display set"; jnpr "show configuration applications | display set")
+}
+fw_permits() {
+    python3 -c '
+import ipaddress, sys
+zone, src, dst, port = sys.argv[1], ipaddress.ip_address(sys.argv[2]), ipaddress.ip_address(sys.argv[3]), int(sys.argv[4])
+addr, sets, apps, order, pol = {}, {}, {}, [], {}
+builtin = {"junos-http": {80}, "junos-https": {443}}
+for line in sys.stdin:
+    t = line.split()
+    if t[:5] == ["set", "security", "address-book", "global", "address"] and len(t) >= 7:
+        try: addr[t[5]] = ipaddress.ip_network(t[6])
+        except ValueError: pass
+    elif t[:5] == ["set", "security", "address-book", "global", "address-set"] and len(t) >= 8:
+        sets.setdefault(t[5], []).append(t[7])
+    elif t[:3] == ["set", "applications", "application"] and len(t) >= 6 and t[4] == "destination-port":
+        lo, _, hi = t[5].partition("-")
+        apps[t[3]] = set(range(int(lo), int(hi or lo) + 1))
+    elif t[:3] == ["set", "security", "policies"] and len(t) >= 10 and t[3] == "from-zone" \
+            and t[4] == zone and t[6] == "k8s-prod":
+        p = pol.setdefault(t[8], {"source-address": [], "destination-address": [], "application": [], "then": None})
+        if t[8] not in order: order.append(t[8])
+        if t[9] == "match" and len(t) >= 12: p.setdefault(t[10], []).append(t[11])
+        elif t[9] == "then" and t[10] in ("permit", "deny", "reject"): p["then"] = t[10]
+def has(name, ip, seen=()):
+    if name in ("any", "any-ipv4"): return True
+    if name in addr: return ip in addr[name]
+    return any(has(m, ip, seen + (name,)) for m in sets.get(name, []) if m not in seen)
+def serves(name):
+    return name == "any" or port in builtin.get(name, apps.get(name, set()))
+for n in order:
+    p = pol[n]
+    if any(has(a, src) for a in p["source-address"]) and any(has(a, dst) for a in p["destination-address"]) \
+            and any(serves(a) for a in p["application"]):
+        print(("permit " if p["then"] == "permit" else "deny ") + n); break
+else:
+    print("deny default")' "$1" "$2" "$3" "$4" <<<"$fw_cfg" 2>/dev/null || echo "deny unparsed"
+}
+
+# One source host, one destination VIP, and the two independent gates between
+# them. The answer is DERIVED from configuration -- the firewall's policy and
+# the pods' CiliumNetworkPolicy -- and then the datapath has to agree with it in
+# both directions: open-but-unreachable is a broken datapath, and
+# closed-but-reachable is a security failure. Nothing here assumes which way
+# round the gates are set, so a grant made while the lab is running moves the
+# expectation instead of failing the check.
+#   gated_reach <label> <src-node> <src-ip> <src-zone> <ns> <svc> <vip> <port> <path>
+gated_reach() {
+    local label="$1" node="$2" sip="$3" zone="$4" ns="$5" svc="$6" vip="$7" port="$8" path="$9"
+    local fw pod code
+    fw=$(fw_permits "$zone" "$sip" "$vip" "$port")
+    pod=$(pod_admits "$ns" "$svc" "$sip")
+    code=$(docker exec "clab-otternet-$node" curl -sS -o /dev/null -w '%{http_code}' \
+             --max-time 6 "http://$vip:$port$path" 2>/dev/null)
+    local why="firewall: ${fw}; pod policy: ${pod}"
+    if [[ "$fw" == permit* && "$pod" == "admit" ]]; then
+        [[ "$code" == "200" ]] \
+            && ok "$label: reachable, both gates open ($why)" \
+            || bad "$label" "both gates are open ($why) but http://$vip:$port$path returned ${code:-nothing} from $node -- the datapath is broken"
+    else
+        [[ "$code" == "200" ]] \
+            && bad "$label" "a gate is closed ($why) yet $node reached http://$vip:$port$path -- the gate is not enforcing" \
+            || ok "$label: NOT reachable, as configured ($why)"
+    fi
+}
+
 # =============================================================== fabric =====
 hdr "Fabric underlay and overlay"
 if running spine1; then
@@ -135,31 +271,51 @@ if running fw1; then
     fi
     # The MTU compromise this platform forces. Without the clamp, large TCP
     # through the firewall stalls in exactly the way the lab warns about.
-    check "vSRX clamps TCP MSS to fit its 9192-byte interface MTU" \
-          "9138" jnpr "show configuration security flow | display set"
+    # The clamp is sized for the VXLAN fabric BEHIND the firewall, not for its
+    # own 9192-byte interface: 9214 - 50 (VXLAN) - 20 (IP) - 20 (TCP) = 9124.
+    # The interface-sized 9138 was measured to drop every full-size segment
+    # inside the fabric, so matching it here would pass a broken datapath.
+    check "vSRX clamps TCP MSS to 9124, sized for the VXLAN fabric behind it" \
+          "tcp-mss all-tcp mss 9124$" jnpr "show configuration security flow | display set"
 else
     skp "firewall checks" "fw1 is not running"
 fi
 
 # =========================================================== kubernetes =====
 hdr "Kubernetes and fabric integration"
-if [[ -f "$KUBECONFIG" ]] && command -v kubectl >/dev/null 2>&1 && kubectl get nodes >/dev/null 2>&1; then
+demo_svc=""; demo_vip=""; demo_cip=""; demo_port=""; metrics_ns=""
+if kube_ok; then
     check "all three k3s nodes are Ready" \
           "^3$" bash -c 'kubectl get nodes --no-headers | grep -c " Ready "'
     check "Cilium is running on every node" \
           "3" bash -c 'kubectl -n kube-system get ds cilium -o jsonpath="{.status.numberReady}"'
     check "Cilium BGP sessions to both leaves are established" \
           "established" bash -c 'kubectl -n kube-system exec ds/cilium -- cilium-dbg bgp peers 2>/dev/null || kubectl get ciliumbgpclusterconfig otternet-fabric -o yaml'
-    check "the frontend service has a LoadBalancer VIP from the pool" \
-          "10\.112\.240\." bash -c 'kubectl -n otternet-demo get svc frontend -o jsonpath="{.status.loadBalancer.ingress[0].ip}"'
+    # The demo application's advertised Service, whichever writer delivered it,
+    # and the observability stack's namespace: `otternet-metrics` when Infrahub
+    # delivers it, the lab's own `otternet-observability` otherwise. Detected,
+    # never assumed, so a lab deployed without Infrahub still verifies.
+    read -r demo_svc demo_vip demo_cip demo_port <<<"$(advertised_svc otternet-demo)"
+    metrics_ns=""
+    for n in otternet-metrics otternet-observability; do
+        ns_exists "$n" && { metrics_ns=$n; break; }
+    done
+    if [[ -n "${demo_svc:-}" && "$demo_vip" != "-" ]]; then
+        blk=$(vip_in_block otternet-demo "$demo_vip")
+        [[ -n "$blk" ]] \
+            && ok "the demo app's Service $demo_svc holds VIP $demo_vip, inside its own block $blk" \
+            || bad "demo VIP" "$demo_svc holds $demo_vip, which is outside the otternet-demo FabricApp's vipBlock -- another app's pool handed it out"
+    else
+        bad "demo VIP" "no advertised LoadBalancer Service with a VIP in otternet-demo -- kubectl -n otternet-demo get svc -l otternet.lab/advertise=true"
+    fi
     check "default-deny policy is in force in the demo namespace" \
           "default-deny" bash -c 'kubectl -n otternet-demo get cnp -o name'
 
     if running k8s-leaf1; then
         check "the leaf learned the pod CIDR over BGP from Cilium" \
               "10\.111\." eos k8s-leaf1 "show ip route vrf K8S_PROD bgp"
-        check "the LoadBalancer VIP reached the fabric" \
-              "10\.112\.240\." eos k8s-leaf1 "show ip route vrf K8S_PROD bgp"
+        check "the demo app's LoadBalancer VIP reached the fabric" \
+              "${demo_vip:-10.112.240.}/32" eos k8s-leaf1 "show ip route vrf K8S_PROD bgp"
     fi
 else
     skp "kubernetes checks" "cluster not reachable -- run make k8s"
@@ -316,15 +472,21 @@ for p in json.load(sys.stdin)[\"items\"]:
     # The real chart, actually deployed by provider-helm.
     check "kube-prometheus-stack is deployed as a Helm release" \
           "deployed" bash -c 'kubectl get releases.helm.crossplane.io -o jsonpath="{.items[*].status.atProvider.state}"'
-    check "Prometheus is scraping Cilium" \
-          "^cilium-agent$" bash -c 'kubectl -n otternet-observability get cm -o name >/dev/null; kubectl get secret -n otternet-observability -o json | python3 -c "
-import json,sys,base64,re
-for s in json.load(sys.stdin)[\"items\"]:
-    for k,v in (s.get(\"data\") or {}).items():
-        if k.endswith(\".yaml\") and \"scrape\" in k.lower() or k==\"additional-scrape-configs.yaml\":
-            t=base64.b64decode(v).decode()
-            m=re.search(r\"job_name: (cilium-agent)\", t)
-            if m: print(m.group(1)); raise SystemExit"'
+    # Ask Prometheus itself, through the API server's service proxy, rather than
+    # grepping its configuration: a job that is configured and never scraped
+    # successfully is exactly what a dashboard full of "No data" looks like.
+    if [[ -n "$metrics_ns" ]]; then
+        prom=$(kubectl -n "$metrics_ns" get svc -l app=kube-prometheus-stack-prometheus \
+                 -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        check "Prometheus in $metrics_ns is scraping Cilium on every node" \
+              "^cilium-agent up=[1-9][0-9]* down=0$" bash -c "kubectl get --raw '/api/v1/namespaces/$metrics_ns/services/http:$prom:9090/proxy/api/v1/targets?state=active' | python3 -c '
+import json,sys
+t=[x for x in json.load(sys.stdin)[\"data\"][\"activeTargets\"] if x[\"labels\"].get(\"job\")==\"cilium-agent\"]
+up=sum(x[\"health\"]==\"up\" for x in t)
+print(\"cilium-agent up=%d down=%d\" % (up, len(t)-up))'"
+    else
+        bad "Prometheus" "neither otternet-metrics (Infrahub's) nor otternet-observability (the lab's) exists -- the observability stack is not deployed"
+    fi
 else
     skp "crossplane checks" "Crossplane not installed -- run make crossplane"
 fi
@@ -497,16 +659,25 @@ hdr "Branch office and self-service access"
 
 if running branch-rtr; then
     # One switched segment, not three point-to-point links. If the ports are not
-    # enslaved, guacd cannot open a VNC session to the desktop without the
+    # bridged, guacd cannot open a VNC session to the desktop without the
     # router forwarding between two hosts in the same /24, which mostly works
     # and is not what a branch LAN does.
-    ports=$(docker exec clab-otternet-branch-rtr sh -c \
-              "ip -o link show | grep -c 'master br-branch'" 2>/dev/null || echo 0)
+    #
+    # branch-rtr is SR Linux, so the LAN is a mac-vrf (`lan`) with the three
+    # access subinterfaces bridged into it and irb0.0 as the routed gateway in
+    # `default` -- not a Linux bridge, which SR Linux never creates. The Type
+    # line is reset per interface because irb0.0 prints none.
+    ports=$(srl branch-rtr "show network-instance lan interfaces" | awk '
+        /^Interface/ {t=""} /^Type/ {t=$3}
+        /^Oper state/ { if (t=="bridged" && $4=="up") n++ }
+        END {print n+0}')
     if [[ "${ports:-0}" -ge 3 ]]; then
-        ok "all $ports branch LAN ports are on br-branch"
+        ok "all $ports branch LAN ports are bridged and up in mac-vrf lan"
     else
-        bad "branch LAN bridge" "expected 3 ports on br-branch, found ${ports:-0} -- re-render and push: make wan-build wan-deploy"
+        bad "branch LAN bridge" "expected 3 bridged subinterfaces up in mac-vrf lan, found ${ports:-0} -- docker exec clab-otternet-branch-rtr sr_cli -d 'show network-instance lan interfaces'"
     fi
+    check "the branch LAN gateway 10.70.0.1 is on irb0.0, routed in default" \
+          "default \(default\)" bash -c "docker exec clab-otternet-branch-rtr sr_cli -d 'show interface irb0' 2>/dev/null | grep -A12 'irb0.0 is up' | grep -B10 '10\.70\.0\.1/24'"
 fi
 
 if running branch-desktop; then
@@ -594,8 +765,17 @@ if [[ -f "$KUBECONFIG" ]] && command -v kubectl >/dev/null 2>&1 \
         else
             ok "the access controller is reconciling without errors"
         fi
+    elif ns_exists vidra-system; then
+        # Infrahub drives this lab. `invoke cluster`'s handover deletes the
+        # lab's access broker ON PURPOSE -- nothing in Infrahub models it, and
+        # a workload no service object declares is state no proposed change can
+        # explain. Requests come from Infrahub's portal (Backstage, in the
+        # tooling cluster) and a grant is a `ServiceAppAccess`, so absence is
+        # the asserted state here, not a gap to skip over. `--no-handover`
+        # keeps the broker, and then the branch above runs instead.
+        ok "the lab's access broker is absent by design: the handover removed it and Infrahub's portal replaces it"
     else
-        skp "access broker" "not installed -- make access-images && make access"
+        skp "access broker" "optional in a lab-only deployment and not installed -- make access-images && make access"
     fi
 fi
 
@@ -613,131 +793,164 @@ if running host-a && running k8s-node1; then
     # VIP -> pod, crossing the leaf ACL, the firewall zone policy and the
     # CiliumNetworkPolicy. Ten consecutive requests, because a partial pass here
     # means per-backend asymmetry (see the externalTrafficPolicy note in
-    # crossplane/apps/10-demo.yaml).
-    if [[ -f "$KUBECONFIG" ]] && command -v kubectl >/dev/null 2>&1; then
-        vip=$(kubectl -n otternet-demo get svc frontend -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
-        if [[ -n "$vip" ]]; then
+    # crossplane/apps/10-demo.yaml). The demo app is the one every external
+    # source is admitted to at the pod, so it is the one that proves the
+    # datapath; Grafana is the one that proves the gates, further down.
+    if kube_ok; then
+        if [[ -n "$demo_vip" && "$demo_vip" != "-" ]]; then
             hits=0
             for _ in $(seq 1 10); do
-                docker exec clab-otternet-host-a curl -sS --max-time 6 "http://$vip/" 2>/dev/null | grep -q Hostname && hits=$((hits+1))
+                docker exec clab-otternet-host-a curl -sS --max-time 6 "http://$demo_vip:$demo_port/" 2>/dev/null | grep -q Hostname && hits=$((hits+1))
             done
             if [[ "$hits" -eq 10 ]]; then
-                ok "host-a reaches the LoadBalancer VIP through every enforcement layer (10/10)"
+                ok "host-a reaches the demo app's LoadBalancer VIP $demo_vip through every enforcement layer (10/10)"
             else
-                bad "end-to-end LoadBalancer path" "only $hits/10 requests to http://$vip/ succeeded -- expect all 10"
+                bad "end-to-end LoadBalancer path" "only $hits/10 requests to http://$demo_vip:$demo_port/ succeeded -- expect all 10"
             fi
         else
-            skp "end-to-end LoadBalancer path" "no VIP allocated yet"
+            bad "end-to-end LoadBalancer path" "the demo app has no advertised VIP -- kubectl -n otternet-demo get svc -l otternet.lab/advertise=true"
         fi
     fi
 
-    # The real application, on its own VIP, reached from the other tenant. This
-    # is the same path as the demo workload's but through a chart nobody here
-    # wrote: Crossplane pulled it, Cilium allocated and advertised the VIP, and
-    # the firewall permitted the session.
-    if [[ -f "$KUBECONFIG" ]] && command -v kubectl >/dev/null 2>&1; then
-        gvip=$(kubectl -n otternet-observability get svc -l otternet.lab/advertise=true \
-                 -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}' 2>/dev/null)
-        if [[ -n "$gvip" ]]; then
-            ghits=0
-            for _ in $(seq 1 5); do
-                code=$(docker exec clab-otternet-host-a curl -sS -o /dev/null \
-                         -w '%{http_code}' --max-time 8 "http://$gvip/api/health" 2>/dev/null)
-                [[ "$code" == "200" ]] && ghits=$((ghits+1))
-            done
-            if [[ "$ghits" -eq 5 ]]; then
-                ok "host-a reaches Crossplane-deployed Grafana on its advertised VIP $gvip (5/5)"
-            else
-                bad "Grafana VIP path" "only $ghits/5 requests to http://$gvip/api/health returned 200"
-            fi
-        else
-            skp "Grafana VIP path" "no VIP allocated for the observability app yet"
+    # The real application, a chart nobody here wrote: Crossplane pulled it,
+    # Cilium allocated and advertised the VIP, the firewall permits the session
+    # -- and then Grafana's own pod policy decides. Infrahub seeds it to admit
+    # the cluster's pod prefix only, so a source outside the cluster is dropped
+    # AT THE POD until a grant names it. The positive is therefore taken from a
+    # k8s node, which the composed policy admits as `host`/`remote-node`; the
+    # cross-tenant request is the negative, and is derived from the policy
+    # rather than assumed, so the lab-only claim (which admits the app tenant
+    # outright) still reads as a positive there.
+    gsvc=""; gvip="-"; gport=80
+    if kube_ok && [[ -n "$metrics_ns" ]]; then
+        read -r gsvc gvip _ gport <<<"$(advertised_svc "$metrics_ns")"
+    fi
+    if [[ -z "$gsvc" || "$gvip" == "-" ]]; then
+        bad "Grafana VIP" "no advertised LoadBalancer Service with a VIP in ${metrics_ns:-the observability namespace} -- kubectl -n ${metrics_ns:-otternet-metrics} get svc -l otternet.lab/advertise=true"
+    else
+        blk=$(vip_in_block "$metrics_ns" "$gvip")
+        [[ -n "$blk" ]] \
+            && ok "Grafana's Service holds VIP $gvip, inside its own block $blk" \
+            || bad "Grafana VIP" "$gvip is outside the $metrics_ns FabricApp's vipBlock"
+        if running k8s-leaf1; then
+            check "Grafana's VIP is advertised into the fabric" \
+                  "${gvip}/32" eos k8s-leaf1 "show ip route vrf K8S_PROD bgp"
+        fi
+        # busybox wget, because the k3s node image has no curl.
+        check "Grafana answers on its VIP $gvip from inside the cluster" \
+              '"database": *"ok"' node k8s-node1 "wget -q -T 8 -O - http://$gvip:$gport/api/health"
+        if running fw1 && [[ "$fw_kind" == "juniper_vsrx" ]]; then
+            load_fw_cfg
+            gated_reach "host-a -> Grafana (app tenant)" host-a 10.210.0.11 app-prod \
+                        "$metrics_ns" "$gsvc" "$gvip" "$gport" /api/health
         fi
     fi
 
     # ---- the new external paths -------------------------------------------
     # A WAN customer and a branch user consuming a DC service. Same service,
     # two different trust levels, two different firewall zones -- and for the
-    # customer, two AS hops of provider in between.
-    if [[ -f "$KUBECONFIG" ]] && command -v kubectl >/dev/null 2>&1; then
-        gvip=$(kubectl -n otternet-observability get svc -l otternet.lab/advertise=true \
-                 -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}' 2>/dev/null)
-        if [[ -z "$gvip" ]]; then
-            skp "WAN and branch service access" "no advertised DC service VIP yet"
-        else
-            # The branch is the exception, and deliberately so on the
-            # The branch baseline permits the access portal and nothing else,
-            # so reaching Grafana proves somebody granted it rather than
-            # proving the datapath works. It is checked separately below.
-            sites=(cust-acme-host cust-globex-host)
-            for site in "${sites[@]}"; do
-                if ! running "$site"; then
-                    skp "$site -> DC service" "$site is not running"
-                    continue
-                fi
-                hits=0
-                for _ in $(seq 1 5); do
-                    code=$(docker exec "clab-otternet-$site" curl -sS -o /dev/null \
-                             -w '%{http_code}' --max-time 8 "http://$gvip/api/health" 2>/dev/null)
-                    [[ "$code" == "200" ]] && hits=$((hits+1))
-                done
-                if [[ "$hits" -eq 5 ]]; then
-                    ok "$site reaches the DC service VIP $gvip (5/5)"
-                else
-                    bad "$site -> DC service" "only $hits/5 requests to http://$gvip/api/health returned 200"
-                fi
+    # customer, two AS hops of provider in between. The demo app, because it is
+    # the service whose pod policy names both external sources.
+    if [[ -z "$demo_vip" || "$demo_vip" == "-" ]]; then
+        bad "WAN and branch service access" "no advertised demo VIP to test against"
+    else
+        # The branch is the exception, and deliberately so: its baseline
+        # permits the self-service portal and nothing else, so reaching an
+        # application proves somebody granted it rather than proving the
+        # datapath works. It is checked separately below.
+        sites=(cust-acme-host cust-globex-host)
+        for site in "${sites[@]}"; do
+            if ! running "$site"; then
+                skp "$site -> DC service" "optional WAN customer site $site is not running"
+                continue
+            fi
+            hits=0
+            for _ in $(seq 1 5); do
+                code=$(docker exec "clab-otternet-$site" curl -sS -o /dev/null \
+                         -w '%{http_code}' --max-time 8 "http://$demo_vip:$demo_port/" 2>/dev/null)
+                [[ "$code" == "200" ]] && hits=$((hits+1))
             done
-
-            # The trust difference, tested against a k8s NODE rather than the
-            # VIP. Do not be tempted to ping the VIP to prove this: ICMP to a
-            # LoadBalancer VIP does not work in this datapath at all -- Cilium
-            # only programs the service's TCP port, so the echo request lands
-            # on a node with no route for it, gets forwarded back out, and
-            # comes back as "Time to live exceeded". That failure is unrelated
-            # to policy and would make this check pass or fail for the wrong
-            # reason.
-            #
-            # The branch is told a route to 10.110.0.0/24 and permitted ICMP to
-            # it; a WAN customer is told neither.
-            if running branch-host; then
-                check "the branch may ping a k8s node, because it is our own network" \
-                      "bytes from" node branch-host "ping -c2 -W2 10.110.0.11"
+            if [[ "$hits" -eq 5 ]]; then
+                ok "$site reaches the DC service VIP $demo_vip (5/5)"
+            else
+                bad "$site -> DC service" "only $hits/5 requests to http://$demo_vip:$demo_port/ returned 200"
             fi
-            if running cust-acme-host; then
-                if docker exec clab-otternet-cust-acme-host ping -c2 -W2 10.110.0.11 >/dev/null 2>&1; then
-                    bad "WAN customer reach" "a WAN customer reached a k8s node -- it should be told no route to 10.110.0.0/24 and be denied by the wan zone policy"
-                else
-                    ok "a WAN customer cannot reach a k8s node (no route, and no policy)"
-                fi
+        done
+
+        # The trust difference, tested against a k8s NODE rather than the
+        # VIP. Do not be tempted to ping the VIP to prove this: ICMP to a
+        # LoadBalancer VIP does not work in this datapath at all -- Cilium
+        # only programs the service's TCP port, so the echo request lands
+        # on a node with no route for it, gets forwarded back out, and
+        # comes back as "Time to live exceeded". That failure is unrelated
+        # to policy and would make this check pass or fail for the wrong
+        # reason.
+        #
+        # The branch is told a route to 10.110.0.0/24 and permitted ICMP to
+        # it; a WAN customer is told neither.
+        if running branch-host; then
+            check "the branch may ping a k8s node, because it is our own network" \
+                  "bytes from" node branch-host "ping -c2 -W2 10.110.0.11"
+        fi
+        if running cust-acme-host; then
+            if docker exec clab-otternet-cust-acme-host ping -c2 -W2 10.110.0.11 >/dev/null 2>&1; then
+                bad "WAN customer reach" "a WAN customer reached a k8s node -- it should be told no route to 10.110.0.0/24 and be denied by the wan zone policy"
+            else
+                ok "a WAN customer cannot reach a k8s node (no route, and no policy)"
             fi
+        fi
+    fi
 
-            # ---- the self-service path, from the branch --------------------
-            # Two assertions that only make sense together: the portal is
-            # always reachable, and an application nobody has requested is not.
-            # If the second one ever passes by accident the demo still *looks*
-            # right -- the user clicks Request, waits, and the app was reachable
-            # the whole time -- so it is asserted explicitly.
-            if running branch-desktop; then
-                code=$(docker exec clab-otternet-branch-desktop curl -sS -o /dev/null \
-                         -w '%{http_code}' --max-time 10 http://10.112.240.33/ 2>/dev/null)
-                if [[ "$code" == "200" ]]; then
-                    ok "the branch desktop reaches the access portal with no grant at all"
-                else
-                    bad "branch -> portal" "http://10.112.240.33/ returned ${code:-nothing} from the desktop; that path is the one standing branch permit (policy 6) and everything else depends on it"
-                fi
+    # ---- the self-service path, from the branch ----------------------------
+    # Two assertions that only make sense together: the portal is always
+    # reachable, and an application nobody has requested is not. If the second
+    # one ever passes by accident the demo still *looks* right -- the user
+    # clicks Request, waits, and the app was reachable the whole time -- so it
+    # is asserted explicitly.
+    if running branch-desktop; then
+        if kube_ok && ns_exists otternet-access; then
+            # The lab's own broker, on its pinned VIP (lab-only, or --no-handover).
+            code=$(docker exec clab-otternet-branch-desktop curl -sS -o /dev/null \
+                     -w '%{http_code}' --max-time 10 http://10.112.240.33/ 2>/dev/null)
+            if [[ "$code" == "200" ]]; then
+                ok "the branch desktop reaches the lab's access portal with no grant at all"
+            else
+                bad "branch -> portal" "http://10.112.240.33/ returned ${code:-nothing} from the desktop; that path is the one standing branch permit and everything else depends on it"
+            fi
+        elif running tool-node1; then
+            # Infrahub's portal: Backstage and Dex in the tooling cluster,
+            # reached the hard way -- branch -> border-leaf1 -> fw1, zone
+            # `tooling`, policy branch-to-tooling-portal. HTTPS with a
+            # self-signed certificate, hence -k; Dex is plain HTTP.
+            code=$(docker exec clab-otternet-branch-desktop curl -sSk -o /dev/null \
+                     -w '%{http_code}' --max-time 10 https://10.90.0.11:32001/ 2>/dev/null)
+            if [[ "$code" == "200" ]]; then
+                ok "the branch desktop reaches the service portal (Backstage, 10.90.0.11:32001) with no grant at all"
+            else
+                bad "branch -> portal" "https://10.90.0.11:32001/ returned ${code:-nothing} from the desktop; branch-to-tooling-portal is the one standing branch permit and every request depends on it"
+            fi
+            check "the branch desktop reaches the lab's one OIDC issuer (Dex, 10.90.0.11:32556)" \
+                  '"issuer": *"http://10\.90\.0\.11:32556/dex"' \
+                  node branch-desktop "curl -sS --max-time 10 http://10.90.0.11:32556/dex/.well-known/openid-configuration"
+        else
+            skp "branch -> portal" "no portal deployed: neither the lab's access broker (make access) nor the tooling cluster (tool-node1) is running"
+        fi
 
-                granted=$(kubectl get appaccess -o jsonpath='{.items[?(@.spec.app=="grafana")].spec.approved}' 2>/dev/null)
-                reach=$(docker exec clab-otternet-branch-desktop curl -sS -o /dev/null \
-                          -w '%{http_code}' --max-time 6 "http://$gvip/api/health" 2>/dev/null)
-                if [[ "$granted" == "true" ]]; then
-                    [[ "$reach" == "200" ]] \
-                        && ok "Grafana is reachable from the branch because access was granted" \
-                        || bad "granted access" "an approved AppAccess exists for grafana but http://$gvip/ returned ${reach:-nothing} -- make access-status"
-                else
-                    [[ "$reach" == "200" ]] \
-                        && bad "ungranted access" "the branch reached Grafana at $gvip with no approved AppAccess -- the branch baseline is too wide, so every grant is a no-op" \
-                        || ok "Grafana is NOT reachable from the branch until access is requested"
-                fi
+        # Both applications, from the desktop, against both gates. Grafana is
+        # the grant demonstration: closed at the firewall AND at its pod until
+        # a ServiceAppAccess (or, lab-only, an AppAccess) opens both. The demo
+        # app's pod policy already names the branch, so it isolates the
+        # firewall: if the branch reached it with no permit, the branch
+        # baseline would be too wide and every grant a no-op.
+        if running fw1 && [[ "$fw_kind" == "juniper_vsrx" ]] && kube_ok; then
+            load_fw_cfg
+            if [[ -n "$gsvc" && "$gvip" != "-" ]]; then
+                gated_reach "branch desktop -> Grafana (only after a grant)" branch-desktop 10.70.0.20 branch \
+                            "$metrics_ns" "$gsvc" "$gvip" "$gport" /api/health
+            fi
+            if [[ -n "$demo_vip" && "$demo_vip" != "-" ]]; then
+                gated_reach "branch desktop -> demo app (only after a grant)" branch-desktop 10.70.0.20 branch \
+                            otternet-demo "$demo_svc" "$demo_vip" "$demo_port" /
             fi
         fi
     fi
@@ -751,18 +964,27 @@ if running host-a && running k8s-node1; then
         fi
     fi
 
-    # And a negative: the backend is ClusterIP-only and must NOT be reachable.
+    # And a negative: a ClusterIP is never advertised, so it must NOT be
+    # reachable from outside the cluster. The lab's own claim has a
+    # ClusterIP-only `backend` for this; the chart Infrahub delivers is one
+    # tier (cycle 033), so its control is the advertised Service's OWN
+    # ClusterIP: the same pods, admitted by the same policy, answering on the
+    # VIP above -- so a failure here can only be the address not being routed.
     # Look the address up rather than hardcoding it -- a ClusterIP is assigned
-    # at create time, so a literal here goes stale the first time the service is
-    # recreated and the check then passes because it is probing an address that
-    # belongs to nothing.
+    # at create time, so a literal here goes stale the first time the service
+    # is recreated and the check then passes because it is probing an address
+    # that belongs to nothing.
     beip=$(kubectl -n otternet-demo get svc backend -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+    beport=8080; bename="ClusterIP-only backend"
+    if [[ -z "$beip" && -n "$demo_cip" && "$demo_cip" != "-" ]]; then
+        beip=$demo_cip; beport=$demo_port; bename="demo app's own ClusterIP"
+    fi
     if [[ -z "$beip" ]]; then
-        skp "backend isolation" "backend service not found"
-    elif docker exec clab-otternet-host-a curl -sS --max-time 5 "http://$beip:8080/" 2>&1 | grep -q Hostname; then
-        bad "backend isolation" "the ClusterIP-only backend ($beip) answered from the app tenant -- it should never be advertised"
+        bad "ClusterIP isolation" "neither a backend Service nor the demo Service was found in otternet-demo"
+    elif docker exec clab-otternet-host-a curl -sS --max-time 5 "http://$beip:$beport/" 2>&1 | grep -q Hostname; then
+        bad "ClusterIP isolation" "the $bename ($beip) answered from the app tenant -- it should never be advertised"
     else
-        ok "the ClusterIP-only backend ($beip) stays unreachable from the app tenant"
+        ok "the $bename ($beip) stays unreachable from the app tenant"
     fi
 else
     skp "datapath checks" "workload nodes are not running"
