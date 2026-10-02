@@ -177,3 +177,42 @@ def parse_patterns(raw: str) -> list[str]:
 def is_imported(patterns: list[str], branch: str) -> bool:
     """Infrahub's own rule: a name or regex, tried with ``re.fullmatch``."""
     return any(re.fullmatch(pattern, branch) for pattern in patterns)
+
+
+# Task states that mean Infrahub is still working on the branch.
+ACTIVE_TASK_STATES = ("SCHEDULED", "PENDING", "RUNNING", "PAUSED", "CANCELLING")
+# Task states that mean something on the branch went wrong.
+FAILED_TASK_STATES = ("FAILED", "CRASHED")
+
+
+def decide_settled(
+    *,
+    expected_commit: str,
+    commit: str,
+    sync_status: str,
+    kind_present: bool,
+    object_count: int,
+    active_tasks: int,
+    failed_tasks: list[str],
+) -> tuple[bool, str]:
+    """Whether a released branch is fully imported, and if not, what it is still waiting for.
+
+    A proposed change opened earlier judges a branch that is half there: its checks can
+    pass over data that is not loaded yet. So "settled" needs all of: the pushed commit
+    imported and in sync, the schema and the objects present (a repository import carries
+    both), and no task still queued or running for the branch. A failed task is not a
+    reason to keep waiting, so it is reported separately by the caller.
+    """
+    if failed_tasks:
+        return False, f"failed tasks on the branch: {', '.join(failed_tasks)}"
+    if commit != expected_commit:
+        return False, f"the import of {expected_commit[:10]} (the branch is at {commit[:10] or 'nothing'})"
+    if sync_status != "in-sync":
+        return False, f"the repository to be in-sync (it is {sync_status or 'unknown'})"
+    if not kind_present:
+        return False, "the schema to load"
+    if object_count < 1:
+        return False, "the objects to load"
+    if active_tasks:
+        return False, f"{active_tasks} task(s) still queued or running on the branch"
+    return True, ""

@@ -490,6 +490,60 @@ def _worker_import_filter(ctx: Context) -> list[str] | None:
     return dr.parse_patterns(result.stdout.strip()) if result and result.ok else None
 
 
+def _branch_tasks(branch: str, states: tuple[str, ...]) -> list[str]:
+    """Titles of the tasks on `branch` in any of `states`."""
+    data = _graphql(
+        f'{{ InfrahubTask(branch: "{branch}", state: [{", ".join(states)}], limit: 100) '
+        "{ count edges { node { title } } } }"
+    )
+    edges = (data.get("InfrahubTask") or {}).get("edges") or []
+    return [str(e["node"]["title"]) for e in edges]
+
+
+def _branch_settled(branch: str, expected: str) -> tuple[bool, str]:
+    """Whether `branch` is fully imported (see `decide_settled`), and what it still waits for."""
+    from solution_arista_avd import demo_release as dr
+
+    current = _repository(branch)
+    kind_present = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}', branch).get("__type"))
+    objects = 0
+    if kind_present:
+        edges = (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}", branch).get(DEMO_KIND) or {}).get(
+            "edges"
+        )
+        objects = len(edges or [])
+    return dr.decide_settled(
+        expected_commit=expected,
+        commit=current.get("commit", ""),
+        sync_status=current.get("sync_status", ""),
+        kind_present=kind_present,
+        object_count=objects,
+        active_tasks=len(_branch_tasks(branch, dr.ACTIVE_TASK_STATES)),
+        failed_tasks=_branch_tasks(branch, dr.FAILED_TASK_STATES),
+    )
+
+
+def _wait_until_settled(branch: str, expected: str, timeout: int) -> None:
+    """Block until the branch is fully imported, on two polls in a row.
+
+    One poll is not enough: the commit is recorded before the objects and definitions
+    finish loading, and a task can queue the moment another completes.
+    """
+    deadline = time.monotonic() + timeout
+    consecutive = 0
+    while time.monotonic() < deadline:
+        settled, waiting = _branch_settled(branch, expected)
+        if not settled and waiting.startswith("failed tasks"):
+            raise Exit(f"The import of '{branch}' failed: {waiting}", code=1)
+        consecutive = consecutive + 1 if settled else 0
+        if consecutive >= 2:
+            print(f" - '{branch}' is fully imported", flush=True)
+            return
+        print(f"   waiting for {waiting or 'the branch to stay settled'}", flush=True)
+        sleep(5)
+    raise Exit(f"Timed out after {timeout}s waiting for '{branch}' to be fully imported", code=1)
+
+
 def _regenerate_artifacts() -> None:
     """Re-render every artifact against what `main` now holds.
 
@@ -624,13 +678,8 @@ def demo_release(
         _graphql(dr.set_ref_mutation(repo["id"], demo), demo)
         expected = commit
 
-    def _synced() -> bool:
-        current = _repository(demo)
-        return current.get("commit") == expected and current.get("sync_status") == "in-sync"
-
-    _wait_for(_synced, f"the import of {expected[:10]} on '{demo}'", timeout)
-    arrived = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}', demo).get("__type"))
-    print(f" - {DEMO_KIND} on the branch: {'yes' if arrived else 'NO (check .infrahub.yml schemas/objects)'}")
+    print(" - Waiting for the branch to be fully imported", flush=True)
+    _wait_until_settled(demo, expected, timeout)
 
     if not proposed_change:
         print(f"\nBranch '{demo}' is ready. Open a proposed change from it into main.")

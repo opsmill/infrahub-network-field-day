@@ -157,3 +157,50 @@ def test_the_defaults_still_hold() -> None:
     assert repository["spec"]["data"][0]["location"] == "/upstream"
     override = (REPO / "docker-compose.override.yml").read_text(encoding="utf-8")
     assert '${INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES:-["main"]}' in override
+
+
+_SETTLED = {
+    "expected_commit": "a" * 40,
+    "commit": "a" * 40,
+    "sync_status": "in-sync",
+    "kind_present": True,
+    "object_count": 1,
+    "active_tasks": 0,
+    "failed_tasks": [],
+}
+
+
+def test_a_branch_is_settled_only_when_every_condition_holds() -> None:
+    assert dr.decide_settled(**_SETTLED) == (True, "")
+
+
+@pytest.mark.parametrize(
+    ("change", "waiting_for"),
+    [
+        ({"commit": "b" * 40}, "the import of"),
+        ({"commit": ""}, "nothing"),
+        ({"sync_status": "syncing"}, "in-sync"),
+        ({"kind_present": False}, "schema"),
+        ({"object_count": 0}, "objects"),
+        ({"active_tasks": 3}, "3 task(s)"),
+    ],
+)
+def test_each_missing_condition_keeps_the_branch_unsettled_and_says_why(change: dict, waiting_for: str) -> None:
+    settled, waiting = dr.decide_settled(**{**_SETTLED, **change})
+
+    assert settled is False
+    assert waiting_for in waiting
+
+
+def test_a_failed_task_is_reported_even_when_everything_else_looks_settled() -> None:
+    settled, waiting = dr.decide_settled(**{**_SETTLED, "failed_tasks": ["Import objects"]})
+
+    assert settled is False
+    assert waiting.startswith("failed tasks")
+    assert "Import objects" in waiting
+
+
+def test_the_task_states_that_count_as_active_and_as_failed_do_not_overlap() -> None:
+    assert not set(dr.ACTIVE_TASK_STATES) & set(dr.FAILED_TASK_STATES)
+    assert {"RUNNING", "PENDING"} <= set(dr.ACTIVE_TASK_STATES)
+    assert {"FAILED", "CRASHED"} <= set(dr.FAILED_TASK_STATES)

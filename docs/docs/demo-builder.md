@@ -89,8 +89,10 @@ branch's contents onto it as one commit and pushes. That is a fast-forward, so n
 is rewritten. The branch has Sync with Git on, which is the only kind whose merge also merges git:
 branches Infrahub creates from the remote have it off, and it cannot be changed afterwards. In
 read-only mode the command pushes the staged branch, creates the Infrahub branch and sets the ref on
-it. Either way it then waits for the import of the pushed commit, checks the new kind arrived, opens
-the proposed change and re-runs its checks. A first pass can race the import, so the re-run is what
+it. Either way it then waits until the branch is fully imported before it opens anything: the pushed
+commit imported and in sync, the schema and the objects present, and no task still queued or running
+for the branch, on two polls in a row. A failed task stops it with the task's title. Only then does it
+open the proposed change and re-run its checks. A first pass can race the import, so the re-run is what
 makes the checks judge the final branch.
 
 The proposed change runs every artifact validator and check with the branch's own code, so the
