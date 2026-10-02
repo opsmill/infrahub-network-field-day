@@ -548,6 +548,28 @@ def demo_credential(ctx: Context, user: str = "") -> None:
     print("The demo-remote credential now holds the current token.")
 
 
+def _copy_stage_onto_branch(ctx: Context, location: str, branch: str, stage: str) -> str:
+    """Put the staged branch's tree on `branch` as one new commit and push it. Returns the new tip.
+
+    Fetches the remote branch Infrahub just published, takes the tree of the local `stage`
+    branch, commits it on top and pushes: a fast-forward, so nothing Infrahub holds is rewritten.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        clone = Path(tmp) / "clone"
+        ctx.run(f"git clone --quiet --branch {shlex.quote(branch)} {shlex.quote(location)} {shlex.quote(str(clone))}")
+        with ctx.cd(clone):
+            ctx.run(f"git fetch --quiet {shlex.quote(str(MAIN_DIRECTORY_PATH))} {shlex.quote(f'refs/heads/{stage}')}")
+            ctx.run("git read-tree -u --reset FETCH_HEAD")
+            ctx.run(
+                "git -c user.name=demo-release -c user.email=demo-release@example.invalid "
+                f"commit --quiet --allow-empty -m {shlex.quote(f'Release {stage}')}"
+            )
+            ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
+            return ctx.run("git rev-parse HEAD", hide=True).stdout.strip()
+
+
 @task(
     help={
         "name": f"Capability name; releases stage/<name> (default {DEMO_NAME})",
@@ -578,36 +600,35 @@ def demo_release(
     if not repo:
         raise Exit("No repository is registered. Bootstrap with INFRAHUB_REPOSITORY_URL set.", code=1)
     read_write = repo["kind"] == "CoreRepository"
-    if read_write:
-        patterns = _worker_import_filter(ctx)
-        if patterns is not None and not dr.is_imported(patterns, demo):
-            raise Exit(
-                f"The task worker would ignore '{demo}' (filter: {patterns}). Set "
-                f"INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='{dr.DEMO_IMPORT_FILTER}' and bootstrap a fresh stack.",
-                code=1,
-            )
     if demo in (_branches() or {}):
         raise Exit(
             f"Infrahub already has '{demo}'. Use `--run {run + 1}`, or `invoke demo-reset --run {run}` first.", code=1
         )
 
     print(f"\n=== Releasing {stage} ({commit[:10]}) as {demo} ===", flush=True)
-    with ctx.cd(MAIN_DIRECTORY_PATH):
-        ctx.run(f"git push origin {shlex.quote(dr.refspec(name, run))}", pty=True)
-
     if read_write:
-        print(" - Waiting for Infrahub to sync the branch in", flush=True)
-        _wait_for(lambda: demo in (_branches() or {}), f"the Infrahub branch '{demo}'", timeout)
+        # A branch created with sync-with-git on is the only kind whose merge also merges git
+        # (branches Infrahub creates from the remote have it off, and it cannot be changed).
+        # Infrahub then creates the git branch itself and pushes it; the staged content goes
+        # on top as one commit.
+        print(f" - Creating the Infrahub branch '{demo}' with Sync with Git", flush=True)
+        ctx.run(f"infrahubctl branch create {shlex.quote(demo)} --sync-with-git", pty=True)
+        _wait_for(lambda: bool(_remote_tip(ctx, demo)), f"Infrahub to publish '{demo}' on the remote", timeout)
+        print(" - Copying the staged content onto it and pushing", flush=True)
+        expected = _copy_stage_onto_branch(ctx, repo["location"], demo, stage)
     else:
+        with ctx.cd(MAIN_DIRECTORY_PATH):
+            ctx.run(f"git push origin {shlex.quote(dr.refspec(name, run))}", pty=True)
         print(f" - Creating the Infrahub branch '{demo}' and setting the repository ref on it", flush=True)
         ctx.run(f"infrahubctl branch create {shlex.quote(demo)}", pty=True)
         _graphql(dr.set_ref_mutation(repo["id"], demo), demo)
+        expected = commit
 
     def _synced() -> bool:
         current = _repository(demo)
-        return current.get("commit") == commit and current.get("sync_status") == "in-sync"
+        return current.get("commit") == expected and current.get("sync_status") == "in-sync"
 
-    _wait_for(_synced, f"the import of {commit[:10]} on '{demo}'", timeout)
+    _wait_for(_synced, f"the import of {expected[:10]} on '{demo}'", timeout)
     arrived = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}', demo).get("__type"))
     print(f" - {DEMO_KIND} on the branch: {'yes' if arrived else 'NO (check .infrahub.yml schemas/objects)'}")
 
