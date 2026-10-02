@@ -39,7 +39,7 @@ The repository kind cannot be changed on an existing stack. Infrahub refuses to 
 place, and refuses to delete a repository while trigger actions reference its generators. Pick a
 mode and bootstrap a fresh stack.
 
-### Read-write (the live push)
+### Read-write
 
 Infrahub watches the remote, syncs `demo/*` branches in by itself and pushes merges to
 `demo-main`, never to the real `main`. Infrahub maps its own `main` onto the repository's
@@ -83,10 +83,15 @@ uv run invoke bootstrap --fresh
 uv run invoke demo-release     # push, then wait for the branch, its import and the proposed change
 ```
 
-In read-write mode the push is the trigger and the task only watches. In read-only mode it also
-creates the Infrahub branch and sets the ref on it. It then waits for the import of the pushed
-commit, checks the new kind arrived, opens the proposed change and re-runs its checks. A first
-pass can race the import, so the re-run is what makes the checks judge the final branch.
+In read-write mode the command creates the Infrahub branch with `--sync-with-git`, which makes
+Infrahub create the git branch itself and push it. It then fetches that branch, copies the staged
+branch's contents onto it as one commit and pushes. That is a fast-forward, so nothing Infrahub holds
+is rewritten. The branch has Sync with Git on, which is the only kind whose merge also merges git:
+branches Infrahub creates from the remote have it off, and it cannot be changed afterwards. In
+read-only mode the command pushes the staged branch, creates the Infrahub branch and sets the ref on
+it. Either way it then waits for the import of the pushed commit, checks the new kind arrived, opens
+the proposed change and re-runs its checks. A first pass can race the import, so the re-run is what
+makes the checks judge the final branch.
 
 The proposed change runs every artifact validator and check with the branch's own code, so the
 `isp-pe1` diff shows `statement 30` before the merge.
