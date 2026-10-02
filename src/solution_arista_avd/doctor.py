@@ -387,15 +387,17 @@ def probe_schema_freshness(env: Environment) -> Result:
     return decide_schema_freshness(committed_path.read_text(encoding="utf-8"), exported)
 
 
+# The generic, so a read-only repository (the demo's) is seen as well as a CoreRepository;
+# `commit` lives on each kind rather than on the generic.
 REPOSITORY_QUERY = (
-    "{ CoreRepository { edges { node { name { value } commit { value } "
-    "sync_status { value } operational_status { value } } } } }"
+    "{ CoreGenericRepository { edges { node { name { value } sync_status { value } operational_status { value } "
+    "... on CoreRepository { commit { value } } ... on CoreReadOnlyRepository { commit { value } } } } } }"
 )
 
 
 def parse_repositories(data: dict[str, Any]) -> list[dict[str, str]]:
     rows = []
-    for edge in (data.get("CoreRepository") or {}).get("edges") or []:
+    for edge in (data.get("CoreGenericRepository") or {}).get("edges") or []:
         node = edge["node"]
         rows.append(
             {
@@ -412,7 +414,12 @@ def probe_repository_sync(env: Environment) -> Result:
     def is_ancestor(commit: str) -> bool | None:
         proc = _run(["git", "merge-base", "--is-ancestor", commit, "HEAD"], cwd=env.root)
         # 1 is "not an ancestor"; anything else (128: unknown object) is a clone that cannot see the commit.
-        return proc.returncode == 0
+        if proc.returncode == 0:
+            return True
+        # A read-only repository tracking a staged demo branch imports a commit that is on a branch
+        # rather than on HEAD. It is not diverged history while some ref here contains it.
+        held = _run(["git", "for-each-ref", "--contains", commit, "--count=1", "refs/"], cwd=env.root)
+        return held.returncode == 0 and bool(held.stdout.strip())
 
     return decide_repository_sync(repositories, is_ancestor)
 

@@ -71,7 +71,7 @@ Key docs to read before larger changes:
 | Grafana, Prometheus, Telegraf, monitoring profiles, service monitoring, the exporters | [observability.md](docs/docs/developer-guide/observability.md) |
 | Every generator, transform and check, with traps for each | [generator-transform-inventory.md](docs/docs/developer-guide/generator-transform-inventory.md) |
 | Repository sync and what wedges it | [repository-sync.md](docs/docs/developer-guide/repository-sync.md) |
-| Releasing a staged capability branch into Infrahub for the builder demo (`demo/*` filter override, remote repository) | [demo-builder.md](docs/docs/demo-builder.md) |
+| Releasing a staged capability branch into Infrahub for the builder demo (read-only repository on the remote, moving the `ref`) | [demo-builder.md](docs/docs/demo-builder.md) |
 | Why services expand on their branch, and withdrawal by `status` | [service-triggers.md](docs/docs/developer-guide/service-triggers.md) |
 | `DeploymentState` and its one rule | [deployment-state.md](docs/docs/developer-guide/deployment-state.md) |
 | The reconciler, normalisers, firewall full-replace, wake logic | [deployment-reconciler.md](docs/docs/developer-guide/deployment-reconciler.md) |

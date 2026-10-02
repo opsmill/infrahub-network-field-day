@@ -271,7 +271,7 @@ def init_semaphore(
 def get_repository_sync_status(name: str) -> str | None:
     query = """
     query CheckRepoSync($name: String!) {
-      CoreRepository(name__value: $name) {
+      CoreGenericRepository(name__value: $name) {
         edges {
           node {
             sync_status { value }
@@ -286,7 +286,7 @@ def get_repository_sync_status(name: str) -> str | None:
         timeout=10,
     )
     data = resp.json()
-    edges = data.get("data", {}).get("CoreRepository", {}).get("edges", [])
+    edges = data.get("data", {}).get("CoreGenericRepository", {}).get("edges", [])
     if not edges:
         return None
     return str(edges[0]["node"]["sync_status"]["value"])
@@ -328,13 +328,18 @@ def load(ctx: Context) -> None:
 
 
 def _load_repository(ctx: Context) -> None:
-    """Register the CoreRepository: the checkout by default, a Git remote for the demo.
+    """Register the repository: the checkout by default, a Git remote for the demo.
 
-    `INFRAHUB_REPOSITORY_URL` points Infrahub at a remote instead of `/upstream`,
-    which is what lets a pushed branch reach it (`invoke demo-release`). A private
-    remote also needs `INFRAHUB_REPOSITORY_TOKEN` (and `INFRAHUB_REPOSITORY_USER`);
-    the credential file is written to a temporary directory and deleted, never
-    into the repository.
+    `INFRAHUB_REPOSITORY_URL` registers a **read-only** repository on that remote
+    instead of `/upstream`, tracking `INFRAHUB_REPOSITORY_REF` (default `main`).
+    A read-only repository imports one ref into the default branch: Infrahub
+    creates no branch from Git and pushes nothing, so no write credential is
+    needed, and `invoke demo-activate` moves the ref. A private remote needs
+    `INFRAHUB_REPOSITORY_TOKEN` (and `INFRAHUB_REPOSITORY_USER`); the credential
+    file is written to a temporary directory and deleted, never into the repository.
+
+    Choose this on a fresh stack. Infrahub refuses to change a repository's kind
+    in place, and to delete one while trigger actions reference its generators.
     """
     url = os.environ.get("INFRAHUB_REPOSITORY_URL", "")
     if not url:
@@ -346,6 +351,7 @@ def _load_repository(ctx: Context) -> None:
 
     token = os.environ.get("INFRAHUB_REPOSITORY_TOKEN", "")
     credential = "demo-remote" if token else None
+    ref = os.environ.get("INFRAHUB_REPOSITORY_REF", "main")
     with tempfile.TemporaryDirectory() as tmp:
         if token:
             cred_file = Path(tmp) / "credential.yml"
@@ -356,8 +362,8 @@ def _load_repository(ctx: Context) -> None:
             cred_file.chmod(0o600)
             ctx.run(f"infrahubctl object load {shlex.quote(str(cred_file))}", pty=True)
         repo_file = Path(tmp) / "repository.yml"
-        repo_file.write_text(dr.render_repository(url, credential=credential), encoding="utf-8")
-        print(f" - Repository 'test-repository' -> {url}")
+        repo_file.write_text(dr.render_repository(url, ref=ref, credential=credential), encoding="utf-8")
+        print(f" - Repository 'test-repository' -> {url} @ {ref} (read-only)")
         ctx.run(f"infrahubctl object load {shlex.quote(str(repo_file))}", pty=True)
 
 
@@ -369,6 +375,10 @@ DEMO_NAME = "internet-access"
 # The objects the staged capability adds. `object load` upserts, so the rest of
 # the file is already there and unchanged.
 DEMO_OBJECTS = "objects/37_otternet_wan_services.yml"
+# The kind it adds, so a rehearsal can take it back out.
+DEMO_KIND = "ServiceInternetAccess"
+DEMO_SCHEMA_NAMESPACE = "Service"
+DEMO_SCHEMA_NAME = "InternetAccess"
 
 
 def _wait_for(condition: Callable[[], bool], what: str, timeout: int, interval: int = 5) -> None:
@@ -376,55 +386,48 @@ def _wait_for(condition: Callable[[], bool], what: str, timeout: int, interval: 
     while time.monotonic() < deadline:
         if condition():
             return
-        print(f"   waiting for {what}")
+        print(f"   waiting for {what}", flush=True)
         sleep(interval)
     msg = f"Timed out after {timeout}s waiting for {what}"
     raise Exit(msg, code=1)
 
 
-def _branch_repository_commit(branch: str) -> str:
-    """The commit Infrahub has imported for the repository on this branch, or ''."""
-    data = _graphql("{ CoreRepository { edges { node { commit { value } } } } }", branch)
-    edges = (data.get("CoreRepository") or {}).get("edges") or []
-    return str(((edges[0]["node"].get("commit") or {}).get("value")) or "") if edges else ""
-
-
-def _worker_import_filter(ctx: Context) -> list[str] | None:
-    """The branch filter the running task worker carries; None if it cannot be read."""
-    from solution_arista_avd import demo_release as dr
-
-    result = ctx.run(
-        f"{compose_cmd()} exec -T task-worker printenv INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES",
-        hide=True,
-        warn=True,
+def _repository() -> dict[str, str]:
+    """The read-only repository's id, tracked ref, imported commit and sync status; empty if there is none."""
+    data = _graphql(
+        "{ CoreReadOnlyRepository { edges { node { id ref { value } commit { value } sync_status { value } } } } }"
     )
-    if not result or not result.ok:
-        return None
-    return dr.parse_patterns(result.stdout.strip())
+    edges = (data.get("CoreReadOnlyRepository") or {}).get("edges") or []
+    if not edges:
+        return {}
+    node = edges[0]["node"]
+    return {
+        "id": str(node["id"]),
+        "ref": str((node.get("ref") or {}).get("value") or ""),
+        "commit": str((node.get("commit") or {}).get("value") or ""),
+        "sync_status": str((node.get("sync_status") or {}).get("value") or ""),
+    }
 
 
-@task(help={"restart": "Recreate infrahub-server and task-worker with the filter applied (default: only print it)"})
-def demo_filter(ctx: Context, restart: bool = False) -> None:
-    """Let `demo/*` branches into Infrahub, keeping `main`.
+def _remote_tip(ctx: Context, branch: str) -> str:
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        result = ctx.run(f"git ls-remote origin {shlex.quote(f'refs/heads/{branch}')}", hide=True, warn=True)
+    line = (result.stdout.strip().splitlines() or [""])[0] if result else ""
+    return line.split()[0] if line else ""
 
-    `["main"]` is deliberate (every extra synced branch costs ~171 automations),
-    so this is a demo-time override through the variable the compose files
-    already read, not a change to the default.
-    """
+
+def _point_repository_at(ref: str, tip: str, timeout: int) -> None:
+    """Change the tracked ref and wait until Infrahub has imported that commit."""
     from solution_arista_avd import demo_release as dr
 
-    current = _worker_import_filter(ctx) or ["main"]
-    value = dr.demo_filter(current)
-    print(f"INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='{value}'")
-    if not restart:
-        print("Not applied. Re-run with --restart, or export it and run `invoke restart`.")
-        return
-    with ctx.cd(compose_root()):
-        ctx.run(
-            f"{compose_cmd()} up -d --no-deps infrahub-server task-worker",
-            env={"INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES": value},
-            pty=True,
-        )
+    repo = _repository()
+    if not repo:
+        raise Exit("No read-only repository is registered. Bootstrap with INFRAHUB_REPOSITORY_URL set.", code=1)
+    if repo["ref"] != ref:
+        result = _graphql(dr.set_ref_mutation(repo["id"], ref))
+        if not (result.get("CoreReadOnlyRepositoryUpdate") or {}).get("ok"):
+            raise Exit(f"Infrahub refused to change the ref to '{ref}'.", code=1)
+    _wait_for(lambda: _repository().get("commit") == tip, f"the import of {tip[:10]} from '{ref}'", timeout)
 
 
 @task(
@@ -432,7 +435,6 @@ def demo_filter(ctx: Context, restart: bool = False) -> None:
         "name": f"Capability name; releases stage/<name> (default {DEMO_NAME})",
         "run": "Release number. Each release is a new branch name, because a pulled commit is never rewritten",
         "objects": "Object file on the staged branch to load onto the Infrahub branch",
-        "timeout": "Seconds to wait for each step (default 600)",
         "proposed_change": "Open the proposed change once the data is loaded (default true)",
     }
 )
@@ -441,15 +443,14 @@ def demo_release(
     name: str = DEMO_NAME,
     run: int = 1,
     objects: str = DEMO_OBJECTS,
-    timeout: int = 600,
     proposed_change: bool = True,
 ) -> None:
-    """Push stage/<name> to demo/<name>-<run>, wait for Infrahub to import it, load its schema and data.
+    """Publish stage/<name> as demo/<name>-<run>, then review its schema and data on an Infrahub branch.
 
-    The push delivers code. Schema and objects are not part of a repository
-    import, so they are read from the staged commit and loaded onto the new
-    Infrahub branch directly. The proposed change is opened last: one opened
-    before the data lands runs its checks against a branch that is not ready.
+    Nothing here changes what Infrahub runs. The code stays on the remote until
+    `invoke demo-activate` moves the repository's ref, which is done after the
+    merge. The proposed change is opened last, once the data has landed: one
+    opened earlier runs its checks against a branch that is not ready.
     """
     import tempfile
 
@@ -461,77 +462,114 @@ def demo_release(
     if not tip or not tip.ok:
         raise Exit(f"No local branch '{stage}'. Create it first; see docs/docs/demo-builder.md.", code=1)
     commit = tip.stdout.strip()
-
-    patterns = _worker_import_filter(ctx)
-    if patterns is None:
-        print(" - Could not read the task worker's branch filter; continuing, the wait below will say if it is wrong.")
-    elif not dr.is_imported(patterns, demo):
-        raise Exit(
-            f"The running task worker would ignore '{demo}' (filter: {patterns}). Run `invoke demo-filter --restart`.",
-            code=1,
-        )
     if demo in (_branches() or {}):
         raise Exit(
-            f"Infrahub already has '{demo}'. Use `--run {run + 1}`, or `invoke demo-reset --run {run}` first.", code=1
+            f"Infrahub already has '{demo}'. Use `--run {run + 1}`, or `invoke demo-reset --run {run}` first.",
+            code=1,
         )
 
-    print(f"\n=== Releasing {stage} ({commit[:10]}) as {demo} ===")
+    print(f"\n=== Releasing {stage} ({commit[:10]}) as {demo} ===", flush=True)
     with ctx.cd(MAIN_DIRECTORY_PATH):
         ctx.run(f"git push origin {shlex.quote(dr.refspec(name, run))}", pty=True)
 
-    print(" - Waiting for Infrahub to create the branch")
-    _wait_for(lambda: demo in (_branches() or {}), f"the Infrahub branch '{demo}'", timeout)
-    print(" - Waiting for the repository import on that branch to reach the pushed commit")
-    _wait_for(lambda: _branch_repository_commit(demo) == commit, f"the import of {commit[:10]} on '{demo}'", timeout)
-
+    print(f" - Creating the Infrahub branch '{demo}'", flush=True)
+    ctx.run(f"infrahubctl branch create {shlex.quote(demo)}", pty=True)
     with tempfile.TemporaryDirectory() as tmp, ctx.cd(MAIN_DIRECTORY_PATH):
         ctx.run(f"git archive {shlex.quote(commit)} schemas {shlex.quote(objects)} | tar -x -C {shlex.quote(tmp)}")
-        print(f" - Loading the staged schema onto '{demo}'")
+        print(f" - Loading the staged schema onto '{demo}'", flush=True)
         ctx.run(f"infrahubctl schema load {shlex.quote(tmp)}/schemas --branch {shlex.quote(demo)}", pty=True)
         sleep(5)
-        print(f" - Loading {objects} onto '{demo}'")
+        print(f" - Loading {objects} onto '{demo}'", flush=True)
         ctx.run(
-            f"infrahubctl object load {shlex.quote(tmp)}/{shlex.quote(objects)} --branch {shlex.quote(demo)}", pty=True
+            f"infrahubctl object load {shlex.quote(tmp)}/{shlex.quote(objects)} --branch {shlex.quote(demo)}",
+            pty=True,
         )
 
     if not proposed_change:
         print(f"\nBranch '{demo}' is ready. Open a proposed change from it into main.")
-        return
-    mutation = dr.proposed_change_mutation(
-        demo, f"Add {name}", f"Prepared implementation of {name}, released from {stage} at {commit[:10]}."
-    )
-    created = _graphql(mutation)
-    pc_id = ((created.get("CoreProposedChangeCreate") or {}).get("object") or {}).get("id")
-    if not pc_id:
-        print(f"\nBranch '{demo}' is ready, but the proposed change could not be opened. Open it in the UI.")
-        return
-    # Creating one starts its validators at once, and that first pass can race the
-    # data just loaded. Asking again is what makes the checks judge the final branch.
-    _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
-    print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
+    else:
+        mutation = dr.proposed_change_mutation(
+            demo, f"Add {name}", f"Prepared implementation of {name}, released from {stage} at {commit[:10]}."
+        )
+        created = _graphql(mutation)
+        pc_id = ((created.get("CoreProposedChangeCreate") or {}).get("object") or {}).get("id")
+        if not pc_id:
+            print(f"\nBranch '{demo}' is ready, but the proposed change could not be opened. Open it in the UI.")
+        else:
+            # Creating one starts its validators at once, and that first pass can race
+            # the data just loaded. Asking again makes the checks judge the final branch.
+            _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
+            print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
+    print(f"After the merge, make the code live with: invoke demo-activate --name {name} --run {run}")
+
+
+@task(
+    help={
+        "name": f"Capability name (default {DEMO_NAME})",
+        "run": "The release to activate",
+        "timeout": "Seconds to wait for the import (default 600)",
+    }
+)
+def demo_activate(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int = 600) -> None:
+    """Point the repository at demo/<name>-<run>, so its queries, transforms and checks go live.
+
+    Run it after the proposed change is merged. Before the merge nothing reads the
+    staged kind, so the data can land first; after it, the code that renders it
+    can. The other order leaves queries on `main` naming a kind it does not have.
+    """
+    from solution_arista_avd import demo_release as dr
+
+    demo = dr.demo_branch(name, run)
+    tip = _remote_tip(ctx, demo)
+    if not tip:
+        raise Exit(f"The remote has no '{demo}'. Run `invoke demo-release --run {run}` first.", code=1)
+    print(f"\n=== Pointing the repository at {demo} ({tip[:10]}) ===", flush=True)
+    _point_repository_at(demo, tip, timeout)
+    print("\nThe staged code is live. The artifacts re-render; the reconciler pushes them.")
 
 
 @task(
     help={
         "name": f"Capability name (default {DEMO_NAME})",
         "run": "The release to remove",
+        "timeout": "Seconds to wait for the import (default 600)",
     }
 )
-def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1) -> None:
-    """Remove demo/<name>-<run> from Infrahub and the remote, so the demo can be rehearsed again.
+def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int = 600) -> None:
+    """Undo a release so the demo can be rehearsed again, merged or not.
 
-    Never reuse the name afterwards: a branch Infrahub has pulled is not
-    rewritten. The next release takes `--run <n+1>`.
+    Order matters: the ref goes back to `main` first, so no code on `main` names
+    the kind; then the kind's objects and schema node are removed if the merge
+    put them there; then the Infrahub branch and the remote branch go. Never
+    reuse the name afterwards: the next release takes `--run <n+1>`.
     """
+    import tempfile
+
     from solution_arista_avd import demo_release as dr
 
     demo = dr.demo_branch(name, run)
+    main_tip = _remote_tip(ctx, "main")
+    if main_tip and _repository():
+        print(" - Pointing the repository back at main", flush=True)
+        _point_repository_at("main", main_tip, timeout)
+    if _graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"):
+        for edge in (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ id }} }} }} }}").get(DEMO_KIND) or {}).get(
+            "edges", []
+        ):
+            print(f" - Deleting {DEMO_KIND} {edge['node']['id']}", flush=True)
+            _graphql(f'mutation {{ {DEMO_KIND}Delete(data: {{id: "{edge["node"]["id"]}"}}) {{ ok }} }}')
+        with tempfile.TemporaryDirectory() as tmp:
+            absent = Path(tmp) / "absent.yml"
+            absent.write_text(dr.absent_schema(DEMO_SCHEMA_NAMESPACE, DEMO_SCHEMA_NAME), encoding="utf-8")
+            print(f" - Removing the {DEMO_KIND} schema node", flush=True)
+            ctx.run(f"infrahubctl schema load {shlex.quote(str(absent))}", pty=True)
     if demo in (_branches() or {}):
         ctx.run(f"infrahubctl branch delete {shlex.quote(demo)}", pty=True)
     else:
         print(f" - Infrahub has no '{demo}'")
-    with ctx.cd(MAIN_DIRECTORY_PATH):
-        ctx.run(f"git push origin --delete {shlex.quote(demo)}", pty=True, warn=True)
+    if _remote_tip(ctx, demo):
+        with ctx.cd(MAIN_DIRECTORY_PATH):
+            ctx.run(f"git push origin --delete {shlex.quote(demo)}", pty=True, warn=True)
     print(f"\nNext release: invoke demo-release --name {name} --run {run + 1}")
 
 

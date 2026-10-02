@@ -356,7 +356,9 @@ def act_preflight() -> None:
     last = cycles[-1] if cycles else ""
     check("differed=0" in last and "failed=0" in last, "the last reconcile cycle found nothing to do", last[-90:])
 
-    repo = gql("{ CoreRepository { edges { node { sync_status { value } } } } }")["CoreRepository"]["edges"]
+    repo = gql("{ CoreGenericRepository { edges { node { sync_status { value } } } } }")["CoreGenericRepository"][
+        "edges"
+    ]
     check(all(e["node"]["sync_status"]["value"] == "in-sync" for e in repo), "the repository is in sync")
     others = sorted(
         b["name"] for b in gql("{ Branch { name status } }")["Branch"] if b["name"] != "main" and b["status"] == "OPEN"

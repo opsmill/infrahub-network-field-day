@@ -114,7 +114,7 @@ def test_no_repository_fails() -> None:
 
 def test_parse_repositories() -> None:
     data = {
-        "CoreRepository": {
+        "CoreGenericRepository": {
             "edges": [
                 {
                     "node": {

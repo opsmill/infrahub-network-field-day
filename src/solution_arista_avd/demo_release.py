@@ -1,16 +1,17 @@
 """`invoke demo-release`: bring a staged capability branch into Infrahub on cue.
 
-The demo needs a branch that arrives from the Git remote, is synced into
-Infrahub, and is ready for a proposed change, without the branch existing in
-Infrahub beforehand. Three facts shape it:
+The demo needs prepared work that arrives from the Git remote and is reviewed as
+a proposed change, without Infrahub ever holding the branch. Four facts shape it:
 
-* Infrahub only imports remote branches whose names match
-  ``INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES``. The prepared work lives on
-  ``stage/<name>``, which never matches, so it can sit on the remote unsynced.
-  Pushing it to ``demo/<name>-<run>`` is the trigger.
-* ``.infrahub.yml`` carries no ``schemas:`` or ``objects:`` section, so a Git
-  push delivers code (queries, transforms, checks, menus) and nothing else.
-  Schema and data are loaded onto the Infrahub branch directly.
+* The repository is a ``CoreReadOnlyRepository``. It tracks one ``ref`` and
+  imports it into Infrahub's default branch, so no Infrahub branch is created
+  from Git and Infrahub never pushes. A ``CoreRepository`` does both, which
+  needs a write credential on the remote. Changing ``ref`` is the whole trigger.
+* The prepared work lives on ``stage/<name>``; releasing it publishes it as
+  ``demo/<name>-<run>`` so the ref can name something on the remote.
+* ``.infrahub.yml`` carries no ``schemas:`` or ``objects:`` section, so moving
+  the ref delivers code (queries, transforms, checks, menus) and nothing else.
+  Schema and data are loaded onto a plain Infrahub branch and reviewed there.
 * A commit Infrahub has pulled is never rewritten, so every release uses a new
   ``-<run>`` suffix.
 
@@ -58,34 +59,10 @@ def refspec(name: str, run: int) -> str:
     return f"{stage_branch(name)}:{demo_branch(name, run)}"
 
 
-def parse_patterns(raw: str) -> list[str]:
-    """The JSON array ``INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES`` holds."""
-    try:
-        patterns = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        msg = f"INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES is not a JSON array: {raw!r}"
-        raise DemoReleaseError(msg) from exc
-    if not isinstance(patterns, list) or not all(isinstance(p, str) for p in patterns):
-        msg = f"INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES is not a JSON array of strings: {raw!r}"
-        raise DemoReleaseError(msg)
-    return patterns
-
-
-def is_imported(patterns: list[str], branch: str) -> bool:
-    """Infrahub's own rule: a name or regex, tried with ``re.fullmatch``."""
-    return any(re.fullmatch(pattern, branch) for pattern in patterns)
-
-
-def demo_filter(existing: list[str]) -> str:
-    """The override that lets ``demo/`` branches in, keeping whatever was already allowed."""
-    patterns = list(existing)
-    if f"{DEMO_PREFIX}.*" not in patterns:
-        patterns.append(f"{DEMO_PREFIX}.*")
-    return json.dumps(patterns, separators=(",", ":"))
-
-
-def render_repository(url: str, *, repository_name: str = "test-repository", credential: str | None = None) -> str:
-    """The ``CoreRepository`` object file for a remote, as ``infrahubctl object load`` reads it.
+def render_repository(
+    url: str, *, ref: str = "main", repository_name: str = "test-repository", credential: str | None = None
+) -> str:
+    """The read-only repository object file for a remote, as ``infrahubctl object load`` reads it.
 
     ``credential`` is the name of a ``CoreCredential`` that already exists on the
     stack. The secret itself is never written here.
@@ -93,15 +70,19 @@ def render_repository(url: str, *, repository_name: str = "test-repository", cre
     if not url.startswith(("https://", "http://", "ssh://", "git@")):
         msg = f"{url!r} does not look like a Git remote URL"
         raise DemoReleaseError(msg)
+    if not ref.strip():
+        msg = "a repository ref is required"
+        raise DemoReleaseError(msg)
     lines = [
         "---",
         "apiVersion: infrahub.app/v1",
         "kind: Object",
         "spec:",
-        "  kind: CoreRepository",
+        "  kind: CoreReadOnlyRepository",
         "  data:",
         f"    - name: {repository_name}",
         f"      location: {json.dumps(url)}",
+        f"      ref: {json.dumps(ref)}",
     ]
     if credential:
         lines.append(f"      credential: {json.dumps(credential)}")
@@ -132,4 +113,24 @@ def proposed_change_mutation(source_branch: str, name: str, description: str) ->
         f" source_branch: {{ value: {json.dumps(source_branch)} }}"
         ' destination_branch: { value: "main" }'
         " }) { object { id } } }"
+    )
+
+
+def set_ref_mutation(repository_id: str, ref: str) -> str:
+    """The GraphQL that points the read-only repository at another ref."""
+    return (
+        "mutation { CoreReadOnlyRepositoryUpdate(data: {"
+        f" id: {json.dumps(repository_id)} ref: {{ value: {json.dumps(ref)} }}"
+        " }) { ok } }"
+    )
+
+
+def absent_schema(namespace: str, name: str) -> str:
+    """A schema file that marks one node absent: how a loaded kind is taken back out."""
+    return (
+        'version: "1.0"\n'
+        "nodes:\n"
+        f"  - name: {json.dumps(name)}\n"
+        f"    namespace: {json.dumps(namespace)}\n"
+        "    state: absent\n"
     )
