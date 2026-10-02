@@ -1,0 +1,401 @@
+{
+  "_comment": "Captured read-only from GET /api/schema/<kind>?branch=main and trimmed to names, kinds and peers. Recapture with scripts/portal/capture_rack_schema.py rather than editing by hand.",
+  "kinds": {
+    "LocationRack": {
+      "attributes": [
+        {
+          "name": "checksum",
+          "kind": "Text"
+        },
+        {
+          "name": "description",
+          "kind": "Text"
+        },
+        {
+          "name": "device_name_template",
+          "kind": "Text"
+        },
+        {
+          "name": "generation_complete",
+          "kind": "Boolean"
+        },
+        {
+          "name": "index",
+          "kind": "Number"
+        },
+        {
+          "name": "mlag",
+          "kind": "Boolean"
+        },
+        {
+          "name": "name",
+          "kind": "Text"
+        },
+        {
+          "name": "rack_type",
+          "kind": "Dropdown"
+        },
+        {
+          "name": "shortname",
+          "kind": "Text"
+        }
+      ],
+      "relationships": [
+        {
+          "name": "always_include_vrfs_in_tenants",
+          "peer": "EvpnTenant",
+          "cardinality": "many"
+        },
+        {
+          "name": "avd_tags",
+          "peer": "AvdTag",
+          "cardinality": "many"
+        },
+        {
+          "name": "children",
+          "peer": "LocationGeneric",
+          "cardinality": "many"
+        },
+        {
+          "name": "circuit_endpoints",
+          "peer": "DcimCircuitEndpoint",
+          "cardinality": "many"
+        },
+        {
+          "name": "clusters",
+          "peer": "ClusterGeneric",
+          "cardinality": "many"
+        },
+        {
+          "name": "device_designs",
+          "peer": "NetworkRackDeviceDesign",
+          "cardinality": "many"
+        },
+        {
+          "name": "devices",
+          "peer": "DcimPhysicalDevice",
+          "cardinality": "many"
+        },
+        {
+          "name": "member_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "parent",
+          "peer": "LocationHall",
+          "cardinality": "one"
+        },
+        {
+          "name": "pod",
+          "peer": "NetworkPod",
+          "cardinality": "one"
+        },
+        {
+          "name": "policy",
+          "peer": "SecurityPolicy",
+          "cardinality": "one"
+        },
+        {
+          "name": "prefixes",
+          "peer": "IpamPrefix",
+          "cardinality": "many"
+        },
+        {
+          "name": "profiles",
+          "peer": "CoreProfile",
+          "cardinality": "many"
+        },
+        {
+          "name": "subscriber_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "tags",
+          "peer": "BuiltinTag",
+          "cardinality": "many"
+        },
+        {
+          "name": "tenant",
+          "peer": "OrganizationTenant",
+          "cardinality": "one"
+        }
+      ]
+    },
+    "LocationHall": {
+      "attributes": [
+        {
+          "name": "description",
+          "kind": "Text"
+        },
+        {
+          "name": "index",
+          "kind": "Number"
+        },
+        {
+          "name": "name",
+          "kind": "Text"
+        },
+        {
+          "name": "shortname",
+          "kind": "Text"
+        }
+      ],
+      "relationships": [
+        {
+          "name": "children",
+          "peer": "LocationRack",
+          "cardinality": "many"
+        },
+        {
+          "name": "clusters",
+          "peer": "ClusterGeneric",
+          "cardinality": "many"
+        },
+        {
+          "name": "member_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "parent",
+          "peer": "LocationGeneric",
+          "cardinality": "one"
+        },
+        {
+          "name": "policy",
+          "peer": "SecurityPolicy",
+          "cardinality": "one"
+        },
+        {
+          "name": "profiles",
+          "peer": "CoreProfile",
+          "cardinality": "many"
+        },
+        {
+          "name": "subscriber_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "tags",
+          "peer": "BuiltinTag",
+          "cardinality": "many"
+        }
+      ]
+    },
+    "DcimPhysicalDevice": {
+      "attributes": [
+        {
+          "name": "position",
+          "kind": "Number"
+        },
+        {
+          "name": "rack_face",
+          "kind": "Dropdown"
+        },
+        {
+          "name": "serial",
+          "kind": "Text"
+        }
+      ],
+      "relationships": [
+        {
+          "name": "device_type",
+          "peer": "DcimDeviceType",
+          "cardinality": "one"
+        },
+        {
+          "name": "location",
+          "peer": "LocationHosting",
+          "cardinality": "one"
+        },
+        {
+          "name": "member_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "profiles",
+          "peer": "CoreProfile",
+          "cardinality": "many"
+        },
+        {
+          "name": "subscriber_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        }
+      ]
+    },
+    "DcimDeviceType": {
+      "attributes": [
+        {
+          "name": "containerlab_interface_mapping",
+          "kind": "Text"
+        },
+        {
+          "name": "description",
+          "kind": "Text"
+        },
+        {
+          "name": "full_depth",
+          "kind": "Boolean"
+        },
+        {
+          "name": "height",
+          "kind": "Number"
+        },
+        {
+          "name": "name",
+          "kind": "Text"
+        },
+        {
+          "name": "part_number",
+          "kind": "Text"
+        },
+        {
+          "name": "weight",
+          "kind": "Number"
+        }
+      ],
+      "relationships": [
+        {
+          "name": "manufacturer",
+          "peer": "OrganizationManufacturer",
+          "cardinality": "one"
+        },
+        {
+          "name": "member_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "platform",
+          "peer": "DcimPlatform",
+          "cardinality": "one"
+        },
+        {
+          "name": "profiles",
+          "peer": "CoreProfile",
+          "cardinality": "many"
+        },
+        {
+          "name": "subscriber_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "tags",
+          "peer": "BuiltinTag",
+          "cardinality": "many"
+        }
+      ]
+    },
+    "ComputePhysicalServer": {
+      "attributes": [
+        {
+          "name": "checksum",
+          "kind": "Text"
+        },
+        {
+          "name": "description",
+          "kind": "Text"
+        },
+        {
+          "name": "name",
+          "kind": "Text"
+        },
+        {
+          "name": "os_version",
+          "kind": "Text"
+        },
+        {
+          "name": "role",
+          "kind": "Dropdown"
+        },
+        {
+          "name": "status",
+          "kind": "Dropdown"
+        }
+      ],
+      "relationships": [
+        {
+          "name": "device_services",
+          "peer": "ServiceGeneric",
+          "cardinality": "many"
+        },
+        {
+          "name": "interfaces",
+          "peer": "DcimInterface",
+          "cardinality": "many"
+        },
+        {
+          "name": "member_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "object_template",
+          "peer": "TemplateComputePhysicalServer",
+          "cardinality": "one"
+        },
+        {
+          "name": "platform",
+          "peer": "DcimPlatform",
+          "cardinality": "one"
+        },
+        {
+          "name": "primary_address",
+          "peer": "IpamIPAddress",
+          "cardinality": "one"
+        },
+        {
+          "name": "profiles",
+          "peer": "CoreProfile",
+          "cardinality": "many"
+        },
+        {
+          "name": "rack",
+          "peer": "LocationRack",
+          "cardinality": "one"
+        },
+        {
+          "name": "static_routes",
+          "peer": "RoutingStaticRoute",
+          "cardinality": "many"
+        },
+        {
+          "name": "subscriber_of_groups",
+          "peer": "CoreGroup",
+          "cardinality": "many"
+        },
+        {
+          "name": "tags",
+          "peer": "BuiltinTag",
+          "cardinality": "many"
+        },
+        {
+          "name": "telemetry_address",
+          "peer": "IpamIPAddress",
+          "cardinality": "one"
+        },
+        {
+          "name": "tenant",
+          "peer": "OrganizationTenant",
+          "cardinality": "one"
+        },
+        {
+          "name": "virtual_machines",
+          "peer": "VirtualizationVirtualMachine",
+          "cardinality": "many"
+        },
+        {
+          "name": "worker_in_cluster",
+          "peer": "ClusterGenericComputeUnitNodes",
+          "cardinality": "one"
+        }
+      ]
+    }
+  }
+}

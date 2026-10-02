@@ -105,3 +105,19 @@ you do not want.
 schema pattern but not a universal one, so a materially different schema needs
 those field names parameterised -- config can retarget which entities a panel
 appears on, but not yet what it reads.
+
+The rack queries are held against a schema fixture,
+`src/panels/__fixtures__/rack-schema.json`, captured read-only from the live
+instance by `scripts/portal/capture_rack_schema.py`; `rackLayout.test.ts` walks
+every field they name against it. The elevation once asked for `facility_id`,
+`height` and `mounted_devices` -- fields from an upstream example schema that
+this one never had -- and the page was the first thing to say so. Recapture the
+fixture after changing the location or device schema.
+
+What the elevation draws follows what the schema has. A rack's network devices
+come from `LocationRack.devices` (the `DcimPhysicalDevice` generic, so switches,
+routers and the firewall alike); its servers from `ComputePhysicalServer.rack`,
+which has no reverse on the rack. A rack records no height, so the drawing is as
+tall as its highest positioned device, and devices with no `position` -- every
+device in this lab -- are listed by name beneath it rather than given a made-up
+U.

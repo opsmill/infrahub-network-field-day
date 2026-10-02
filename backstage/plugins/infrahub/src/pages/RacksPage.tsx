@@ -12,7 +12,15 @@ import {
   SupportButton,
 } from '@backstage/core-components';
 import { useInfrahubQuery } from '../client';
-import { Rack, RACK_FIELDS, RackNode } from '../panels/RackElevation';
+import { Rack } from '../panels/RackElevation';
+import {
+  layoutRack,
+  RACK_FIELDS,
+  RackNode,
+  SERVER_FIELDS,
+  ServerNode,
+  summarise,
+} from '../panels/rackLayout';
 
 /**
  * Two queries on purpose. The first is only what the picker needs -- a name and
@@ -20,11 +28,11 @@ import { Rack, RACK_FIELDS, RackNode } from '../panels/RackElevation';
  * number of options grows with how many racks exist. The second fetches one
  * rack's contents, and only when one is chosen.
  */
-const LIST_QUERY = `
+export const LIST_QUERY = `
   query ($search: String, $limit: Int) {
     LocationRack(
       partial_match: true
-      shortname__value: $search
+      name__value: $search
       limit: $limit
       order: { disable: false }
     ) {
@@ -32,7 +40,7 @@ const LIST_QUERY = `
       edges {
         node {
           id
-          shortname { value }
+          name { value }
           display_label
           parent { node { display_label } }
         }
@@ -42,18 +50,19 @@ const LIST_QUERY = `
 `;
 
 /**
- * By shortname, not id: the chosen rack has to load even when it is not on the
- * page of options currently in hand.
+ * By name, not id: the chosen rack has to load even when it is not on the page
+ * of options currently in hand. Name rather than shortname because no rack here
+ * has a shortname -- keyed on it, the picker offered racks it could not load.
+ * Servers come from their own root field: they point at the rack, and the rack
+ * has no relationship back to them.
  */
-const DETAIL_QUERY = `
-  query ($shortname: String!) {
-    LocationRack(shortname__value: $shortname) {
-      edges {
-        node {
-          ${RACK_FIELDS}
-          parent { node { display_label } }
-        }
-      }
+export const DETAIL_QUERY = `
+  query ($name: String!) {
+    LocationRack(name__value: $name) {
+      edges { node { ${RACK_FIELDS} } }
+    }
+    ComputePhysicalServer(rack__name__value: $name) {
+      edges { node { ${SERVER_FIELDS} } }
     }
   }
 `;
@@ -63,7 +72,7 @@ const PAGE = 50;
 
 export type RackOption = {
   id: string;
-  shortname: { value: string };
+  name: { value: string };
   display_label: string;
   parent: { node: { display_label: string } | null } | null;
 };
@@ -73,13 +82,8 @@ type RackList = {
 };
 
 type RackDetail = {
-  LocationRack: {
-    edges: {
-      node: RackNode & {
-        parent: { node: { display_label: string } | null } | null;
-      };
-    }[];
-  };
+  LocationRack: { edges: { node: RackNode }[] };
+  ComputePhysicalServer: { edges: { node: ServerNode }[] };
 };
 
 /**
@@ -95,16 +99,6 @@ export function withSelected(
     return options;
   }
   return [selected, ...options];
-}
-
-/** How much of a rack is still free, which is the question people ask of one. */
-export function capacity(rack: RackNode) {
-  const units = rack.height.value ?? 0;
-  const used = rack.mounted_devices.edges.reduce(
-    (total, edge) => total + (edge.node.device_type?.node?.height.value ?? 1),
-    0,
-  );
-  return { units, used, free: Math.max(0, units - used) };
 }
 
 export function RacksPage() {
@@ -135,17 +129,19 @@ export function RacksPage() {
   // Nothing chosen yet: show the first rack rather than an empty page.
   useEffect(() => {
     if (!chosen && options.length > 0) {
-      setParams({ rack: options[0].shortname.value }, { replace: true });
+      setParams({ rack: options[0].name.value }, { replace: true });
     }
   }, [chosen, options, setParams]);
 
   const detail = useInfrahubQuery<RackDetail>(
     DETAIL_QUERY,
-    { shortname: chosen },
+    { name: chosen },
     [chosen],
     !chosen,
   );
   const rack = detail.data?.LocationRack.edges[0]?.node;
+  const servers =
+    detail.data?.ComputePhysicalServer.edges.map(edge => edge.node) ?? [];
 
   const total = list.data?.LocationRack.count ?? 0;
   const site = rack?.parent?.node?.display_label;
@@ -155,7 +151,7 @@ export function RacksPage() {
   const selected: RackOption | null = rack
     ? {
         id: rack.id,
-        shortname: rack.shortname,
+        name: rack.name,
         display_label: rack.display_label,
         parent: rack.parent,
       }
@@ -191,7 +187,7 @@ export function RacksPage() {
           loading={list.loading}
           style={{ minWidth: 380 }}
           // Infrahub already filtered; filtering again would hide matches that
-          // the shortname matched but the label does not show.
+          // the name matched but the label does not show.
           filterOptions={x => x}
           // Focusing highlights the current rack's name, so typing replaces it
           // rather than appending to it and matching nothing.
@@ -204,7 +200,7 @@ export function RacksPage() {
           value={selected}
           onChange={(_event, option) => {
             if (option) {
-              setParams({ rack: option.shortname.value });
+              setParams({ rack: option.name.value });
             } else {
               // The X. Keep showing the rack -- an empty page is worse -- but
               // put every rack back in the picker.
@@ -235,12 +231,9 @@ export function RacksPage() {
           {rack && (
             <>
               <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 12 }}>
-                {(() => {
-                  const { units, used, free } = capacity(rack);
-                  return `${used}U used of ${units}U · ${free}U free · ${rack.mounted_devices.edges.length} devices · hatched is rear-facing`;
-                })()}
+                {summarise(layoutRack(rack, servers))} · hatched is rear-facing
               </div>
-              <Rack rack={rack} />
+              <Rack rack={rack} servers={servers} />
             </>
           )}
         </div>
