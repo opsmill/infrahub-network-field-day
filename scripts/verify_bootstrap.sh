@@ -416,7 +416,21 @@ check "$grafana_role" "Viewer" "alice signs in to Grafana through Dex and lands 
 # OTTERNET folder through `/api/ds/query`, with the dashboards' own variables, and
 # names each panel that returns no data or an error. Its allowlist is the one place
 # a query may be empty, with a reason per entry.
-if uv run python scripts/check_grafana_panels.py --url http://127.0.0.1:13000; then
+#
+# RETRIED FOR A BOUNDED WINDOW, because the bootstrap's own last step can empty a
+# panel for a minute: the firewall's first full-config push lands moments before
+# this stage, and its rate() panels need two SNMP samples after it. Measured: four
+# firewall panels empty at the check, all nine full a few minutes later. A panel
+# that stays empty for the whole window still fails, with the last listing.
+grafana_ok=0
+for attempt in 1 2 3 4 5 6; do
+    if uv run python scripts/check_grafana_panels.py --url http://127.0.0.1:13000; then
+        grafana_ok=1
+        break
+    fi
+    [ "$attempt" -lt 6 ] && { echo "      (attempt $attempt: retrying in 45s while recent pushes settle)"; sleep 45; }
+done
+if [ "$grafana_ok" = 1 ]; then
     pass "every OTTERNET dashboard panel returns data through Grafana"
 else
     fail "an OTTERNET dashboard panel returns no data or an error through Grafana (listed above)"
