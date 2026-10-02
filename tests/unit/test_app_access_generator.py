@@ -1775,7 +1775,9 @@ async def test_revoking_a_grant_withdraws_its_advertisement() -> None:
     await _generator(client).generate(parsed.model_dump(by_alias=True))
 
     switch = client.nodes[f"dev-{BORDER_LEAF}"]
-    assert switch.avd_custom_hostvars.value == {}, "the advertisement should be gone, husk and all"
+    # Null rather than `{}`: the seed holds null, and `{}` left a `null -> {}`
+    # attribute diff in every revocation's proposed change.
+    assert switch.avd_custom_hostvars.value is None, "the advertisement should be gone, husk and all"
 
 
 @pytest.mark.asyncio

@@ -1273,7 +1273,10 @@ class AppAccessGenerator(InfrahubGenerator):
         it, and this generator would eventually delete a leaf.
         """
         device = await self._init_client.get(kind="DcimFabricSwitch", id=advertisement.device_id)
-        device.avd_custom_hostvars.value = hostvars  # type: ignore[union-attr]
+        # Empty goes back as null, which is what the seed data holds: `{}` left a
+        # `null -> {}` change in every revocation's proposed change, an
+        # attribute diff a reviewer has to read and that renders nothing.
+        device.avd_custom_hostvars.value = hostvars or None  # type: ignore[union-attr]
         await device.save(update_group_context=False)
 
     async def _rerender_firewall(self, firewall_id: str | None) -> None:
