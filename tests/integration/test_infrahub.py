@@ -6,6 +6,8 @@ from infrahub_sdk.protocols import CoreGenericRepository
 from infrahub_sdk.testing.docker import TestInfrahubDockerClient
 from infrahub_sdk.testing.repository import GitRepo
 
+from .helpers import REPO_SYNC_INTERVAL, REPO_SYNC_RETRIES
+
 
 class TestInfrahub(TestInfrahubDockerClient):
     @pytest.mark.asyncio
@@ -63,8 +65,17 @@ class TestInfrahub(TestInfrahubDockerClient):
             dst_directory=remote_repos_dir,
         )
         await repo.add_to_infrahub(client=client)
-        in_sync = await repo.wait_for_sync_to_complete(client=client)
-        assert in_sync
+        # The SDK's default budget is 6 x 5s. Importing this repository's
+        # queries, generators, transforms, checks and artifact definitions
+        # measured 35-66s on 1.10.6, so the default reported a healthy import as
+        # a failure. A real `error-import` still returns False at once.
+        in_sync = await repo.wait_for_sync_to_complete(
+            client=client, interval=REPO_SYNC_INTERVAL, retries=REPO_SYNC_RETRIES
+        )
+        if not in_sync:
+            synced = await client.get(kind=CoreGenericRepository, name__value=repo.name)
+            msg = f"repository '{repo.name}' did not reach in-sync; status={synced.sync_status.value}"
+            raise AssertionError(msg)
 
         repos = await client.all(kind=CoreGenericRepository)
 

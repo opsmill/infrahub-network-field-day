@@ -39,6 +39,10 @@ from .helpers import (
     POLL_INTERVAL,
     REPO_SYNC_INTERVAL,
     REPO_SYNC_RETRIES,
+    TRIGGER_SETUP_STABLE_SAMPLES,
+    TRIGGER_SETUP_TIMEOUT,
+    WORKFLOW_CONFIGURE_ACTION_RULES,
+    wait_for_workflow_quiet,
     wait_until,
 )
 
@@ -172,11 +176,20 @@ class TestOtternetFabric(TestInfrahubDockerClient):
 
     # --- stage 5: trigger rules -------------------------------------------
     @pytest.mark.asyncio(loop_scope="class")
-    async def test_load_triggers(self, infrahub_port: int) -> None:
+    async def test_load_triggers(self, client: InfrahubClient, infrahub_port: int) -> None:
         """Load the event rules that cascade pod -> rack -> hostvars -> structured config.
 
         After the repository sync: the trigger actions reference generators by
         name, which only exist once the repository has registered them.
+
+        Loading the objects is not the same as the rules being live. Each saved
+        rule, action and match queues a `configure-action-rules` run that builds
+        the automation, and the event only reaches a generator once that run has
+        finished. Measured on 1.10.6: 171 runs over 65 seconds, while the fabric
+        generator in the next stage wrote the pod checksum 33 seconds in -- the
+        event was emitted on the branch with the checksum attribute and nothing
+        received it, so no pod, rack or AVD generator ever ran and the uplink
+        stage timed out ten minutes later with an empty report.
         """
         result = self.execute_command(
             command="infrahubctl object load triggers.yml", address=self._address(infrahub_port)
@@ -185,6 +198,15 @@ class TestOtternetFabric(TestInfrahubDockerClient):
         if result.stderr:
             print(result.stderr, flush=True)
         assert result.returncode == 0, f"trigger load failed:\n{result.stdout}\n{result.stderr}"
+
+        await wait_for_workflow_quiet(
+            client,
+            workflow=WORKFLOW_CONFIGURE_ACTION_RULES,
+            timeout=TRIGGER_SETUP_TIMEOUT,
+            interval=POLL_INTERVAL,
+            stable_samples=TRIGGER_SETUP_STABLE_SAMPLES,
+            describe="the trigger rules becoming live automations",
+        )
 
     # --- stage 6: branch --------------------------------------------------
     @pytest.mark.asyncio(loop_scope="class")

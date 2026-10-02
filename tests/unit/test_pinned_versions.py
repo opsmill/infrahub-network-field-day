@@ -143,6 +143,38 @@ def test_semaphore_installs_the_locked_infrahub_sdk() -> None:
     )
 
 
+def _locked_version(name: str) -> str:
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    return next(package["version"] for package in lock["package"] if package["name"] == name)
+
+
+def test_testcontainers_matches_the_infrahub_release() -> None:
+    """The integration suite must start the release the project runs.
+
+    `infrahub-testcontainers` ships its compose file per release, in lockstep with
+    Infrahub, so an older package starts a stack laid out for an older server --
+    and a bump that forgets it is green locally and tests nothing current.
+    `update-infrahub.yml` pins it with `uv add ...==<version>`, so both the
+    declared specifier and the lock must carry the Dockerfile's version exactly.
+    """
+    expected = _infrahub_source_version()
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    specifiers = [
+        requirement
+        for requirement in pyproject["dependency-groups"]["dev"]
+        if re.match(r"infrahub-testcontainers\b", requirement)
+    ]
+    assert specifiers == [f"infrahub-testcontainers=={expected}"], (
+        f"pyproject.toml's dev group declares {specifiers}; it must pin infrahub-testcontainers=={expected}, "
+        "the Dockerfile's Infrahub release"
+    )
+    locked = _locked_version("infrahub-testcontainers")
+    assert locked == expected, (
+        f"uv.lock resolves infrahub-testcontainers {locked}, the Dockerfile targets Infrahub {expected}; "
+        "run `uv lock --upgrade-package infrahub-testcontainers`"
+    )
+
+
 # --------------------------------------------------------------------- images
 
 FLOATING = re.compile(r"(^|:)latest$")
