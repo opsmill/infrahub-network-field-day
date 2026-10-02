@@ -79,4 +79,4 @@ list of names or regexes tried with `re.fullmatch`. Things to know:
 - `tests/unit/test_repository_sync_contract.py` pins the value and the `/upstream` mount.
   Integration tests are unaffected: they build their own Infrahub and repository.
 
-The builder demo registers a read-only repository on the Git remote instead, tracking one `ref`, so the filter does not apply and Infrahub pushes nothing. See [Builder demo](../demo-builder.md).
+The builder demo registers a repository on the Git remote instead, in read-only or read-write mode, so its filter and credentials differ from the defaults here. See [Builder demo](../demo-builder.md).
