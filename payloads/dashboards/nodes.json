@@ -1,33 +1,107 @@
 {
   "uid": "otternet-nodes",
   "title": "OTTERNET / Kubernetes nodes",
-  "description": "The k3s nodes through node-exporter. They are containers on one host, so host-level series describe the host, not each node.",
+  "description": "The three k3s nodes: what their pods use against the one CPU each node is given, their network, and what Cilium's datapath is doing. Node traffic comes from node-exporter through Telegraf, as the cluster-nodes profile selects it; pod usage from the kubelet; flows from Hubble.",
   "tags": [
     "otternet",
     "telemetry",
-    "kubernetes"
+    "cluster"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
+  "graphTooltip": 1,
   "refresh": "1m",
   "time": {
     "from": "now-1h",
     "to": "now"
   },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "otternet"
+      ],
+      "asDropdown": true,
+      "title": "OTTERNET dashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "device",
+        "label": "Node",
+        "description": "k3s nodes the cluster-nodes profile collects.",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(node_memory_MemTotal_bytes, device)",
+          "refId": "device"
+        },
+        "definition": "label_values(node_memory_MemTotal_bytes, device)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
+      "type": "row",
+      "title": "Each node",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
       "type": "timeseries",
-      "title": "CPU busy %",
+      "title": "Pod CPU per node (cores)",
+      "description": "CPU the node's pods use, from the kubelet's cAdvisor, taken once per container so a second kubelet Service cannot double it. Each k3s node is capped at one CPU (cpu.max 100000 100000), drawn as the red line: a node near it starves whatever runs there.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 1,
         "w": 12,
         "h": 8
       },
@@ -38,31 +112,70 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * (1 - avg by (device) (rate(node_cpu_seconds_total{mode=\"idle\"}[2m])))",
+          "expr": "sum by (node) (max by (node, namespace, pod, container) (rate(container_cpu_usage_seconds_total{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", node=~\"$device\", container!=\"\", image!=\"\"}[$__rate_interval])))",
           "instant": false,
           "range": true,
-          "legendFormat": "{{device}}"
+          "legendFormat": "{{node}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 0.8,
+                "color": "orange"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            },
+            "axisSoftMax": 1.2
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
-      "id": 2,
+      "id": 3,
       "type": "timeseries",
-      "title": "Memory available",
+      "title": "Pod memory per node (working set)",
+      "description": "Working-set memory of the node's pods, from the kubelet's cAdvisor, taken once per container.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 12,
-        "y": 0,
+        "y": 1,
         "w": 12,
         "h": 8
       },
@@ -73,19 +186,348 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "node_memory_MemAvailable_bytes",
+          "expr": "sum by (node) (max by (node, namespace, pod, container) (container_memory_working_set_bytes{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", node=~\"$device\", container!=\"\", image!=\"\"}))",
           "instant": false,
           "range": true,
-          "legendFormat": "{{device}}"
+          "legendFormat": "{{node}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
         },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Network per node",
+      "description": "Bits per second on each node's eth0 (management) and eth1 (its fabric uplink), in (up) and out (down).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, interface) (rate(node_network_receive_bytes_total{device=~\"$device\", interface=~\"eth[0-9]+\"}[$__rate_interval]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{interface}} in"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, interface) (rate(node_network_transmit_bytes_total{device=~\"$device\", interface=~\"eth[0-9]+\"}[$__rate_interval]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{interface}} out"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* out$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Lab host CPU and memory",
+      "description": "node-exporter reads /proc, which in a container is the lab HOST's, so all three nodes report the same machine: one line each for CPU busy and memory used, shared by every device in the lab.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\", device=~\"$device\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "host CPU busy"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (1 - min(node_memory_MemAvailable_bytes{device=~\"$device\"}) / max(node_memory_MemTotal_bytes{device=~\"$device\"}))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "host memory used"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Cilium datapath",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Hubble flows by verdict",
+      "description": "Flows per second Hubble observed, by verdict, across the cluster.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (verdict) (rate(hubble_flows_processed_total[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{verdict}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DROPPED"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "FORWARDED"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Drops by reason",
+      "description": "Packets per second Hubble saw dropped, by reason -- POLICY_DENIED is a CiliumNetworkPolicy refusing a source, which is the third gate a grant opens.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (reason) (rate(hubble_drop_total[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No drops",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ]
 }

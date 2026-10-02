@@ -1,26 +1,54 @@
 {
   "uid": "otternet-fabric-state",
   "title": "OTTERNET / Deployment state",
-  "description": "Whether each device matches the configuration Infrahub renders for it, as the deployment reconciler last recorded, plus the cluster's own datapath.",
+  "description": "Whether each device matches the configuration Infrahub renders for it, as the deployment reconciler last recorded it in DeploymentState. Read through the Infrahub exporter, so it updates once a minute.",
   "tags": [
     "otternet",
-    "deployment",
-    "cluster"
+    "deployment"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
+  "graphTooltip": 1,
   "refresh": "1m",
   "time": {
     "from": "now-1h",
     "to": "now"
   },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "otternet"
+      ],
+      "asDropdown": true,
+      "title": "OTTERNET dashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
       "type": "stat",
-      "title": "Devices not in sync",
+      "title": "Devices tracked",
+      "description": "DeploymentState records: one per device the reconciler manages.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -38,39 +66,45 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(infrahub_deploymentstate_info{status!=\"in_sync\"}) or vector(0)",
+          "expr": "count(infrahub_deploymentstate_info) or vector(0)",
           "instant": true,
           "range": false
         }
       ],
-      "description": "Anything but in_sync. The reconciler pushes a differing device on its next cycle.",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
+                "value": null,
+                "color": "blue"
               }
             ]
-          }
+          },
+          "noValue": "0"
         },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Suspended devices",
+      "title": "In sync",
+      "description": "Devices whose last comparison found no difference.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -88,22 +122,165 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "expr": "count(infrahub_deploymentstate_info{status=\"in_sync\"}) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Not in sync",
+      "description": "Pending, drifted, failed or never deployed.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(infrahub_deploymentstate_info{status!=\"in_sync\"}) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Suspended",
+      "description": "Devices an operator has suspended: the reconciler neither compares nor pushes them.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "count(infrahub_deploymentstate_info{suspend=\"True\"}) or vector(0)",
           "instant": true,
           "range": false
         }
       ],
-      "description": "The operator's break-glass: the reconciler leaves these alone.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
-      "id": 3,
+      "id": 5,
       "type": "table",
       "title": "Deployment state per device",
+      "description": "One row per DeploymentState. Status is coloured; a suspended device shows True.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -112,7 +289,7 @@
         "x": 0,
         "y": 4,
         "w": 12,
-        "h": 10
+        "h": 12
       },
       "targets": [
         {
@@ -121,7 +298,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "infrahub_deploymentstate_info",
+          "expr": "max by (name, status, suspend) (label_replace(infrahub_deploymentstate_info, \"suspend\", \"False\", \"suspend\", \"\"))",
           "instant": true,
           "range": false,
           "format": "table"
@@ -129,23 +306,137 @@
       ],
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "in_sync": {
+                        "text": "In sync",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "pending": {
+                        "text": "Pending",
+                        "color": "blue",
+                        "index": 1
+                      },
+                      "drifted": {
+                        "text": "Drifted",
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "failed": {
+                        "text": "Failed",
+                        "color": "red",
+                        "index": 3
+                      },
+                      "never_deployed": {
+                        "text": "Never deployed",
+                        "color": "text",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Device"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "suspend"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Suspended"
+              }
+            ]
+          }
+        ]
       },
-      "options": {}
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "status",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "name": 0,
+              "status": 1,
+              "suspend": 2,
+              "Value": 3
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "name",
+                "status",
+                "suspend"
+              ]
+            }
+          }
+        }
+      ]
     },
     {
-      "id": 4,
+      "id": 6,
       "type": "timeseries",
-      "title": "Hubble flows by verdict",
+      "title": "Devices by status over time",
+      "description": "How many devices held each status: a drift or a failed push shows as a step away from in_sync and back.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 12,
-        "y": 0,
+        "y": 4,
         "w": 12,
-        "h": 7
+        "h": 12
       },
       "targets": [
         {
@@ -154,50 +445,117 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (verdict) (rate(hubble_flows_processed_total[2m]))",
+          "expr": "count by (status) (infrahub_deploymentstate_info)",
           "instant": false,
           "range": true,
-          "legendFormat": "{{verdict}}"
+          "legendFormat": "{{status}}"
         }
       ],
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "options": {}
-    },
-    {
-      "id": 5,
-      "type": "timeseries",
-      "title": "Policy drops",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 7,
-        "w": 12,
-        "h": 7
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 40,
+            "showPoints": "never",
+            "spanNulls": true,
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in_sync"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
           },
-          "expr": "sum by (reason) (rate(hubble_drop_total[2m]))",
-          "instant": false,
-          "range": true,
-          "legendFormat": "{{reason}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pending"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "drifted"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "never_deployed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "gray"
+                }
+              }
+            ]
+          }
+        ]
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ]
 }

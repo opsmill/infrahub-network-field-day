@@ -39,12 +39,14 @@ Linux routers render the same ``NetworkLocalUser`` ``admin`` hash as the switche
 
 **The WAN routers and the fabric switches are subscribed through the same
 OpenConfig paths**, so their series arrive under the same names --
-``bgp_neighbor_session_state_code``, ``interface_counters_*``, ``cpu_*``,
-``memory_*`` -- with the same labels. Measured with Telegraf 1.40 against an
-SR Linux 26.7 router: every one of the four subscriptions answered, and the BGP
-series carries ``neighbor_address`` and the network instance as ``name`` exactly
-as EOS does. A dashboard written for the fabric therefore covers the WAN without
-a second query, which is what replacing frr_exporter bought.
+``bgp_neighbor_session_state_code``, ``bgp_afi_safi_*``, ``interface_counters_*``,
+``interface_status_oper_status_code``, ``cpu_*``, ``memory_*`` -- with the same
+labels. Measured with Telegraf 1.40 against an SR Linux 26.7 router: every
+subscription answered, and the BGP series carries ``neighbor_address`` and the
+network instance as ``name`` exactly as EOS does. A dashboard written for the
+fabric therefore covers the WAN without a second query, which is what replacing
+frr_exporter bought. ``tests/unit/test_dashboard_metrics_contract.py`` holds
+every dashboard panel to the series this renders.
 """
 
 from __future__ import annotations
@@ -83,6 +85,18 @@ PROMETHEUS_LISTEN = ":9273"
 # RFC 4271's finite-state machine, in order, so ESTABLISHED is the one value a
 # dashboard compares against.
 BGP_STATE_CODES = {"IDLE": 1, "CONNECT": 2, "ACTIVE": 3, "OPENSENT": 4, "OPENCONFIRM": 5, "ESTABLISHED": 6}
+# OpenConfig's oper-status, numbered as IF-MIB's ifOperStatus so a gNMI interface
+# and an SNMP one compare with the same `== 1`. Measured against EOS and SR Linux
+# with Telegraf 1.40: both report these strings.
+OPER_STATUS_CODES = {
+    "UP": 1,
+    "DOWN": 2,
+    "TESTING": 3,
+    "UNKNOWN": 4,
+    "DORMANT": 5,
+    "NOT_PRESENT": 6,
+    "LOWER_LAYER_DOWN": 7,
+}
 INTENDED_FILE = "/etc/telegraf-intent/intended.prom"
 
 # ---------------------------------------------------------------------------
@@ -99,6 +113,10 @@ _IF_TABLE = (
     "interface",
     [
         ("ifName", ".1.3.6.1.2.1.31.1.1.1.1", True),
+        # The interface's description, which junos_config renders from the
+        # model, so a panel can say what a port is for and not only which
+        # port it is.
+        ("ifAlias", ".1.3.6.1.2.1.31.1.1.1.18", True),
         ("ifHCInOctets", ".1.3.6.1.2.1.31.1.1.1.6", False),
         ("ifHCOutOctets", ".1.3.6.1.2.1.31.1.1.1.10", False),
         ("ifInErrors", ".1.3.6.1.2.1.2.2.1.14", False),
@@ -120,35 +138,45 @@ _JNX_SESSIONS = (
 )
 
 _OC_INTERFACES = ("interface_counters", "openconfig", "/interfaces/interface/state/counters")
+# Operational state, which the measurement promises and the counters path does
+# not carry. OpenConfig reports a string, so it is mapped onto IF-MIB's
+# ifOperStatus numbers -- the values the firewall's SNMP table already reports
+# -- and "a cabled interface that is down" is one comparison for every family.
+_OC_INTERFACE_STATUS = ("interface_status", "openconfig", "/interfaces/interface/state/oper-status")
 _OC_BGP = (
     "bgp_neighbor",
     "openconfig",
     "/network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/state",
+)
+# Prefixes per session and address family: the OpenConfig per-AFI counts rather
+# than an EOS-native Sysdb path. Stable across EOS releases, answered by SR Linux
+# under the same name, and on the leaves' l2vpn-evpn neighbours exactly the EVPN
+# routes received.
+_OC_BGP_PREFIXES = (
+    "bgp_afi_safi",
+    "openconfig",
+    "/network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/afi-safis/afi-safi/state/prefixes",
 )
 _OC_CPU = ("cpu", "openconfig", "/components/component/cpu/utilization/state")
 _OC_MEMORY = ("memory", "openconfig", "/components/component/state/memory")
 
 DISPATCH: dict[str, dict[str, Any]] = {
     "interface-counters": {
-        SWITCH: [_OC_INTERFACES],
-        ROUTER: [_OC_INTERFACES],
+        SWITCH: [_OC_INTERFACES, _OC_INTERFACE_STATUS],
+        ROUTER: [_OC_INTERFACES, _OC_INTERFACE_STATUS],
         FIREWALL: [_IF_TABLE],
     },
+    # State AND prefixes, as the measurement says: a session that is up and
+    # carries nothing is the failure a state panel alone cannot show.
     "bgp-neighbor-state": {
-        SWITCH: [_OC_BGP],
-        ROUTER: [_OC_BGP],
+        SWITCH: [_OC_BGP, _OC_BGP_PREFIXES],
+        ROUTER: [_OC_BGP, _OC_BGP_PREFIXES],
     },
-    # The OpenConfig per-AFI prefix counts rather than an EOS-native Sysdb path:
-    # stable across EOS releases, and the leaves' l2vpn-evpn neighbours report
-    # exactly the EVPN routes received.
+    # The same subscription, kept as its own measurement so a profile can ask
+    # for EVPN routes without every session's state. A device asked for both
+    # subscribes once: an input's specs are deduplicated.
     "evpn-routes": {
-        SWITCH: [
-            (
-                "bgp_afi_safi",
-                "openconfig",
-                "/network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/afi-safis/afi-safi/state/prefixes",
-            )
-        ],
+        SWITCH: [_OC_BGP_PREFIXES],
     },
     "system-resources": {
         SWITCH: [_OC_CPU, _OC_MEMORY],
@@ -395,6 +423,16 @@ class TelemetryCollectorConfig(InfrahubTransform):
                 "    [processors.enum.mapping.value_mappings]",
                 *_kv("      ", BGP_STATE_CODES),
             ]
+        if any(w.device.kind in GNMI_KINDS and "interface-counters" in w.measurements for w in watches):
+            lines += [
+                "",
+                "[[processors.enum]]",
+                *_kv("  ", {"namepass": ["interface_status"]}),
+                "  [[processors.enum.mapping]]",
+                *_kv("    ", {"fields": ["oper_status"], "dest": "oper_status_code"}),
+                "    [processors.enum.mapping.value_mappings]",
+                *_kv("      ", OPER_STATUS_CODES),
+            ]
         lines += self._identity_processors(watches)
         rendered_inputs = 0
         for watch in watches:
@@ -486,7 +524,13 @@ class TelemetryCollectorConfig(InfrahubTransform):
         device = watch.device
         measurements = sorted(watch.measurements)
         interval = f"{watch.interval}s"
-        specs = [spec for m in measurements for spec in DISPATCH[m][device.kind]]
+        # Deduplicated in first-seen order: two measurements may share a
+        # subscription (evpn-routes and bgp-neighbor-state on a leaf), and
+        # subscribing twice would report every series twice.
+        specs: list[Any] = []
+        for spec in (s for m in measurements for s in DISPATCH[m][device.kind]):
+            if spec not in specs:
+                specs.append(spec)
 
         if device.kind in GNMI_KINDS:
             if device.kind == SWITCH:
@@ -594,9 +638,16 @@ class TelemetryCollectorConfig(InfrahubTransform):
             "# TYPE otternet_intended_bgp_neighbor gauge",
             "# HELP otternet_intended_bgp_neighbor A BGP session Infrahub intends this device to hold.",
         ]
-        for name, _kind in bgp:
+        for name, kind in bgp:
             for vrf, peer, description in await self._intended_neighbors(devices[name]):
-                labels = {"device": name, "peer_address": peer, "vrf": vrf}
+                # `kind` so a dashboard scopes intent the way it scopes what is
+                # observed, without joining on a device that may be silent.
+                labels = {"device": name, "kind": kind, "peer_address": peer}
+                # A router's neighbours carry no network instance in the model,
+                # so its sessions name no VRF rather than claiming `default`
+                # for a session that lives in a customer's.
+                if vrf:
+                    labels["vrf"] = vrf
                 peer_device = description.split("_", 1)[0] if description else ""
                 if peer_device in devices:
                     labels["peer_device"] = peer_device
@@ -623,14 +674,20 @@ class TelemetryCollectorConfig(InfrahubTransform):
                 link_lines.append(
                     _series(
                         "otternet_intended_link",
-                        {"device": dev, "interface": intf, "peer_device": peer_dev, "peer_interface": peer_intf},
+                        {
+                            "device": dev,
+                            "interface": intf,
+                            "kind": devices[dev].kind,
+                            "peer_device": peer_dev,
+                            "peer_interface": peer_intf,
+                        },
                         1,
                     )
                 )
                 up_lines.append(
                     _series(
                         "otternet_intended_interface_up",
-                        {"device": dev, "interface": intf},
+                        {"device": dev, "interface": intf, "kind": devices[dev].kind},
                         1 if status in (None, "active") else 0,
                     )
                 )
@@ -647,7 +704,7 @@ class TelemetryCollectorConfig(InfrahubTransform):
     async def _intended_neighbors(self, device: Device) -> list[tuple[str, str, str]]:
         """(vrf, peer address, description) for every session the device is configured with."""
         if device.kind == ROUTER:
-            return [("default", peer, "") for peer in device.bgp_neighbors]
+            return [("", peer, "") for peer in device.bgp_neighbors]
         if device.kind != SWITCH or not device.structured_config_id:
             return []
         sc_file = await self.client.get(AvdStructuredConfigFile, id=device.structured_config_id)

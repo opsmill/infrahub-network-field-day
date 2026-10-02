@@ -1,7 +1,7 @@
 {
   "uid": "otternet-wan",
   "title": "OTTERNET / WAN routing",
-  "description": "The SR Linux routers, over gNMI, as the wan-routing profile selects. The series are the OpenConfig ones the fabric switches report, filtered to kind DcimDevice.",
+  "description": "The WAN's SR Linux routers over gNMI, compared with the BGP neighbours Infrahub models for them. The series are the OpenConfig ones the fabric switches report, filtered to kind DcimDevice; a session's VRF is the network instance the router reports it in.",
   "tags": [
     "otternet",
     "telemetry",
@@ -9,27 +9,101 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
+  "graphTooltip": 1,
   "refresh": "1m",
   "time": {
     "from": "now-1h",
     "to": "now"
   },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "otternet"
+      ],
+      "asDropdown": true,
+      "title": "OTTERNET dashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "device",
+        "label": "Router",
+        "description": "WAN routers Infrahub models, whether or not they currently report.",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(infrahub_dcimgenericdevice_info{hfid=~\"DcimDevice__.*\"}, name)",
+          "refId": "device"
+        },
+        "definition": "label_values(infrahub_dcimgenericdevice_info{hfid=~\"DcimDevice__.*\"}, name)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
-      "type": "bargauge",
-      "title": "BGP sessions established per router",
+      "type": "row",
+      "title": "BGP: intent against what the routers report",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Intended sessions",
+      "description": "RoutingBGPNeighbor objects on the selected routers.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
-        "w": 12,
-        "h": 8
+        "y": 1,
+        "w": 6,
+        "h": 4
       },
       "targets": [
         {
@@ -38,29 +112,429 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count by (device) (bgp_neighbor_session_state_code{kind=\"DcimDevice\"} == 6)",
+          "expr": "count(otternet_intended_bgp_neighbor{kind=\"DcimDevice\", device=~\"$device\"}) or vector(0)",
           "instant": true,
-          "range": false,
-          "legendFormat": "{{device}}"
+          "range": false
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
-      "id": 2,
-      "type": "timeseries",
-      "title": "Sessions not established",
+      "id": 3,
+      "type": "stat",
+      "title": "Intended and established",
+      "description": "Intended sessions the router reports as Established.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(otternet_intended_bgp_neighbor{kind=\"DcimDevice\", device=~\"$device\"} and on (device, peer_address) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimDevice\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6)) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Intended but not established",
+      "description": "Intended sessions in any other state, or not reported at all.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 12,
-        "y": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(otternet_intended_bgp_neighbor{kind=\"DcimDevice\", device=~\"$device\"} unless on (device, peer_address) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimDevice\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6)) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Established but never intended",
+      "description": "Sessions a router holds that Infrahub does not model.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count((label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimDevice\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6) unless on (device, peer_address) otternet_intended_bgp_neighbor{kind=\"DcimDevice\", device=~\"$device\"}) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Every BGP session: intended, observed, or both",
+      "description": "One row per session Infrahub models, with the state, VRF and description the router reports (Not reported: the router reports no session to that peer), plus any session a router holds that Infrahub does not model, marked unexplained. Problems sort first.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 16,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(max by (device, vrf, peer_address, description) (otternet_intended_bgp_neighbor{kind=\"DcimDevice\", device=~\"$device\"} * 0 + on (device, peer_address) group_left (vrf, description) max by (device, peer_address, vrf, description) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimDevice\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\"))) or on (device, peer_address) max by (device, peer_address) (otternet_intended_bgp_neighbor{kind=\"DcimDevice\", device=~\"$device\"} * 0), \"intent\", \"intended\", \"\", \"\") or label_replace(max by (device, vrf, peer_address, description) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimDevice\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") unless on (device, peer_address) otternet_intended_bgp_neighbor{kind=\"DcimDevice\", device=~\"$device\"}), \"intent\", \"UNEXPLAINED\", \"\", \"\")",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Not reported",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Idle",
+                  "color": "red",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Connect",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Active",
+                  "color": "orange",
+                  "index": 3
+                },
+                "4": {
+                  "text": "OpenSent",
+                  "color": "orange",
+                  "index": 4
+                },
+                "5": {
+                  "text": "OpenConfirm",
+                  "color": "orange",
+                  "index": 5
+                },
+                "6": {
+                  "text": "Established",
+                  "color": "green",
+                  "index": 6
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "State"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "State",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "device": 0,
+              "vrf": 1,
+              "peer_address": 2,
+              "description": 3,
+              "intent": 4,
+              "Value": 5
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "device",
+                "vrf",
+                "peer_address",
+                "description",
+                "intent",
+                "Value"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "bargauge",
+      "title": "Established sessions per router and VRF",
+      "description": "Sessions in state Established, by the network instance each lives in.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count by (device, vrf) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimDevice\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{device}} / {{vrf}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          },
+          "noValue": "No sessions established",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "IPv4 prefixes received per session",
+      "description": "OpenConfig afi-safi prefixes received on each session: a session that is Established and carries nothing is the failure the state alone cannot show.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
         "w": 12,
         "h": 8
       },
@@ -71,31 +545,125 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "bgp_neighbor_session_state_code{kind=\"DcimDevice\"} != 6",
+          "expr": "sum by (device, name, neighbor_address) (bgp_afi_safi_received{kind=\"DcimDevice\", afi_safi_name=\"IPV4_UNICAST\", device=~\"$device\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} <- {{neighbor_address}} ({{name}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "IPv4 prefixes sent per session",
+      "description": "Prefixes each router advertises on each session.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name, neighbor_address) (bgp_afi_safi_sent{kind=\"DcimDevice\", afi_safi_name=\"IPV4_UNICAST\", device=~\"$device\"})",
           "instant": false,
           "range": true,
           "legendFormat": "{{device}} -> {{neighbor_address}} ({{name}})"
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Interface throughput (bits/s)",
+      "id": 10,
+      "type": "row",
+      "title": "Interfaces",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Operational state of every enabled interface",
+      "description": "Interfaces the router reports counters for -- the configured ones; SR Linux lists every unconfigured port too, all down, and they are left out.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
-        "w": 12,
-        "h": 8
+        "y": 23,
+        "w": 8,
+        "h": 9
       },
       "targets": [
         {
@@ -104,29 +672,228 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (device, name) (rate(interface_counters_in_octets{kind=\"DcimDevice\", name=~\"ethernet-.*\"}[2m]) * 8)",
-          "instant": false,
-          "range": true,
-          "legendFormat": "{{device}} {{name}}"
+          "expr": "max by (device, name) (interface_status_oper_status_code{kind=\"DcimDevice\", device=~\"$device\"} and on (device, name) interface_counters_in_octets{kind=\"DcimDevice\"})",
+          "instant": true,
+          "range": false,
+          "format": "table"
         }
       ],
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Not reported",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Down",
+                  "color": "red",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Testing",
+                  "color": "orange",
+                  "index": 3
+                },
+                "4": {
+                  "text": "Unknown",
+                  "color": "orange",
+                  "index": 4
+                },
+                "5": {
+                  "text": "Dormant",
+                  "color": "orange",
+                  "index": 5
+                },
+                "6": {
+                  "text": "Not present",
+                  "color": "red",
+                  "index": 6
+                },
+                "7": {
+                  "text": "Lower layer down",
+                  "color": "red",
+                  "index": 7
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "State"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          }
+        ]
       },
-      "options": {}
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "State",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "device": 0,
+              "name": 1,
+              "Value": 2
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "device",
+                "name",
+                "Value"
+              ]
+            }
+          }
+        }
+      ]
     },
     {
-      "id": 4,
+      "id": 12,
       "type": "timeseries",
-      "title": "Control-plane CPU (%)",
+      "title": "Throughput per interface",
+      "description": "Bits per second in (up) and out (down) on each router's ethernet ports.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 12,
-        "y": 8,
+        "x": 8,
+        "y": 23,
+        "w": 16,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name) (rate(interface_counters_in_octets{kind=\"DcimDevice\", device=~\"$device\", name=~\"ethernet-.*\"}[$__rate_interval]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{name}} in"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name) (rate(interface_counters_out_octets{kind=\"DcimDevice\", device=~\"$device\", name=~\"ethernet-.*\"}[$__rate_interval]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{name}} out"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* out$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "Control plane, as each router reports it",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "CPU busy % per router",
+      "description": "The control-plane CPU each router reports. Containerised, so this is the lab host's load as the router sees it.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 33,
         "w": 12,
         "h": 8
       },
@@ -137,17 +904,131 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max by (device) (cpu_instant{kind=\"DcimDevice\"})",
+          "expr": "max by (device) (cpu_instant{kind=\"DcimDevice\", device=~\"$device\"})",
           "instant": false,
           "range": true,
           "legendFormat": "{{device}}"
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Memory used % per router",
+      "description": "memory/utilized over memory/available (the physical total). Containerised, so it is the lab host's memory.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 33,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * max by (device) (memory_utilized{kind=\"DcimDevice\", device=~\"$device\"}) / max by (device) (memory_available{kind=\"DcimDevice\", device=~\"$device\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ]
 }

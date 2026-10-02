@@ -1,7 +1,7 @@
 {
   "uid": "otternet-fabric-telemetry",
   "title": "OTTERNET / Fabric telemetry",
-  "description": "Streaming telemetry from the fabric, collected exactly as Infrahub's monitoring profiles say -- and compared with what Infrahub intends.",
+  "description": "The EOS fabric over gNMI, compared with what Infrahub intends: the BGP sessions in each switch's stored structured config and the links NetworkLink records. Intended-but-down and up-but-never-intended are the panels neither half can show alone.",
   "tags": [
     "otternet",
     "telemetry",
@@ -9,25 +9,99 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
+  "graphTooltip": 1,
   "refresh": "1m",
   "time": {
     "from": "now-1h",
     "to": "now"
   },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "otternet"
+      ],
+      "asDropdown": true,
+      "title": "OTTERNET dashboards",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "device",
+        "label": "Switch",
+        "description": "Fabric switches Infrahub models, whether or not they currently report.",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(infrahub_dcimgenericdevice_info{hfid=~\"DcimFabricSwitch__.*\"}, name)",
+          "refId": "device"
+        },
+        "definition": "label_values(infrahub_dcimgenericdevice_info{hfid=~\"DcimFabricSwitch__.*\"}, name)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
-      "id": 7,
+      "id": 1,
+      "type": "row",
+      "title": "BGP: intent against what the switches report",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
       "type": "stat",
-      "title": "Intended BGP sessions",
+      "title": "Intended sessions",
+      "description": "BGP sessions in the switches' structured configs, default VRF and tenant VRFs.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 1,
         "w": 6,
         "h": 4
       },
@@ -38,29 +112,52 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(otternet_intended_bgp_neighbor)",
+          "expr": "count(otternet_intended_bgp_neighbor{kind=\"DcimFabricSwitch\", device=~\"$device\"}) or vector(0)",
           "instant": true,
           "range": false
         }
       ],
-      "description": "Every session Infrahub's intent says should exist, from the stored structured configs and the modelled WAN neighbours.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
-      "id": 8,
+      "id": 3,
       "type": "stat",
-      "title": "Intended but not established",
+      "title": "Intended and established",
+      "description": "Intended sessions the switch reports as Established.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 6,
-        "y": 0,
+        "y": 1,
         "w": 6,
         "h": 4
       },
@@ -71,205 +168,54 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(otternet_intended_bgp_neighbor unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"))) or vector(0)",
+          "expr": "count(otternet_intended_bgp_neighbor{kind=\"DcimFabricSwitch\", device=~\"$device\"} and on (device, vrf, peer_address) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimFabricSwitch\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6)) or vector(0)",
           "instant": true,
           "range": false
         }
       ],
-      "description": "0 is healthy. Anything else is a session Infrahub intends that the device does not report as established.",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
+                "value": null,
+                "color": "green"
               }
             ]
-          }
+          },
+          "noValue": "0"
         },
         "overrides": []
       },
-      "options": {}
-    },
-    {
-      "id": 9,
-      "type": "stat",
-      "title": "Established but never intended",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "count((label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\")) unless on (device, peer_address) otternet_intended_bgp_neighbor) or vector(0)",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "description": "0 is healthy. Anything else is a session up on a device that no intent explains.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "overrides": []
-      },
-      "options": {}
-    },
-    {
-      "id": 1,
-      "type": "table",
-      "title": "Which sessions are down",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 4,
-        "w": 12,
-        "h": 6
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "otternet_intended_bgp_neighbor unless on (device, peer_address) (label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "description": "Sessions Infrahub configures that the device does not report as established.",
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "All intended sessions are established"
-        },
-        "overrides": []
-      },
-      "options": {}
-    },
-    {
-      "id": 2,
-      "type": "table",
-      "title": "Which sessions are unexplained",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 4,
-        "w": 12,
-        "h": 6
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(label_replace(bgp_neighbor_session_state_code == 6, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\")) unless on (device, peer_address) otternet_intended_bgp_neighbor",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "description": "The other half: a session up on the device that no intent explains.",
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "Every established session is intended"
-        },
-        "overrides": []
-      },
-      "options": {}
-    },
-    {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Interface throughput (bits/s)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 10,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (device, name) (rate(interface_counters_in_octets{kind=\"DcimFabricSwitch\"}[2m]) * 8)",
-          "instant": false,
-          "range": true,
-          "legendFormat": "{{device}} {{name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bps"
-        },
-        "overrides": []
-      },
-      "options": {}
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
       "id": 4,
-      "type": "timeseries",
-      "title": "Interface errors",
+      "type": "stat",
+      "title": "Intended but not established",
+      "description": "Intended sessions in any other state, or not reported at all.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 12,
-        "y": 10,
-        "w": 12,
-        "h": 8
+        "y": 1,
+        "w": 6,
+        "h": 4
       },
       "targets": [
         {
@@ -278,29 +224,56 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (device, name) (rate(interface_counters_in_errors{kind=\"DcimFabricSwitch\"}[5m]))",
-          "instant": false,
-          "range": true,
-          "legendFormat": "{{device}} {{name}}"
+          "expr": "count(otternet_intended_bgp_neighbor{kind=\"DcimFabricSwitch\", device=~\"$device\"} unless on (device, vrf, peer_address) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimFabricSwitch\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6)) or vector(0)",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
       "id": 5,
       "type": "stat",
-      "title": "Cabled interfaces Infrahub expects up",
+      "title": "Established but never intended",
+      "description": "Sessions the switch holds that no structured config explains.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 18,
-        "y": 0,
+        "y": 1,
         "w": 6,
         "h": 4
       },
@@ -311,29 +284,328 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(otternet_intended_interface_up)",
+          "expr": "count((label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimFabricSwitch\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") == 6) unless on (device, vrf, peer_address) otternet_intended_bgp_neighbor{kind=\"DcimFabricSwitch\", device=~\"$device\"}) or vector(0)",
           "instant": true,
           "range": false
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
     },
     {
       "id": 6,
-      "type": "bargauge",
-      "title": "Devices reporting, by kind",
+      "type": "table",
+      "title": "Every BGP session: intended, observed, or both",
+      "description": "One row per session Infrahub intends, with the state the switch reports (Not reported: the switch reports no session to that peer in that VRF), plus any session the switch holds that no structured config explains, marked unexplained. Problems sort first.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 5,
         "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(max by (device, vrf, peer_address, peer_device) (otternet_intended_bgp_neighbor{kind=\"DcimFabricSwitch\", device=~\"$device\"} * 0 + on (device, vrf, peer_address) max by (device, vrf, peer_address) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimFabricSwitch\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\"))) or on (device, vrf, peer_address) max by (device, vrf, peer_address, peer_device) (otternet_intended_bgp_neighbor{kind=\"DcimFabricSwitch\", device=~\"$device\"} * 0), \"intent\", \"intended\", \"\", \"\") or label_replace(max by (device, vrf, peer_address) (label_replace(label_replace(bgp_neighbor_session_state_code{kind=\"DcimFabricSwitch\", device=~\"$device\"}, \"peer_address\", \"$1\", \"neighbor_address\", \"(.*)\"), \"vrf\", \"$1\", \"name\", \"(.*)\") unless on (device, vrf, peer_address) otternet_intended_bgp_neighbor{kind=\"DcimFabricSwitch\", device=~\"$device\"}), \"intent\", \"UNEXPLAINED\", \"\", \"\")",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Not reported",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Idle",
+                  "color": "red",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Connect",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Active",
+                  "color": "orange",
+                  "index": 3
+                },
+                "4": {
+                  "text": "OpenSent",
+                  "color": "orange",
+                  "index": 4
+                },
+                "5": {
+                  "text": "OpenConfirm",
+                  "color": "orange",
+                  "index": 5
+                },
+                "6": {
+                  "text": "Established",
+                  "color": "green",
+                  "index": 6
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "State"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "State",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "device": 0,
+              "vrf": 1,
+              "peer_address": 2,
+              "peer_device": 3,
+              "intent": 4,
+              "Value": 5
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "device",
+                "vrf",
+                "peer_address",
+                "peer_device",
+                "intent",
+                "Value"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "EVPN routes received per leaf",
+      "description": "L2VPN EVPN prefixes received, summed over each leaf's overlay neighbours (OpenConfig afi-safi prefixes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device) (bgp_afi_safi_received{kind=\"DcimFabricSwitch\", afi_safi_name=\"L2VPN_EVPN\", device=~\"$device\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "IPv4 unicast prefixes received per switch",
+      "description": "Underlay and tenant-VRF IPv4 prefixes received, summed over every session.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device) (bgp_afi_safi_received{kind=\"DcimFabricSwitch\", afi_safi_name=\"IPV4_UNICAST\", device=~\"$device\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Interfaces: cabling against operational state",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Cabled interfaces Infrahub expects up",
+      "description": "Switch interfaces on a NetworkLink whose status is active.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 6,
         "h": 4
       },
       "targets": [
@@ -343,18 +615,664 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count by (kind) (count by (device, kind) ({job=\"telemetry\", kind!=\"\"}))",
+          "expr": "count(otternet_intended_interface_up{kind=\"DcimFabricSwitch\", device=~\"$device\"} == 1) or vector(0)",
           "instant": true,
-          "range": false,
-          "legendFormat": "{{kind}}"
+          "range": false
         }
       ],
-      "description": "Every target here came from a monitoring profile; none is listed by hand.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "blue"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
         "overrides": []
       },
-      "options": {}
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Cabled and up",
+      "description": "Of those, the ones the switch reports oper-status UP.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 24,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count((otternet_intended_interface_up{kind=\"DcimFabricSwitch\", device=~\"$device\"} == 1) and on (device, interface) (label_replace(interface_status_oper_status_code{kind=\"DcimFabricSwitch\", device=~\"$device\"}, \"interface\", \"$1\", \"name\", \"(.*)\") == 1)) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Cabled but not up",
+      "description": "Expected up, reported anything else or not reported.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count((otternet_intended_interface_up{kind=\"DcimFabricSwitch\", device=~\"$device\"} == 1) unless on (device, interface) (label_replace(interface_status_oper_status_code{kind=\"DcimFabricSwitch\", device=~\"$device\"}, \"interface\", \"$1\", \"name\", \"(.*)\") == 1)) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Interface errors and discards (1h)",
+      "description": "In and out errors plus discards over the last hour, every fabric Ethernet port.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 24,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(interface_counters_in_errors{kind=\"DcimFabricSwitch\", device=~\"$device\", name=~\"Ethernet.*\"}[1h]) + increase(interface_counters_out_errors{kind=\"DcimFabricSwitch\", device=~\"$device\", name=~\"Ethernet.*\"}[1h]) + increase(interface_counters_in_discards{kind=\"DcimFabricSwitch\", device=~\"$device\", name=~\"Ethernet.*\"}[1h]) + increase(interface_counters_out_discards{kind=\"DcimFabricSwitch\", device=~\"$device\", name=~\"Ethernet.*\"}[1h])) or vector(0)",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              }
+            ]
+          },
+          "noValue": "0",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Every cabled interface and its operational state",
+      "description": "One row per end of each NetworkLink on a switch, with the peer Infrahub records.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (device, interface, peer_device, peer_interface) (otternet_intended_link{kind=\"DcimFabricSwitch\", device=~\"$device\"} * 0 + on (device, interface) max by (device, interface) (label_replace(interface_status_oper_status_code{kind=\"DcimFabricSwitch\", device=~\"$device\"}, \"interface\", \"$1\", \"name\", \"(.*)\"))) or on (device, interface) max by (device, interface, peer_device, peer_interface) (otternet_intended_link{kind=\"DcimFabricSwitch\", device=~\"$device\"} * 0)",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Not reported",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Up",
+                  "color": "green",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Down",
+                  "color": "red",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Testing",
+                  "color": "orange",
+                  "index": 3
+                },
+                "4": {
+                  "text": "Unknown",
+                  "color": "orange",
+                  "index": 4
+                },
+                "5": {
+                  "text": "Dormant",
+                  "color": "orange",
+                  "index": 5
+                },
+                "6": {
+                  "text": "Not present",
+                  "color": "red",
+                  "index": 6
+                },
+                "7": {
+                  "text": "Lower layer down",
+                  "color": "red",
+                  "index": 7
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "State"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "State",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "device": 0,
+              "interface": 1,
+              "peer_device": 2,
+              "peer_interface": 3,
+              "Value": 4
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "device",
+                "interface",
+                "peer_device",
+                "peer_interface",
+                "Value"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Throughput per Ethernet port",
+      "description": "Bits per second in (up) and out (down), every Ethernet port of the selected switches. Port-Channels are left out so a member's traffic is not counted twice.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name) (rate(interface_counters_in_octets{kind=\"DcimFabricSwitch\", device=~\"$device\", name=~\"Ethernet.*\"}[$__rate_interval]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{name}} in"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name) (rate(interface_counters_out_octets{kind=\"DcimFabricSwitch\", device=~\"$device\", name=~\"Ethernet.*\"}[$__rate_interval]) * 8)",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{name}} out"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* out$"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Errors and discards",
+      "description": "Packets per second dropped as errors or discards, in and out: the total across the selected switches, plus one line for each port whose rate is not zero.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(interface_counters_in_errors{kind=\"DcimFabricSwitch\", device=~\"$device\"}[$__rate_interval]) + rate(interface_counters_out_errors{kind=\"DcimFabricSwitch\", device=~\"$device\"}[$__rate_interval]) + rate(interface_counters_in_discards{kind=\"DcimFabricSwitch\", device=~\"$device\"}[$__rate_interval]) + rate(interface_counters_out_discards{kind=\"DcimFabricSwitch\", device=~\"$device\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "all ports"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (device, name) (rate(interface_counters_in_errors{kind=\"DcimFabricSwitch\", device=~\"$device\"}[$__rate_interval]) + rate(interface_counters_out_errors{kind=\"DcimFabricSwitch\", device=~\"$device\"}[$__rate_interval]) + rate(interface_counters_in_discards{kind=\"DcimFabricSwitch\", device=~\"$device\"}[$__rate_interval]) + rate(interface_counters_out_discards{kind=\"DcimFabricSwitch\", device=~\"$device\"}[$__rate_interval])) > 0",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}} {{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "min": 0,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Control plane, as each switch reports it",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "CPU busy % per switch",
+      "description": "Average of the CPUs each switch reports. cEOS is a container, so this is the lab host's load as the switch sees it: a switch that leaves the pack is the signal.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "avg by (device) (cpu_instant{kind=\"DcimFabricSwitch\", device=~\"$device\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Memory used % per switch",
+      "description": "memory/utilized over memory/available, which OpenConfig defines as the physical total. Containerised, so it is the lab host's memory.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 46,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * max by (device) (memory_utilized{kind=\"DcimFabricSwitch\", device=~\"$device\"}) / max by (device) (memory_available{kind=\"DcimFabricSwitch\", device=~\"$device\"})",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 70,
+                "color": "orange"
+              },
+              {
+                "value": 90,
+                "color": "red"
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ]
 }

@@ -459,6 +459,19 @@ Four things the first rebuilds with it measured, each of which cost an afternoon
 - **A k3s node is one CPU** (`cpu.max 100000 100000`), so a busy Grafana starves on it.
   The dashboards refresh each minute rather than every 30 seconds for that reason.
 
+An audit of every panel after the SR Linux rebuild found two causes no dashboard
+review could have caught, both now pinned by `tests/unit/test_dashboard_metrics_contract.py`:
+
+- **Grafana 13 unregisters its own Prometheus plugin on a read-only root** while
+  "preinstalling" an update to it, so every panel read "No data" with Prometheus full.
+  `grafana.ini` `plugins.preinstall_disabled` is what stops it.
+- **A generated release name leaves a second kubelet Service behind**, and every kubelet
+  series is then scraped twice. The values pin `prometheusOperator.kubeletService.name`.
+  A stale Service from an earlier name still needs deleting by hand, once.
+
+That test also fails when a panel queries a metric nothing produces, derived by rendering
+the collector's intent rather than from a list.
+
 **The exporter reads as `metrics-exporter`, never `admin` or `agent`.** It is built from a pinned
 upstream commit, because none is published, and runs on host port 8002, because 8001 is
 `infrahub-mcp`. `invoke metrics-exporter` provisions the account and starts it, and the bootstrap
