@@ -127,11 +127,12 @@ uv run infrahubctl repository list    # Sync status: in-sync
 uv run infrahubctl branch list        # main, and nothing you would rather not explain
 ```
 
-The branch selector is the first thing on screen in Infrahub. **Infrahub
-mirrors the git branches of the repository it clones**, which here is your own
-checkout, so every local git branch, including each `worktree-*` branch an agent
-created, appears as an Infrahub branch. Deleting the Infrahub branch is not
-enough: delete or push aside the git branch first, or it comes back.
+The branch selector is the first thing on screen in Infrahub. Infrahub clones
+your own checkout, and by default it would mirror **every** local git branch,
+including each `worktree-*` branch an agent created, as an Infrahub branch. The
+compose stack sets `INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES` to `["main"]`, so only
+`main` is imported. A branch Infrahub imported before that setting existed keeps
+syncing until you delete it in Infrahub; it does not come back afterwards.
 
 In the Infrahub UI, **Deployment → Device Sync State** should list fourteen
 devices, all `in_sync`, with `last_checked_at` inside the last couple of minutes.

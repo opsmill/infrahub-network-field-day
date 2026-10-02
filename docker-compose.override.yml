@@ -6,6 +6,21 @@ x-infrahub-custom-build: &infrahub_custom_build
     INFRAHUB_GIT_EMAIL: "no-reply@opsmill.com"
     INFRAHUB_GIT_USE_EXPLICIT_MERGE_COMMIT: true
     INFRAHUB_TIMEOUT: 180
+    # IMPORT ONLY `main` FROM THE REPOSITORY. The CoreRepository clones
+    # `/upstream`, which is this checkout, and by default Infrahub turns EVERY
+    # local git branch into an Infrahub branch -- each agent worktree and each
+    # feature branch. Every Infrahub branch then registers ~171 Prefect
+    # automations and imports the repository for itself; a handful of
+    # worktrees took the task manager to 100% CPU, 3,868 automations, pool
+    # timeouts and `set_state` 500s that failed real generator runs.
+    #
+    # A JSON ARRAY of names or regexes, matched with `re.fullmatch`. The git
+    # sync runs in the task workers, which is where this matters; the server
+    # carries the same value below so the two never disagree. Branches made in
+    # Infrahub with `sync_with_git: true` are still imported by name (that is
+    # Infrahub's own rule), and the portal's are `sync_with_git: false`.
+    # tests/unit/test_repository_sync_contract.py pins it.
+    INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES: ${INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES:-["main"]}
     CLOUDVISION_SERVERS: ${CLOUDVISION_SERVERS:-}
     CLOUDVISION_TOKEN: ${CLOUDVISION_TOKEN:-}
     CLOUDVISION_USERNAME: ${CLOUDVISION_USERNAME:-}
@@ -66,6 +81,9 @@ services:
       # nothing -- which reads as a broken integration rather than a missing
       # setting.
       INFRAHUB_SECURITY_SSO_USER_DEFAULT_GROUP: ${INFRAHUB_SECURITY_SSO_USER_DEFAULT_GROUP:-Infrahub Users}
+      # This service's `environment` replaces the anchor's rather than merging
+      # with it, so the main-only import filter is restated here. See above.
+      INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES: ${INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES:-["main"]}
     # NO `depends_on` for the identity provider, deliberately. Dex lives in the
     # tooling cluster now, which comes up long after `invoke start` -- and
     # Infrahub was measured booting cleanly with its discovery URL unreachable,
