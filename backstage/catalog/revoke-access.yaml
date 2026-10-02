@@ -76,10 +76,9 @@ spec:
         request_reference:
           title: Request reference
           type: string
-          description: >-
-            Lower case, digits and dashes. Makes the branch name unique, so a run
-            that fails half way can be resubmitted -- `BranchCreate` is not
-            idempotent.
+          # Makes the branch name unique, so a run that fails half way can be
+          # resubmitted -- `BranchCreate` is not idempotent.
+          description: A short label for this request, such as a ticket number, using lower-case letters, digits and dashes.
           pattern: '^[a-z0-9][a-z0-9-]*$'
 
   steps:
@@ -225,5 +224,6 @@ spec:
     links:
       - title: Review the revocation
         url: ${{ steps.revoke.output.address }}/proposed-changes/${{ steps.proposed_change.output.data.CoreProposedChangeCreate.object.id }}
+      # On the revocation's branch: on main the grant still reads `active`.
       - title: The grant in Infrahub
-        url: ${{ steps.revoke.output.address }}/objects/ServiceAppAccess/${{ steps.revoke.output.data.ServiceAppAccessUpdate.object.id }}
+        url: ${{ steps.revoke.output.address }}/objects/ServiceAppAccess/${{ steps.revoke.output.data.ServiceAppAccessUpdate.object.id }}?branch=${{ ("revoke_" + (steps.fetch.output.entity.metadata.title | lower) + "_" + parameters.request_reference) | urlencode }}

@@ -317,7 +317,23 @@ mutation takes an optional `context: { account: { id } }`; the id resolves by UU
 and an SSO login provisions an account named for the identity, so `alice@otternet.lab` is `alice` —
 the same local-part rule the Backstage sign-in resolver uses. Nothing has to share a UUID.
 `infrahub.catalog.actAsUser` turns it on, and the caller needs `OVERRIDE_CONTEXT` with
-`ALLOW_ALL` (SUPER_ADMIN bypasses it, which is why the lab's admin token works).
+`ALLOW_ALL` (SUPER_ADMIN bypasses it).
+
+**The portal's service account is `backstage-portal`, never the admin token.** It used to hold the
+stack's Super Administrator token, committed in `tooling/20-backstage.yaml`.
+`scripts/provision_portal_account.py` creates `backstage-portal` in `Portal Services` with the
+`Portal Access` role — `view` everywhere, `any` on non-default branches, `create` on
+`CoreProposedChange`, and the globals `edit_default_branch` and `override_context` — and mints its
+token into the main checkout's `.env`. `scripts/deploy_tooling.sh` renders that token over the
+manifest's `__INFRAHUB_PORTAL_TOKEN__` placeholder at apply time and refuses without one, so
+`invoke tooling` provisions the account first. `tests/unit/test_portal_account_contract.py` pins
+the permission set and that no real token is committed. Replayed against 1.10.6 with that token on a
+scratch branch, every template step succeeded — `BranchCreate`, both creates and the values upload
+with `context`, the generators' run and task polling, both whole-group AVD runs and
+`CoreProposedChangeCreate` — and the creates were attributed to `alice`; a write to another kind on
+`main`, `BranchMerge` and account management were refused. **`BranchDelete` is not refused**: 1.10.6
+checks `delete_branch` only for a branch the caller did not create, and the portal creates every
+request branch.
 
 **It is attribution, not authorization, and that distinction is load bearing.** Permissions are
 loaded once before the resolver runs, so the write executes with the SERVICE account's rights

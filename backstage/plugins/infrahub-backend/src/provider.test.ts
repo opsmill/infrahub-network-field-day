@@ -54,6 +54,7 @@ const SCHEMA: Record<string, any> = {
     name: 'Wireless',
     namespace: 'Service',
     label: 'Wireless',
+    description: 'Wi-Fi at a site',
     human_friendly_id: ['service_identifier__value'],
     attributes: [
       // A List, which is what makes Infrahub 1.10.6 return 500 from
@@ -62,7 +63,15 @@ const SCHEMA: Record<string, any> = {
       { name: 'ports', kind: 'List', optional: true },
       // Mandatory, and filled from the session rather than asked for.
       { name: 'requester', kind: 'Text', optional: false },
-      { name: 'ssid', kind: 'Text', optional: false },
+      // Labelled and described in the schema, so the form must say THIS
+      // rather than `Ssid` derived from the field name.
+      {
+        name: 'ssid',
+        kind: 'Text',
+        optional: false,
+        label: 'Network name (SSID)',
+        description: 'What users see in their Wi-Fi list',
+      },
       { name: 'service_identifier', kind: 'Text', optional: false },
       {
         name: 'security',
@@ -89,6 +98,7 @@ const SCHEMA: Record<string, any> = {
         peer: 'OrganizationProvider',
         cardinality: 'one',
         optional: false,
+        description: 'The carrier that delivers it',
       },
       // A peer whose hfid has TWO elements. A single-element lookup is refused
       // by Infrahub outright, so this cannot be sent as one string.
@@ -97,6 +107,7 @@ const SCHEMA: Record<string, any> = {
         peer: 'IpamIPAddress',
         cardinality: 'one',
         optional: false,
+        label: 'Destination VIP',
       },
       // MANDATORY and cardinality MANY, like `ServiceNetworkSegment.avd_tags`.
       // Dropping it makes Infrahub refuse the create outright.
@@ -160,6 +171,7 @@ const SCHEMA: Record<string, any> = {
   '/api/schema/IpamIPAddress': {
     name: 'IPAddress',
     namespace: 'Ipam',
+    label: 'IP Address',
     human_friendly_id: ['address__value', 'ip_namespace__name__value'],
     attributes: [],
     relationships: [],
@@ -422,11 +434,14 @@ describe('InfrahubEntityProvider', () => {
 
     // Nothing here is per-kind code: the fields come from the schema, and the
     // relationship line uses Infrahub's own label.
+    //
+    // The site HAS a description, so it leads and only the relations follow;
+    // the wireless service has none, so it keeps the full detail line.
     expect(entities['Resource:bru01'].metadata.description).toBe(
-      'Description Main POP · Parent Brussels',
+      'Main POP — Parent Brussels',
     );
     expect(entities['Component:wifi-001'].metadata.description).toContain(
-      'Ssid acme-corp requested',
+      'Network name (SSID) acme-corp requested',
     );
     expect(entities['Component:wifi-001'].metadata.description).toContain(
       'Site Brussels 1 (bru01)',
@@ -739,6 +754,62 @@ describe('InfrahubEntityProvider', () => {
     );
     // A change has no identifier parameter; the picked target's entity does.
     expect(link.url).toContain('steps.fetch.output.entity.metadata.name');
+  });
+
+  it('opens the objects a request made on the request\'s branch', async () => {
+    // The object exists only on the branch until the change merges, so a link
+    // with no branch opens main and shows nothing -- or, for a change, the
+    // old values.
+    const template = (await run())['Template:wireless-request'];
+    const link = (template.spec!.output as any).links.find(
+      (l: any) => l.title === 'Wireless in Infrahub',
+    );
+    expect(link.url).toContain('"?branch=" + (');
+    expect(link.url).toContain('"implement_" + (parameters.service_identifier | lower)');
+    expect(link.url).toContain('| urlencode');
+    // The proposed change lives on main and needs no branch.
+    const change = (template.spec!.output as any).links.find(
+      (l: any) => l.title === 'Proposed change in Infrahub',
+    );
+    expect(change.url).not.toContain('?branch=');
+  });
+
+  it('titles a generated template for the person reading the catalogue', async () => {
+    const template = (await run())['Template:wireless-request'];
+
+    expect(template.metadata.title).toBe('Wireless');
+    expect(template.metadata.description).toBe(
+      'Wi-Fi at a site. Request a new wireless, or change one you already have.',
+    );
+    expect(template.metadata.description).not.toMatch(/generated/i);
+    // Tooling finds these by tag, never by title.
+    expect(template.metadata.tags).toContain('generated');
+  });
+
+  it('uses the schema\'s own labels and descriptions on the form', async () => {
+    const template = (await run())['Template:wireless-request'];
+    const [parameters] = template.spec!.parameters as any[];
+    const create = parameters.dependencies.mode.oneOf.find(
+      (branch: any) => branch.properties.mode.enum[0] === 'create',
+    ).properties;
+
+    // An attribute's label and description from /api/schema.
+    expect(create.ssid.title).toBe('Network name (SSID)');
+    expect(create.ssid.description).toBe('What users see in their Wi-Fi list');
+    // A relationship's own label and description.
+    expect(create.vip.title).toBe('Destination VIP');
+    expect(create.provider.description).toBe('The carrier that delivers it.');
+    // No description: plain help built from the PEER's label, never its kind
+    // name or the word hfid.
+    expect(create.vip.description).toBe(
+      'The IP address: enter its address, then ip namespace name, one per entry.',
+    );
+    expect(create.location.description).toBe('Choose the site.');
+    for (const field of Object.values(create) as any[]) {
+      expect(String(field.description ?? '')).not.toMatch(
+        /belongs to|hfid|Ipam|Location[A-Z]/,
+      );
+    }
   });
 
   it('offers a mandatory relationship to a Core peer', async () => {
