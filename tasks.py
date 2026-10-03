@@ -572,6 +572,49 @@ def _wait_until_settled(
     raise Exit(f"Timed out after {timeout}s waiting for '{branch}' to be fully imported", code=1)
 
 
+def _validator_rows(pc_id: str) -> list[dict[str, str]]:
+    """The proposed change's validators as `decide_validators` reads them; empty if Infrahub cannot say."""
+    query = (
+        '{ CoreProposedChange(ids: ["' + pc_id + '"]) { edges { node { validations { edges { node { '
+        "display_label state { value } conclusion { value } started_at { value } } } } } } } }"
+    )
+    edges = (_graphql(query).get("CoreProposedChange") or {}).get("edges") or []
+    if not edges:
+        return []
+    return [
+        {
+            "label": str(v["node"]["display_label"]),
+            "state": str(v["node"]["state"]["value"]),
+            "conclusion": str(v["node"]["conclusion"]["value"]),
+            "started_at": str((v["node"].get("started_at") or {}).get("value") or ""),
+        }
+        for v in edges[0]["node"]["validations"]["edges"]
+    ]
+
+
+def _wait_for_validators(pc_id: str, timeout: int) -> None:
+    """Block until every validator has finished and passed, stable on two polls; exit with the failing names."""
+    from solution_arista_avd import demo_release as dr
+
+    deadline = time.monotonic() + timeout
+    consecutive = 0
+    previous = ""
+    while time.monotonic() < deadline:
+        rows = _validator_rows(pc_id)
+        state, detail = dr.decide_validators(rows)
+        if state == "failed":
+            raise Exit(f"The proposed change does not pass: {detail}", code=1)
+        snapshot = repr(sorted((r["label"], r["state"], r["conclusion"]) for r in rows))
+        consecutive = consecutive + 1 if state == "passed" and snapshot == previous else 0
+        if consecutive >= 1:  # the same all-passed picture on two polls in a row
+            print(f" - All {len(rows)} validators passed", flush=True)
+            return
+        previous = snapshot if state == "passed" else ""
+        print(f"   waiting for the validators ({detail})", flush=True)
+        sleep(10)
+    raise Exit(f"Timed out after {timeout}s waiting for the validators of the proposed change", code=1)
+
+
 def _regenerate_artifacts() -> None:
     """Re-render every artifact against what `main` now holds.
 
@@ -792,6 +835,8 @@ def demo_release(
         return
     # Creating one starts its validators at once; asking again makes them judge the final branch.
     _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
+    print(" - Waiting for the proposed change's validators", flush=True)
+    _wait_for_validators(pc_id, timeout)
     print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
 
 
