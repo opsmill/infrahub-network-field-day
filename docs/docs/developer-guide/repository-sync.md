@@ -58,7 +58,7 @@ CoreRepository's `/upstream` is this checkout, bind-mounted, and by default Infr
 feature branch. Every Infrahub branch registers about 171 Prefect automations (display labels,
 human-friendly ids, profile refresh) and imports the repository for itself. Measured with a
 handful of worktrees: the task manager at 100% CPU, 3,868 automations, 126 queued runs,
-SQLAlchemy pool timeouts, and `set_state` 500s that failed a portal request's generators with
+SQLAlchemy pool timeouts, and `set_state` 500 errors that failed a portal request's generators with
 `One or more generators failed`. Nothing named the branches as the cause.
 
 `docker-compose.override.yml` sets the variable to `["main"]` on the task workers (where the git

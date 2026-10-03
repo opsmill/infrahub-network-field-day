@@ -64,7 +64,7 @@ confirmed. `src/solution_arista_avd/deployment/wake.py` decides when the next cy
 Two rules keep the early wake from pushing something half-rendered. A merge re-renders the
 artifacts one after another, so any further movement resets the two-poll count. And the wake
 fires only on movement **away from** what the last cycle read: two polls agreeing on the old
-checksums, which is how `_wait_for_artifacts` was once fooled, is "nothing happened", and the
+checksums, which is how `_wait_for_artifacts` was once fooled, is "nothing happened," and the
 interval still applies. A render still moving when the interval runs out holds the cycle for up
 to five minutes more. An empty artifact is refused where it always was, in
 `compare.read_intent`.
@@ -184,7 +184,7 @@ never states.
 **Re-salted hashes are the subtle one.** Compared against a freshly booted vSRX, both of the
 lab's `$6$otternetlab$…` hashes come back as `$6$<random>$…`: the same password under a new salt,
 on every load. A rule that ignored `encrypted-password` changes would hide a changed password; a
-rule that reported them would push a freshly deployed firewall every cycle. So the normaliser
+rule that reported them would push a freshly deployed firewall every cycle. The normaliser
 hashes the reconciler's own password with each salt and suppresses the pair only when both
 match. A hash no known password explains is a changed secret, and differs.
 
@@ -377,7 +377,7 @@ Worth knowing before debugging it:
   **earned**: `_assert_vsrx_reachable` logs in again through vrnetlab's forward and asks NETCONF
   for a hello before the confirm is sent. Measured: an artifact moving `fxp0` off vrnetlab's
   guest address passed the lifeline, committed, failed the check, was never confirmed, and was
-  rolled back by Junos itself (`root via other`). A probe answering within 30s of the rollback is
+  rolled back by Junos itself (`root via other`). A probe answering within 30 s of the rollback is
   refused rather than raced — a confirm issued after the rollback commits nothing and still
   prints `commit complete`.
 - **`fxp0` is modelled, and the model is authoritative for the firewall's management
@@ -402,7 +402,7 @@ Worth knowing before debugging it:
 - **`show | compare` cannot see a cleartext password, so the comparator asks running.** A
   freshly booted vSRX carries `init.conf`'s two `plain-text-password-value "admin@123"` leaves.
   `load override` deletes them, but the compare never prints that deletion — its only trace is
-  the two re-salted hash pairs, which the proof above rightly suppresses. So the whole diff
+  the two re-salted hash pairs, which the proof above rightly suppresses. The whole diff
   normalised to empty, and a fresh bootstrap recorded fw1 `in_sync` with cleartext credentials
   on it and never pushed; a manual `invoke provision --kind junos` removed exactly those two
   lines. `compare_junos` now runs `show configuration | display set | match
@@ -434,7 +434,7 @@ Worth knowing before debugging it:
   replace the whole tree atomically, but only sr_cli takes the artifact exactly as rendered and
   has commit-confirm, and it needs no credential and no address, which keeps `mgmt_ip` meaning
   eAPI and the collector's `telemetry_address` out of the reconciler. Nothing is saved to
-  startup. A `docker restart`ed router came back in sync in 16s **but without its data-plane
+  startup. A `docker restart`ed router came back in sync in 16 s **but without its data-plane
   links** — a plain restart drops a container's veths and only `containerlab deploy` restores
   them.
 - **`scp -O` is load-bearing on the Junos path.** Without it the copy fails, `load override` does

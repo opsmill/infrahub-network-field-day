@@ -10,7 +10,7 @@ sidebar_position: 32
 `triggers.yml` fires each service generator on `created`, scoped to
 `other_branches`. Until that existed a service was expanded only because the PORTAL
 asked for it, so one created any other way — the API, a human in the UI — sat unbuilt, and the branch diff showed a request with none of its consequences.
-That reads as "nothing happened" rather than "not built yet".
+That reads as "nothing happened" rather than "not built yet."
 
 **The point is that the proposed change carries the outcome before anyone merges it.** The
 alternative is `execute_after_merge`, where the technical objects and the rendered configuration
@@ -40,8 +40,8 @@ generator and need none: `srl_config` reads their status at render time.
 generator writes back to its own target — a status, plus a record of what it built — so an
 unscoped rule fires on the generator's own output. The records are deliberately unwatched for
 exactly that reason: `granted_rules`/`granted_source_prefixes`, `subnet`/`vlan`/`svi`,
-`vip_block`/`vip_block_managed`, `evpn_tenant`/`mac_vrf_vni_base`, `server`, `peerings`. So are
-fields another generator writes: `ServiceFabricApp.allowed_source_prefixes` belongs to
+`vip_block`/`vip_block_managed`, `evpn_tenant`/`mac_vrf_vni_base`, `server`, `peerings`. Fields
+another generator writes are unwatched too: `ServiceFabricApp.allowed_source_prefixes` belongs to
 `generate-app-access`, and a rule on it would run `generate-fabric-app` on every grant.
 `tests/unit/test_service_trigger_contract.py` pins the watched set per kind, asserts none of it
 is a write-back, and asserts each watched field is selected by the generator's own query.

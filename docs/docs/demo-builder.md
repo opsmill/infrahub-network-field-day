@@ -29,7 +29,7 @@ The whole cycle, from release to reset, was run on a fresh stack with the final 
 
 The repository is registered against the Git remote when the stack is first loaded, and the kind of
 repository cannot change afterwards: Infrahub refuses to change it in place, and refuses to delete one
-while trigger actions reference its generators. So this is done on a fresh stack.
+while trigger actions reference its generators. Do this on a fresh stack.
 
 ```bash
 source ~/.zshrc                      # exports NFD_GITHUB_TOKEN, a token with write access to the repo
@@ -41,10 +41,10 @@ uv run invoke bootstrap --fresh
 
 - **The token needs write access.** Infrahub pushes the branches it creates and the merges it makes.
   Bootstrap checks first, with a dry-run push, which has to authenticate for write, and stops with
-  git's message if it cannot. A fine-grained token needs **Contents: Read and write** on the repository,
+  the message from git if it cannot. A fine-grained token needs **Contents: Read and write** on the repository,
   and the organization may need to approve it. A classic token needs the `repo` scope, and the account
   needs write access to the repository. The username does not matter, because GitHub identifies the
-  owner from the token. The API's `permissions` field shows your own role on the repository, not what
+  owner from the token. The `permissions` field shows your own role on the repository, not what
   the token may do, so it cannot be used to check.
 - **Turn on branch protection for `main`** on the remote. Infrahub only pushes `demo-main`, but a token
   with write access could push anywhere, and protection turns that from a measured fact into a guarantee.
@@ -108,7 +108,7 @@ remote.
 ## Rules that each cost a failed run
 
 - **Do not push to `demo-main` yourself.** Infrahub never imports a commit pushed there from outside:
-  the remote `main` shadows it, and the worker logs "Ignoring import of mismatched default branch". A
+  the remote `main` shadows it, and the worker logs "Ignoring import of mismatched default branch." A
   stray commit also makes Infrahub's next merge push non-fast-forward. Deleting `demo-main` and
   recreating it does not work either, because Infrahub's clone has already pulled the merge commit.
 - **Never reuse a branch name.** Deleting a branch in Infrahub leaves the workers' local ref behind, so a

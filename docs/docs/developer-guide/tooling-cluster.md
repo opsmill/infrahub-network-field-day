@@ -20,7 +20,7 @@ reach it the hard way, through WAN → border-leaf1 → fw1 → zone `tooling`.
 
 Four things about it are deliberate and each looks like an oversight:
 
-- **There is exactly one Dex, and it is reachable only from the branch side.** An OIDC issuer is
+- **Exactly one Dex exists, and it is reachable only from the branch side.** An OIDC issuer is
   one URL; `10.90.0.11:32556` is reachable from the branch desktop and from the Infrahub
   container, and not from an operator arriving over Tailscale. That is the boundary, not a gap:
   **an operator signs in with the local `admin` account**, which sits on the same login page. A
@@ -62,9 +62,9 @@ Four things about it are deliberate and each looks like an oversight:
 **The branch desktop's bookmarks are held to their labels.** `lab/configs/branch/desktop/`
 is everything a branch user sees, and `make -C lab verify` reads the bookmarks out of the
 policies the *running* desktop has, probing each from inside it. A title containing
-`(locked)` means "answers only after a grant", so that bookmark must name a live
+`(locked)` means "answers only after a grant," so that bookmark must name a live
 LoadBalancer VIP and may answer only where fw1 permits the branch. Any other bookmark must
-answer. Two further decisions look like oversights. **There is no Log Out**: the panel has no
+answer. Two further decisions look like oversights. **No Log Out exists**: the panel has no
 action buttons and the menu entry is hidden, because the session is the container's main
 process and logging out stops the node. And **gdk-pixbuf's SVG loader (`librsvg2-common`)
 is installed**: without it every Humanity and Adwaita icon renders blank.
@@ -115,8 +115,8 @@ The steps are plain `infrahub:graphql:execute`, and three details are load beari
 
 - **`nodes` omitted runs the definition across its whole target group.** It is optional on
   `GeneratorDefinitionRequestRunInput`, and omitting it covers all seven switches;
-  `wait_until_completion: true` blocks until they finish — measured 15s for the hostvars and
-  6s for the structured configs. Omitting `id` instead does *not* run everything, it returns
+  `wait_until_completion: true` blocks until they finish — measured 15 s for the hostvars and
+  6 s for the structured configs. Omitting `id` instead does *not* run everything, it returns
   500.
 - **Hostvars, then structured config, and both explicitly.** The structured-config generator
   reads the **stored** hostvar files rather than the switch attribute, so it must follow. The
@@ -278,7 +278,7 @@ request branch.
 **It is attribution, not authorization, and that distinction is load bearing.** Permissions are
 loaded once before the resolver runs, so the write executes with the SERVICE account's rights
 wearing the user's name — and nothing in the graph distinguishes "the portal acting as alice"
-from "alice". The portal is therefore the authorization boundary and must remain one. The account
+from "alice." The portal is therefore the authorization boundary and must remain one. The account
 also only exists once that person has signed in to Infrahub at least once; before that the
 mutation fails with `Unable to set context for account that doesn't exist`.
 
@@ -302,10 +302,10 @@ measured against 1.10.6 and all are closed, which is what makes `context` the an
 - A Dex token as a bearer is refused (`401 Invalid token`), and its audience is `backstage`.
 - `InfrahubAccountTokenCreate` takes `name` and `expiration` only, so an admin cannot mint a
   token *for* another account.
-- There is no impersonation endpoint; the whole auth surface is `/api/auth/login`,
+- No impersonation endpoint exists; the whole auth surface is `/api/auth/login`,
   `/api/auth/ldap/login`, `/api/auth/refresh` and the OIDC/OAuth2 authorize+token pairs.
 - The OIDC route needs a code returned to **Infrahub's own** callback with a state Infrahub
-  issued -- a tampered state is rejected -- so the portal cannot obtain one, and being HTTPS to
+  issued -- a tampered state is rejected -- which means the portal cannot obtain one, and being HTTPS to
   Infrahub's HTTP it could not read it anyway.
 
 True per-user *authorization* — Infrahub enforcing the user's own permissions on reads as well as
@@ -319,7 +319,7 @@ See `auth/README.md` in the repository root for the sign-in flows and the things
 
 Moved from the architecture summary of the repository instruction file.
 
-- **There is one request portal: Backstage, in the tooling cluster** — see [the tooling cluster](./tooling-cluster.md).
+- **One request portal exists: Backstage, in the tooling cluster** — see [the tooling cluster](./tooling-cluster.md).
   The Streamlit app that used to sit beside it on host port 8501 was removed; it duplicated
   every request form, drifted from the schema (its application page never sent the mandatory
   chart fields), and two of its pages were never reachable from its own navigation. Every
@@ -329,6 +329,6 @@ Moved from the architecture summary of the repository instruction file.
   answer. Operators who need something the portal does not offer use the Infrahub UI or
   `infrahubctl` on a branch; the event rules in `triggers.yml` build it the same way.
 - **Backstage's generated templates pass relationships as hfids**, because a typed field has
-  no id to offer and a picker yields a name. So a peer whose `human_friendly_id` has two
+  no id to offer and a picker yields a name. A peer whose `human_friendly_id` has two
   elements — `IpamIPAddress`, `IpamPrefix` — needs both, and a picker's value is an entity ref
   (`component:default/<name>`) to resolve with `catalog:fetch`, never a name to use directly.
