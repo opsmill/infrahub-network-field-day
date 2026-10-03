@@ -433,6 +433,8 @@ def _ensure_remote_branch(ctx: Context, branch: str) -> None:
 # ---------------------------------------------------------------------------
 
 DEMO_NAME = "internet-access"
+# The object file the capability adds. `object load` upserts, so the rest of it is already there.
+DEMO_OBJECTS = "objects/37_otternet_wan_services.yml"
 # The kind it adds, so a rehearsal can take it back out.
 DEMO_KIND = "ServiceInternetAccess"
 DEMO_SCHEMA_NAMESPACE = "Service"
@@ -479,16 +481,6 @@ def _remote_tip(ctx: Context, branch: str) -> str:
         result = ctx.run(f"git ls-remote origin {shlex.quote(f'refs/heads/{branch}')}", hide=True, warn=True)
     line = (result.stdout.strip().splitlines() or [""])[0] if result else ""
     return line.split()[0] if line else ""
-
-
-def _worker_import_filter(ctx: Context) -> list[str] | None:
-    """The branch filter the running task worker carries; None if it cannot be read."""
-    from solution_arista_avd import demo_release as dr
-
-    result = ctx.run(
-        f"{compose_cmd()} exec -T task-worker printenv INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES", hide=True, warn=True
-    )
-    return dr.parse_patterns(result.stdout.strip()) if result and result.ok else None
 
 
 def _branch_tasks(branch: str, states: tuple[str, ...]) -> list[str]:
@@ -658,6 +650,77 @@ def _copy_stage_onto_branch(ctx: Context, location: str, branch: str, stage: str
             )
             ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
             return ctx.run("git rev-parse HEAD", hide=True).stdout.strip()
+
+
+@task(
+    help={
+        "name": f"Capability name; builds stage/<name> (default {DEMO_NAME})",
+        "baseline": "The commit that removed the capability (default: found by its subject on main)",
+        "objects": f"Object file the capability adds (default {DEMO_OBJECTS})",
+        "force": "Replace an existing stage branch. It must never have been pushed under a name Infrahub follows",
+    }
+)
+def demo_stage(
+    ctx: Context, name: str = DEMO_NAME, baseline: str = "", objects: str = DEMO_OBJECTS, force: bool = False
+) -> None:
+    """Build stage/<name>: main with the capability put back, and the schema and object declared for import.
+
+    It is the baseline's revert, so the implementation is the one that was removed, plus the
+    `schemas:` and `objects:` sections the repository import needs to carry the schema and the data.
+    It is a prepared implementation, not a Spec Kit run; replace the revert with one when there is one.
+    """
+    import tempfile
+
+    from solution_arista_avd import demo_release as dr
+
+    stage = dr.stage_branch(name)
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        exists = ctx.run(f"git rev-parse --verify --quiet {shlex.quote(stage)}", hide=True, warn=True).ok
+        if exists and not force:
+            raise Exit(f"'{stage}' exists. Use --force to rebuild it.", code=1)
+        if not baseline:
+            baseline = ctx.run(
+                "git log main --no-merges --format=%H -n 1 --grep='remove the internet-access service kind to a baseline'",
+                hide=True,
+            ).stdout.strip()
+        if not baseline:
+            raise Exit("Could not find the baseline commit. Pass --baseline <sha>.", code=1)
+        if exists:
+            ctx.run(f"git branch -D {shlex.quote(stage)}", hide=True)
+        ctx.run(f"git branch {shlex.quote(stage)} main", hide=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp) / "stage"
+            ctx.run(f"git worktree add --quiet {shlex.quote(str(tree))} {shlex.quote(stage)}", hide=True)
+            failure = ""
+            try:
+                with ctx.cd(tree):
+                    reverted = ctx.run(f"git revert --no-edit {shlex.quote(baseline)}", hide=True, warn=True)
+                    if not reverted.ok:
+                        failure = f"Reverting {baseline[:10]} failed:\n{reverted.stderr}"
+                    else:
+                        files = [
+                            f
+                            for f in ctx.run("git ls-files schemas", hide=True).stdout.split()
+                            if f.endswith((".yml", ".yaml"))
+                        ]
+                        config = tree / ".infrahub.yml"  # ctx.cd does not move Python's own cwd
+                        config.write_text(
+                            dr.declare_schemas_and_objects(config.read_text(encoding="utf-8"), files, [objects]),
+                            encoding="utf-8",
+                        )
+                        ctx.run("git add .infrahub.yml", hide=True)
+                        ctx.run(
+                            "git -c user.name=demo-stage -c user.email=demo-stage@example.invalid commit --quiet "
+                            "-m 'feat(stage): let the repository import carry the schema and the object'",
+                            hide=True,
+                        )
+            finally:
+                ctx.run(f"git worktree remove --force {shlex.quote(str(tree))}", hide=True, warn=True)
+            if failure:
+                ctx.run(f"git branch -D {shlex.quote(stage)}", hide=True, warn=True)
+                raise Exit(failure, code=1)
+        tip = ctx.run(f"git rev-parse --short {shlex.quote(stage)}", hide=True).stdout.strip()
+    print(f"{stage} is at {tip}: main with {baseline[:10]} reverted, and the import declarations added.")
 
 
 @task(
