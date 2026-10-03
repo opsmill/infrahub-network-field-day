@@ -229,6 +229,44 @@ def decide_settled(
     return True, ""
 
 
+# A validator is finished in this state; its conclusion says whether it passed.
+VALIDATOR_DONE_STATE = "completed"
+VALIDATOR_PASSED = "success"
+
+
+def decide_validators(validators: list[dict[str, str]]) -> tuple[str, str]:
+    """Where a proposed change's validators stand: ``("pending" | "failed" | "passed", detail)``.
+
+    Each validator is ``{"label": ..., "state": ..., "conclusion": ..., "started_at": ...}``. A check
+    run twice (the release asks again so the checks judge the final branch) leaves one validator per
+    run under the same label; only the latest by ``started_at`` counts, because the first can have
+    raced the import. Passed needs every one
+    completed with a ``success`` conclusion, and at least one user-defined check among them
+    (``Check: ...``): the integrity validators complete before the rest are even created, so
+    "all complete" over that set alone means nothing. A failure is reported as soon as a
+    completed validator has not succeeded, with the failing names, even while others still run,
+    because nothing a later validator does can make it pass.
+    """
+    latest: dict[str, dict[str, str]] = {}
+    for v in validators:
+        seen = latest.get(v["label"])
+        # An empty start time is a validator created and not begun yet: the newest of all.
+        if seen is None or (v.get("started_at") or "~") >= (seen.get("started_at") or "~"):
+            latest[v["label"]] = v
+    validators = list(latest.values())
+    failing = sorted(
+        v["label"] for v in validators if v["state"] == VALIDATOR_DONE_STATE and v["conclusion"] != VALIDATOR_PASSED
+    )
+    if failing:
+        return "failed", f"validators that did not pass: {', '.join(failing)}"
+    running = sorted(v["label"] for v in validators if v["state"] != VALIDATOR_DONE_STATE)
+    if running:
+        return "pending", f"{len(running)} validator(s) still running: {', '.join(running[:3])}"
+    if not any(v["label"].startswith("Check:") for v in validators):
+        return "pending", "the user-defined checks to start"
+    return "passed", f"{len(validators)} validators passed"
+
+
 def declare_schemas_and_objects(infrahub_yml: str, schema_files: list[str], object_files: list[str]) -> str:
     """``.infrahub.yml`` with ``schemas:`` and ``objects:`` sections appended.
 

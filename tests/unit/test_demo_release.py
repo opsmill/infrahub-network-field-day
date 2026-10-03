@@ -275,3 +275,65 @@ def _current_branch() -> str:
         check=False,
         cwd=REPO,
     ).stdout.strip()
+
+
+def _validator(label: str, state: str = "completed", conclusion: str = "success") -> dict[str, str]:
+    return {"label": label, "state": state, "conclusion": conclusion}
+
+
+def test_validators_pass_when_all_are_completed_and_successful() -> None:
+    validators = [_validator("Repository Validator"), _validator("Check: wan-service-consistency")]
+
+    assert dr.decide_validators(validators) == ("passed", "2 validators passed")
+
+
+def test_validators_are_pending_until_a_user_defined_check_has_started() -> None:
+    state, detail = dr.decide_validators([_validator("Repository Validator")])
+
+    assert state == "pending"
+    assert "checks" in detail
+
+
+def test_validators_are_pending_while_any_is_still_running() -> None:
+    validators = [_validator("Check: a"), _validator("Artifact Validator", "in_progress", "unknown")]
+
+    state, detail = dr.decide_validators(validators)
+
+    assert state == "pending"
+    assert "Artifact Validator" in detail
+
+
+def test_a_failed_validator_is_reported_by_name_even_while_others_run() -> None:
+    validators = [
+        _validator("Check: zone-advertisement", conclusion="failure"),
+        _validator("Check: allocation-consistency", conclusion="failure"),
+        _validator("Artifact Validator", "in_progress", "unknown"),
+    ]
+
+    state, detail = dr.decide_validators(validators)
+
+    assert state == "failed"
+    assert "Check: allocation-consistency, Check: zone-advertisement" in detail
+
+
+def test_no_validators_at_all_is_pending() -> None:
+    assert dr.decide_validators([])[0] == "pending"
+
+
+def test_only_the_latest_run_of_a_validator_counts() -> None:
+    """The release asks for the checks twice; a first pass that raced the import must not fail the gate."""
+    validators = [
+        {**_validator("Check: a", conclusion="failure"), "started_at": "2026-10-03T10:00:00Z"},
+        {**_validator("Check: a"), "started_at": "2026-10-03T10:05:00Z"},
+    ]
+
+    assert dr.decide_validators(validators)[0] == "passed"
+
+
+def test_a_validator_not_started_yet_is_newer_than_a_finished_one() -> None:
+    validators = [
+        {**_validator("Check: a"), "started_at": "2026-10-03T10:00:00Z"},
+        {"label": "Check: a", "state": "queued", "conclusion": "unknown", "started_at": ""},
+    ]
+
+    assert dr.decide_validators(validators)[0] == "pending"
