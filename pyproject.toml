@@ -86,6 +86,8 @@ ignore_errors = true
 line-length = 120
 
 exclude = [
+    # Vendored upstream skills; not edited here.
+    ".agents",
     ".git",
     ".tox",
     ".venv",

@@ -599,7 +599,7 @@ name the pool on the segment — because "ambiguous" on its own sends the reader
 
 The VLAN and the SVI take the segment's own name, so a generated segment reads like the four
 hand-written ones beside it. The cost is that a request named `K8S_NODES` would upsert onto the
-lab's existing VLAN — and delete it on decommissioning. So an object wearing the requested name
+lab's existing VLAN — and delete it on decommissioning. An object wearing the requested name
 that the service does not already record is **refused**. Adopting one is explicit: point the
 service's `vlan` or `svi` at it first.
 
@@ -618,7 +618,7 @@ registered `execute_after_merge: false`, because the AVD chain is expensive and 
 explicitly. A correct segment that is invisible on the device means `invoke avd` has not run
 yet, not that the generator failed.
 
-**There is no seeded segment**, deliberately. An active one would allocate a subnet and a VLAN
+**No seeded segment exists**, deliberately. An active one would allocate a subnet and a VLAN
 into the default data set and change every rendered EOS artifact, and the fixtures those are
 held against are the hand-written baseline. Request one on a branch instead.
 

@@ -169,7 +169,7 @@ every bug this found was quiet:
   against the `neighbor` statements of that router's own `lab/wan/rendered/<n>/config.cli`,
   so the expected count comes from the artifact rather than from a number in the script.
 - It runs **every OTTERNET dashboard panel through Grafana**, not against Prometheus.
-  The direct check passed while every panel read "No data", because Grafana's
+  The direct check passed while every panel read "No data," because Grafana's
   Prometheus plugin was not registered. `scripts/check_grafana_panels.py` checks the
   datasource's health, then sends each visible query to `/api/ds/query` over the last
   30 minutes, with the dashboard's own variables, and names each panel that returns

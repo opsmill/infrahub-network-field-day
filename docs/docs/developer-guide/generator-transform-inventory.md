@@ -43,7 +43,7 @@ Current generator definitions are registered in `.infrahub.yml`:
 `generate-fabric-app`, `generate-tenant-onboarding`, `generate-server-placement`,
 and `generate-monitoring-collector`.
 
-There is no `backfill-structured-config` any more. It read each switch's structured
+No `backfill-structured-config` exists any more. It read each switch's structured
 config back into `Routing*`, `IpamPrefix` and interface MTU objects that nothing
 consumed, and after the device-kind split it failed on every run — four of the
 `Routing*` kinds peer `DcimDevice` — leaving a red task in every proposed change that
@@ -186,7 +186,7 @@ to know before changing it:
   dropped at the pod. The generator opened the first two. The third was left to whoever created the
   application, and **the portal cannot ask for it**: `allowed_source_prefixes` is an optional
   cardinality-many relationship and the form builder admits cardinality-one plus *mandatory* many
-  only. So an application requested through the portal deployed cleanly, took a VIP, passed the
+  only. An application requested through the portal deployed cleanly, took a VIP, passed the
   firewall and dropped every packet — measured, with `allowFrom: []`, the rule on the device and the
   leaf holding the VIP's `/32`. **Nothing logged a denial, because the drop is not on `fw1`.**
   The grant now adds its source to the application, which needs no parsing and creates nothing: a
@@ -292,7 +292,7 @@ the WAN reachability matrix. It replaced `frr_config`. Things to know before cha
 - **The output is the router's WHOLE configuration, and every use of it is a full replace.**
   Flat `set` commands opening with `delete /`: the ContainerLab startup configuration (so a
   booted router already matches), what the reconciler loads to compare, and what it commits —
-  EOS's `rollback clean-config`, in SR Linux terms. So `/system` is in it too: management
+  EOS's `rollback clean-config`, in SR Linux terms. `/system` is in it too: management
   interface and VRF, gNMI/SSH/NETCONF/JSON-RPC servers, AAA, logging, LLDP, and the image's
   control-plane ACL (`_cpm_acl.srl.j2`, 537 lines captured verbatim from 26.7.2 — re-capture it
   when the image moves, or a push strips the control plane of its own protection).

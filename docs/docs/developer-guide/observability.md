@@ -67,7 +67,7 @@ Three kinds, in `schemas/monitoring.yml`:
 - **`telegraf.conf`**: every input, chosen by device kind:
   - EOS: gNMI on port 6030 in VRF `MGMT`
   - SR Linux: gNMI on port 57400, TLS (self-signed per lab, so not verified), through the same
-    OpenConfig paths as EOS -- so the series names and labels match and fabric panels cover
+    OpenConfig paths as EOS -- which keeps the series names and labels the same, and fabric panels cover
     the WAN unchanged
   - Junos: SNMP v2c
   - k3s nodes: node-exporter on port 9100
@@ -162,7 +162,7 @@ Read these before trusting a number on them:
   `verify_bootstrap.sh` runs it, and it works against any running Grafana through a
   port-forward. Two queries are allowed to be empty, both listed in its `ALLOWED_EMPTY`:
   the per-port breakouts on Fabric telemetry's "Errors and discards" and the firewall's
-  "Interface errors", each filtered with `> 0`, so a healthy lab has no series. Each panel's
+  "Interface errors," each filtered with `> 0`, so a healthy lab has no series. Each panel's
   other query must still return data. Services' "Probed ports answering" was a third until
   the collector was admitted at the applications' pod gates; both of its queries now
   return data.
@@ -409,7 +409,7 @@ Seven things look like oversights and are not:
   Prometheus scrapes cluster internals that the composition's one selector-scoped ingress policy
   cannot express. With `allowed_source_prefixes` non-empty the composition still renders
   `allow-ingress` on Grafana's pods, and seeding the pod CIDR makes that policy exist from the
-  first render. So the branch is dropped at the pod until a grant adds `10.70.0.0/24`.
+  first render. The branch is dropped at the pod until a grant adds `10.70.0.0/24`.
 - **The new address field is `telemetry_address`, never `mgmt_ip`.** To the reconciler,
   `mgmt_ip` means "push over eAPI" (`reach = target.mgmt_ip or target.container`), and cycle 027
   holds it on `DcimFabricSwitch` alone. The WAN routers, fw1 and the k3s nodes needed an address a
@@ -420,7 +420,7 @@ Seven things look like oversights and are not:
   cleanly and makes the query resolve against `CoreProfile`, failing with `Cannot query field
   'device_groups' on type 'CoreProfile'`.
 - **`generate-monitoring-collector` writes nothing.** The artifact's target is the collector, and
-  almost nothing that changes what should be collected is a change to the collector. So it
+  almost nothing that changes what should be collected is a change to the collector. It
   re-renders the artifact on its branch, in every proposed change and after every merge. **No
   trigger may name a `Monitoring*` kind**, for the same reason as `Deployment*`.
 - **The Dex back channel goes over the management network.** The browser uses the issuer

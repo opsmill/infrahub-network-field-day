@@ -40,7 +40,7 @@ device with no record (the servers, and `cust-acme-dr-ce`, which the reconciler 
 record**, not a fault. `DeploymentState` is branch-agnostic, so the overlay describes the devices as they are
 whichever branch is selected.
 
-**There is no BGP overlay, because the portal cannot reach the data.** Session state lives in Prometheus, which
+**No BGP overlay exists, because the portal cannot reach the data.** Session state lives in Prometheus, which
 is a `ClusterIP` Service in `otternet-metrics`; only Grafana has a LoadBalancer VIP, and reaching either from the
 tooling zone would need the same three gates a `ServiceAppAccess` grant opens (route, firewall rule, pod policy).
 
