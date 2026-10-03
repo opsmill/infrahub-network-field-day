@@ -10,6 +10,7 @@ rewritten, so two releases of the same work may not share a name.
 from __future__ import annotations
 
 import re
+import subprocess  # noqa: S404 - one fixed-argv git call
 from pathlib import Path
 
 import pytest
@@ -230,3 +231,47 @@ def test_a_branch_is_not_settled_until_every_worker_has_pulled_the_commit() -> N
 
 def test_the_workers_check_defaults_to_satisfied_for_modes_that_do_not_merge_git() -> None:
     assert dr.decide_settled(**_SETTLED) == (True, "")
+
+
+_INFRAHUB_YML = "---\nmenus:\n  - menus/menu.yml\nqueries:\n  - name: q\n"
+
+
+def test_declaring_the_import_adds_schemas_and_objects_and_keeps_the_rest() -> None:
+    out = dr.declare_schemas_and_objects(_INFRAHUB_YML, ["schemas/b.yml", "schemas/a.yml"], ["objects/37.yml"])
+    document = yaml.safe_load(out)
+
+    assert out.startswith(_INFRAHUB_YML.rstrip("\n"))
+    assert document["schemas"] == ["schemas/a.yml", "schemas/b.yml"]
+    assert document["objects"] == ["objects/37.yml"]
+    assert document["menus"] == ["menus/menu.yml"]
+
+
+@pytest.mark.parametrize("already", ["schemas:\n  - a.yml\n", "objects:\n  - o.yml\n"])
+def test_a_file_that_already_declares_the_import_is_refused(already: str) -> None:
+    with pytest.raises(dr.DemoReleaseError):
+        dr.declare_schemas_and_objects(_INFRAHUB_YML + already, ["schemas/a.yml"], ["objects/o.yml"])
+
+
+@pytest.mark.parametrize(("schemas", "objects"), [([], ["o.yml"]), (["s.yml"], [])])
+def test_both_schema_files_and_object_files_are_required(schemas: list[str], objects: list[str]) -> None:
+    with pytest.raises(dr.DemoReleaseError):
+        dr.declare_schemas_and_objects(_INFRAHUB_YML, schemas, objects)
+
+
+def test_main_declares_neither_schemas_nor_objects_so_only_a_staged_branch_carries_them() -> None:
+    """Skipped on the staged branch itself, which is the one place they are meant to be declared."""
+    declared = re.search(r"^(schemas|objects):", (REPO / ".infrahub.yml").read_text(encoding="utf-8"), re.MULTILINE)
+    if declared and (REPO / ".git").exists() and "stage/" in _current_branch():
+        pytest.skip("this is a staged branch")
+
+    assert declared is None
+
+
+def _current_branch() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO,
+    ).stdout.strip()

@@ -227,3 +227,25 @@ def decide_settled(
     if active_tasks:
         return False, f"{active_tasks} task(s) still queued or running on the branch"
     return True, ""
+
+
+def declare_schemas_and_objects(infrahub_yml: str, schema_files: list[str], object_files: list[str]) -> str:
+    """``.infrahub.yml`` with ``schemas:`` and ``objects:`` sections appended.
+
+    The staged branch declares them so one repository import carries the schema and the data as
+    well as the code. ``main`` declares neither, so refusing a file that already has them keeps a
+    staged branch from being built on top of one that was already staged.
+    """
+    if re.search(r"^(schemas|objects):", infrahub_yml, re.MULTILINE):
+        msg = ".infrahub.yml already declares schemas or objects"
+        raise DemoReleaseError(msg)
+    if not schema_files or not object_files:
+        msg = "both schema files and object files are required"
+        raise DemoReleaseError(msg)
+    lines = [
+        "schemas:",
+        *[f"  - {path}" for path in sorted(schema_files)],
+        "objects:",
+        *[f"  - {p}" for p in object_files],
+    ]
+    return infrahub_yml.rstrip("\n") + "\n" + "\n".join(lines) + "\n"
