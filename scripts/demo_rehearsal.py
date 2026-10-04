@@ -790,6 +790,10 @@ class Mcp:
         headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
         if self.session:
             headers["Mcp-Session-Id"] = self.session
+        # The server runs in token-passthrough mode: the token is the client's, not the server's.
+        token = os.environ.get("INFRAHUB_MCP_TOKEN") or main_env("INFRAHUB_MCP_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         response = self.http.post(self.url, json=body, headers=headers)
         self.session = response.headers.get("mcp-session-id", self.session)
         return response

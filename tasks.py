@@ -2938,20 +2938,20 @@ def tooling(ctx: Context) -> None:
 @task
 def mcp(ctx: Context) -> None:
     """
-    Start the Infrahub MCP server beside Infrahub, signed in as `mcp-agent`.
+    Start the Infrahub MCP server beside Infrahub, in token-passthrough mode.
 
-    **The account first, then the container**, because the container reads the
-    account's password from `.env` at start. `scripts/provision_mcp_agent.py`
+    **The account first, then the container.** `scripts/provision_mcp_agent.py`
     creates `mcp-agent` -- read everything, write only on branches, open a
-    proposed change -- and writes that password on first run. The upstream
-    example signs in as `agent` instead, which here is a Super Administrator the
-    task workers run as: a back door past the review gate for anything that can
-    reach the port.
+    proposed change -- and mints its API token into `.env` as
+    `INFRAHUB_MCP_TOKEN`. The server holds no credential: each client sends that
+    token as `Authorization: Bearer ...`. The upstream example uses `agent`
+    instead, which here is a Super Administrator the task workers run as.
+    Export `INFRAHUB_MCP_TOKEN` in the shell that launches Claude Code.
 
     The server listens on http://127.0.0.1:8001/mcp. Idempotent.
     """
     ctx.run("python scripts/provision_mcp_agent.py", pty=True)
-    # --force-recreate so a password rotated in .env reaches a running container,
+    # --force-recreate so a changed compose service reaches a running container,
     # and --no-deps because without it the recreate cascades to infrahub-server.
     ctx.run(f"{compose_cmd()} --profile mcp up -d --no-deps --force-recreate infrahub-mcp", pty=True)
     print(" - Infrahub MCP server: http://127.0.0.1:8001/mcp")
@@ -3045,7 +3045,7 @@ def bootstrap(
         lab        the ContainerLab topology, management connectivity only
         provision  every device configured from its rendered artifact
         tooling    Dex and the Backstage portal, in the tooling cluster
-        mcp        the Infrahub MCP server, signed in as `mcp-agent`
+        mcp        the Infrahub MCP server (token passthrough; clients use the `mcp-agent` token)
         metrics    the Infrahub exporter, reading as `metrics-exporter`
         cluster    Cilium, Vidra, Crossplane, the resource handover, and the
                    observability Secrets Grafana and Telegraf wait for

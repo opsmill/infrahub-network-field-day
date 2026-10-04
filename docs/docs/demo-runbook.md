@@ -638,21 +638,25 @@ would reach each other directly across the provider edge.
 
 ```bash
 uv run python scripts/provision_mcp_agent.py --check
-# mcp-agent signs in and holds only the 'Agent Access' role.
+# mcp-agent signs in, its token authenticates, and it holds only the 'Agent Access' role.
 curl -s http://127.0.0.1:8001/health
 # {"status":"healthy"}
 ```
 
 Claude Code picks the server up from `.mcp.json` as `infrahub-lab` and asks you
-to approve it the first time. It signs in as `mcp-agent`, never as the
+to approve it the first time. The server holds no credential: `.mcp.json` sends the
+`mcp-agent` API token from `INFRAHUB_MCP_TOKEN`, so start `claude` from a shell that
+has sourced `.env` (`set -a; source .env; set +a`). The agent acts as `mcp-agent`, never as the
 Super Administrator `agent` the task workers run as. It reads everything, writes
 only on a branch (the server creates one per session, named
 `mcp/session-<date>-<hex>`), and can open a proposed change. A write aimed at
 `main` is refused by Infrahub, not by the prompt.
 
-`provision_mcp_agent.py --check` reads the password from the `.env` beside the
-script, so run it from the main checkout. From a git worktree it reports
-`INFRAHUB_MCP_PASSWORD is not set` against a server that is working.
+`provision_mcp_agent.py` reads the password and token from the main checkout's `.env`
+(`envfile.env_file`), also when run from a git worktree. If tool calls answer
+`Authentication required: no Infrahub API token in request header.`, the variable was
+not in the environment of the shell that started Claude Code; see
+[the MCP server](./developer-guide/mcp-server.md#connecting-claude-code-to-the-server).
 
 Good questions to ask it: "what depends on `otternet-demo`?" (`find_reachable`
 from `ServiceFabricApp__otternet-demo` reaches its `ClusterKubernetes`

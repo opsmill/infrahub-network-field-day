@@ -24,7 +24,7 @@ builds the firewall rule and the address and service objects, adds the source to
 allowed sources and advertises the destination VIP toward the source zone. A proposed change then
 carries those results before anyone merges.
 
-The agent signs in to Infrahub as `mcp-agent`. That account writes only on a branch, which the MCP
+The agent reaches Infrahub as `mcp-agent`: the MCP server forwards the `mcp-agent` API token the client sends in the `Authorization: Bearer` header (`INFRAHUB_MCP_TOKEN` in `.env`). That account writes only on a branch, which the MCP
 server creates for the session (`mcp/session-<date>-<hex>`), and Infrahub refuses its writes to `main`.
 A human merges the proposed change. Do not tell the requester the agent cannot merge: on Infrahub
 1.10.6 the merge mutation does not check the permission, so the account can merge its own change.
@@ -200,6 +200,7 @@ or a `ServiceAppAccess` on `main`.
 | The proposed change has the firewall rule but no border leaf EOS diff | `propose_changes` opened the change before the generators finished | Wait, then run `CoreProposedChangeRunCheck` with `check_type: ALL`. See step 5 |
 | `Writes to the default branch 'main' are not allowed` or `PERMISSION_DENIED` | The write was aimed at `main` | Write on the session branch. This is intended |
 | `Node must have at least one identifier (ID or HFID) to query it` on every proposed change | A deleted grant left its `CoreGeneratorInstance` behind | An operator deletes the instance. See [Recovery](../../../docs/docs/demo-runbook.md#recovery) |
+| Every tool says `Authentication required: no Infrahub API token in request header.` or `Invalid token` | `INFRAHUB_MCP_TOKEN` was not in the environment of the shell that started Claude Code, or the token was re-minted | Run `uv run invoke mcp`, source `.env`, restart Claude Code. `claude mcp list` still shows `Connected` |
 | `INFRAHUB_MCP_PASSWORD is not set` from `provision_mcp_agent.py --check` | The script was run from a git worktree | Run it from the main checkout |
 | The change merged but the application still does not answer | The reconciler, Vidra or the firewall has not converged | Step 8 |
 

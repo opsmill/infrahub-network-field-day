@@ -180,18 +180,22 @@ services:
 
   # The Infrahub MCP server, which is how an agent works with the platform.
   #
-  # **It signs in as `mcp-agent`, not as `agent`.** The upstream sidecar example
-  # uses INFRAHUB_INITIAL_AGENT_TOKEN, and here that is a Super Administrator the
-  # task workers run as. `scripts/provision_mcp_agent.py` creates `mcp-agent`,
-  # which reads everything, writes only on branches and can open a proposed
-  # change, and writes its password to `.env`; `invoke mcp` runs it and starts
-  # this service.
+  # **It holds no credential.** It runs in `token-passthrough` mode: every client
+  # sends `Authorization: Bearer <mcp-agent API token>` and the server forwards it
+  # to Infrahub, so a request without the header is refused (401) and each action
+  # is attributed to the account that owns the token. Do NOT add
+  # INFRAHUB_API_TOKEN here: that would be a shared credential, and the one in the
+  # upstream sidecar example (INFRAHUB_INITIAL_AGENT_TOKEN) is a Super
+  # Administrator the task workers run as.
+  # `scripts/provision_mcp_agent.py` creates `mcp-agent` (reads everything, writes
+  # only on branches, can open a proposed change) and mints its token into `.env`
+  # as INFRAHUB_MCP_TOKEN; `invoke mcp` runs it and starts this service.
   #
-  # Behind a profile because it cannot sign in until that script has run, and a
-  # plain `docker compose up` on a fresh stack would otherwise crash-loop it.
+  # Behind a profile because a plain `docker compose up` on a fresh stack has no
+  # account for a client to use until that script has run.
   #
-  # Bound to 127.0.0.1: auth mode `none` means whoever reaches the port acts as
-  # `mcp-agent`. The image is pinned because `infrahub-mcp` 1.1.7 from PyPI
+  # Still bound to 127.0.0.1, so only this host can reach the port. The image is
+  # pinned because `infrahub-mcp` 1.1.7 from PyPI
   # resolves against fastmcp 4 and mcp 2 and fails at import with
   # `cannot import name 'McpError' from 'mcp'`; the published image is built
   # from the project's lock file and carries the versions it was tested with.
@@ -204,8 +208,7 @@ services:
         condition: service_healthy
     environment:
       INFRAHUB_ADDRESS: http://infrahub-server:8000
-      INFRAHUB_USERNAME: mcp-agent
-      INFRAHUB_PASSWORD: ${INFRAHUB_MCP_PASSWORD:-}
+      INFRAHUB_MCP_AUTH_MODE: token-passthrough
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8001"
       INFRAHUB_MCP_BRANCH_PATTERN: ${INFRAHUB_MCP_BRANCH_PATTERN:-mcp/session-{date}-{hex}}
