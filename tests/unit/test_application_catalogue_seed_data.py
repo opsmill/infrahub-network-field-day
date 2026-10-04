@@ -59,10 +59,13 @@ def _seed_script() -> Any:
     return module
 
 
-REQUESTABLE = {"whoami", "podinfo", "grafana"}
+REQUESTABLE = {"whoami", "podinfo", "grafana", "argo-cd"}
 
-# Where each requestable chart takes the label its Service must carry.
+# Where each requestable chart keeps its LoadBalancer Service's values, and the key under
+# which the Service takes the label the selector matches on.
+SERVICE_PATH = {"whoami": "service", "podinfo": "service", "grafana": "service", "argo-cd": "server.service"}
 LABEL_KEY = {"whoami": "commonLabels", "podinfo": "service.additionalLabels", "grafana": "service.labels"}
+LABEL_KEY["argo-cd"] = "server.service.labels"
 
 
 def test_the_catalogue_has_the_requestable_entries_and_one_per_seeded_application() -> None:
@@ -158,7 +161,9 @@ def test_every_requestable_entry_is_reachable_and_labelled(name: str) -> None:
     entry = _entries()[name]
     values = yaml.safe_load(entry["default_values"])
 
-    service = values["service"]
+    service: Any = values
+    for part in SERVICE_PATH[name].split("."):
+        service = service[part]
     assert service["type"] == "LoadBalancer"
     assert service["externalTrafficPolicy"] == "Local"
 

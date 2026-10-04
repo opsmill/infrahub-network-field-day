@@ -114,6 +114,36 @@ spec:
           labels:
             otternet.lab/advertise: "true"
 
+    - name: argo-cd
+      title: "Argo CD"
+      description: "Declarative GitOps continuous delivery for Kubernetes, with its web interface"
+      status: active
+      requestable: true
+      chart_repository: https://argoproj.github.io/argo-helm
+      chart_name: argo-cd
+      chart_version: "10.9.6"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-http
+      # The web interface is the argocd-server Service, so the exposure keys sit
+      # under `server.service`. Dex and the notifications controller are switched
+      # off: a demo needs the interface, not single sign-on or alerting.
+      default_values: |
+        dex:
+          enabled: false
+
+        notifications:
+          enabled: false
+
+        server:
+          service:
+            type: LoadBalancer
+            externalTrafficPolicy: Local
+            labels:
+              otternet.lab/advertise: "true"
+
     - name: lab-whoami
       title: "OTTERNET demo workload"
       description: "The lab's own whoami demonstration, three replicas across the fabric"

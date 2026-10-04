@@ -265,7 +265,7 @@ laptop on purpose.
 | Application name | `otter-shop` |
 | What it is | anything a stranger would understand |
 | Kubernetes namespace | `otter-shop` |
-| Application | **Who am I** (the demo default; Podinfo and Grafana are also in the picker) |
+| Application | **Who am I** (the demo default; the picker lists more applications) |
 | Request reference | `demo1`, or anything not used before |
 
 Leave the rest. The defaults are the cluster `otternet`, VRF `K8S_PROD` and source
