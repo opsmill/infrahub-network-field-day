@@ -46,12 +46,14 @@ uv run invoke reconcile                 # the loop, 600s maximum, 60s floor, wak
 uv run invoke reconcile --now           # ask the running loop for an all-device cycle now
 uv run invoke backstage-build           # build the portal image (it runs in the tooling cluster)
 uv run invoke tooling                   # Dex and the portal, into the tooling cluster
-uv run invoke mcp                       # the MCP server beside Infrahub, as mcp-agent
+uv run invoke mcp                       # the MCP server beside Infrahub, as mcp-agent; also the Requester Access role
+uv run invoke mcp-tokens                # alice's MCP token into .env; needs Dex (run `tooling` first)
+uv run invoke ready                     # the demonstration's prerequisites, and what a person still has to do
 uv run invoke metrics-exporter          # the Infrahub exporter beside Infrahub, as metrics-exporter
 uv run invoke cluster                   # Cilium, Vidra, Crossplane, then the handover
 uv run invoke cluster --no-handover     # ... leaving the lab in charge of all four
 uv run invoke vidra                     # the operator on its own, for a re-install
-uv run invoke doctor                    # FIRST thing to run when something is odd: image staleness vs commits, duplicate reconcile processes, schema.graphql freshness, repository sync_status, dangling CoreGeneratorInstance
+uv run invoke doctor                    # FIRST thing to run when something is odd: image staleness vs commits, duplicate reconcile processes, schema.graphql freshness, repository sync_status, dangling CoreGeneratorInstance, then the `ready` checks
 uv run invoke init-semaphore
 uv run invoke test                      # unit tests, as CI runs them
 uv run invoke test --integration        # ... plus the Docker-backed integration suite

@@ -58,8 +58,11 @@ uv run invoke bootstrap --fresh
   the token may do, so it cannot be used to check.
 - **Turn on branch protection for `main`** on the remote. Infrahub only pushes `demo-main`, but a token
   with write access could push anywhere, and protection turns that from a measured fact into a guarantee.
-- **`demo-main` is created for you** at the tip of `main` if it is missing. It is the branch Infrahub
-  treats as its own `main`, so merges land there and the real `main` is never written.
+- **`demo-main` is created for you** at the tip of `main` if it is missing, and `uv run invoke bootstrap --fresh`
+  deletes it and creates it again at the tip of `main` after the old stack is destroyed, so a new stack never starts
+  from the tree an earlier demonstration left. It is the branch Infrahub
+  treats as its own `main`, so merges land there and the real `main` is never written. Bootstrap also checks the
+  four settings above before it destroys anything. See [bootstrap](./developer-guide/bootstrap.md).
 - The token reaches Infrahub through a temporary file and is not kept in the repository. To replace it on
   a running stack, for example when it expires, run `uv run invoke demo-credential`.
 

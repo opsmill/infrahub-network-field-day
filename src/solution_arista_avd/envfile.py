@@ -17,8 +17,13 @@ one place that decides, and `env_file` is what every caller should use.
 
 from __future__ import annotations
 
+import re
 import subprocess  # noqa: S404 - one fixed-argv git call, never a shell string
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, MutableMapping
 
 
 def main_checkout(start: Path) -> Path:
@@ -94,3 +99,29 @@ def upsert_env(path: Path, name: str, value: str, comment: str) -> None:
 
     compact += ["", header, f"{name}={value}"]
     path.write_text("\n".join(compact).lstrip("\n") + "\n", encoding="utf-8")
+
+
+# The credentials this project generates into `.env`: the account passwords and the API tokens of
+# the MCP agent and its users, the portal, and the exporter.
+GENERATED_CREDENTIAL = re.compile(r"^INFRAHUB_(MCP|PORTAL|EXPORTER)_(TOKEN|PASSWORD)(_[A-Z0-9_]+)?$")
+
+
+def stale_credentials(environ: Mapping[str, str], path: Path) -> list[str]:
+    """Names of generated credentials the process environment holds with a value `.env` does not.
+
+    A shell that loaded `.env` before `bootstrap --fresh` keeps the old tokens, and a process
+    environment wins over `.env` both for `docker compose` and for `scripts/deploy_tooling.sh`. The
+    portal was then deployed with a token the new database had never seen, and every request it made
+    was refused with 401, so its catalogue was empty. Names only, never values.
+    """
+    return sorted(
+        name for name, value in environ.items() if GENERATED_CREDENTIAL.match(name) and value != read_env(path, name)
+    )
+
+
+def use_dotenv_credentials(environ: MutableMapping[str, str], path: Path) -> list[str]:
+    """Drop the stale generated credentials from `environ`, so `.env` is the one source. Returns the names dropped."""
+    names = stale_credentials(environ, path)
+    for name in names:
+        del environ[name]
+    return names

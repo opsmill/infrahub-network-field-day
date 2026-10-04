@@ -10,7 +10,9 @@ sidebar_position: 22
 `infrahub-mcp` runs beside Infrahub in the compose stack (profile `mcp`, pinned
 `registry.opsmill.io/opsmill/infrahub-mcp:v1.1.7`, `http://127.0.0.1:8001/mcp`),
 and `.mcp.json` registers it for Claude Code. `uv run invoke mcp` provisions its
-account and starts it; the bootstrap does both after `tooling`.
+account and starts it, and `uv run invoke mcp-tokens` mints alice's token. The bootstrap runs `mcp`
+after `tooling` and `mcp-tokens` after that, because alice's token is minted through Dex. `uv run invoke ready`
+checks both identities (see [bootstrap](./bootstrap.md#what-a-finished-bootstrap-checks)).
 
 **Clients act as `mcp-agent`, never as `agent`.** The server runs in
 `INFRAHUB_MCP_AUTH_MODE=token-passthrough` and holds no Infrahub credential. Each
@@ -106,7 +108,8 @@ second identity. `scripts/provision_mcp_user_token.py --user alice` obtains that
 
 The script prints the token only with `--show`. Run it yourself when you need to paste the token
 somewhere: `uv run python scripts/provision_mcp_user_token.py --user alice --show`. `--check` reports
-without minting. The Dex sign-in needs the Dex address (`OTTERNET_DEX_ADDRESS`, default
+without minting. `uv run invoke mcp-tokens` runs it for every user the bootstrap serves (alice) after making sure
+the portal accounts exist, and bootstrap runs that task after `tooling`. The Dex sign-in needs the Dex address (`OTTERNET_DEX_ADDRESS`, default
 `http://10.90.0.11:32556`) to be reachable from where the script runs.
 
 `.mcp.json` registers a second server, `infrahub-lab-alice`, with the same URL and the header
