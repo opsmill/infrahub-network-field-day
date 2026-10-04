@@ -801,11 +801,20 @@ def _worker_branch_refs(repo_id: str) -> list[str]:
 
 
 def _ensure_workers_on_default_branch(repo: dict[str, str]) -> None:
-    """Put every task worker's main worktree on the repository's default branch, or say why it cannot be.
+    """Put every task worker's main worktree on the default branch, at the remote's tip.
 
-    See `worker_needs_default_branch`: a merge pushes only from a worker on `demo-main`, so one on `main`
-    makes a git-synced merge succeed in the graph and fail to reach the remote. The switch keeps the
-    worktree's commit (`checkout -B`), so nothing Infrahub has merged there is lost.
+    Two measured faults make a git-synced merge succeed in the graph and never reach the remote:
+
+    * A worker's worktree can sit on `main` instead of `demo-main` (the clone's own default), and
+      Infrahub pushes a merge with `git push origin demo-main`, which fails there.
+    * Infrahub never imports a commit pushed to `demo-main`, and the periodic sync broadcasts the
+      sync-running worker's own local `demo-main` as "the pinned commit" that every worker hard-resets
+      to, once a minute. After a merge only one worker has the new commit, so the next sync pins a stale
+      one and the pool converges on a commit older than the remote's. The next merge then builds on it
+      and its push is a non-fast-forward, which Infrahub does not report. Measured: three runs in four.
+
+    Fetching and resetting every worker to the remote's tip makes the pin equal the tip, which is a
+    fixed point. Anything a worker held that the remote lacks is reported, not hidden.
     """
     import subprocess  # noqa: S404 - fixed argv, no shell
 
@@ -831,15 +840,22 @@ def _ensure_workers_on_default_branch(repo: dict[str, str]) -> None:
                 check=False,
             )
 
+        git("fetch", "-q", "origin", default)
         current = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-        if not dr.worker_needs_default_branch(current, default):
+        head = git("rev-parse", "HEAD").stdout.strip()
+        tip = git("rev-parse", f"refs/remotes/origin/{default}").stdout.strip()
+        if not tip:
+            raise Exit(f"Worker {container[:12]} cannot see origin/{default}.", code=1)
+        if not dr.worker_needs_realignment(current, default, head, tip):
             continue
         if git("status", "--porcelain").stdout.strip():
             raise Exit(f"Worker {container[:12]} is on '{current}' with local changes; fix its clone by hand.", code=1)
-        switched = git("checkout", "-q", "-B", default, "HEAD")
+        unpushed = git("rev-list", "--count", f"{tip}..{head}").stdout.strip()
+        switched = git("checkout", "-q", "-B", default, tip)
         if switched.returncode != 0:
             raise Exit(f"Could not put worker {container[:12]} on '{default}': {switched.stderr.strip()}", code=1)
-        print(f" - Worker {container[:12]} was on '{current}'; it is on '{default}' now", flush=True)
+        note = f" (it held {unpushed} commit(s) the remote lacks)" if unpushed not in {"", "0"} else ""
+        print(f" - Worker {container[:12]}: '{current}' {head[:7]} -> '{default}' {tip[:7]}{note}", flush=True)
 
 
 def _taken_branch_names(ctx: Context, repo_id: str) -> list[str]:
@@ -1100,6 +1116,7 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int =
     for leftover in sorted(b for b in (_branches() or {}) if b.startswith(f"{demo}-reset")):
         _delete_demo_branch(ctx, leftover)  # an attempt that was interrupted or had nothing to undo
     _delete_demo_branch(ctx, demo)
+    _ensure_workers_on_default_branch(_repository())  # leave the pool aligned with what the reset pushed
     print(f"\nNext release: invoke demo-release --name {name}  (it takes the next unused number, {run + 1} or later)")
 
 

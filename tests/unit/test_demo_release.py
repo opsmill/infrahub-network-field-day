@@ -340,8 +340,15 @@ def test_a_validator_not_started_yet_is_newer_than_a_finished_one() -> None:
 
 
 @pytest.mark.parametrize(
-    ("current", "default", "needs"),
-    [("main", "demo-main", True), ("demo-main", "demo-main", False), ("", "demo-main", False)],
+    ("current", "head", "tip", "needs"),
+    [
+        ("main", "a" * 40, "a" * 40, True),  # on the wrong branch
+        ("demo-main", "a" * 40, "b" * 40, True),  # behind or beside the remote
+        ("demo-main", "a" * 40, "a" * 40, False),  # aligned
+        ("", "a" * 40, "b" * 40, False),  # detached or unreadable: leave it
+    ],
 )
-def test_a_worker_off_the_default_branch_needs_switching(current: str, default: str, needs: bool) -> None:
-    assert dr.worker_needs_default_branch(current, default) is needs
+def test_a_worker_needs_realigning_unless_it_is_on_the_default_branch_at_the_remote_tip(
+    current: str, head: str, tip: str, needs: bool
+) -> None:
+    assert dr.worker_needs_realignment(current, "demo-main", head, tip) is needs
