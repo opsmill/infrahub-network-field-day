@@ -695,22 +695,58 @@ def _copy_stage_onto_branch(ctx: Context, location: str, branch: str, stage: str
             return ctx.run("git rev-parse HEAD", hide=True).stdout.strip()
 
 
+def _apply_implementation(ctx: Context, baseline: str, implementation: str) -> str:
+    """Put the capability on the current branch: revert `baseline`, or cherry-pick `implementation`'s commits.
+
+    Returns '' on success, or why it failed (the branch is left for the caller to delete). The commits of
+    `implementation` that only touch `.infrahub.yml` are skipped: they are its import declarations, which
+    the caller adds itself, once, for whichever implementation it used.
+    """
+    if not implementation:
+        reverted = ctx.run(f"git revert --no-edit {shlex.quote(baseline)}", hide=True, warn=True)
+        return "" if reverted.ok else f"Reverting {baseline[:10]} failed:\n{reverted.stderr}"
+    listed = ctx.run(f"git rev-list --reverse --no-merges main..{shlex.quote(implementation)}", hide=True, warn=True)
+    commits = listed.stdout.split() if listed.ok else []
+    if not commits:
+        return f"'{implementation}' has no commits that main lacks."
+    picked = 0
+    for sha in commits:
+        touched = set(ctx.run(f"git diff-tree --no-commit-id --name-only -r {sha}", hide=True).stdout.split())
+        if touched == {".infrahub.yml"}:
+            continue
+        result = ctx.run(f"git cherry-pick {sha}", hide=True, warn=True)
+        if not result.ok:
+            ctx.run("git cherry-pick --abort", hide=True, warn=True)
+            return f"Cherry-picking {sha[:10]} onto main failed (rebuild {implementation} on today's main):\n{result.stderr}"
+        picked += 1
+    return "" if picked else f"Every commit of '{implementation}' only touches .infrahub.yml."
+
+
 @task(
     help={
         "name": f"Capability name; builds stage/<name> (default {DEMO_NAME})",
         "baseline": "The commit that removed the capability (default: found by its subject on main)",
+        "implementation": "Build from this branch's commits instead of reverting the baseline (a Spec Kit branch)",
         "objects": f"Object file the capability adds (default {DEMO_OBJECTS})",
         "force": "Replace an existing stage branch. It must never have been pushed under a name Infrahub follows",
     }
 )
 def demo_stage(
-    ctx: Context, name: str = DEMO_NAME, baseline: str = "", objects: str = DEMO_OBJECTS, force: bool = False
+    ctx: Context,
+    name: str = DEMO_NAME,
+    baseline: str = "",
+    implementation: str = "",
+    objects: str = DEMO_OBJECTS,
+    force: bool = False,
 ) -> None:
     """Build stage/<name>: main with the capability put back, and the schema and object declared for import.
 
-    It is the baseline's revert, so the implementation is the one that was removed, plus the
-    `schemas:` and `objects:` sections the repository import needs to carry the schema and the data.
-    It is a prepared implementation, not a Spec Kit run; replace the revert with one when there is one.
+    By default the implementation is the baseline's revert, the one that was removed. With
+    `--implementation <branch>` it is that branch's own commits, cherry-picked onto the current `main`
+    (a Spec Kit branch: `demo-stage --implementation speckit/internet-access --name internet-access-speckit`),
+    so its baseline is today's `main` and a reset restores the tree the stack started from. Either way
+    the `schemas:` and `objects:` sections the repository import needs are added last. The revert is a
+    prepared implementation, not a Spec Kit run; say which one you are showing.
     """
     import tempfile
 
@@ -721,12 +757,12 @@ def demo_stage(
         exists = ctx.run(f"git rev-parse --verify --quiet {shlex.quote(stage)}", hide=True, warn=True).ok
         if exists and not force:
             raise Exit(f"'{stage}' exists. Use --force to rebuild it.", code=1)
-        if not baseline:
+        if not baseline and not implementation:
             baseline = ctx.run(
                 "git log main --no-merges --format=%H -n 1 --grep='remove the internet-access service kind to a baseline'",
                 hide=True,
             ).stdout.strip()
-        if not baseline:
+        if not baseline and not implementation:
             raise Exit("Could not find the baseline commit. Pass --baseline <sha>.", code=1)
         if exists:
             ctx.run(f"git branch -D {shlex.quote(stage)}", hide=True)
@@ -737,10 +773,8 @@ def demo_stage(
             failure = ""
             try:
                 with ctx.cd(tree):
-                    reverted = ctx.run(f"git revert --no-edit {shlex.quote(baseline)}", hide=True, warn=True)
-                    if not reverted.ok:
-                        failure = f"Reverting {baseline[:10]} failed:\n{reverted.stderr}"
-                    else:
+                    failure = _apply_implementation(ctx, baseline, implementation)
+                    if not failure:
                         files = [
                             f
                             for f in ctx.run("git ls-files schemas", hide=True).stdout.split()
@@ -763,7 +797,8 @@ def demo_stage(
                 ctx.run(f"git branch -D {shlex.quote(stage)}", hide=True, warn=True)
                 raise Exit(failure, code=1)
         tip = ctx.run(f"git rev-parse --short {shlex.quote(stage)}", hide=True).stdout.strip()
-    print(f"{stage} is at {tip}: main with {baseline[:10]} reverted, and the import declarations added.")
+    source = f"{implementation}'s commits cherry-picked" if implementation else f"{baseline[:10]} reverted"
+    print(f"{stage} is at {tip}: main with {source}, and the import declarations added.")
 
 
 def _worker_branch_refs(repo_id: str) -> list[str]:
