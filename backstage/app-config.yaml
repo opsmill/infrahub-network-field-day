@@ -282,7 +282,23 @@ infrahub:
         # The VIP block is allocated from the cluster's pool when the app is
         # exposed; vip_block_managed records that the generator owns it and is
         # never set by hand.
-        formExclude: [vip_block, vip_block_managed]
+        #
+        # `definition_pinned` is the pin generate-fabric-app writes once it has
+        # copied the catalogue entry onto the application; typing it would tell
+        # the generator the pin was already taken.
+        formExclude: [vip_block, vip_block_managed, definition_pinned]
+      # THE APPLICATION CATALOGUE (specs/035-application-catalogue). Not a
+      # service -- it inherits no ServiceGeneric, so `discover` below would never
+      # find it, and it has no generator group -- so it is named here. A Resource
+      # of type `application-definition` (`slugFor` drops the `Service` prefix),
+      # with no generated request form: entries are maintained in Infrahub by the
+      # platform team, and a requester only ever PICKS one. The provider tags an
+      # entry `requestable` when it is requestable and active, which is what the
+      # "Exposed application, with access" picker filters on.
+      - kind: ServiceApplicationDefinition
+        entity: Resource
+        type: application-definition
+        template: false
       - kind: ServiceAppAccess
         entity: Component
         groups: [service_app_accesses]

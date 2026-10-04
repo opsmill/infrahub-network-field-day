@@ -1,0 +1,103 @@
+---
+# The application catalogue (specs/035-application-catalogue).
+#
+# Loads BEFORE 36_otternet_app_services.yml, which names these entries from its
+# applications. `35a_` sorts between `35_` and `36_` (underscore before `a`),
+# and files load in filename order; tests/unit/test_object_load_order.py and
+# tests/unit/test_application_catalogue_seed_data.py hold it.
+#
+# TWO KINDS OF ENTRY.
+#
+# `whoami` is the one a requester may pick: `requestable: true`. Everything the
+# portal used to ask for -- chart, version, values, ports, block size, selector --
+# is decided here instead, by the platform team.
+#
+# The three `lab-*` entries describe the lab's own infrastructure applications
+# and are `requestable: false`, so they never appear in the portal picker. They
+# exist so that those applications are catalogue entries too and point at them;
+# each application carries its own pinned copy of the chart (and
+# `definition_pinned: true`), so its rendered output does not move.
+#
+# `default_values` IS TEXT, never JSON: Infrahub 1.10.6 answers HTTP 500 for a
+# JSON key containing a dot or a slash, and the values below are full of both
+# (otternet.lab/advertise, app.kubernetes.io/name). `whoami`'s are inline, being
+# short. The three `lab-*` entries leave `default_values` to
+# scripts/seed_app_payloads.py, which sets it from the SAME payload file
+# (payloads/*.yaml, as committed) the application's own attachment comes from,
+# so git holds one source. The metrics attachment also has dashboards folded in at
+# upload; the entry deliberately does not carry those 220 KB.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: ServiceApplicationDefinition
+  data:
+    - name: whoami
+      title: "Who am I"
+      description: "A small web service that answers with the details of each request it receives"
+      status: active
+      requestable: true
+      chart_repository: https://cowboysysop.github.io/charts/
+      chart_name: whoami
+      chart_version: "6.0.0"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      # `junos-http` is 80/tcp and already declared by the firewall, so a grant
+      # references it rather than creating a second object for the same port.
+      default_advertised_services:
+        - junos-http
+      # THE EXPOSURE BLOCK IS WHY THESE ARE NOT OPTIONAL. An application can hold
+      # a VIP block, carry a firewall rule permitting it, and still answer
+      # nothing, because a chart's Service is ClusterIP by default. The Service
+      # has to be a LoadBalancer AND carry the label named in
+      # `default_service_selector`, and externalTrafficPolicy has to be Local or
+      # the pod sees a node address and the source-prefix policy cannot apply.
+      default_values: |
+        replicaCount: 1
+
+        service:
+          type: LoadBalancer
+          externalTrafficPolicy: Local
+          ports:
+            http: 80
+
+        commonLabels:
+          otternet.lab/advertise: "true"
+
+    - name: lab-whoami
+      title: "OTTERNET demo workload"
+      description: "The lab's own whoami demonstration, three replicas across the fabric"
+      status: active
+      requestable: false
+      chart_repository: https://cowboysysop.github.io/charts/
+      chart_name: whoami
+      chart_version: "6.0.0"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-http
+
+    - name: lab-metrics
+      title: "OTTERNET metrics"
+      description: "Grafana and Prometheus: the lab's own observability"
+      status: active
+      requestable: false
+      chart_repository: https://prometheus-community.github.io/helm-charts
+      chart_name: kube-prometheus-stack
+      chart_version: "90.0.0"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-http
+
+    - name: lab-telemetry
+      title: "OTTERNET telemetry"
+      description: "Telegraf: device telemetry, collected as Infrahub's monitoring profiles say"
+      status: active
+      requestable: false
+      chart_repository: https://helm.influxdata.com/
+      chart_name: telegraf
+      chart_version: "1.8.77"
+      default_vip_block_size: 28

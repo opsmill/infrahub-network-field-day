@@ -189,6 +189,22 @@ class ServiceAppAccess(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     source_zone: RelationshipAttribute[SecurityZone]
 
 
+class ServiceApplicationDefinition(CoreNode):
+    chart_name: String
+    chart_repository: String
+    chart_version: String
+    default_service_selector: ListAttributeOptional
+    default_values: StringOptional
+    default_vip_block_size: Integer
+    description: StringOptional
+    name: String
+    requestable: Boolean
+    status: Dropdown
+    title: String
+    applications: RelationshipManager[ServiceFabricApp]
+    default_advertised_services: RelationshipManager[SecurityService]
+
+
 class AvdArtifact(CoreNode):
     name: String
     device: RelationshipAttribute[DcimFabricSwitch]
@@ -333,6 +349,7 @@ class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     chart_values: JSONAttributeOptional
     chart_version: String
     communities: ListAttributeOptional
+    definition_pinned: Boolean
     exposed: Boolean
     namespace_name: String
     policy_allow_dns: Boolean
@@ -349,6 +366,7 @@ class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     advertised_services: RelationshipManager[SecurityService]
     allowed_source_prefixes: RelationshipManager[IpamPrefix]
     cluster: RelationshipAttribute[ClusterKubernetes]
+    definition: RelationshipAttribute[ServiceApplicationDefinition]
     peering_service: RelationshipAttribute[ServiceFabricPeering]
     values_file: RelationshipAttribute[ServiceFabricAppValuesFile]
     vip_block: RelationshipAttribute[IpamPrefix]

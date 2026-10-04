@@ -49,6 +49,27 @@ Two are hand-written, because they do something the generated shape cannot.
 One request, two service objects, one branch, one proposed change. It creates an
 exposed `ServiceFabricApp` and the `ServiceAppAccess` that opens the way to it.
 
+**The application is picked from the catalogue, not described.** The form asks
+for **one entry from the application catalogue**, such as Who am I, plus what is
+yours: a name, a namespace, an owner, a cluster, a VRF, a source site, a
+justification and a reference. It does not ask for a chart repository, chart name,
+chart version, ports, block size, selector or values. Those are the platform
+team's decision and live on the entry in Infrahub (`ServiceApplicationDefinition`).
+The portal cannot override the chart or its values.
+
+The picker offers only entries that are **requestable and active**; the lab's own
+infrastructure applications are not requestable and never appear. The template
+reads the chosen entry again from Infrahub with the same two conditions before it
+creates anything, so a stale form cannot request an entry that is no longer
+offered. A new entry needs no portal change: the portal ingests the catalogue like
+any other kind. See [the application catalogue](./developer-guide/schemas.md#the-application-catalogue).
+
+**The chart is pinned when you ask.** The application is created with the entry's
+chart and version, and `generate-fabric-app` then attaches the entry's values and
+fills the advertised services, once, on your branch. A later change to the
+catalogue never upgrades an application already requested; moving one to a new
+version is its own reviewed change.
+
 The ordering is the design. `generate-app-access` reads the application's VIP
 block and `generate-fabric-app` is what allocates it; both fire on creation
 through independent rules, so a grant created beside its application races the
@@ -61,16 +82,20 @@ It also regenerates the fabric before opening the change, so the reviewer sees
 the border leaf's rendered configuration gain its advertisement line rather than
 a JSON attribute changing.
 
-Two fields carry traps worth knowing:
+Two things the catalogue entry carries are traps worth knowing, because nobody
+types them any more:
 
-- **Ports to advertise** names `SecurityService` objects. The grant derives its
+- **Advertised services** name `SecurityService` objects. The grant derives its
   permitted ports from them and *refuses* rather than guessing when an
   application advertises nothing — so the rule permits the port the application
-  actually declared, as one object rather than two numbers that must agree.
-- **Chart values** are prefilled with a working exposure block. A chart's Service
-  is ClusterIP by default, and an application can be exposed, hold a VIP block
-  and be permitted by the firewall while answering nothing. Reaching it needs a
-  LoadBalancer Service *and* the label named in the service selector.
+  actually declared, as one object rather than two numbers that must agree. The
+  entry names them, and `generate-fabric-app` applies them when the request left
+  them empty.
+- **Default values** carry a working exposure block. A chart's Service is
+  ClusterIP by default, and an application can be exposed, hold a VIP block and be
+  permitted by the firewall while answering nothing. Reaching it needs a
+  LoadBalancer Service *and* the label named in the service selector, which is why
+  the `whoami` entry's values say both.
 
 ### Revoke access
 

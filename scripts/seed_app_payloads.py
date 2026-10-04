@@ -53,6 +53,29 @@ PAYLOADS: dict[str, tuple[str, str, str]] = {
 }
 
 
+# Catalogue entry -> the application whose payload file is its `default_values`
+# (specs/035-application-catalogue).
+#
+# THE THREE `lab-*` ENTRIES TAKE THEIR VALUES FROM THE SAME PAYLOAD FILE AS THE
+# APPLICATION THEY DESCRIBE, so git holds one source and the entry and the
+# application's pinned attachment cannot disagree. `whoami`, the requestable
+# entry, is not here: its values are short and sit inline in
+# objects/35a_otternet_app_catalogue.yml.
+#
+# The text is the payload file AS COMMITTED, not the assembled attachment: the
+# metrics application's attachment has 220 KB of Grafana dashboard JSON folded
+# in at upload time (`assemble_payload`), and a 237 KB attribute would be read
+# in full by every catalogue refresh and every page of the entry. The entry
+# therefore holds the reviewable YAML, and the dashboards stay a property of the
+# application's own attachment. It is a Text attribute, so the keys with dots
+# and slashes that break a JSON attribute are harmless.
+DEFINITION_PAYLOADS: dict[str, str] = {
+    "lab-whoami": "otternet-demo",
+    "lab-metrics": "otternet-metrics",
+    "lab-telemetry": "otternet-telemetry",
+}
+
+
 # Applications whose values payload has Grafana dashboards folded in at upload
 # time (cycle 034): application name -> directory of dashboard JSON files.
 #
@@ -107,6 +130,32 @@ def assemble_payload(app_name: str, path: Path) -> bytes:
     return (header + yaml.safe_dump(values, sort_keys=False, width=4096)).encode()
 
 
+def definition_default_values(entry: str) -> str:
+    """The text an infrastructure catalogue entry carries as `default_values`."""
+    app_name = DEFINITION_PAYLOADS[entry]
+    filename = PAYLOADS[app_name][0]
+    return (PAYLOAD_DIR / filename).read_text(encoding="utf-8")
+
+
+async def seed_definitions(client: InfrahubClient, branch: str) -> int:
+    """Set each infrastructure entry's `default_values`. Returns how many changed.
+
+    Guarded on the current text, so a second run saves nothing and moves nothing.
+    """
+    changed = 0
+    for entry in DEFINITION_PAYLOADS:
+        wanted = definition_default_values(entry)
+        node = await client.get(kind="ServiceApplicationDefinition", branch=branch, name__value=entry)
+        if node.default_values.value == wanted:  # type: ignore[attr-defined]
+            print(f"{entry}: default_values unchanged")
+            continue
+        node.default_values.value = wanted  # type: ignore[attr-defined]
+        await node.save(update_group_context=False)
+        changed += 1
+        print(f"{entry}: default_values set ({len(wanted)} characters)")
+    return changed
+
+
 async def seed(branch: str) -> int:
     """Upload every payload. Returns the number of files actually written."""
     token = os.environ.get("INFRAHUB_API_TOKEN")
@@ -159,6 +208,8 @@ async def seed(branch: str) -> int:
         uploaded += int(wrote)
         print(f"{app_name}: {'uploaded' if wrote else 'unchanged'} ({len(content)} bytes)")
 
+    # After the payloads, so an entry is only ever set from a file that exists.
+    uploaded += await seed_definitions(client, branch)
     return uploaded
 
 

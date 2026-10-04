@@ -46,6 +46,7 @@ Regenerate the typed protocol classes after any schema change (see [the command 
 | `objects/objects.yml` | `Avd.Artifact`, `Avd.HostvarFile`, `Avd.StructuredConfigFile` |
 | `service/service.yml` | `Service.Generic` plus the `Service.GenericDevice` / `Service.GenericInterface` binding generics, and the one extension block coupling DCIM to the service layer |
 | `service/kubernetes_services.yml` | `Service.FabricPeering`, `Service.FabricApp` |
+| `catalogue/application_catalogue.yml` | `Service.ApplicationDefinition` — the application catalogue. **Not a service**, so it is not under `service/` |
 | `service/access_services.yml` | `Service.AppAccess` |
 | `service/wan_services.yml` | `Service.L3vpn`, `Service.TenantCloud` |
 | `service/network_services.yml` | `Service.NetworkSegment` — a subnet, a VLAN and a gateway, **allocated** rather than named |
@@ -500,6 +501,43 @@ the ports its VIP answers on through `advertised_services`, a relationship to th
 `SecurityService` objects a firewall rule already names as its destination. That keeps the
 application's advertised port and the rule's permitted port one object rather than two numbers
 that have to agree.
+
+## The application catalogue
+
+`ServiceApplicationDefinition` is a **catalogue entry**: what the platform team has decided an
+application is. A requester picks one in the portal and supplies only what is theirs, so the
+chart repository, name, version, values, block size and selector are no longer typed.
+
+| Attribute or relationship | Notes |
+| --- | --- |
+| `name` (unique, the HFID), `title`, `description` | `title` is the display label ("Who am I"). |
+| `chart_repository`, `chart_name`, `chart_version` | Mandatory. |
+| `default_values` | **Text**, never JSON: Infrahub 1.10.6 returns HTTP 500 for a JSON key containing a dot or a slash, and every Kubernetes label has both. |
+| `default_vip_block_size` | Bounded 24 to 30, like the application's own. |
+| `default_service_selector` | `key=value` strings, for the same 500. |
+| `default_advertised_services` | `SecurityService` objects, the same ones a grant derives its ports from. |
+| `requestable` | Boolean, **false by default**, so an entry is never user-facing by accident. The lab's own applications stay false. |
+| `status` | `active` or `deprecated`. Only an active entry is requestable. |
+| `applications` | The inverse of `ServiceFabricApp.definition`; a delete never cascades either way. |
+
+It lives in `schemas/catalogue/`, not `schemas/service/`. The service-layer contract tests iterate
+`service/*.yml` and require every node there to inherit `ServiceGeneric` and `GeneratorTarget`, which a
+catalogue entry deliberately does not: it has no owner, no lifecycle a generator moves and no generator
+group. It sits in the Services menu section, because that is what requests are made from, and
+`tests/unit/test_service_layer_menu_contract.py` keeps it in its own `CATALOGUE_KINDS` set.
+
+**The pin.** `ServiceFabricApp` gains an **optional** `definition` (never mandatory: Infrahub refuses
+that against existing data) and an optional Boolean `definition_pinned`. An application with no
+definition behaves exactly as before. One with a definition is **pinned once** on its request
+branch: `generate-fabric-app` copies the chart fields from the entry, attaches `default_values` as the
+application's values file, and fills the selector and advertised services when the request left them
+empty. `definition_pinned` is set in the same save as the chart fields and is the whole guard, so a later
+edit to the entry changes nothing already requested. An upgrade is its own reviewed change to that
+application. Seeded applications are created on `main`, where no event rule fires, so the seed data
+carries the pin itself (`definition_pinned: true`).
+
+The `chart_*` fields on the application stay mandatory — an existing contract test asserts it — so the
+portal reads the entry and sends them in the create.
 
 ## Application payload attachment
 

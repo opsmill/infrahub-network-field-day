@@ -172,6 +172,25 @@ nodes:
           - name: dex
             label: Dex
             description: "People sign in through the lab's single Dex issuer"
+      # THE ONCE-ONLY MARKER for pinning from a catalogue entry.
+      #
+      # `generate-fabric-app` copies the entry's chart fields and values onto a
+      # requested application and sets this in the SAME save, so a later run --
+      # or a later edit to the entry -- finds it true and touches nothing. That
+      # is what keeps a catalogue change from silently upgrading a running
+      # application.
+      #
+      # A write-back, so it is NEVER watched in triggers.yml. Set by the
+      # generator, or by seed data that already carries the pin (seeded
+      # applications are created on main, where no event rule fires). Never set
+      # by hand otherwise: true tells the generator the pin has been taken.
+      - name: definition_pinned
+        kind: Boolean
+        label: Pinned From Catalogue
+        optional: true
+        default_value: false
+        description: "Set once the catalogue entry's chart and values have been copied onto this application"
+        order_weight: 1425
       - name: service_selector
         kind: List
         label: Service Selector
@@ -368,6 +387,29 @@ nodes:
         description: "Services this application's VIP answers on; a grant permits these"
         identifier: service__app_advertised_services
         order_weight: 945
+      # WHERE THIS APPLICATION CAME FROM (specs/035-application-catalogue).
+      #
+      # OPTIONAL, NEVER MANDATORY: Infrahub refuses to make a relationship
+      # mandatory against existing data, and an application with no definition
+      # keeps working exactly as it did, with its inline chart fields.
+      #
+      # NOT A WATCHED INPUT in triggers.yml. Re-pointing an application at
+      # another entry is an upgrade, and an upgrade is its own reviewed change;
+      # an event rule here would rebuild it on every edit.
+      #
+      # `no-action`, both ways: deleting an entry must not delete the
+      # applications pinned from it.
+      - name: definition
+        peer: ServiceApplicationDefinition
+        label: Catalogue Entry
+        kind: Attribute
+        cardinality: one
+        optional: true
+        direction: outbound
+        on_delete: no-action
+        description: "The catalogue entry this application was requested from"
+        identifier: service__app_definition
+        order_weight: 955
       - name: values_file
         peer: ServiceFabricAppValuesFile
         label: Chart Values File

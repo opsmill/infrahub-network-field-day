@@ -265,19 +265,30 @@ laptop on purpose.
 | Application name | `otter-shop` |
 | What it is | anything a stranger would understand |
 | Kubernetes namespace | `otter-shop` |
-| Chart repository / name / version | `https://cowboysysop.github.io/charts/` / `whoami` / `6.0.0` (the seeded application's chart) |
+| Application | **Who am I** (the only entry in the picker) |
 | Request reference | `demo1`, or anything not used before |
 
-Leave the rest. The defaults are the cluster `otternet`, VRF `K8S_PROD`, ports
-`junos-http`, a `/28` VIP block, source site `branch-office`, and chart values
-carrying a working exposure block: a LoadBalancer Service with the
-`otternet.lab/advertise: "true"` label the service selector names.
+Leave the rest. The defaults are the cluster `otternet`, VRF `K8S_PROD` and source
+site `branch-office`.
+
+The form has no chart repository, version, port, block-size or values field any more:
+the application is picked from the application catalogue, and the platform team's
+entry decides all of it. Say so while the picker is on screen: the lab's own
+Grafana, Prometheus and Telegraf are catalogue entries too, and are not in the
+list, because they are not requestable. The entry for **Who am I** is chart
+`whoami` 6.0.0, a `/28` VIP block, the `junos-http` service and values carrying a
+working exposure block: a LoadBalancer Service with the `otternet.lab/advertise:
+"true"` label the service selector names.
 
 The run takes **70 to 85 seconds**, most of it two waits. What to say while it
 runs, step by step, because the step list is on screen:
 
+- It looks the chosen entry up in Infrahub and **reads it again** with the
+  conditions the picker used, requestable and active, so a stale form cannot get
+  past it.
 - It creates a branch, `implement_otter-shop_demo1`, and the application on it,
-  **as `alice`**. The write carries her account through the mutation's `context`,
+  **as `alice`**, with the entry's chart and version. The generator then **pins**
+  the rest from the entry, once: the values file and the advertised service. The write carries her account through the mutation's `context`,
   so the events are attributed to her, not to the portal's service account.
 - It **waits for the VIP block to be allocated** before it creates the grant.
   Both generators fire on creation and nothing else orders them; a grant that

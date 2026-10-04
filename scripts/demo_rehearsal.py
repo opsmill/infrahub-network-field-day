@@ -65,6 +65,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 import httpx
+import yaml
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -443,32 +444,71 @@ def act_four() -> None:
     check(gone and proposed_change(branch) is None, "--revert removed the branch and the proposed change")
 
 
-def act_one(reference: str) -> None:
-    stage("Act one: ask for an application (up to the merge)")
-    app = "otter-shop"
-    branch = f"implement_{app}_{reference}"
-    CREATED_BRANCHES.append(branch)
-    values = {
+# ACT ONE PICKS AN APPLICATION FROM THE CATALOGUE (specs/035-application-catalogue).
+#
+# The request no longer types a chart repository, name, version, ports, block size,
+# selector or values: those are the platform team's decision, held on the catalogue
+# entry. The one value that stands in for all of them is the entry's entity ref --
+# the picker's value, `resource:default/<name>`. What the entry pins is asserted
+# below against the rendered artifact, so the check stays as strong as when the
+# fields were typed.
+ACT_ONE_ENTRY = "whoami"
+ACT_ONE_ENTITY = f"resource:default/{ACT_ONE_ENTRY}"
+PINNED_CHART = {
+    "repository": "https://cowboysysop.github.io/charts/",
+    "name": "whoami",
+    "version": "6.0.0",
+}
+# The values the `whoami` entry carries, as the transform renders them.
+PINNED_VALUES = {
+    "replicaCount": 1,
+    "service": {"type": "LoadBalancer", "externalTrafficPolicy": "Local", "ports": {"http": 80}},
+    "commonLabels": {"otternet.lab/advertise": "true"},
+}
+
+
+def act_one_values(app: str, reference: str) -> dict[str, Any]:
+    """What act one submits to the curated template: only what is the requester's."""
+    return {
         "app_name": app,
         "description": "A rehearsal of the demo; never merged",
         "namespace_name": app,
         "cluster": "otternet",
         "vrf": "K8S_PROD",
         "owner": "acme",
-        "chart_repository": "https://cowboysysop.github.io/charts/",
-        "chart_name": "whoami",
-        "chart_version": "6.0.0",
-        "advertised_services": ["junos-http"],
-        "service_selector": ["otternet.lab/advertise=true"],
-        "vip_block_size": 28,
-        "values_file_content": (
-            "replicaCount: 1\n\nservice:\n  type: LoadBalancer\n  externalTrafficPolicy: Local\n"
-            '  ports:\n    http: 80\n\ncommonLabels:\n  otternet.lab/advertise: "true"\n'
-        ),
+        "catalogue_entry": ACT_ONE_ENTITY,
         "source_site": "branch-office",
         "justification": "demo rehearsal",
         "request_reference": reference,
     }
+
+
+def pinned_chart_problems(manifest: str) -> list[str]:
+    """What is wrong with a rendered Crossplane FabricApp's chart, as plain sentences.
+
+    Empty means the artifact shows chart `whoami` 6.0.0 and the catalogue entry's values.
+    """
+    chart = ((yaml.safe_load(manifest) or {}).get("spec") or {}).get("chart") or {}
+    problems = [
+        f"chart.{key} is {chart.get(key)!r}, not {wanted!r}"
+        for key, wanted in PINNED_CHART.items()
+        if chart.get(key) != wanted
+    ]
+    values = chart.get("values") or {}
+    problems += [
+        f"chart.values.{key} is {values.get(key)!r}, not {wanted!r}"
+        for key, wanted in PINNED_VALUES.items()
+        if values.get(key) != wanted
+    ]
+    return problems
+
+
+def act_one(reference: str) -> None:
+    stage("Act one: ask for an application (up to the merge)")
+    app = "otter-shop"
+    branch = f"implement_{app}_{reference}"
+    CREATED_BRANCHES.append(branch)
+    values = act_one_values(app, reference)
     with timed("act one: portal request, start to proposed change"):
         result = run_template("template:default/exposed-app-with-access-request", values)
     if not check(
@@ -497,6 +537,32 @@ def act_one(reference: str) -> None:
         branch=branch,
     )["ServiceFabricApp"]["edges"][0]["node"]["vip_block"]["node"]["display_label"].split()[0]
 
+    # THE PIN. The request named an entry and nothing else, so everything the
+    # application runs came from the catalogue: its chart, copied onto the
+    # application once, its values as an attached file, and the services a grant
+    # permits. `definition_pinned` is what stops a later catalogue edit from moving it.
+    pinned = gql(
+        """query ($n: String!) { ServiceFabricApp(name__value: $n) { edges { node {
+             chart_name { value } chart_version { value } definition_pinned { value }
+             definition { node { name { value } } } values_file { node { id } }
+             advertised_services { edges { node { name { value } } } } } } } }""",
+        {"n": app},
+        branch=branch,
+    )["ServiceFabricApp"]["edges"][0]["node"]
+    pinned_from = ((pinned["definition"] or {}).get("node") or {}).get("name", {}).get("value")
+    check(
+        pinned_from == ACT_ONE_ENTRY, f"the application points at the {ACT_ONE_ENTRY} catalogue entry", str(pinned_from)
+    )
+    check(
+        pinned["definition_pinned"]["value"] is True
+        and pinned["chart_name"]["value"] == PINNED_CHART["name"]
+        and pinned["chart_version"]["value"] == PINNED_CHART["version"],
+        "the application was pinned: chart whoami 6.0.0 copied onto it",
+    )
+    check(bool((pinned["values_file"] or {}).get("node")), "the entry's values were attached as the application's file")
+    services = [e["node"]["name"]["value"] for e in pinned["advertised_services"]["edges"]]
+    check(services == ["junos-http"], "the entry's advertised service was applied", str(services))
+
     with timed("act one: proposed change opened, until every validator is done"):
         validators = settled_validators(branch)
     check_all_green(validators, "every validator on the proposed change is green")
@@ -519,6 +585,17 @@ def act_one(reference: str) -> None:
         names >= {EOS, JUNOS, "Crossplane FabricApp"},
         "EOS, Junos and FabricApp artifacts re-rendered",
         ", ".join(sorted(names)),
+    )
+    manifest_node = artifacts(branch).get(("Crossplane FabricApp", app))
+    problems = (
+        pinned_chart_problems("\n".join(storage(manifest_node["storage_id"]["value"])))
+        if manifest_node
+        else ["no Crossplane FabricApp artifact for the application"]
+    )
+    check(
+        not problems,
+        "the rendered FabricApp shows chart whoami 6.0.0 and the catalogue entry's values",
+        "; ".join(problems),
     )
     eos = {target: diff for (name, target), diff in changed.items() if name == EOS}
     added = [line.strip() for diff in eos.values() for line in diff[1]]

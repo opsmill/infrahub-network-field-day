@@ -106,6 +106,30 @@ application with no block does not degrade — `crossplane_fabric_app.py` **rais
   (`10.112.240.0/24 le 32`), so a block from anywhere else is advertised by the cluster and
   refused by the fabric.
 
+**`generate-fabric-app` also pins an application from its catalogue entry**
+(`ServiceApplicationDefinition`, see [schemas](./schemas.md#the-application-catalogue)). On the
+build path, and never for a withdrawn status, `_pin_definition` runs first. It reads the entry
+through the SDK rather than the generator's query, because a new query model needs
+`schema.graphql`, which only a live Infrahub can re-export; `generate_fabric_app.gql` and its model
+did not change. Four traps:
+
+- **The file is written before the marker.** The values file is created from `default_values`, then
+  the chart fields and `definition_pinned` are saved together. The marker is the commit point, so a
+  failure in between is retried rather than recorded as done.
+- **It never writes `vip_block_size`.** That field is a watched input of the application's event
+  rules; a write-back to it would feed the run into the next. The portal sends the entry's default
+  in the create, and the generator fills only `service_selector` and `advertised_services`, both
+  unwatched, and only when the request left them empty.
+- **`definition` and `definition_pinned` are not watched.** Re-pointing an application is an upgrade
+  and its own reviewed change; watching `definition` would rebuild on every edit. See
+  [service triggers](./service-triggers.md).
+- **A catalogue edit never reaches a running application.** The artifact reads the application's own
+  fields, and `crossplane_fabric_app.gql` selects nothing from the entry, which a test asserts.
+
+`crossplane_fabric_app.build_chart` also **raises** for a chart name without a repository and a
+version, naming the application. The schema keeps all three mandatory together, but a catalogue
+request is pinned in two steps, so a half-pinned application is refused where it can be read.
+
 `generate-network-segment` and `generate-fabric-app` are the two generators that **allocate
 rather than select**: every other one here derives from objects that already exist, while these
 take the next free resource from a pool. Two things to know before changing the segment one:

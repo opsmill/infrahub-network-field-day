@@ -417,13 +417,22 @@ def build_chart(app: AppNode, values: Any) -> dict[str, Any]:
     if not name:
         return {}
 
-    chart: dict[str, Any] = {"name": name}
     repository = _value(app.chart_repository)
-    if repository:
-        chart["repository"] = repository
     version = _value(app.chart_version)
-    if version:
-        chart["version"] = version
+    # THE XRD REQUIRES ALL THREE TOGETHER (`chart` carries `required: [repository,
+    # name, version]`). The schema says so too, but an application can now be
+    # created by a path that sets them in two steps -- a catalogue request is
+    # pinned by its generator -- so a half-pinned one is refused here, where it
+    # names itself, rather than delivered to a cluster that rejects it.
+    missing = [field for field, value in (("repository", repository), ("version", version)) if not value]
+    if missing:
+        msg = (
+            f"application {_value(app.name)!r} names chart {name!r} but no {' or '.join(missing)}; "
+            "the XRD requires chart.repository, chart.name and chart.version together"
+        )
+        raise ValueError(msg)
+
+    chart: dict[str, Any] = {"name": name, "repository": repository, "version": version}
     if values:
         chart["values"] = values
     return chart
