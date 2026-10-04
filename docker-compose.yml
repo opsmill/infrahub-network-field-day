@@ -321,7 +321,9 @@ services:
   task-worker:
     deploy:
       mode: replicated
-      replicas: 2
+      # Infrahub's default is two. The builder demonstration sets TASK_WORKER_REPLICAS=1 in .env: see
+      # docs/docs/demo-builder.md for why (the workers' clones diverge after a git-synced merge).
+      replicas: ${TASK_WORKER_REPLICAS:-2}
     image: "${INFRAHUB_DOCKER_IMAGE:-registry.opsmill.io/opsmill/infrahub}:${VERSION:-${INFRAHUB_BASE_VERSION:-1.10.6}}"
     command: prefect worker start --type infrahubasync --pool infrahub-worker --with-healthcheck
     restart: unless-stopped
