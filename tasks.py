@@ -800,6 +800,48 @@ def _worker_branch_refs(repo_id: str) -> list[str]:
     return refs
 
 
+def _ensure_workers_on_default_branch(repo: dict[str, str]) -> None:
+    """Put every task worker's main worktree on the repository's default branch, or say why it cannot be.
+
+    See `worker_needs_default_branch`: a merge pushes only from a worker on `demo-main`, so one on `main`
+    makes a git-synced merge succeed in the graph and fail to reach the remote. The switch keeps the
+    worktree's commit (`checkout -B`), so nothing Infrahub has merged there is lost.
+    """
+    import subprocess  # noqa: S404 - fixed argv, no shell
+
+    from solution_arista_avd import demo_release as dr
+
+    if repo.get("kind") != "CoreRepository" or not repo.get("id"):
+        return
+    default = repo["default_branch"]
+    clone = f"/opt/infrahub/git/{repo['id']}/main"
+    listing = subprocess.run(
+        ["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=task-worker"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    for container in listing.stdout.split():
+
+        def git(*args: str, container: str = container) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(  # noqa: S603
+                ["docker", "exec", container, "git", "-C", clone, *args],  # noqa: S607
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        current = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        if not dr.worker_needs_default_branch(current, default):
+            continue
+        if git("status", "--porcelain").stdout.strip():
+            raise Exit(f"Worker {container[:12]} is on '{current}' with local changes; fix its clone by hand.", code=1)
+        switched = git("checkout", "-q", "-B", default, "HEAD")
+        if switched.returncode != 0:
+            raise Exit(f"Could not put worker {container[:12]} on '{default}': {switched.stderr.strip()}", code=1)
+        print(f" - Worker {container[:12]} was on '{current}'; it is on '{default}' now", flush=True)
+
+
 def _taken_branch_names(ctx: Context, repo_id: str) -> list[str]:
     """Every name a release branch could collide with: Infrahub's branches, the remote's and the workers' refs."""
     with ctx.cd(MAIN_DIRECTORY_PATH):
@@ -837,6 +879,7 @@ def demo_release(
     repo = _repository()
     if not repo:
         raise Exit("No repository is registered. Bootstrap with INFRAHUB_REPOSITORY_URL set.", code=1)
+    _ensure_workers_on_default_branch(repo)
     if run < 1:
         from solution_arista_avd import demo_restore as restore_module
 
@@ -1025,6 +1068,7 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int =
     from solution_arista_avd import demo_release as dr
 
     repo = _repository()
+    _ensure_workers_on_default_branch(repo)
     if run < 1:
         from solution_arista_avd import demo_restore as restore_module
 
