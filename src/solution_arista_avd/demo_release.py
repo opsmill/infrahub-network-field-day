@@ -18,16 +18,21 @@ follow on its own. Five facts shape it:
   repository import carries the schema and the data as well as the code. ``main``
   declares neither, so nothing else loads them.
 * A commit Infrahub has pulled is never rewritten, so every release uses a new
-  ``-<run>`` suffix, and ``demo-main`` is reset forward (a commit with the baseline's
-  tree), not by deleting it.
+  ``-<run>`` suffix, and ``demo-main`` is reset forward, not by deleting it.
+* A reset undoes only what the release added: the files the staged branch changes relative
+  to the ``main`` commit it was cut from. Every other file of ``demo-main`` stays as it is,
+  because ``demo-main`` can be newer than that commit (it is advanced by Infrahub merges only,
+  and a restore that copied a whole old tree back reverted every later change).
 
 Only pure functions live here; ``tasks.py`` does the I/O. Host-side only.
 """
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
+from dataclasses import dataclass, field
 
 STAGE_PREFIX = "stage/"
 DEMO_PREFIX = "demo/"
@@ -323,3 +328,123 @@ def declare_schemas_and_objects(infrahub_yml: str, schema_files: list[str], obje
         *[f"  - {p}" for p in object_files],
     ]
     return infrahub_yml.rstrip("\n") + "\n" + "\n".join(lines) + "\n"
+
+
+# `git ls-tree -r` prints "<mode> <type> <sha>\t<path>".
+def parse_tree_listing(listing: str) -> dict[str, str]:
+    """Path to blob id, from the output of ``git ls-tree -r``."""
+    files: dict[str, str] = {}
+    for line in listing.splitlines():
+        meta, _, path = line.partition("\t")
+        parts = meta.split()
+        if path and len(parts) == 3:
+            files[path] = parts[2]
+    return files
+
+
+def capability_paths(base: dict[str, str], stage: dict[str, str]) -> list[str]:
+    """The files the staged branch adds, changes or removes relative to the ``main`` commit it was cut from.
+
+    ``base`` and ``stage`` map path to blob id. ``.infrahub.yml`` is left out: it is handled by
+    ``revert_declarations``, because the default branch keeps its other entries.
+    """
+    return sorted(
+        path
+        for path in set(base) | set(stage)
+        if base.get(path) != stage.get(path) and path not in _STAGE_BOOKKEEPING_FILES
+    )
+
+
+def require_capability_files(changed_by_stage: list[str], stage: str) -> None:
+    """Refuse a release whose staged branch changes no capability file.
+
+    Such a branch carries no schema node, so the release would wait for the schema to load until
+    its timeout. Commonly the cause is a staged branch built before the capability existed.
+    """
+    if all(f in _STAGE_BOOKKEEPING_FILES for f in changed_by_stage):
+        msg = (
+            f"'{stage}' changes no file besides .infrahub.yml compared with the main commit it was cut from, "
+            "so it carries no capability and the release would wait for a schema that never loads. "
+            "Rebuild it with `invoke demo-stage --force`."
+        )
+        raise DemoReleaseError(msg)
+
+
+@dataclass(frozen=True)
+class RestorePlan:
+    """What a reset does to the default branch's files."""
+
+    remove: list[str] = field(default_factory=list)  # files the release added, and the default branch still has
+    restore: list[str] = field(default_factory=list)  # files to take back from the baseline commit
+    diverged: list[str] = field(default_factory=list)  # in ``restore``, but changed on the default branch since
+
+
+def plan_restore(base: dict[str, str], stage: dict[str, str], default: dict[str, str]) -> RestorePlan:
+    """Which files to remove and which to put back, so only the release's own changes are undone.
+
+    ``base`` is the ``main`` commit the staged branch was cut from, ``stage`` the staged branch and
+    ``default`` the default branch's current tree, each as path to blob id. A file the release changed
+    is returned to its baseline version even when the default branch edited it since, because leaving
+    it could leave a query naming the removed kind; those files are listed in ``diverged`` so the
+    caller can say so. Files the release did not touch are not in the plan at all.
+    """
+    remove: list[str] = []
+    restore: list[str] = []
+    diverged: list[str] = []
+    for path in capability_paths(base, stage):
+        in_default = path in default
+        if path not in base:
+            if in_default:
+                remove.append(path)
+        elif path not in stage:
+            if not in_default:
+                restore.append(path)
+        elif in_default and default[path] != base[path]:
+            restore.append(path)
+            if default[path] != stage[path]:
+                diverged.append(path)
+    return RestorePlan(remove=remove, restore=restore, diverged=diverged)
+
+
+def _find_block(lines: list[str], block: list[str], after: list[str]) -> int:
+    """Index where ``block`` occurs in ``lines``, preferring the occurrence that follows ``after``; -1 if absent."""
+    hits = [i for i in range(len(lines) - len(block) + 1) if lines[i : i + len(block)] == block]
+    if not hits:
+        return -1
+    if len(hits) > 1 and after:
+        for i in hits:
+            if lines[max(0, i - len(after)) : i] == after:
+                return i
+    return hits[0]
+
+
+def revert_declarations(base_yml: str, stage_yml: str, default_yml: str) -> tuple[str, list[str]]:
+    """``default_yml`` without the entries the staged branch added to ``.infrahub.yml``; the others stay.
+
+    The difference between ``base_yml`` (the ``main`` commit the branch was cut from) and ``stage_yml`` is
+    a set of line blocks: the capability's queries, transform, generator and menu entries, and the
+    ``schemas:`` and ``objects:`` sections. Each block is looked for in ``default_yml`` and put back to its
+    baseline lines, so entries other work added to ``default_yml`` survive. Returns the new text and the
+    blocks that could not be found, which the caller prints. A block already absent counts as done.
+    """
+    base, stage = base_yml.splitlines(), stage_yml.splitlines()
+    lines = default_yml.splitlines()
+    unresolved: list[str] = []
+    ops = [op for op in difflib.SequenceMatcher(None, base, stage, autojunk=False).get_opcodes() if op[0] != "equal"]
+    for tag, i1, i2, j1, j2 in reversed(ops):
+        added, original = stage[j1:j2], base[i1:i2]
+        if not added:  # the release deleted lines: nothing to find; put them back only if the default lost them
+            if original and _find_block(lines, original, []) < 0:
+                unresolved.append(f"deleted by the release, not put back: {original[0].strip()}")
+            continue
+        at = _find_block(lines, added, stage[max(0, j1 - 3) : j1])
+        if at < 0:
+            if tag == "replace" and _find_block(lines, original, []) >= 0:
+                continue  # already back to the baseline lines
+            if tag == "insert":
+                continue  # already gone
+            unresolved.append(f"not found in the default branch's .infrahub.yml: {added[0].strip()}")
+            continue
+        lines[at : at + len(added)] = original
+    text = "\n".join(lines)
+    return (text + "\n" if text else text), unresolved

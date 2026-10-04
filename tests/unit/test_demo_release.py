@@ -373,3 +373,131 @@ def test_the_import_bookkeeping_file_alone_cannot_say_whether_it_is_merged() -> 
     """`.infrahub.yml` is on the default branch either way, so the caller must judge another way."""
     assert dr.capability_is_merged([".infrahub.yml"], {".infrahub.yml"}) is None
     assert dr.capability_is_merged([], {".infrahub.yml"}) is None
+
+
+# --- restoring only the capability --------------------------------------------
+
+BASE_YML = "queries:\n  - name: a\n    file_path: a.gql\nmenus:\n  - menus/m.yml\n"
+STAGE_YML = (
+    "queries:\n  - name: a\n    file_path: a.gql\n  - name: internet\n    file_path: internet.gql\n"
+    "menus:\n  - menus/m.yml\nschemas:\n  - schemas/internet.yml\nobjects:\n  - objects/internet.yml\n"
+)
+
+
+def test_parse_tree_listing_reads_git_ls_tree_output() -> None:
+    listing = "100644 blob abc123\tschemas/a.yml\n100644 blob def456\tpath with space.md\n"
+
+    assert dr.parse_tree_listing(listing) == {"schemas/a.yml": "abc123", "path with space.md": "def456"}
+
+
+def test_capability_paths_are_what_the_stage_changes_against_its_cut_point() -> None:
+    base = {"a.yml": "1", "q.gql": "1", ".infrahub.yml": "1"}
+    stage = {"a.yml": "1", "q.gql": "2", "schemas/internet.yml": "9", ".infrahub.yml": "2"}
+
+    assert dr.capability_paths(base, stage) == ["q.gql", "schemas/internet.yml"]
+
+
+def test_plan_removes_capability_files_and_restores_changed_ones() -> None:
+    base = {"q.gql": "1", "keep.md": "1"}
+    stage = {"q.gql": "2", "schemas/internet.yml": "9", "keep.md": "1"}
+    default = {"q.gql": "2", "schemas/internet.yml": "9", "keep.md": "1"}
+
+    plan = dr.plan_restore(base, stage, default)
+
+    assert plan.remove == ["schemas/internet.yml"]
+    assert plan.restore == ["q.gql"]
+    assert plan.diverged == []
+
+
+def test_plan_leaves_a_default_branch_newer_than_the_staging_point_alone() -> None:
+    # demo-main is older than main: it lacks triggers.yml and new.md, which main gained after staging.
+    base = {"triggers.yml": "2", "new.md": "1", "q.gql": "1"}
+    stage = {"triggers.yml": "2", "new.md": "1", "q.gql": "2", "schemas/internet.yml": "9"}
+    default = {"triggers.yml": "1", "q.gql": "2", "schemas/internet.yml": "9"}
+
+    plan = dr.plan_restore(base, stage, default)
+
+    assert "triggers.yml" not in plan.remove + plan.restore
+    assert "new.md" not in plan.remove + plan.restore
+    assert plan.remove == ["schemas/internet.yml"]
+    assert plan.restore == ["q.gql"]
+
+
+def test_plan_keeps_files_changed_on_the_default_branch_after_staging() -> None:
+    base = {"tasks.py": "1", "q.gql": "1"}
+    stage = {"tasks.py": "1", "q.gql": "2", "schemas/internet.yml": "9"}
+    default = {"tasks.py": "5", "q.gql": "2", "schemas/internet.yml": "9"}
+
+    plan = dr.plan_restore(base, stage, default)
+
+    assert "tasks.py" not in plan.remove + plan.restore
+
+
+def test_plan_reports_a_capability_file_edited_after_staging() -> None:
+    base = {"q.gql": "1"}
+    stage = {"q.gql": "2"}
+    default = {"q.gql": "3"}
+
+    plan = dr.plan_restore(base, stage, default)
+
+    assert plan.restore == ["q.gql"]
+    assert plan.diverged == ["q.gql"]
+
+
+def test_plan_does_nothing_when_the_capability_is_not_on_the_default_branch() -> None:
+    base = {"q.gql": "1"}
+    stage = {"q.gql": "2", "schemas/internet.yml": "9"}
+
+    plan = dr.plan_restore(base, stage, {"q.gql": "1"})
+
+    assert plan == dr.RestorePlan()
+
+
+def test_plan_with_a_stage_that_has_no_capability_files_is_empty() -> None:
+    files = {"a.yml": "1", ".infrahub.yml": "1"}
+
+    assert dr.plan_restore(files, {**files, ".infrahub.yml": "2"}, files) == dr.RestorePlan()
+
+
+def test_declarations_of_the_capability_are_removed_and_other_entries_kept() -> None:
+    default = (
+        "queries:\n  - name: a\n    file_path: a.gql\n  - name: internet\n    file_path: internet.gql\n"
+        "  - name: later\n    file_path: later.gql\n"
+        "menus:\n  - menus/m.yml\nschemas:\n  - schemas/internet.yml\nobjects:\n  - objects/internet.yml\n"
+    )
+
+    text, unresolved = dr.revert_declarations(BASE_YML, STAGE_YML, default)
+
+    assert (
+        text
+        == "queries:\n  - name: a\n    file_path: a.gql\n  - name: later\n    file_path: later.gql\nmenus:\n  - menus/m.yml\n"
+    )
+    assert unresolved == []
+
+
+def test_declarations_are_untouched_when_the_capability_is_not_there() -> None:
+    default = BASE_YML + "triggers:\n  - triggers.yml\n"
+
+    text, unresolved = dr.revert_declarations(BASE_YML, STAGE_YML, default)
+
+    assert text == default
+    assert unresolved == []
+
+
+def test_declarations_on_a_default_branch_that_lacks_newer_entries_do_not_gain_them() -> None:
+    newer_base = BASE_YML + "triggers:\n  - triggers.yml\n"
+    default = STAGE_YML  # demo-main has the capability but not the later `triggers:` entry
+
+    text, _ = dr.revert_declarations(BASE_YML, STAGE_YML, default)
+
+    assert text == BASE_YML
+    assert "triggers" not in text
+    assert newer_base != text
+
+
+def test_a_stage_with_no_capability_file_is_refused_before_a_release_waits_for_a_schema() -> None:
+    with pytest.raises(dr.DemoReleaseError, match=r"changes no file besides \.infrahub\.yml"):
+        dr.require_capability_files([".infrahub.yml"], "stage/x")
+    with pytest.raises(dr.DemoReleaseError):
+        dr.require_capability_files([], "stage/x")
+    dr.require_capability_files([".infrahub.yml", "schemas/internet.yml"], "stage/x")
