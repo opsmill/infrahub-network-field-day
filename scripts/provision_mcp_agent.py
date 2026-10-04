@@ -29,8 +29,14 @@ also merge it, and `infrahub-mcp`'s `mutate_graphql` does not block that mutatio
 Measured: this account merged its own proposed change. Until upstream fixes it, the
 review gate against an agent is a convention, not an enforcement.
 
-The password lives in `.env` (gitignored) as `INFRAHUB_MCP_PASSWORD`, which is where
-docker compose reads it from; one is generated on first run.
+HOW CLIENTS AUTHENTICATE. The server runs in `token-passthrough` mode and holds no
+credential. Each client sends its own `mcp-agent` API token as
+`Authorization: Bearer <token>`, and the server forwards it to Infrahub. This script
+mints that token (`INFRAHUB_MCP_TOKEN` in `.env`) by signing in as `mcp-agent` with
+its password (`INFRAHUB_MCP_PASSWORD`), because Infrahub 1.10.6 mints a token only for
+the account that asks. The password is used by this script alone; the server never
+receives it. Both values live in `.env` (gitignored); an existing token that still
+authenticates as `mcp-agent` is kept.
 
     uv run python scripts/provision_mcp_agent.py
     uv run python scripts/provision_mcp_agent.py --check   # report only
@@ -59,6 +65,8 @@ ACCOUNT = "mcp-agent"
 GROUP = "Agents"
 ROLE = "Agent Access"
 PASSWORD_VAR = "INFRAHUB_MCP_PASSWORD"  # noqa: S105 -- the variable's name, not a password
+TOKEN_VAR = "INFRAHUB_MCP_TOKEN"  # noqa: S105 -- the variable's name, not a token
+TOKEN_NAME = "mcp-agent-client"  # noqa: S105 -- the token's label in Infrahub, not a token
 
 # decision values: 6 = allow everywhere, 4 = allow on branches other than the default
 OBJECT_PERMISSIONS = [
@@ -80,8 +88,42 @@ def write_env_password(password: str) -> None:
         ENV_FILE,
         PASSWORD_VAR,
         password,
-        "The MCP server's Infrahub account, written by scripts/provision_mcp_agent.py.",
+        "The mcp-agent password, used only by scripts/provision_mcp_agent.py to mint the token.",
     )
+
+
+def read_env_token() -> str:
+    return read_env(ENV_FILE, TOKEN_VAR)
+
+
+def write_env_token(token: str) -> None:
+    upsert_env(
+        ENV_FILE,
+        TOKEN_VAR,
+        token,
+        "The mcp-agent API token MCP clients send as a Bearer header; written by scripts/provision_mcp_agent.py.",
+    )
+
+
+def token_account(address: str, token: str) -> str:
+    """The account name the token authenticates as, or the empty string."""
+    if not token:
+        return ""
+    try:
+        own = InfrahubClientSync(config=Config(address=address, api_token=token))
+        result = own.execute_graphql("query { AccountProfile { name { value } } }")
+    except Exception:  # noqa: BLE001 -- any failure means the token does not authenticate
+        return ""
+    return str(result["AccountProfile"]["name"]["value"])
+
+
+def mint_token(address: str, password: str) -> str:
+    """Sign in AS mcp-agent and mint a token for it, the only way 1.10.6 allows."""
+    own = InfrahubClientSync(config=Config(address=address, username=ACCOUNT, password=password))
+    result = own.execute_graphql(
+        f'mutation {{ InfrahubAccountTokenCreate(data: {{name: "{TOKEN_NAME}"}}) {{ ok object {{ token {{ value }} }} }} }}'
+    )
+    return str(result["InfrahubAccountTokenCreate"]["object"]["token"]["value"])
 
 
 def admin_client() -> InfrahubClientSync:
@@ -125,7 +167,7 @@ def provision(client: InfrahubClientSync, password: str) -> None:
     group.save(allow_upsert=True)
 
 
-def check(client: InfrahubClientSync, password: str) -> list[str]:
+def check(client: InfrahubClientSync, password: str, token: str = "") -> list[str]:
     problems = []
     account = client.get("CoreAccount", name__value=ACCOUNT, raise_when_missing=False, include=["member_of_groups"])
     if account is None:
@@ -144,6 +186,11 @@ def check(client: InfrahubClientSync, password: str) -> list[str]:
         own.execute_graphql("query { AccountProfile { name { value } } }")
     except (GraphQLError, Exception) as exc:  # noqa: BLE001 -- any failure here means the container cannot sign in
         problems.append(f"{ACCOUNT} cannot sign in with the password in {ENV_FILE}: {exc}")
+    holder = token_account(client.config.address, token)
+    if holder != ACCOUNT:
+        problems.append(
+            f"{TOKEN_VAR} in {ENV_FILE} does not authenticate as {ACCOUNT} (it authenticates as {holder or 'nobody'})"
+        )
     return problems
 
 
@@ -154,6 +201,7 @@ def main() -> int:
 
     client = admin_client()
     password = read_env_password()
+    token = read_env_token()
 
     if not args.check:
         if not password:
@@ -162,12 +210,18 @@ def main() -> int:
             print(f"Generated {PASSWORD_VAR} in {ENV_FILE}")
         provision(client, password)
         print(f"{ACCOUNT} is in {GROUP!r} with role {ROLE!r}")
+        if token_account(client.config.address, token) == ACCOUNT:
+            print(f"{TOKEN_VAR} still authenticates as {ACCOUNT}; kept")
+        else:
+            token = mint_token(client.config.address, password)
+            write_env_token(token)
+            print(f"Minted {TOKEN_VAR} in {ENV_FILE}")
 
-    problems = check(client, password)
+    problems = check(client, password, token)
     for problem in problems:
         print(f"PROBLEM: {problem}")
     if not problems:
-        print(f"{ACCOUNT} signs in and holds only the {ROLE!r} role.")
+        print(f"{ACCOUNT} signs in, its token authenticates, and it holds only the {ROLE!r} role.")
     return 1 if problems else 0
 
 
