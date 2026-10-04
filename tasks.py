@@ -1189,6 +1189,21 @@ def _delete_leftover_restore_branches() -> None:
         rehearsal.cleanup(leftovers)
 
 
+def _wait_for_quiet(timeout: int) -> None:
+    """Block until no task is queued or running on main, on three polls 10 s apart."""
+    from solution_arista_avd import demo_release as dr
+
+    quiet = 0
+    deadline = time.monotonic() + timeout
+    while quiet < 3 and time.monotonic() < deadline:
+        busy = _branch_tasks("main", dr.ACTIVE_TASK_STATES)
+        quiet = quiet + 1 if not busy else 0
+        if busy:
+            print(f"   waiting for {len(busy)} task(s) on main to finish", flush=True)
+        if quiet < 3:
+            sleep(10)
+
+
 def _withdraw_demo_services(timeout: int) -> dict[str, Any] | None:
     """Withdraw every demo-created grant and application on one branch, and merge it.
 
@@ -1475,8 +1490,20 @@ def demo_restore(ctx: Context, name: str = DEMO_NAME, timeout: int = 600, no_ver
 
     print("\n=== 2. Grants and applications a presenter created ===", flush=True)
     _ensure_workers_on_default_branch(_repository())
-    _delete_leftover_restore_branches()
-    removed = _withdraw_demo_services(timeout)
+    removed: dict[str, Any] | None = None
+    for attempt in range(1, 4):
+        _delete_leftover_restore_branches()
+        _wait_for_quiet(timeout)
+        try:
+            removed = _withdraw_demo_services(timeout)
+            break
+        except Exit as exc:
+            # Work Infrahub still does on main after the reset's merge (display labels, computed attributes)
+            # touches the prefixes the withdrawal deletes, and the proposed change then has a data conflict.
+            # Measured once in five restores. A fresh branch cut after main is quiet does not have it.
+            if "Data Integrity" not in str(getattr(exc, "message", "")) or attempt == 3:
+                raise
+            print(f" - Main was still changing; starting the withdrawal again ({attempt}/2)", flush=True)
     _delete_orphan_artifacts()
     _delete_dangling_generator_records()
 
@@ -1498,9 +1525,20 @@ def demo_restore(ctx: Context, name: str = DEMO_NAME, timeout: int = 600, no_ver
         raise Exit(f"Upstream main moved during the restore: {upstream_before[:10]} -> {upstream_after[:10]}", code=1)
     if not no_verify:
         print("\n=== 5. Proving the baseline ===", flush=True)
-        rehearsal.act_preflight()
-        failed = [r for r in rehearsal.RESULTS if r[0] == "FAIL"]
-        warned = [r for r in rehearsal.RESULTS if r[0] == "WARN"]
+        # The dashboard reads Prometheus, which scrapes once a minute and lags a change by up to two, so a
+        # restore that has only just finished can read as unhealthy for a moment. Judge it after a few tries.
+        for attempt in range(1, 7):
+            rehearsal.RESULTS.clear()
+            rehearsal.act_preflight()
+            failed = [r for r in rehearsal.RESULTS if r[0] == "FAIL"]
+            warned = [r for r in rehearsal.RESULTS if r[0] == "WARN"]
+            if not (failed or warned) or attempt == 6:
+                break
+            print(
+                f" - The preflight found {[r[1] for r in failed + warned]}; trying again in 45 s ({attempt}/5)",
+                flush=True,
+            )
+            time.sleep(45)
         if failed or warned:
             raise Exit(f"The restore is not clean: {[r[1] for r in failed + warned]}", code=1)
         ctx.run(f"make -C {shlex.quote(str(rehearsal.main_checkout() / 'lab'))} verify", pty=False)
