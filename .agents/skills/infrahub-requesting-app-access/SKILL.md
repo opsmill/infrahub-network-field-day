@@ -204,6 +204,17 @@ or a `ServiceAppAccess` on `main`.
 | `INFRAHUB_MCP_PASSWORD is not set` from `provision_mcp_agent.py --check` | The script was run from a git worktree | Run it from the main checkout |
 | The change merged but the application still does not answer | The reconciler, Vidra or the firewall has not converged | Step 8 |
 
+## Acting as a named user
+
+By default the agent acts as `mcp-agent`. To record the request as the person who asked (for example
+`alice`), use that person's server in Claude Code, `infrahub-lab-alice`, which sends her API token
+(`INFRAHUB_MCP_TOKEN_ALICE`, minted by `scripts/provision_mcp_user_token.py --user alice`). Measured on
+Infrahub 1.10.6: the grant's attributes then show `updated_by: alice`, and `requester` stays a separate
+free-text value. With her token `propose_changes` is refused (`object:Core:ProposedChange:create`), so an
+operator or an `mcp-agent` session opens the proposed change. Her token can also load a schema and merge,
+so never merge. Details:
+[acting as a named user](../../../docs/docs/developer-guide/mcp-server.md#acting-as-a-named-user-such-as-alice).
+
 ## Related
 
 - [The MCP server and the account it must not use](../../../docs/docs/developer-guide/mcp-server.md)

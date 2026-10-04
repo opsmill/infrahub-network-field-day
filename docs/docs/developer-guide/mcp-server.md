@@ -90,6 +90,102 @@ Three measured facts about that role:
 profiled services, and this one, being on the compose network, then holds that
 network open so it cannot be removed.
 
+## Acting as a named user, such as alice
+
+A person who asks an agent for access wants the request recorded as theirs, not as `mcp-agent`. In
+token-passthrough mode Infrahub records the account that owns the token, so a second token gives a
+second identity. `scripts/provision_mcp_user_token.py --user alice` obtains that token:
+
+1. It signs in as `alice@otternet.lab` through Dex, the same OIDC flow as
+   `scripts/provision_portal_accounts.py`, and receives an Infrahub access token (a JWT).
+2. With that JWT it calls `InfrahubAccountTokenCreate`. Infrahub 1.10.6 mints a token only for the
+   account that asks, so the operator token cannot do this for her.
+3. It writes the API token to the git-ignored `.env` of the main checkout as
+   `INFRAHUB_MCP_TOKEN_ALICE` (the variable is `INFRAHUB_MCP_TOKEN_<USER>`, upper case, `-` becomes `_`).
+   A token already in `.env` that still authenticates as the user is kept, so a re-run mints nothing.
+
+The script prints the token only with `--show`. Run it yourself when you need to paste the token
+somewhere: `uv run python scripts/provision_mcp_user_token.py --user alice --show`. `--check` reports
+without minting. The Dex sign-in needs the Dex address (`OTTERNET_DEX_ADDRESS`, default
+`http://10.90.0.11:32556`) to be reachable from where the script runs.
+
+`.mcp.json` registers a second server, `infrahub-lab-alice`, with the same URL and the header
+`Authorization: Bearer ${INFRAHUB_MCP_TOKEN_ALICE}`. In Claude Code the identity is chosen by server:
+tools of `infrahub-lab` act as `mcp-agent`, tools of `infrahub-lab-alice` act as `alice`. Source the
+`.env` in the shell that starts `claude`, as described above, and restart Claude Code after the first
+run so it reads the variable.
+
+What was measured on `infrahub-mcp` v1.1.7 against Infrahub 1.10.6:
+
+- **The JWT from the Dex sign-in is not accepted by the MCP server.** Sent as the Bearer token it
+  returns `Invalid token`, although Infrahub's own GraphQL endpoint accepts the same JWT. Only an API
+  token works, which is why the script mints one.
+- **A tool call with her token runs as `alice`.** `query_graphql` with `AccountProfile { name { value } }`
+  returned `alice`. The `Authorization` header is read per request, not per server: a client
+  that sends a different token gets a different identity on the same port.
+- **A grant she creates is attributed to her.** `ServiceAppAccessCreate` through `mutate_graphql` on the
+  session branch succeeded. Reading the grant back, `updated_by` on its `name` and `requester` attributes
+  showed `alice`. A grant created with the `mcp-agent` token showed `MCPagent` (the account's label). The
+  attribute `status`, which the generator writes, showed `Agent`, the account the task workers run as.
+  Node-level `created_by` metadata is not available in this schema (`node_metadata` is an unknown
+  field), so the per-attribute `updated_by` is the evidence.
+- **`requester` is a separate, free-text attribute.** A grant created with the token of `alice` and
+  `requester: someone-else@otternet.lab` kept that value. Infrahub does not set or check it against the
+  token, so the account that wrote the node and the requester it names can differ.
+- **She cannot open a proposed change.** `propose_changes` was refused with
+  `You do not have one of the following permissions: object:Core:ProposedChange:create:allow_default`.
+  `mcp-agent` has that permission; the `Infrahub Users` group does not. Her roles
+  (`GeneralAccess`, `ProposedChangeReviewer`) allow writes on branches other than `main`, viewing
+  everything, editing the default branch, reviewing and updating proposed changes, and the global
+  permissions `merge_proposed_change`, `manage_schema` and `manage_repositories`. With her token
+  an operator or the `mcp-agent` session must open the proposed change, or the permission
+  `object:Core:ProposedChange:create` must be added to a role she holds. That choice is not made here.
+- **Her token carries more power than `mcp-agent`'s.** She holds `manage_schema` and
+  `merge_proposed_change`, which `mcp-agent` does not. A model working with her token can load a schema
+  or merge a branch. Treat `INFRAHUB_MCP_TOKEN_ALICE` as her credential: use it only for a request she
+  made, and never merge.
+- **A write to `main` as her was not tried.** From her roles, `any:allow_other` allows object writes on
+  branches other than the default branch only, and the MCP server writes on the session branch.
+
+### Claude Desktop
+
+Claude Desktop reads `claude_desktop_config.json` and does not expand environment variables in it, so
+the literal token has to be in that file. The file is outside this repository. Never copy it into the
+repository or commit it. Get the token with the `--show` command above.
+
+The documented form of that file starts local servers as a command, so the safest entry is a stdio
+bridge, `mcp-remote`, which forwards to the HTTP endpoint:
+
+```json
+{
+  "mcpServers": {
+    "infrahub_lab_alice": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://127.0.0.1:8001/mcp",
+        "--header",
+        "Authorization:${AUTH}"
+      ],
+      "env": { "AUTH": "Bearer <alice-api-token>" }
+    }
+  }
+}
+```
+
+`mcp-remote` documents that `--header` values may refer to environment variables, which keeps a space out of
+the argument (a known problem on Windows). Node.js must be installed.
+
+A direct entry with `"transport": "streamable-http"` and a `url` was not tried and is not expected to
+work: Claude Desktop's remote servers are added as connectors and are reached from the vendor's
+servers, which cannot reach `127.0.0.1`. That reading comes from the product's documentation and is
+unverified here.
+
+Verified here without Claude Desktop (not installed): `npx -y mcp-remote@0.14.3 http://127.0.0.1:8001/mcp
+--header "Authorization:${AUTH}"` run over standard input returned `alice` for the `AccountProfile` query.
+Not verified: that Claude Desktop starts this entry and lists the tools.
+
 ## Requesting application access through the MCP server
 
 A person who asks an agent for access to an application is creating a `ServiceAppAccess` node on a

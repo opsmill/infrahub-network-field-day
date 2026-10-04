@@ -79,6 +79,46 @@ def test_the_token_is_minted_for_mcp_agent_and_no_admin_token_is_referenced() ->
     assert not any("INITIAL_" in name for name in environment)
 
 
+def _user_token_provisioner() -> ModuleType:
+    path = REPO / "scripts/provision_mcp_user_token.py"
+    spec = importlib.util.spec_from_file_location("provision_mcp_user_token", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_alice_server_entry_reads_her_token_from_an_environment_variable() -> None:
+    text = (REPO / ".mcp.json").read_text(encoding="utf-8")
+    servers = json.loads(text)["mcpServers"]
+    alice = servers["infrahub-lab-alice"]
+    assert alice["type"] == "http"
+    assert alice["url"] == servers["infrahub-lab"]["url"]
+    assert alice["headers"] == {"Authorization": "Bearer ${INFRAHUB_MCP_TOKEN_ALICE}"}
+    # No literal token anywhere, and neither the admin nor the `agent` token.
+    for server in servers.values():
+        assert server["headers"]["Authorization"].startswith("Bearer ${INFRAHUB_MCP_TOKEN")
+    assert "INFRAHUB_API_TOKEN" not in text
+    assert "INITIAL_ADMIN_TOKEN" not in text
+    assert "INITIAL_AGENT_TOKEN" not in text
+
+
+def test_a_user_token_variable_is_named_for_the_user() -> None:
+    provisioner = _user_token_provisioner()
+    assert provisioner.token_var("alice") == "INFRAHUB_MCP_TOKEN_ALICE"
+    assert provisioner.token_var("bob-smith") == "INFRAHUB_MCP_TOKEN_BOB_SMITH"
+    assert provisioner.token_var("alice") != "INFRAHUB_MCP_TOKEN"
+
+
+def test_the_user_token_script_cannot_mint_for_an_admin_or_a_malformed_name() -> None:
+    provisioner = _user_token_provisioner()
+    # The name goes into a GraphQL string, so it is restricted to account-name characters.
+    assert not provisioner.USER_PATTERN.match('alice"}) { x }')
+    assert provisioner.USER_PATTERN.match("alice")
+    source = (REPO / "scripts/provision_mcp_user_token.py").read_text(encoding="utf-8")
+    assert "INFRAHUB_API_TOKEN" not in source, "the script must not fall back to the operator token"
+
+
 def test_the_mcp_port_is_bound_to_loopback() -> None:
     ports = _mcp_service()["ports"]
     assert ports, "the MCP server must be reachable from the host"
