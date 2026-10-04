@@ -511,6 +511,20 @@ fi
 # does not", because a flat network passes the first and fails the second.
 hdr "Tenants: multi-site, isolated cloud, internet as a product"
 
+# Internet access is the builder demonstration's capability: the seeded baseline does not sell it, and
+# the merged capability does (acme's import policy gains statement 30, the default route). Ask the
+# provider edge which it is, so the checks below hold the lab to the state it is in -- the baseline must
+# have no internet for anyone, and a lab with the capability must give it to acme alone.
+internet_sold=false
+if running isp-pe1 && srl isp-pe1 "info from running /routing-policy policy RM-ACME-IMPORT statement 30" | grep -q "PL-DEFAULT"; then
+    internet_sold=true
+fi
+if $internet_sold; then
+    printf '  (internet access is deployed: acme has bought it)\n'
+else
+    printf '  (internet access is not deployed: the baseline, before the builder capability is merged)\n'
+fi
+
 if running isp-pe1; then
     # ---- one VRF per tenant, both sites inside it ------------------------
     check "acme's two sites share one VRF on the PE" \
@@ -545,8 +559,14 @@ if running isp-pe1; then
     fi
 
     # ---- internet as a product -------------------------------------------
-    check "acme's VRF has a default route (it bought internet)" \
-          "0\.0\.0\.0/0" srl isp-pe1 "show network-instance CUST_ACME ipv4 route"
+    if $internet_sold; then
+        check "acme's VRF has a default route (it bought internet)" \
+              "0\.0\.0\.0/0" srl isp-pe1 "show network-instance CUST_ACME ipv4 route"
+    elif srl isp-pe1 "show network-instance CUST_ACME ipv4 route 0.0.0.0/0" | grep -q "^0\.0\.0\.0/0"; then
+        bad "internet product" "acme has a default route but internet access is not deployed -- the baseline sells it to no one"
+    else
+        ok "acme has NO default route, because internet access is not deployed in the baseline"
+    fi
     if srl isp-pe1 "show network-instance CUST_GLOBEX ipv4 route 0.0.0.0/0" | grep -q "^0\.0\.0\.0/0"; then
         bad "internet product" "globex has a default route in its VRF but did not buy internet access -- check RM-GLOBEX-IMPORT"
     else
@@ -555,8 +575,12 @@ if running isp-pe1; then
 fi
 
 if running internet-rtr; then
-    check "the internet learns acme's prefixes from the provider" \
-          "10\.60\.10\.0/24" srl internet-rtr "show network-instance default protocols bgp routes ipv4 summary"
+    if $internet_sold; then
+        check "the internet learns acme's prefixes from the provider" \
+              "10\.60\.10\.0/24" srl internet-rtr "show network-instance default protocols bgp routes ipv4 summary"
+    else
+        skp "the internet learns acme's prefixes from the provider" "internet access is not deployed"
+    fi
     if srl internet-rtr "show network-instance default protocols bgp routes ipv4 summary" | grep -q "10.60.20.0/24"; then
         bad "internet announcement" "globex's prefix is in the internet's table -- RM-INTERNET-OUT on isp-pe2 is announcing a tenant that did not buy transit"
     else
@@ -640,16 +664,28 @@ if running internet-host; then
     if running cust-acme-host; then
         code=$(docker exec clab-otternet-cust-acme-host curl -sS -o /dev/null \
                  -w '%{http_code}' --max-time 8 http://198.51.100.10/ 2>/dev/null)
-        [[ "$code" == "200" ]] \
-            && ok "acme hq reaches the internet (HTTP 200 from 198.51.100.10)" \
-            || bad "internet access" "acme bought internet access but got '${code:-nothing}' from 198.51.100.10"
+        if $internet_sold; then
+            [[ "$code" == "200" ]] \
+                && ok "acme hq reaches the internet (HTTP 200 from 198.51.100.10)" \
+                || bad "internet access" "acme bought internet access but got '${code:-nothing}' from 198.51.100.10"
+        else
+            [[ "$code" == "200" ]] \
+                && bad "internet access" "acme reached the internet although it is not deployed in the baseline" \
+                || ok "acme hq cannot reach the internet, as in the baseline"
+        fi
     fi
     if running cust-acme-dr-host; then
         code=$(docker exec clab-otternet-cust-acme-dr-host curl -sS -o /dev/null \
                  -w '%{http_code}' --max-time 8 http://198.51.100.10/ 2>/dev/null)
-        [[ "$code" == "200" ]] \
-            && ok "acme's static site reaches the internet too" \
-            || bad "internet access" "acme/dr got '${code:-nothing}' from the internet; the site kind should make no difference to the product"
+        if $internet_sold; then
+            [[ "$code" == "200" ]] \
+                && ok "acme's static site reaches the internet too" \
+                || bad "internet access" "acme/dr got '${code:-nothing}' from the internet; the site kind should make no difference to the product"
+        else
+            [[ "$code" == "200" ]] \
+                && bad "internet access" "acme/dr reached the internet although it is not deployed in the baseline" \
+                || ok "acme's static site cannot reach the internet, as in the baseline"
+        fi
     fi
     if running cust-globex-host; then
         code=$(docker exec clab-otternet-cust-globex-host curl -sS -o /dev/null \
