@@ -840,7 +840,7 @@ def _ensure_workers_on_default_branch(repo: dict[str, str]) -> None:
                 check=False,
             )
 
-        git("fetch", "-q", "origin", default)
+        git("fetch", "-q", "origin", f"+refs/heads/{default}:refs/remotes/origin/{default}")
         current = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         head = git("rev-parse", "HEAD").stdout.strip()
         tip = git("rev-parse", f"refs/remotes/origin/{default}").stdout.strip()
