@@ -32,6 +32,12 @@ them where the difference matters.
 | [Three](#act-three-revoke-it) | Access withdrawn through the same workflow | Yes |
 | [Four](#act-four-the-review-step-bites) | A check catching a mistake nothing else would notice | A branch only, never merged |
 | [Five](#act-five-the-agent-through-the-mcp-server) | An agent working through the MCP server, on a branch | A branch only |
+| [Six](#act-six-the-builder-branch) | A prepared capability released with one command, reviewed and merged as a proposed change, then taken back out | Yes: a merge, then a reset |
+
+The three-act demonstration is acts one, two and six: an application with access, access to
+Grafana, and the builder branch. Acts three to five are extras for a longer slot or for questions.
+`uv run invoke demo-run` runs the three acts for real and prints a PASS or FAIL line for every
+check, a timing table, and exits non-zero on any failure. See [Run it all, and put it back](#run-it-all-and-put-it-back).
 
 :::note What was checked, and how
 Everything up to each merge was rehearsed against a freshly bootstrapped lab:
@@ -40,8 +46,10 @@ portal as `alice` and read in their proposed changes. Acts two and three were
 then rehearsed **through their merges**: the Grafana grant merged, the
 reconciler pushing `fw1` and the border leaf, `alice` signing in to Grafana from
 the branch desktop, the Revoke template, its merge, and the lab compared with a
-snapshot afterwards. Act one's merge was not re-run; its timings are act two's,
-which share every step after the merge.
+snapshot afterwards. Act one's merge was run too, with `uv run invoke demo-run`.
+Measured: the portal request took 95 s, all 24 validators were green, the merge took 22 s,
+the application answered HTTP 200 about 73 s after the merge, and the reconciler confirmed
+both devices about 149 s after it. The builder branch is act six.
 
 Rehearse before an audience does, with a request reference you do not plan to use live:
 
@@ -559,7 +567,7 @@ merge, so it stops counting towards **Healthy** rather than failing.
 
 **The grant stays on `main`, `decommissioned`.** That is the record of what was
 granted and withdrawn, and it configures nothing. The Revoke picker still offers
-it, though, so before running the demo again delete it in the Infrahub UI, with
+it, though, so before running the demo again run `uv run invoke demo-restore`, or delete it in the Infrahub UI, with
 its `generate-app-access: <name>` generator instance and its empty
 `generate-app-access-<hash>` group: deleting a grant deletes neither, and the
 orphaned instance turns `generate-app-access` red on every later proposed change
@@ -659,6 +667,73 @@ the MCP server does not block it, so `mcp-agent` merged its own proposed change
 when tested. Say instead that every change the agent makes lands on a branch as
 a proposed change, and that merging is where the human decides.
 
+## Act six: the builder branch
+
+This act adds a capability instead of a service. The capability is the internet-access product for a WAN customer.
+It is built beforehand and released on cue. The audience sees the work arrive in Infrahub as a branch,
+reviews it as a proposed change, and watches one merge put it on a router. Say that the branch is
+prepared output, not a live agent run. The setup, the rules that each cost a failed run, and the
+measurements are in [Builder demo](./demo-builder.md); the order is this:
+
+```bash
+uv run invoke demo-stage      # once, or after main moved: builds the local branch stage/internet-access
+uv run invoke demo-release    # the one command: branch, import, validators, proposed change
+```
+
+1. **Release.** `demo-release` creates the Infrahub branch, copies the staged code onto it, waits until
+   every task worker has pulled it, opens the proposed change, and says `Ready` only when every
+   validator has finished and passed. It takes **2 to 4 minutes, and that wait is Infrahub's**. The
+   workers pull a pushed branch 75 to 256 s after the push, whatever the repository's git-sync
+   schedule is (changing the schedule was tried and does not speed it up). Fill the time with the
+   story: what the capability is, and why a branch is the unit of review.
+2. **Review.** Open the proposed change from the link the command prints. The diff is one schema node, its
+   two attributes and two relationships, a menu entry, the object `acme-internet` and the three
+   queries that name the new kind. All validators are green.
+3. **Merge** through the proposed change (about 50 s). The merge also merges git and pushes
+   `demo-main`; the upstream `main` is never written.
+4. **The outcome.** The `isp-pe1` artifact carries `statement 30` within a minute, the reconciler
+   pushes the router, and from the customer hosts:
+
+   ```bash
+   docker exec clab-otternet-cust-acme-host curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://198.51.100.10/     # 200
+   docker exec clab-otternet-cust-globex-host curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://198.51.100.10/   # 000
+   ```
+
+5. **Take it back out.** `uv run invoke demo-reset` (about 5 minutes) returns the code, the data, and the
+   schema to the baseline through an Infrahub merge. Do it off stage.
+
+## Run it all, and put it back
+
+```bash
+uv run invoke demo-run                       # acts one, two and the builder, with every merge
+uv run invoke demo-run --acts builder        # a subset: one, two, builder
+uv run invoke demo-run --no-builder-reset    # leave the capability merged, for the next act
+uv run invoke demo-run --restore             # and finish with demo-restore
+uv run invoke demo-restore                   # return the whole lab to the baseline
+```
+
+`demo-run` is `scripts/demo_full_run.py`, built on the helpers of `scripts/demo_rehearsal.py`. It
+runs the acts as `alice` through the portal, merges, and checks the result on the devices, the
+cluster and the customer hosts. **It changes the lab.**
+
+`demo-restore` takes the lab from the state after the demonstration back to the seeded baseline. It
+can be run again if it was interrupted, because it decides what to do from what is in the lab:
+
+1. resets the builder capability (the same as `demo-reset`);
+2. withdraws every application and grant that is not in the seed files under `objects/` and is not
+   named `otternet-*`, grants first, on one branch: status `decommissioning`, the generators run, the
+   objects, their generator records and the application's Crossplane artifact deleted there, one
+   proposed change with every validator green, one merge;
+3. waits for the reconciler to push and confirm, for the application's namespace and `FabricApp` to
+   leave the cluster, and for its VIP block to be released;
+4. sweeps what a merge leaves behind: an artifact with no object (Vidra keeps delivering it, so the
+   application never leaves the cluster) and generator instances and tracking groups whose object is gone;
+5. deletes the merged branches, checks that upstream `main` did not move, and runs the preflight and
+   `make -C lab verify`.
+
+If a step cannot be made to work, the fallback is a fresh `uv run invoke bootstrap --fresh`, which takes
+about 25 minutes.
+
 ## Timings
 
 | Step | Wall clock |
@@ -678,6 +753,10 @@ a proposed change, and that merging is where the human decides.
 | Revocation, merge to Grafana leaving the branch | 58 to 90 s, when Vidra closes the pod policy |
 | Revocation, merge to the rule and the line leaving the devices | 50 s and 79 s (before the early wake change: 2.5 to 3 minutes) |
 | Revocation, merge to the reconciler confirming both devices | 154 s (before the early wake change: about 5 minutes) |
+| Portal request **Exposed application, with access**, merged through `demo-run` | request 95 s, 24 validators green, merge 22 s |
+| Act one, merge to the application answering HTTP 200 / to the reconciler confirming | about 73 s / about 149 s |
+| Builder: `demo-release`, start to `Ready` | 2 to 4 minutes; the workers' pull of the branch is 75 to 256 s of it |
+| Builder: merge to `statement 30` on `isp-pe1` | see [Builder demo](./demo-builder.md) |
 | `uv run invoke reconcile --now` to the cycle starting | under a second; the cycle itself about 11 s, or about 25 s when it pushes |
 
 Measured on this lab: a granted VIP answered `HTTP 200` from the branch desktop,
