@@ -175,7 +175,8 @@ def test_every_updated_rule_is_scoped_to_one_field_on_a_branch(kind: str) -> Non
 @pytest.mark.parametrize("kind", sorted(WATCHED))
 def test_watched_fields_exist_and_are_read_by_the_generator(kind: str) -> None:
     rules = _updated_rules(kind) + [r for r in _rules() if r["node_kind"] == kind and r["mutation_action"] == "created"]
-    generators = {_actions()[r["action"]] for r in rules}
+    # A rule whose action is not a generator (the group membership rule) reads no field.
+    generators = {_actions()[r["action"]] for r in rules if r["action"] in _actions()}
     assert len(generators) == 1, f"{kind}'s rules run more than one generator: {generators}"
     (generator,) = generators
 
@@ -188,7 +189,11 @@ def test_watched_fields_exist_and_are_read_by_the_generator(kind: str) -> None:
 
 @pytest.mark.parametrize("kind", sorted(WATCHED))
 def test_each_service_kind_still_builds_on_creation(kind: str) -> None:
-    assert [r for r in _rules() if r["node_kind"] == kind and r["mutation_action"] == "created"]
+    assert [
+        r
+        for r in _rules()
+        if r["node_kind"] == kind and r["mutation_action"] == "created" and r["action"] in _actions()
+    ]
 
 
 def test_rule_names_are_unique() -> None:
@@ -206,3 +211,74 @@ def test_a_catalogue_pin_is_not_an_input() -> None:
 def test_no_rule_names_the_catalogue_entry() -> None:
     """An entry is data, not a service: no generator sits beneath it."""
     assert [r["name"] for r in _rules() if r["node_kind"] == "ServiceApplicationDefinition"] == []
+
+
+def _group_actions() -> dict[str, dict[str, Any]]:
+    return {
+        action["name"]: action
+        for doc in _documents("triggers.yml")
+        if doc.get("spec", {}).get("kind") == "CoreGroupAction"
+        for action in doc["spec"]["data"]
+    }
+
+
+def _group_rules() -> list[dict[str, Any]]:
+    return [
+        rule
+        for doc in _documents("triggers.yml")
+        if doc.get("spec", {}).get("kind") == "CoreGroupTriggerRule"
+        for rule in doc["spec"]["data"]
+    ]
+
+
+def _generator_group(generator: str) -> str:
+    config = yaml.safe_load((ROOT / ".infrahub.yml").read_text(encoding="utf-8"))
+    return next(g for g in config["generator_definitions"] if g["name"] == generator)["targets"]
+
+
+def test_a_grant_from_any_client_joins_the_generator_group_on_creation() -> None:
+    """The portal adds the membership itself; the API, the UI and the MCP server do not.
+
+    Infrahub refuses a generator run against a node outside the target group, so a
+    grant without the membership is never built.
+    """
+    generator = _actions()["run-app-access-generator"]
+    group = _generator_group(generator)
+    rules = [
+        r
+        for r in _rules()
+        if r["node_kind"] == "ServiceAppAccess"
+        and r["mutation_action"] == "created"
+        and r["action"] in _group_actions()
+    ]
+    assert len(rules) == 1
+    assert rules[0]["branch_scope"] == "other_branches"
+    action = _group_actions()[rules[0]["action"]]
+    assert action["member_action"] == "add_member"
+    assert action["group"] == group
+
+
+def test_the_generator_runs_when_a_grant_becomes_a_member_of_its_group() -> None:
+    generator = _actions()["run-app-access-generator"]
+    group = _generator_group(generator)
+    rules = [r for r in _group_rules() if r["group"] == group]
+    assert len(rules) == 1
+    assert rules[0]["member_update"] == "added"
+    assert rules[0]["branch_scope"] == "other_branches"
+    assert _actions()[rules[0]["action"]] == generator
+
+
+def test_group_rules_never_name_a_deployment_or_monitoring_group() -> None:
+    """Nothing may generate from Deployment* or Monitoring* state: it closes a loop."""
+    for rule in _group_rules():
+        assert not rule["group"].startswith(("deployment", "monitoring")), rule["name"]
+
+
+def test_the_group_membership_write_is_not_watched_by_any_updated_rule() -> None:
+    """Membership is not a field of the grant, so the existing field rules cannot see it."""
+    assert "member_of_groups" not in {_matched_field(r) for r in _updated_rules("ServiceAppAccess")}
+
+
+def test_every_rule_name_is_unique_across_node_and_group_rules() -> None:
+    names = [r["name"] for r in _rules()] + [r["name"] for r in _group_rules()]
+    assert len(names) == len(set(names))

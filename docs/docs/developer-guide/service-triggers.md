@@ -91,3 +91,44 @@ which is. The pin therefore adds no run: a create still costs the build plus the
 catalogue entry is an upgrade, and an upgrade is its own reviewed change rather than an automatic
 rebuild. `tests/unit/test_service_trigger_contract.py` holds all of it, including that no rule names
 `ServiceApplicationDefinition`.
+
+## A grant made by any client joins its generator group
+
+**A `ServiceAppAccess` created outside the portal was never built.** `generate-app-access` targets the
+group `service_app_accesses`, and Infrahub refuses to run a generator against a node that is not a
+member of the target group: the run fails with `Target <id> is not part of the group <id>`
+(`_run_generators` in Infrahub's `actions/tasks.py`). The portal avoids this because its create
+mutation sends `member_of_groups: [service_app_accesses]`. The API, the UI and the Infrahub MCP server
+send no membership, so their grants fired the `created` rule, were refused, and produced no firewall
+rule while every validator on the proposed change stayed green. Measured in a live run in which
+`mcp-agent` requested Grafana access.
+
+**`triggers.yml` now adds the membership and builds on it, so the client does not have to.** Three
+objects do this:
+
+- A `CoreGroupAction`, `add-app-access-to-its-generator-group`, which adds a node to
+  `service_app_accesses`.
+- A `CoreNodeTriggerRule`, `trigger-app-access-group-membership-created`, which runs that action when
+  a `ServiceAppAccess` is created on a branch.
+- A `CoreGroupTriggerRule`, `trigger-app-access-generator-member-added`, which runs
+  `generate-app-access` when a node is added to the group on a branch.
+
+The existing `created` rule fires at the same moment as the membership rule and is still refused for
+a grant that has no membership yet. The group rule then builds the grant once the membership exists.
+The refused run is a failed task, not a failed generator instance.
+
+**The loop still terminates.** The membership rule writes only group membership, which is not a field
+of the grant, so none of the `updated` rules above can see it. Adding a node that is already a member
+changes nothing and emits no group event. The group rule runs the generator, whose write-backs are
+guarded as described above. `tests/unit/test_service_trigger_contract.py` pins the three objects, the
+group they name and the branch scope.
+
+**For a grant the portal created, the group rule may run the generator a second time.** The membership
+arrived with the node, and whether Infrahub then emits a member-added event for it was not tested. If it
+does, the second run changes nothing: `generate-app-access` saves with `allow_upsert` and every
+write-back is guarded. The cost would be one extra no-op run.
+
+**Not verified live.** Infrahub imports only `main`, and `triggers.yml` is loaded by
+`infrahubctl object load` (`invoke load`), so these rules take effect only after a merge to `main` and
+a reload. Until they are loaded, the `service_app_accesses` membership must be sent with the grant.
+How the group action and the group rule behave on Infrahub 1.10.6 is read from its source, not from a run.

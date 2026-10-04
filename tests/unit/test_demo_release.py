@@ -352,3 +352,24 @@ def test_a_worker_needs_realigning_unless_it_is_on_the_default_branch_at_the_rem
     current: str, head: str, tip: str, needs: bool
 ) -> None:
     assert dr.worker_needs_realignment(current, "demo-main", head, tip) is needs
+
+
+# --- capability_is_merged ---------------------------------------------------
+
+
+def test_a_stale_stage_branch_is_not_a_merged_capability() -> None:
+    """`main` moved since staging, so the trees differ; the capability's own files are still absent."""
+    added = ["schemas/internet_access.yml", "generators/generate_internet_access.py", ".infrahub.yml"]
+    default_files = {"schemas/other.yml", "generators/generate_pod.py", ".infrahub.yml", "docs/new-page.md"}
+    assert dr.capability_is_merged(added, default_files) is False
+
+
+def test_a_capability_whose_files_are_on_the_default_branch_is_merged() -> None:
+    added = ["schemas/internet_access.yml", ".infrahub.yml"]
+    assert dr.capability_is_merged(added, {"schemas/internet_access.yml", ".infrahub.yml"}) is True
+
+
+def test_the_import_bookkeeping_file_alone_cannot_say_whether_it_is_merged() -> None:
+    """`.infrahub.yml` is on the default branch either way, so the caller must judge another way."""
+    assert dr.capability_is_merged([".infrahub.yml"], {".infrahub.yml"}) is None
+    assert dr.capability_is_merged([], {".infrahub.yml"}) is None

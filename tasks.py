@@ -1045,12 +1045,15 @@ def _delete_demo_branch(ctx: Context, branch: str) -> None:
 
 
 def _code_is_merged(ctx: Context, default_branch: str, stage: str) -> bool:
-    """Whether the default branch's tree differs from the baseline the staged branch was cut from.
+    """Whether the capability's own files are on the default branch.
 
     The kind existing is not enough: an interrupted reset can have removed the data and left the
-    merged code, or the other way round. The baseline is the merge-base of the default branch and
-    the local staged branch.
+    merged code, or the other way round. The files are the ones the local staged branch adds since
+    the commit it was cut from. Comparing whole trees read a staged branch that is merely stale
+    (`main` moved since staging) as merged, and the restore then waited out its timeout.
     """
+    from solution_arista_avd import demo_release as dr
+
     with ctx.cd(MAIN_DIRECTORY_PATH):
         fetched = ctx.run(
             f"git fetch --quiet origin {shlex.quote(f'+refs/heads/{default_branch}:refs/tmp/default')}",
@@ -1062,10 +1065,18 @@ def _code_is_merged(ctx: Context, default_branch: str, stage: str) -> bool:
         base = ctx.run(
             f"git merge-base refs/tmp/default {shlex.quote(f'refs/heads/{stage}')}", hide=True, warn=True
         ).stdout.strip()
-        return (
-            bool(base)
-            and not ctx.run(f"git diff --quiet {shlex.quote(base)} refs/tmp/default", warn=True, hide=True).ok
-        )
+        if not base:
+            return False
+        added = ctx.run(
+            f"git diff --name-only --diff-filter=A {shlex.quote(base)} {shlex.quote(f'refs/heads/{stage}')}",
+            hide=True,
+            warn=True,
+        ).stdout.split()
+        on_default = set(ctx.run("git ls-tree -r --name-only refs/tmp/default", hide=True, warn=True).stdout.split())
+        judged = dr.capability_is_merged(added, on_default)
+        if judged is not None:
+            return judged
+        return not ctx.run(f"git diff --quiet {shlex.quote(base)} refs/tmp/default", warn=True, hide=True).ok
 
 
 def _take_capability_back_out(
