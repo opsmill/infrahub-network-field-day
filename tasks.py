@@ -766,16 +766,58 @@ def demo_stage(
     print(f"{stage} is at {tip}: main with {baseline[:10]} reverted, and the import declarations added.")
 
 
+def _worker_branch_refs(repo_id: str) -> list[str]:
+    """Every `demo/` branch ref in each task worker's clone; a deleted Infrahub branch leaves its ref there."""
+    import subprocess  # noqa: S404 - fixed argv, no shell
+
+    if not repo_id:
+        return []
+    listing = subprocess.run(
+        ["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=task-worker"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    refs: list[str] = []
+    for container in listing.stdout.split():
+        out = subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                "docker",
+                "exec",
+                container,
+                "git",
+                "-C",
+                f"/opt/infrahub/git/{repo_id}/main",
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/heads/demo",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        refs += out.stdout.split()
+    return refs
+
+
+def _taken_branch_names(ctx: Context, repo_id: str) -> list[str]:
+    """Every name a release branch could collide with: Infrahub's branches, the remote's and the workers' refs."""
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        remote = ctx.run("git ls-remote --heads origin 'refs/heads/demo/*'", hide=True, warn=True)
+    remote_names = [line.split("\t", 1)[1] for line in (remote.stdout.splitlines() if remote else []) if "\t" in line]
+    return [*(_branches() or {}), *remote_names, *_worker_branch_refs(repo_id)]
+
+
 @task(
     help={
         "name": f"Capability name; releases stage/<name> (default {DEMO_NAME})",
-        "run": "Release number. Each release is a new branch name, because a pulled commit is never rewritten",
+        "run": "Release number. 0 (the default) takes the next one no branch, remote ref or worker clone has used",
         "timeout": "Seconds to wait for the import (default 600)",
         "proposed_change": "Open the proposed change once the branch is imported (default true)",
     }
 )
 def demo_release(
-    ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int = 600, proposed_change: bool = True
+    ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int = 600, proposed_change: bool = True
 ) -> None:
     """Publish stage/<name> as demo/<name>-<run> and wait for Infrahub to have it, schema and data included.
 
@@ -786,7 +828,7 @@ def demo_release(
     """
     from solution_arista_avd import demo_release as dr
 
-    stage, demo = dr.stage_branch(name), dr.demo_branch(name, run)
+    stage = dr.stage_branch(name)
     with ctx.cd(MAIN_DIRECTORY_PATH):
         tip = ctx.run(f"git rev-parse --verify {shlex.quote(stage)}", hide=True, warn=True)
     if not tip or not tip.ok:
@@ -795,6 +837,12 @@ def demo_release(
     repo = _repository()
     if not repo:
         raise Exit("No repository is registered. Bootstrap with INFRAHUB_REPOSITORY_URL set.", code=1)
+    if run < 1:
+        from solution_arista_avd import demo_restore as restore_module
+
+        run = restore_module.next_run(name, _taken_branch_names(ctx, repo["id"]))
+        print(f" - Using release number {run} (the next one no branch has used)", flush=True)
+    demo = dr.demo_branch(name, run)
     read_write = repo["kind"] == "CoreRepository"
     if demo in (_branches() or {}):
         raise Exit(
@@ -894,7 +942,7 @@ def _code_is_merged(ctx: Context, default_branch: str, stage: str) -> bool:
     """
     with ctx.cd(MAIN_DIRECTORY_PATH):
         fetched = ctx.run(
-            f"git fetch --quiet origin {shlex.quote(f'refs/heads/{default_branch}:refs/tmp/default')}",
+            f"git fetch --quiet origin {shlex.quote(f'+refs/heads/{default_branch}:refs/tmp/default')}",
             warn=True,
             hide=True,
         )
@@ -960,11 +1008,11 @@ def _take_capability_back_out(
 @task(
     help={
         "name": f"Capability name (default {DEMO_NAME})",
-        "run": "The release to remove",
+        "run": "The release to remove. 0 (the default) is the latest one in use",
         "timeout": "Seconds to wait for the import (default 600)",
     }
 )
-def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int = 600) -> None:
+def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int = 600) -> None:
     """Undo a release so the demo can be rehearsed again, merged or not.
 
     Order matters: the code goes back first, so nothing on `main` names the kind; then the
@@ -976,8 +1024,13 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
 
     from solution_arista_avd import demo_release as dr
 
-    demo = dr.demo_branch(name, run)
     repo = _repository()
+    if run < 1:
+        from solution_arista_avd import demo_restore as restore_module
+
+        run = restore_module.latest_run(name, _taken_branch_names(ctx, repo.get("id", "")))
+        print(f" - Resetting release number {run} (the latest in use)", flush=True)
+    demo = dr.demo_branch(name, run)
     merged = bool(_graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"))
     if repo.get("kind") == "CoreRepository":
         # An interrupted reset can leave the data removed and the code merged, so ask git as well.
@@ -1000,8 +1053,394 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 1, timeout: int =
             print(f" - Removing the {DEMO_KIND} schema node", flush=True)
             ctx.run(f"infrahubctl schema load {shlex.quote(str(absent))}", pty=True)
     _regenerate_artifacts()
+    for leftover in sorted(b for b in (_branches() or {}) if b.startswith(f"{demo}-reset")):
+        _delete_demo_branch(ctx, leftover)  # an attempt that was interrupted or had nothing to undo
     _delete_demo_branch(ctx, demo)
-    print(f"\nNext release: invoke demo-release --name {name} --run {run + 1}")
+    print(f"\nNext release: invoke demo-release --name {name}  (it takes the next unused number, {run + 1} or later)")
+
+
+def _rehearsal() -> Any:
+    """`scripts/demo_rehearsal.py` as a module: its helpers drive the portal, the devices and the cluster."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parent / "scripts" / "demo_rehearsal.py"
+    spec = importlib.util.spec_from_file_location("demo_rehearsal", path)
+    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    sys.modules["demo_rehearsal"] = module
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    return module
+
+
+def _demo_services(kind: str) -> dict[str, dict[str, str]]:
+    """Every `kind` object on main: name -> status and, for an application, namespace and VIP block."""
+    extra = " namespace_name { value } vip_block { node { prefix { value } } }" if kind == "ServiceFabricApp" else ""
+    query = f"{{ {kind} {{ edges {{ node {{ id name {{ value }} status {{ value }}{extra} }} }} }} }}"
+    found: dict[str, dict[str, str]] = {}
+    for edge in (_graphql(query).get(kind) or {}).get("edges") or []:
+        node = edge["node"]
+        block = ((node.get("vip_block") or {}).get("node") or {}).get("prefix") or {}
+        found[str(node["name"]["value"])] = {
+            "id": str(node["id"]),
+            "status": str(node["status"]["value"]),
+            "namespace": str((node.get("namespace_name") or {}).get("value") or ""),
+            "block": str(block.get("value") or ""),
+        }
+    return found
+
+
+def _generator_runs(branch: str) -> None:
+    """Regenerate every switch's host vars and structured config on `branch`, as the proposed change would see them."""
+    for definition in ("generate-avd-device-hostvar", "generate-avd-device-structured-config"):
+        found = _graphql(
+            f'{{ CoreGeneratorDefinition(name__value: "{definition}") {{ edges {{ node {{ id }} }} }} }}', branch
+        )
+        generator_id = found["CoreGeneratorDefinition"]["edges"][0]["node"]["id"]
+        _graphql(
+            f'mutation {{ CoreGeneratorDefinitionRun(data: {{id: "{generator_id}"}}, wait_until_completion: true) {{ ok }} }}',
+            branch,
+        )
+
+
+def _delete_leftover_restore_branches() -> None:
+    """A restore branch from an interrupted run: unmerged, so it carries nothing worth keeping."""
+    from solution_arista_avd import demo_restore as restore_module
+
+    rehearsal = _rehearsal()
+    leftovers = [b for b in (_branches() or {}) if restore_module.is_restore_branch(b)]
+    if leftovers:
+        print(f" - Removing the branch left by an interrupted restore: {', '.join(leftovers)}", flush=True)
+        rehearsal.cleanup(leftovers)
+
+
+def _withdraw_demo_services(timeout: int) -> dict[str, Any] | None:
+    """Withdraw every demo-created grant and application on one branch, and merge it.
+
+    Returns what the merge removed, for the convergence checks, or None when there was nothing to do.
+    On one branch, in order: each grant set `decommissioning` and the generator awaited, then each
+    application; the switches regenerated; then the withdrawn objects and their generator instances and
+    groups deleted ON THE BRANCH. Deleting there, and not after the merge, is deliberate: the
+    Crossplane artifact of a withdrawn application cannot render (its VIP block is released, and the
+    transform refuses an exposed application with no block), so the proposed change would be red, and
+    deleting the application removes the artifact, which is also what makes Vidra delete the resource.
+    """
+    from pathlib import Path as _Path
+
+    from solution_arista_avd import demo_restore as restore_module
+
+    rehearsal = _rehearsal()
+    seeds = restore_module.seeded_names(
+        p.read_text(encoding="utf-8") for p in sorted((_Path(__file__).resolve().parent / "objects").glob("*.yml"))
+    )
+    grants, apps = _demo_services("ServiceAppAccess"), _demo_services("ServiceFabricApp")
+    todo_grants = restore_module.demo_created(grants, seeds["ServiceAppAccess"])
+    todo_apps = restore_module.demo_created(apps, seeds["ServiceFabricApp"])
+    if not todo_grants and not todo_apps:
+        print(" - No demo-created grant or application on main", flush=True)
+        return None
+    print(f" - Withdrawing grants {todo_grants} then applications {todo_apps}", flush=True)
+    branch = f"{restore_module.RESTORE_BRANCH_PREFIX}{int(time.time())}"
+    rehearsal.gql(
+        "mutation ($b: String!) { BranchCreate(data: {name: $b, sync_with_git: false}) { ok } }", {"b": branch}
+    )
+
+    def withdraw(kind: str, names: list[str]) -> None:
+        for name in names:
+            rehearsal.gql(
+                f'mutation ($n: String!) {{ {kind}Update(data: {{hfid: [$n], status: {{value: "decommissioning"}}}}) {{ ok }} }}',
+                {"n": name},
+                branch=branch,
+            )
+        gone = rehearsal.wait_until(
+            lambda: all(_demo_services_on(kind, branch).get(n, {}).get("status") == "decommissioned" for n in names),
+            timeout=300,
+            interval=5,
+        )
+        if not gone:
+            raise Exit(f"The generator did not withdraw {kind} {names} on '{branch}' within 300 s.", code=1)
+        print(f"   {kind} {names}: decommissioned", flush=True)
+
+    if todo_grants:
+        withdraw("ServiceAppAccess", todo_grants)
+    if todo_apps:
+        withdraw("ServiceFabricApp", todo_apps)
+    print(" - Regenerating the fabric on the branch", flush=True)
+    _generator_runs(branch)
+
+    names = set(todo_grants) | set(todo_apps)
+    records = rehearsal.gql(
+        """{ CoreGeneratorInstance { edges { node { id name { value } } } }
+             CoreGeneratorGroup { edges { node { id name { value } description { value } } } } }""",
+        branch=branch,
+    )
+    rows = [
+        ("CoreGeneratorInstance", e["node"]["id"], e["node"]["name"]["value"])
+        for e in records["CoreGeneratorInstance"]["edges"]
+    ]
+    rows += [
+        ("CoreGeneratorGroup", e["node"]["id"], str(e["node"]["description"]["value"] or ""))
+        for e in records["CoreGeneratorGroup"]["edges"]
+    ]
+    for kind, node_id in restore_module.generator_records_for(names, rows):
+        rehearsal.gql(
+            f"mutation ($id: String!) {{ {kind}Delete(data: {{id: $id}}) {{ ok }} }}", {"id": node_id}, branch=branch
+        )
+    # Deleting an object does NOT delete its artifacts: the Crossplane FabricApp artifact stays on `main`
+    # with no object, Vidra still sees it, and the application stays in the cluster for good. Measured:
+    # the namespace and the FabricApp were gone 50 s after the orphan artifact was deleted.
+    doomed_ids = {grants[n]["id"] for n in todo_grants} | {apps[n]["id"] for n in todo_apps}
+    artifacts = rehearsal.gql("{ CoreArtifact { edges { node { id object { node { id } } } } } }", branch=branch)
+    for edge in artifacts["CoreArtifact"]["edges"]:
+        owner = (edge["node"]["object"]["node"] or {}).get("id")
+        if owner in doomed_ids:
+            rehearsal.gql(
+                "mutation ($id: String!) { CoreArtifactDelete(data: {id: $id}) { ok } }",
+                {"id": edge["node"]["id"]},
+                branch=branch,
+            )
+    for kind, group in (("ServiceAppAccess", todo_grants), ("ServiceFabricApp", todo_apps)):
+        source = grants if kind == "ServiceAppAccess" else apps
+        for name in group:
+            rehearsal.gql(
+                f"mutation ($id: String!) {{ {kind}Delete(data: {{id: $id}}) {{ ok }} }}",
+                {"id": source[name]["id"]},
+                branch=branch,
+            )
+    print(f" - Deleted {sorted(names)} and their generator records on '{branch}'", flush=True)
+
+    mutation = (
+        "mutation { CoreProposedChangeCreate(data: {"
+        ' name: { value: "Restore the demo baseline" }'
+        f' source_branch: {{ value: "{branch}" }} destination_branch: {{ value: "main" }}'
+        " }) { object { id } } }"
+    )
+    pc_id = ((_graphql(mutation).get("CoreProposedChangeCreate") or {}).get("object") or {}).get("id")
+    if not pc_id:
+        raise Exit(f"Could not open the proposed change for '{branch}'.", code=1)
+    _wait_for_validators(pc_id, timeout)
+    print(" - Merging", flush=True)
+    result = httpx.post(
+        f"{INFRAHUB_ADDRESS}/graphql",
+        json={
+            "query": f'mutation {{ CoreProposedChangeMerge(data: {{id: "{pc_id}"}}, wait_until_completion: true) {{ ok }} }}'
+        },
+        headers={"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")},
+        timeout=300,
+    )
+    if not ((result.json().get("data") or {}).get("CoreProposedChangeMerge") or {}).get("ok"):
+        raise Exit(f"Infrahub refused the merge of '{branch}': {result.text[:300]}", code=1)
+    return {
+        "since": time.time(),
+        "branch": branch,
+        "apps": {n: apps[n] for n in todo_apps},
+        "grants": todo_grants,
+    }
+
+
+def _demo_services_on(kind: str, branch: str) -> dict[str, dict[str, str]]:
+    query = f"{{ {kind} {{ edges {{ node {{ id name {{ value }} status {{ value }} }} }} }} }}"
+    return {
+        str(e["node"]["name"]["value"]): {"status": str(e["node"]["status"]["value"])}
+        for e in (_graphql(query, branch).get(kind) or {}).get("edges") or []
+    }
+
+
+def _wait_converged(removed: dict[str, Any], timeout: int) -> None:
+    """Wait for the lab to follow the merge: devices pushed and confirmed, cluster and address pool cleared."""
+    rehearsal = _rehearsal()
+    since = removed["since"]
+    conditions: dict[str, Callable[[], bool]] = {
+        "the reconciler has pushed and then confirmed": lambda: rehearsal.pushed_and_confirmed(since),
+    }
+
+    def namespace_gone(namespace: str) -> Callable[[], bool]:
+        return lambda: "NotFound" in rehearsal.kubectl("get", "namespace", namespace).stderr
+
+    def fabricapp_gone(app: str) -> Callable[[], bool]:
+        return lambda: "NotFound" in rehearsal.kubectl("get", "fabricapp", app).stderr
+
+    def block_released(block: str) -> Callable[[], bool]:
+        return lambda: (
+            not ((_graphql(f'{{ IpamPrefix(prefix__value: "{block}") {{ count }} }}').get("IpamPrefix")) or {}).get(
+                "count"
+            )
+        )
+
+    for name, app in removed["apps"].items():
+        if app["namespace"]:
+            conditions[f"{name}: namespace {app['namespace']} is gone from the cluster"] = namespace_gone(
+                app["namespace"]
+            )
+        conditions[f"{name}: its FabricApp is gone"] = fabricapp_gone(name)
+        if app["block"]:
+            conditions[f"{name}: the VIP block {app['block']} is released"] = block_released(app["block"])
+    seen = rehearsal.watch("restore", since, conditions, timeout=timeout)
+    missing = [c for c in conditions if c not in seen]
+    if missing:
+        raise Exit("The lab did not converge: " + "; ".join(missing), code=1)
+
+
+def _delete_orphan_artifacts() -> None:
+    """Delete artifacts on main whose object is gone: Vidra keeps delivering them, so their resource never leaves."""
+    rehearsal = _rehearsal()
+    edges = rehearsal.gql("{ CoreArtifact { edges { node { id name { value } object { node { id } } } } } }")[
+        "CoreArtifact"
+    ]["edges"]
+    for edge in edges:
+        if not (edge["node"]["object"]["node"] or {}).get("id"):
+            print(
+                f" - Deleting the orphan artifact '{edge['node']['name']['value']}' ({edge['node']['id']})", flush=True
+            )
+            rehearsal.gql(
+                "mutation ($id: String!) { CoreArtifactDelete(data: {id: $id}) { ok } }", {"id": edge["node"]["id"]}
+            )
+
+
+def _delete_dangling_generator_records() -> None:
+    """Delete generator instances on main whose object is gone, and the tracking groups of the same name.
+
+    Deleting an instance on the restore branch does not reach main (measured: all three were still
+    there after the merge), and one pointing at a deleted node turns the generator red on every later
+    proposed change. A group is removed when it is a `generate-*` tracking group with no member.
+    """
+    import re
+
+    rehearsal = _rehearsal()
+    data = rehearsal.gql(
+        """{ CoreGeneratorInstance { edges { node { id name { value } object { node { id } } } } }
+             CoreGeneratorGroup { edges { node { id name { value } description { value } members { count } } } } }"""
+    )
+    for edge in data["CoreGeneratorInstance"]["edges"]:
+        if not (edge["node"]["object"]["node"] or {}).get("id"):
+            print(f" - Deleting the dangling generator instance '{edge['node']['name']['value']}'", flush=True)
+            rehearsal.gql(
+                "mutation ($id: String!) { CoreGeneratorInstanceDelete(data: {id: $id}) { ok } }",
+                {"id": edge["node"]["id"]},
+            )
+    for edge in data["CoreGeneratorGroup"]["edges"]:
+        node = edge["node"]
+        tracking = re.fullmatch(r"generate-[a-z-]+-[0-9a-f]{32}", node["name"]["value"]) is not None
+        if tracking and (node["description"]["value"] or "").startswith("name: ") and not node["members"]["count"]:
+            print(
+                f" - Deleting the empty tracking group '{node['name']['value']}' ({node['description']['value']})",
+                flush=True,
+            )
+            rehearsal.gql(
+                "mutation ($id: String!) { CoreGeneratorGroupDelete(data: {id: $id}) { ok } }", {"id": node["id"]}
+            )
+
+
+def _delete_merged_branches(ctx: Context) -> None:
+    """Delete every Infrahub branch whose proposed change merged. The proposed change stays as history."""
+    merged = {
+        e["node"]["source_branch"]["value"]
+        for e in (
+            _graphql(
+                '{ CoreProposedChange(state__value: "merged") { edges { node { source_branch { value } } } } }'
+            ).get("CoreProposedChange")
+            or {}
+        ).get("edges")
+        or []
+    }
+    branches = _branches() or {}
+    for branch in sorted(merged):
+        if branch in branches and not branches[branch]:
+            print(f" - Deleting the merged branch '{branch}'", flush=True)
+            ctx.run(f"infrahubctl branch delete {shlex.quote(branch)}", pty=True, warn=True)
+
+
+@task(
+    help={
+        "name": f"The builder capability to reset (default {DEMO_NAME})",
+        "timeout": "Seconds each wait may take (default 600)",
+        "no_verify": "Skip the preflight and `make -C lab verify` at the end",
+    }
+)
+def demo_restore(ctx: Context, name: str = DEMO_NAME, timeout: int = 600, no_verify: bool = False) -> None:
+    """Return the whole lab to the seeded baseline after a demo. Idempotent; safe to run again if interrupted.
+
+    In order: the builder capability is reset (`demo-reset`); every grant and application a presenter
+    created is withdrawn on one branch and merged; the devices, the cluster and the address pool are
+    awaited; the merged branches are deleted; then the preflight and `make -C lab verify` prove it.
+    Anything it cannot return to the baseline it says so, and the fallback is `invoke bootstrap --fresh`.
+    """
+    rehearsal = _rehearsal()
+    started = time.monotonic()
+    repo = _repository()
+    if not repo:
+        raise Exit("No repository is registered. Bootstrap first.", code=1)
+    upstream_before = _remote_tip(ctx, "main")
+
+    print("\n=== 1. The builder capability ===", flush=True)
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        has_stage = ctx.run(
+            f"git rev-parse --verify --quiet refs/heads/stage/{shlex.quote(name)}", hide=True, warn=True
+        ).ok
+    if not has_stage:
+        demo_stage(ctx, name=name)
+    demo_reset(ctx, name=name, timeout=timeout)
+
+    print("\n=== 2. Grants and applications a presenter created ===", flush=True)
+    _delete_leftover_restore_branches()
+    removed = _withdraw_demo_services(timeout)
+    _delete_orphan_artifacts()
+    _delete_dangling_generator_records()
+
+    print("\n=== 3. Waiting for the devices and the cluster ===", flush=True)
+    if removed:
+        _wait_converged(removed, timeout)
+    else:
+        since = time.time()
+        rehearsal.wait_until(
+            lambda: any("differed=0" in line for line in rehearsal.reconciler_cycles(since)), timeout=300, interval=10
+        )
+
+    print("\n=== 4. Merged branches ===", flush=True)
+    _delete_merged_branches(ctx)
+
+    upstream_after = _remote_tip(ctx, "main")
+    if upstream_before != upstream_after:
+        raise Exit(f"Upstream main moved during the restore: {upstream_before[:10]} -> {upstream_after[:10]}", code=1)
+    if not no_verify:
+        print("\n=== 5. Proving the baseline ===", flush=True)
+        rehearsal.act_preflight()
+        failed = [r for r in rehearsal.RESULTS if r[0] == "FAIL"]
+        warned = [r for r in rehearsal.RESULTS if r[0] == "WARN"]
+        if failed or warned:
+            raise Exit(f"The restore is not clean: {[r[1] for r in failed + warned]}", code=1)
+        ctx.run(f"make -C {shlex.quote(str(rehearsal.main_checkout() / 'lab'))} verify", pty=False)
+    print(f"\nRestored in {time.monotonic() - started:.0f} s. Upstream main is untouched ({upstream_after[:10]}).")
+
+
+@task(
+    help={
+        "acts": "Comma-separated acts to run, from one, two, builder (default all three)",
+        "reference": "Request reference for the portal acts (default demo1)",
+        "name": f"The builder capability (default {DEMO_NAME})",
+        "no_builder_reset": "Leave the builder capability merged instead of taking it back out",
+        "restore": "Afterwards run `invoke demo-restore` to return the lab to the baseline",
+    }
+)
+def demo_run(
+    ctx: Context,
+    acts: str = "one,two,builder",
+    reference: str = "demo1",
+    name: str = DEMO_NAME,
+    no_builder_reset: bool = False,
+    restore: bool = False,
+) -> None:
+    """Run the whole demo against the live lab, merges included: a PASS/FAIL line per check and a timing table.
+
+    CHANGES THE LAB. Exits non-zero on any FAIL. See scripts/demo_full_run.py and docs/docs/demo-builder.md.
+    """
+    command = [
+        "uv", "run", "python", "scripts/demo_full_run.py",
+        "--acts", acts, "--reference", reference, "--name", name,
+    ]  # fmt: skip
+    if no_builder_reset:
+        command.append("--no-builder-reset")
+    if restore:
+        command.append("--restore")
+    ctx.run(" ".join(shlex.quote(c) for c in command), pty=False)
 
 
 # The AVD chain, and the reason it is split in two.
