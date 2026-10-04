@@ -672,6 +672,11 @@ Two refusals are worth showing, because they come from different places:
 A write it is allowed lands on its session branch, and `propose_changes` opens
 the proposed change from there in well under a second.
 
+To make the agent request Grafana access instead of using the portal (act two), see
+[requesting application access through the MCP server](./developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server).
+The agent creates the grant with a GraphQL mutation, because `node_upsert` takes scalar values
+only, and the checks are re-run after the generators finish.
+
 **Do not claim the agent cannot merge.** On Infrahub 1.10.6 the
 `CoreProposedChangeMerge` mutation does not check `merge_proposed_change`, and
 the MCP server does not block it, so `mcp-agent` merged its own proposed change
@@ -807,10 +812,22 @@ use live.
   Delete the orphan branch afterwards, in Infrahub and, if it was mirrored, in git.
 - **`Unable to set context for account that doesn't exist`.** That user has never
   signed in to Infrahub. Run `uv run python scripts/provision_portal_accounts.py`.
-- **A grant made outside the portal never builds.** Over the API or an SDK, it must
-  also be added to the `service_app_accesses` group. The event rule fires, and the
-  run fails `Target … is not part of the group` with nothing visible on the grant.
-  The portal adds the membership itself.
+- **A grant made outside the portal never builds.** A grant must be a member of the
+  `service_app_accesses` group, or the run fails `Target … is not part of the group` with
+  nothing visible on the grant and every validator green. The portal sends the membership
+  itself. Since `triggers.yml` gained a group action, a grant from the API, an SDK or the
+  MCP server joins the group on creation and is built by the group rule (see
+  [service triggers](./developer-guide/service-triggers.md#a-grant-made-by-any-client-joins-its-generator-group)).
+  On a stack that has not loaded those rules, send `member_of_groups: [{ hfid:
+  ["service_app_accesses"] }]` with the grant, or add the membership afterwards.
+- **The proposed change from the MCP server has no border leaf diff.** `propose_changes` opens the
+  change before the generators finish. Wait for `generate-app-access` and the AVD generators, then
+  run `CoreProposedChangeRunCheck` with `check_type: ALL` on the proposed change. See
+  [the MCP server](./developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server).
+- **`invoke demo-restore` waits out its timeout.** Fixed: a staged branch that is only stale
+  (`main` moved since `demo-stage`) was read as a merged capability. Restore now looks for the
+  capability's own files on the default branch. If it still stalls, rebuild the branch with
+  `uv run invoke demo-stage --force`.
 - **The cluster resource never appears.** Check `kubectl get vidraresource -A`, not
   the sync: a sync reports `Succeeded` over an empty or rejected set. A deleted
   resource is not redelivered until the `InfrahubSync` is deleted and re-applied

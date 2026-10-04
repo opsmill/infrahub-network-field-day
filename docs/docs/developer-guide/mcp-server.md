@@ -38,3 +38,56 @@ Three measured facts about that role:
 `invoke stop` and `invoke destroy` pass `--profile '*'`. Without it `down` skips
 profiled services, and this one, being on the compose network, then holds that
 network open so it cannot be removed.
+
+## Requesting application access through the MCP server
+
+A person who asks an agent for access to an application is creating a `ServiceAppAccess` node on a
+branch. The agent works as `mcp-agent`, so the change lands on a session branch and a human merges
+it. The step-by-step process is the project skill
+[infrahub-requesting-app-access](https://github.com/opsmill/infrahub-network-field-day/blob/main/.agents/skills/infrahub-requesting-app-access/SKILL.md).
+Two facts from a live run (act two, Grafana, requested as `mcp-agent`) shape it. Both come from
+how `infrahub-mcp` works. The server is the published image
+`registry.opsmill.io/opsmill/infrahub-mcp:v1.1.7`, not code in this repository, so this repository
+cannot change them and documents the way around each.
+
+- **`node_upsert` cannot create a `ServiceAppAccess`.** The tool takes scalar attribute values only.
+  A grant needs two relationships, `application` and `owner`, and `source_site` or another source
+  peer as well. Create the grant with the `mutate_graphql` tool and a `ServiceAppAccessCreate`
+  mutation on the session branch. The portal sends the same mutation, as the `create_grant` step in
+  [`backstage/catalog/exposed-app-with-access.yaml`](https://github.com/opsmill/infrahub-network-field-day/blob/main/backstage/catalog/exposed-app-with-access.yaml):
+
+  ```graphql
+  mutation {
+    ServiceAppAccessCreate(
+      data: {
+        name: { value: "grafana-agent" }
+        requester: { value: "alice@otternet.lab" }
+        justification: { value: "Dashboards for the branch office" }
+        application: { id: "<ServiceFabricApp id>" }
+        source_site: { hfid: ["branch-office"] }
+        owner: { hfid: ["branch"] }
+        member_of_groups: [{ hfid: ["service_app_accesses"] }]
+      }
+    ) {
+      ok
+      object { id }
+    }
+  }
+  ```
+
+  `member_of_groups` is not required since the group rules in `triggers.yml` add the membership
+  (see [service triggers](./service-triggers.md#a-grant-made-by-any-client-joins-its-generator-group)),
+  but sending it does no harm and is what the portal does. On a stack that has not yet loaded those
+  rules (`invoke load` loads `triggers.yml`), a grant without the membership is never built.
+
+- **`propose_changes` opens the proposed change before the generators finish.** The proposed change
+  is created in well under a second, before the generators the grant triggers
+  (`generate-app-access`, then the AVD generators) have finished. The first set of checks therefore
+  ran against a branch that did not yet hold the border leaf configuration, and the proposed change showed no EOS diff for the border
+  leaf. Re-running the checks after the generators finished fixed it: the `CoreProposedChangeRunCheck`
+  mutation with `check_type: ALL`, sent through `mutate_graphql`. Which check types the mutation
+  accepts other than `ALL` was not tested.
+
+How long the generators take on a given stack is not recorded here. Measured elsewhere in this
+documentation, a generator pass is 15 to 21 seconds, and artifacts settle in about a minute after a
+merge ([AGENTS.md](https://github.com/opsmill/infrahub-network-field-day/blob/main/AGENTS.md)).

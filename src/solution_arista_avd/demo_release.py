@@ -280,6 +280,29 @@ def worker_needs_realignment(current: str, default_branch: str, head: str, remot
     return bool(current) and (current != default_branch or head != remote_tip)
 
 
+# Files the staged branch touches only to let the repository import carry the capability.
+# They exist on the default branch whether or not the capability is merged.
+_STAGE_BOOKKEEPING_FILES = frozenset({".infrahub.yml"})
+
+
+def capability_is_merged(added_by_stage: list[str], default_branch_files: set[str]) -> bool | None:
+    """Whether the capability's own files are on the default branch.
+
+    ``added_by_stage`` are the files the staged branch adds since the commit it was cut from;
+    ``default_branch_files`` are every file on the default branch. Returns ``None`` when the staged
+    branch adds nothing besides its bookkeeping, so the caller must judge another way.
+
+    Comparing whole trees instead is wrong: the default branch also differs from the staged branch's
+    base whenever ``main`` has moved since staging, and that read as "the capability is merged". A
+    restore then tried to take out a capability that was never there and waited for a merge that
+    could not come, for the whole timeout.
+    """
+    own = [f for f in added_by_stage if f not in _STAGE_BOOKKEEPING_FILES]
+    if not own:
+        return None
+    return any(f in default_branch_files for f in own)
+
+
 def declare_schemas_and_objects(infrahub_yml: str, schema_files: list[str], object_files: list[str]) -> str:
     """``.infrahub.yml`` with ``schemas:`` and ``objects:`` sections appended.
 

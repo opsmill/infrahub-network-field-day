@@ -32,6 +32,29 @@ spec:
       generator: generate-fabric-peering
 
 ---
+# A grant made by any client is built, not only one made by the portal.
+#
+# `generate-app-access` targets the group `service_app_accesses`, and Infrahub
+# refuses to run a generator against a node outside its target group
+# (`Target ... is not part of the group`). The portal puts each grant in the
+# group itself (`member_of_groups` in its create mutation); the API, the UI and
+# the Infrahub MCP server do not, so their grants fired the `created` rule, were
+# refused by that check and produced no firewall rule, with every validator green.
+#
+# This action adds the node to the group on creation. The group rule in the
+# next document then runs the generator once the node is a member. Adding a node
+# that is already a member changes nothing, so it emits no group event and the
+# portal path costs no extra run.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: CoreGroupAction
+  data:
+    - name: add-app-access-to-its-generator-group
+      member_action: add_member
+      group: service_app_accesses
+
+---
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
@@ -194,6 +217,15 @@ spec:
     # builds on creation like the rest -- the reviewer sees the rule, the
     # service objects and the re-rendered firewall configuration in the
     # proposed change, and merging it is the approval.
+    # Puts a grant created by any client in the generator's target group. See the
+    # CoreGroupAction above. It writes only group membership, which no rule below
+    # watches, so it cannot loop.
+    - name: trigger-app-access-group-membership-created
+      branch_scope: "other_branches"
+      node_kind: ServiceAppAccess
+      mutation_action: "created"
+      action: add-app-access-to-its-generator-group
+
     - name: trigger-app-access-generator-created
       branch_scope: "other_branches"
       node_kind: ServiceAppAccess
@@ -609,3 +641,25 @@ spec:
         data:
           - relationship_name: cluster
             modification_type: updated
+
+---
+# Builds a grant that became a member of `service_app_accesses` AFTER it was
+# created, which is what the membership rule above does for a grant from any
+# client other than the portal. The `created` rule above runs at the same moment
+# as the membership rule, so for such a grant it is refused first; this rule runs
+# once the membership exists.
+#
+# For a grant the portal created, the membership came with the node, so this rule
+# may fire as well as the `created` rule. `generate-app-access` saves every node
+# with `allow_upsert` and every write-back is guarded, so a second run changes
+# nothing. The cost is one extra no-op run.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: CoreGroupTriggerRule
+  data:
+    - name: trigger-app-access-generator-member-added
+      branch_scope: "other_branches"
+      member_update: added
+      group: service_app_accesses
+      action: run-app-access-generator
