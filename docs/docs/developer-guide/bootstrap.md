@@ -43,12 +43,104 @@ uv run invoke bootstrap            # everything, in one command
 uv run invoke bootstrap --fresh    # ... destroying the stack and the lab first
 ```
 
-That runs `start` → `load` → `avd` (on a branch, then merged) → `lab` →
-`reconcile --converge` → `tooling` → `cluster`. Each step is still available on its own;
+That runs `build` → `start` → `load` → `avd` (on a branch, then merged) → `lab` →
+`reconcile --converge` → `tooling` → `mcp` → `mcp-tokens` → `metrics-exporter` → `cluster`, starts
+the reconciler loop, and ends with the readiness checks. Each step is still available on its own;
 `bootstrap` only removes the need to remember the order and the flags.
 
 Since cycle 033 it also builds the portal image and runs `tooling` before `cluster`, so a
 finished bootstrap has a branch user able to sign in and ask for something.
+
+### A read-write bootstrap, and what it does for demo-main
+
+The demonstration runs against a read-write repository on `demo-main`
+([builder demo](../demo-builder.md)). Export these four settings, then bootstrap:
+
+```bash
+export INFRAHUB_REPOSITORY_URL=https://github.com/opsmill/infrahub-network-field-day.git
+export INFRAHUB_REPOSITORY_MODE=readwrite
+export INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='["demo/.*"]'
+export NFD_GITHUB_TOKEN=...          # a token with write access to the repository; never commit it
+uv run invoke bootstrap --fresh
+```
+
+- **The settings are checked first.** Bootstrap stops before it destroys anything if the URL, the
+  token or the import setting is missing, and if a dry-run push with the token is refused. This used
+  to be found out after the teardown.
+- **`--fresh` recreates `demo-main`.** After the stack and the lab are destroyed, bootstrap deletes
+  `demo-main` on the remote and creates it again at the tip of `main`. Before this, an existing
+  `demo-main` was kept, so a new stack registered the tree that earlier demonstrations had left, which
+  was behind `main`. Recreating it is safe at that point, and only at that point: the rule against it
+  in the builder demo exists because a running Infrahub has already pulled the merge commit.
+  Bootstrap without `--fresh` leaves `demo-main` alone, and the readiness check reports a `demo-main`
+  that differs from `main`.
+- **A stale local staged branch is rebuilt.** At the end of a read-write bootstrap, if
+  `stage/internet-access` exists and was cut from an older `main`, bootstrap runs
+  `demo-stage --force`. It does so only when the local `main` equals `origin/main`, because
+  `demo-stage` cuts from the local `main`; otherwise it prints the two commands to run.
+
+### The two MCP identities, and the order they are made in
+
+`mcp` creates `mcp-agent` and mints `INFRAHUB_MCP_TOKEN` into the **main checkout's** `.env`, gives the
+built-in `Infrahub Users` group the `Requester Access` role, and starts the MCP server in
+token-passthrough mode. `mcp-tokens` then mints `INFRAHUB_MCP_TOKEN_ALICE`. It runs after `tooling` and
+after `mcp` because alice has no password in Infrahub: her account exists once she has signed in through
+Dex, and her token is minted with the access token that sign-in returns. Before this wiring, only
+`invoke mcp` ran, and nothing in bootstrap minted her token.
+
+`--fresh` destroys the database, so every token in `.env` stops authenticating. Both scripts replace a
+token that no longer authenticates and keep one that still does, so a re-run changes nothing. Bob has a
+Dex account but no MCP token, because nothing registers him with the MCP server.
+
+**A shell that loaded `.env` before `--fresh` holds the old tokens, and they win over `.env`.** `docker compose`
+and `scripts/deploy_tooling.sh` both prefer a variable in the process environment to the file. Measured on a
+`bootstrap --fresh` run from such a shell: the portal was deployed with the previous stack's token, answered 401 to
+every request, ingested no catalogue entry, and its picker was empty. The readiness check for the picker found it.
+`bootstrap`, `tooling`, `mcp`, `mcp-tokens` and `metrics-exporter` now drop every generated credential variable
+(`INFRAHUB_MCP_*`, `INFRAHUB_PORTAL_*`, `INFRAHUB_EXPORTER_*` tokens and passwords) whose value differs from `.env`,
+print the names without the values, and read `.env` instead. `invoke ready` warns when the shell it runs in holds such
+a variable, because a Claude Code started from that shell would send the old token: open a new shell after a bootstrap.
+
+### What a finished bootstrap checks
+
+The last step is `invoke ready`, which runs by itself at the end of bootstrap and can be run at any time.
+It prints one line per check, a count, and what a person still has to do. It exits 1, and bootstrap
+exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
+
+| Check | What it asserts |
+| --- | --- |
+| Application catalogue | Seven entries; `whoami`, `podinfo`, `grafana` and `argo-cd` are requestable and the three `lab-*` entries are not |
+| `triggers.yml` objects | Every action and rule the file declares exists, including the group rules such as `add-app-access-to-its-generator-group` |
+| Menus | Every entry in `menus/` exists |
+| Seeded applications | `otternet-demo`, `otternet-metrics` and `otternet-telemetry` have a catalogue entry and are pinned |
+| MCP server | The container runs and `/health` reports `token-passthrough` |
+| `mcp-agent` | The account and its role exist; a tool call with `INFRAHUB_MCP_TOKEN` returns `AccountProfile` `mcp-agent` |
+| Requester Access | The role is attached to `Infrahub Users` and holds only the proposed change permissions |
+| Portal accounts | Every Dex user has an Infrahub account |
+| alice | A tool call with `INFRAHUB_MCP_TOKEN_ALICE` returns `alice`, and she opens a proposed change on a throw-away branch that the check deletes |
+| Repository | Read-write on `demo-main`, `in-sync`, two task workers, and `demo-main` equal to `main` (same commit, or same tree) |
+| Leftover branches | Warns about any Infrahub branch besides `main`, such as an `mcp/session-*` branch |
+| Staged branch | Warns when `stage/internet-access` was cut from an older `main` |
+| Portal picker | The portal's catalogue lists exactly the requestable entries, asked from the branch desktop as alice |
+| `.mcp.json` | `infrahub-lab` and `infrahub-lab-alice` send the variables the scripts write |
+| `claude mcp list` | Both servers connect, from a process that has `.env` loaded |
+| Shell environment | Warns when this shell holds a generated credential that differs from `.env` |
+
+The repository check is skipped on a stack that is not read-write unless
+`INFRAHUB_REPOSITORY_MODE=readwrite` is exported, in which case it fails. A check that cannot run, such as
+the picker with the lab down, is reported as `SKIP` with the reason.
+
+**What a person still has to do.** Start Claude Code from a shell that has loaded `.env`, because
+`.mcp.json` takes the two tokens from the environment:
+
+```bash
+cd /home/ubuntu/dev/nfd41/infrahub
+set -a; source .env; set +a
+claude
+```
+
+and approve the `infrahub-lab` and `infrahub-lab-alice` servers the first time Claude Code asks. Claude
+Code reads `.mcp.json` at start, so restart it after a bootstrap that mints new tokens.
 
 **The bootstrap ends by starting the reconciler LOOP**, not just by converging
 once. Without it a merge reaches no device and `DeploymentState` keeps reporting
@@ -61,6 +153,8 @@ container. `scripts/verify_bootstrap.sh` now asserts the container is up.
 default of one cycle in four is a steady-state economy — its comparison takes an
 exclusive lock on the vSRX — and a demo wants `1`, because the firewall is the
 payoff and nobody else is on the box.
+
+**Bootstrap runs `invoke build` itself, before it starts the stack.** `destroy` keeps images, and `invoke doctor` once showed the reconciler's image 14 hours behind the source commits after a pull.
 
 **A rename means `invoke build`.** The reconciler runs the image's installed copy
 of `solution_arista_avd`, not the bind-mounted source, so after the rename it
@@ -141,11 +235,14 @@ gave 67 checks with one red.
 
 ```bash
 scripts/verify_bootstrap.sh          # ~20 minutes, destroys and rebuilds everything
+SKIP_SMOKE=1 scripts/verify_bootstrap.sh   # without the act-level smoke
 ```
 
 Tears the environment down, rebuilds it with `invoke bootstrap --fresh`, and
 asserts the result stage by stage — seed data, artifacts, the devices, the
-cluster, the tooling cluster and signing in. Use it after changing anything in
+cluster, the tooling cluster and signing in, then `invoke ready` and `invoke doctor`, then an act-level
+smoke: `invoke demo-run --acts one,two`, `invoke demo-restore` and `make -C lab verify`, which has to report
+121 passed. For a read-write repository, export the four settings above first. Use it after changing anything in
 the bootstrap path; "it worked" and "it is stable" are different claims, and only
 a full teardown distinguishes them. (This said "sixteen things" for several
 cycles after it stopped being sixteen, which is why the count is no longer

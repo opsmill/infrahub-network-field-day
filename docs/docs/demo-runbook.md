@@ -90,6 +90,20 @@ checked against the lab in front of you.
 
 Allow ten minutes. Each check guards against something that goes wrong quietly.
 
+### 0. The readiness checks pass
+
+```bash
+uv run invoke ready
+```
+
+`invoke bootstrap` ends with the same checks. They cover the application catalogue, the event rules, the
+menus, the MCP server and the tokens of `mcp-agent` and `alice`, the Requester Access role, the read-write
+repository with `demo-main` equal to `main`, the portal's picker and `.mcp.json`; the
+[bootstrap page](./developer-guide/bootstrap.md#what-a-finished-bootstrap-checks) lists each one. It exits 1 on a
+failure and prints what is left for you to do. A `WARN` about a leftover `mcp/session-*` branch or an old
+staged branch does not stop the demonstration, but the staged branch is the one the builder act releases, so
+rebuild it with `uv run invoke demo-stage --force` first.
+
 ### 1. The reconciler loop is running, at demo cadence
 
 ```bash
@@ -646,7 +660,8 @@ curl -s http://127.0.0.1:8001/health
 Claude Code picks the server up from `.mcp.json` as `infrahub-lab` and asks you
 to approve it the first time. The server holds no credential: `.mcp.json` sends the
 `mcp-agent` API token from `INFRAHUB_MCP_TOKEN`, so start `claude` from a shell that
-has sourced `.env` (`set -a; source .env; set +a`). The agent acts as `mcp-agent`, never as the
+has sourced `.env` (`set -a; source .env; set +a`); bootstrap mints both `INFRAHUB_MCP_TOKEN` and
+`INFRAHUB_MCP_TOKEN_ALICE` there, and Claude Code has to be restarted to read new ones. The agent acts as `mcp-agent`, never as the
 Super Administrator `agent` the task workers run as. It reads everything, writes
 only on a branch (the server creates one per session, named
 `mcp/session-<date>-<hex>`), and can open a proposed change. A write aimed at

@@ -37,7 +37,10 @@
 #         INFRAHUB_API_TOKEN   default matches docker-compose.override.yml
 #         OTTERNET_LAB_DIR        default: lab/ in this checkout
 #
-# Takes about twenty minutes. Exits non-zero with the number of failed checks.
+# Takes about twenty minutes, and about twenty-five more with the act-level smoke (SKIP_SMOKE=1 skips
+# it). For a read-write repository, export INFRAHUB_REPOSITORY_URL, INFRAHUB_REPOSITORY_MODE=readwrite,
+# NFD_GITHUB_TOKEN and INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES first (docs/docs/demo-builder.md); the
+# readiness stage then also checks demo-main. Exits non-zero with the number of failed checks.
 set -uo pipefail
 
 LABEL="${1:-$(date +%H%M%S)}"
@@ -462,6 +465,35 @@ for family in "DcimFabricSwitch 7" "DcimDevice 6" "SecurityFirewall 1" "ComputeP
 done
 
 kill "$prom_pf" 2>/dev/null
+
+stage "readiness for a demonstration"
+# `invoke ready` is the same set of checks the bootstrap prints at its end: the catalogue and its seven
+# entries, the event rules, the menus, the MCP server in token-passthrough mode, the tokens of mcp-agent
+# and alice, Requester Access on Infrahub Users, the read-write repository with demo-main equal to main,
+# the portal's picker, and the names in .mcp.json. It exits 1 on any FAIL, so a bootstrap that is up but
+# not usable for the demonstration fails here. `claude mcp list` needs the `claude` command and skips
+# without it.
+uv run invoke ready >"$LOG/ready.log" 2>&1
+check "$?" "0" "invoke ready (no readiness check failed)"
+grep -E '^(FAIL|WARN|SKIP)' "$LOG/ready.log" || true
+uv run invoke doctor >"$LOG/doctor.log" 2>&1
+check "$?" "0" "invoke doctor (no FAIL)"
+
+stage "act-level smoke, then back to the baseline"
+# Acts one and two through the portal, merges included, then `demo-restore` and the lab's own
+# verification. It changes the lab, and the restore puts it back, so it runs last. SKIP_SMOKE=1 skips it
+# (about 25 minutes less) and prints that it did, so the skip is not mistaken for a pass.
+if [ "${SKIP_SMOKE:-0}" = "1" ]; then
+    printf 'SKIP  act-level smoke (SKIP_SMOKE=1)\n'
+else
+    uv run invoke demo-run --acts one,two >"$LOG/demo-run.log" 2>&1
+    check "$?" "0" "invoke demo-run --acts one,two"
+    uv run invoke demo-restore >"$LOG/demo-restore.log" 2>&1
+    check "$?" "0" "invoke demo-restore"
+    make -C "$LAB" verify >"$LOG/lab-verify.log" 2>&1
+    check "$(grep -oE '[0-9]+ passed' "$LOG/lab-verify.log" | tail -1 | cut -d' ' -f1)" "121" \
+        "make -C lab verify, after the restore (121 passed)"
+fi
 
 elapsed=$(( $(date +%s) - started ))
 printf '\n=== [%s] COMPLETE in %sm%ss — %s failure(s) ===\n' \

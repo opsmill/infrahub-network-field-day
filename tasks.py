@@ -428,6 +428,40 @@ def _ensure_remote_branch(ctx: Context, branch: str) -> None:
         ctx.run(f"git push origin FETCH_HEAD:refs/heads/{shlex.quote(branch)}", pty=True)
 
 
+def _recreate_remote_demo_main(ctx: Context) -> None:
+    """Delete `demo-main` on the remote and create it again at the tip of `main`.
+
+    Only for a stack that is about to be built from nothing (`bootstrap --fresh`). `demo-main`
+    keeps every merge a demonstration made, so after a few runs it is behind `main` and carries
+    commits `main` never had, and a new stack that registers it starts from an old tree.
+    Recreating it is safe here and only here: the rule against it
+    (docs/docs/demo-builder.md, "Rules that each cost a failed run") exists because a running
+    Infrahub has already pulled the merge commit, and a stack that was just destroyed has not.
+    """
+    from solution_arista_avd import demo_release as dr
+
+    branch = dr.DEFAULT_DEMO_BRANCH
+    print(f" - Recreating '{branch}' on the remote at the tip of main")
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run("git fetch --quiet origin main", pty=True)
+        if _remote_tip(ctx, branch):
+            ctx.run(f"git push --quiet origin --delete {shlex.quote(branch)}", pty=True)
+        ctx.run(f"git push --quiet origin FETCH_HEAD:refs/heads/{shlex.quote(branch)}", pty=True)
+
+
+def _preflight_repository_mode(ctx: Context) -> bool:
+    """Refuse a read-write bootstrap that cannot work, BEFORE anything is destroyed. Return whether it is read-write."""
+    from solution_arista_avd import readiness
+
+    problems = readiness.repository_environment_problems(os.environ)
+    if problems:
+        raise Exit("The read-write repository settings are incomplete:\n  - " + "\n  - ".join(problems), code=1)
+    if os.environ.get("INFRAHUB_REPOSITORY_MODE") != "readwrite":
+        return False
+    _check_push_access(ctx, os.environ["INFRAHUB_REPOSITORY_URL"], os.environ["NFD_GITHUB_TOKEN"])
+    return True
+
+
 # ---------------------------------------------------------------------------
 # The demo: a staged capability branch arrives from the Git remote on cue.
 # ---------------------------------------------------------------------------
@@ -2895,6 +2929,23 @@ def backstage_build(ctx: Context, no_cache: bool = False) -> None:
     ctx.run(f"{compose_cmd()} --profile build-only build{flag} backstage", pty=True)
 
 
+def _use_dotenv_credentials() -> None:
+    """Make `.env` the only source of the generated credentials for this run and its children.
+
+    A shell that loaded `.env` before the stack was rebuilt keeps the old tokens, and a process
+    environment beats `.env` for `docker compose` and for `scripts/deploy_tooling.sh`. Measured on a
+    `bootstrap --fresh`: the portal was deployed with the previous stack's token, answered 401 to
+    every request and listed no application. Names are printed, never values.
+    """
+    from solution_arista_avd import envfile
+
+    dropped = envfile.use_dotenv_credentials(os.environ, envfile.env_file(MAIN_DIRECTORY_PATH))
+    if dropped:
+        print(
+            f" - Ignoring {len(dropped)} credential variable(s) in this shell that differ from .env: {', '.join(dropped)}"
+        )
+
+
 @task
 def tooling(ctx: Context) -> None:
     """
@@ -2915,6 +2966,7 @@ def tooling(ctx: Context) -> None:
     """
     if not Path("scripts/deploy_tooling.sh").is_file():
         raise Exit("scripts/deploy_tooling.sh is missing")
+    _use_dotenv_credentials()
     # THE PORTAL'S OWN ACCOUNT FIRST, because the deploy renders its token into
     # the backstage Secret and refuses without one. `backstage-portal` reads
     # everything and writes only on branches -- the portal used to hold the
@@ -2954,6 +3006,7 @@ def mcp(ctx: Context) -> None:
 
     The server listens on http://127.0.0.1:8001/mcp. Idempotent.
     """
+    _use_dotenv_credentials()
     ctx.run("python scripts/provision_mcp_agent.py", pty=True)
     # Lets signed-in users, such as alice, open a proposed change with their own
     # token. One extra role on `Infrahub Users`; grants no merge or approval.
@@ -2962,6 +3015,44 @@ def mcp(ctx: Context) -> None:
     # and --no-deps because without it the recreate cascades to infrahub-server.
     ctx.run(f"{compose_cmd()} --profile mcp up -d --no-deps --force-recreate infrahub-mcp", pty=True)
     print(" - Infrahub MCP server: http://127.0.0.1:8001/mcp")
+
+
+@task(name="mcp-tokens")
+def mcp_tokens(ctx: Context) -> None:
+    """
+    Mint an MCP API token for each person an MCP client acts as (`alice`), into `.env`.
+
+    **After the tooling cluster, not inside `invoke mcp`.** A portal user has no password in
+    Infrahub. The account exists once the person has signed in through Dex, and the token is
+    minted with the access token that sign-in returns. So this needs the tooling cluster (Dex)
+    running, and `bootstrap` runs it after `tooling` and `mcp`. A token that still authenticates
+    is kept, so a re-run changes nothing.
+    """
+    from solution_arista_avd import readiness
+
+    _use_dotenv_credentials()
+    # The account first: the token script signs in too, but a missing account is easier to read here.
+    ctx.run("python scripts/provision_portal_accounts.py", pty=True)
+    for user in readiness.MCP_TOKEN_USERS:
+        print(f" - Minting the MCP token for {user}")
+        ctx.run(f"python scripts/provision_mcp_user_token.py --user {shlex.quote(user)}", pty=True)
+
+
+@task
+def ready(ctx: Context) -> None:  # noqa: ARG001
+    """
+    Check that the environment is good to go for a demonstration; exit 1 on any FAIL.
+
+    The catalogue, the event rules, the menus, the MCP server and the tokens of `mcp-agent` and
+    `alice`, the Requester Access role, the read-write repository and `demo-main`, the portal's
+    picker, and `.mcp.json`. It ends with what a person still has to do. Read-only.
+    """
+    from solution_arista_avd import readiness
+
+    results = readiness.run_checks(compose_root())
+    print(readiness.render_summary(results, compose_root()))
+    if readiness.exit_code(results):
+        raise Exit(code=1)
 
 
 @task
@@ -2986,6 +3077,7 @@ def metrics_exporter(ctx: Context) -> None:
     exporter cannot report because it reads one branch. Telegraf scrapes it, as
     the `service-lifecycle` monitoring profile says.
     """
+    _use_dotenv_credentials()
     ctx.run("python scripts/provision_metrics_exporter.py", pty=True)
     # --build, because the image comes from a git context and a first run has
     # none; --force-recreate so a re-minted token reaches a running container;
@@ -3024,6 +3116,35 @@ def metrics_exporter(ctx: Context) -> None:
             print(f" - WARNING: the {name} answered nothing useful in time; check `docker compose logs {service}`")
 
 
+def _refresh_stage_branch(ctx: Context) -> None:
+    """Rebuild the local staged capability branch when `main` has moved past the commit it was cut from.
+
+    `demo-release` and `demo-reset` compare the staged branch with the `main` commit it was cut
+    from, so an old one writes old versions of the files it touched back. Only done when the local
+    `main` is at the remote's tip, because `demo-stage` cuts from the local `main`; otherwise it says
+    what to run.
+    """
+    from solution_arista_avd import demo_release as dr
+
+    stage = dr.stage_branch(DEMO_NAME)
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run("git fetch --quiet origin main", hide=True, warn=True)
+        if not ctx.run(f"git rev-parse --verify --quiet {shlex.quote(stage)}", hide=True, warn=True).ok:
+            return
+        remote = ctx.run("git rev-parse origin/main", hide=True, warn=True).stdout.strip()
+        local = ctx.run("git rev-parse main", hide=True, warn=True).stdout.strip()
+        base = ctx.run(f"git merge-base origin/main {shlex.quote(stage)}", hide=True, warn=True).stdout.strip()
+    if base == remote:
+        return
+    if local != remote:
+        print(
+            f" - {stage} is older than origin/main, and local main is behind it: `git pull --ff-only`, then `uv run invoke demo-stage --force`"
+        )
+        return
+    print(f" - Rebuilding {stage}: it was cut from an older main")
+    demo_stage(ctx, force=True)
+
+
 # `bootstrap` takes a --cluster flag, which shadows the task of the same name
 # inside its body. Alias it here so the call site stays readable.
 _cluster_task = cluster
@@ -3053,9 +3174,11 @@ def bootstrap(
         provision  every device configured from its rendered artifact
         tooling    Dex and the Backstage portal, in the tooling cluster
         mcp        the Infrahub MCP server (token passthrough; clients use the `mcp-agent` token)
+        mcp-tokens an MCP token for `alice`, after Dex and the portal accounts exist
         metrics    the Infrahub exporter, reading as `metrics-exporter`
         cluster    Cilium, Vidra, Crossplane, the resource handover, and the
                    observability Secrets Grafana and Telegraf wait for
+        ready      the readiness checks, and what a person still has to do
 
     **The chain runs on a branch and is merged here rather than by hand.** That
     is not ceremony: the topology generators write a great deal of derived data,
@@ -3069,11 +3192,26 @@ def bootstrap(
     inside `avd --topology` are destructive against a fabric that already has
     cabling, so a second bootstrap onto a populated instance wants `--fresh`.
     """
+    # BEFORE ANYTHING IS DESTROYED: a read-write repository needs a token that can push and an
+    # import setting for the demo branches, and both used to be found out after the teardown.
+    readwrite = _preflight_repository_mode(ctx)
+    _use_dotenv_credentials()
+
     if fresh:
         print("=== Destroying the lab ===")
         lab(ctx, lab_dir=lab_dir, destroy=True)
         print("\n=== Destroying the Infrahub stack ===")
         destroy(ctx)
+        if readwrite:
+            # The new stack must not start from the demo-main an earlier stack left behind.
+            print("\n=== Recreating demo-main on the remote ===")
+            _recreate_remote_demo_main(ctx)
+
+    # The reconciler runs the image's installed copy of the package, not the bind mount, and
+    # `destroy` keeps images. Without this a bootstrap after a pull ran an old reconciler;
+    # `invoke doctor` showed the image 14 hours behind the source commits. Cached, so a repeat is quick.
+    print("\n=== Building the project image ===")
+    build(ctx)
 
     print("\n=== Starting Infrahub ===")
     start(ctx)
@@ -3110,6 +3248,12 @@ def bootstrap(
     print("\n=== Starting the MCP server ===")
     mcp(ctx)
 
+    # AFTER `tooling` (Dex) and after the portal accounts exist: alice's token is minted by signing
+    # her in through Dex, so it cannot come earlier, and a `.env` token from a destroyed stack is
+    # replaced because it no longer authenticates.
+    print("\n=== Minting the MCP tokens ===")
+    mcp_tokens(ctx)
+
     # Before the cluster, so Prometheus has organisation metrics to scrape the
     # moment Grafana comes up, and verify_bootstrap.sh's dashboard check has
     # data rather than a first-scrape race.
@@ -3128,10 +3272,21 @@ def bootstrap(
     print("\n=== Starting the deployment reconciler ===")
     ctx.run(f"{compose_cmd()} --profile reconcile up -d deployment-reconciler", pty=True, warn=True)
 
+    if readwrite:
+        _refresh_stage_branch(ctx)
+
     print("\n=== Bootstrap complete ===")
     print("   The lab is running and every device matches Infrahub.")
     if cluster:
         print("   Merging a service-layer change on main now reaches the cluster through Vidra.")
+
+    print("\n=== Readiness ===")
+    from solution_arista_avd import readiness
+
+    results = readiness.run_checks(compose_root())
+    print(readiness.render_summary(results, compose_root()))
+    if readiness.exit_code(results):
+        raise Exit("Bootstrap finished, but a readiness check failed (listed above).", code=1)
 
 
 def _wait_for_infrahub(timeout: int = 600) -> None:
@@ -3241,12 +3396,15 @@ def doctor(ctx: Context) -> None:  # noqa: ARG001
 
     Stale reconciler image, a stray reconcile process, a stale schema.graphql, a
     wedged repository sync, dangling generator instances, branches syncing with
-    git, and a missing tooling bridge. A check that cannot run (stack down) is
-    reported as SKIP. The logic lives in solution_arista_avd.doctor.
+    git, and a missing tooling bridge, then the readiness checks of `invoke ready`
+    (catalogue, event rules, MCP server and tokens, Requester Access, repository
+    mode, portal picker). A check that cannot run (stack down) is reported as
+    SKIP. The logic lives in solution_arista_avd.doctor and .readiness.
     """
     from solution_arista_avd import doctor as checks
+    from solution_arista_avd import readiness
 
-    results = checks.run_checks(checks.Environment(root=compose_root()))
+    results = checks.run_checks(checks.Environment(root=compose_root())) + readiness.run_checks(compose_root())
     for result in results:
         print(result.render())
     print(f"\n{checks.summary(results)}")
