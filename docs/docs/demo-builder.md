@@ -11,19 +11,23 @@ takes it through an Infrahub proposed change. The work is prepared beforehand an
 cue, so the time spent generating it is skipped and the review is the live part. Say so on
 stage: the branch is prepared output, not a live agent run.
 
-The whole cycle, from release to reset, was run on a fresh stack with the final code and every check passed. The release and merge half was repeated three times.
+The whole cycle, from release to reset, was run on a fresh stack with the final code and every check passed. The release and merge half was repeated three times. In the runbook this is [act six](./demo-runbook.md#act-six-the-builder-branch), and `uv run invoke demo-run` runs it with a PASS or FAIL line for every check.
 
 ## What the audience sees
 
 | Step | What happens | Measured |
 | --- | --- | --- |
-| `invoke demo-release` | A branch arrives in Infrahub with its code, schema and data, and a proposed change opens | 124 seconds |
+| `invoke demo-release` | A branch arrives in Infrahub with its code, schema and data, and a proposed change opens. It says `Ready` only once every validator has finished and passed | 2 to 4 minutes |
 | Review in the Infrahub UI | 32 validators, every artifact check and every rule check, all run with the branch's own code. The diff is the new schema node and fields, the menu entry, `acme-internet` and the three queries that name the new kind | passes |
 | Merge in the Infrahub UI | The merge also merges git and pushes it to `demo-main` | 50 seconds |
 | After the merge | The `isp-pe1` artifact carries `statement 30` | 15 seconds |
 | The router | The reconciler pushes it | within a minute |
 | The outcome | Acme's site gets HTTP 200 from the internet host. Globex's still gets nothing | |
 | `invoke demo-reset` | Everything back to the baseline, ready to go again | 320 seconds |
+
+The release time is Infrahub's, not the command's. The task workers pull a pushed branch 75 to 256 s
+after the push, whatever the repository's git-sync schedule is. A shorter schedule was tried and does not
+help, so do not retry it. Plan the 2 to 4 minutes into the story.
 
 ## One-time setup
 
@@ -85,6 +89,13 @@ One command. It stops with a message when a step fails:
    stops it with the task's title.
 4. Opens the proposed change and runs its checks again. The first pass can race the import, so the
    second is what makes the checks judge the final branch.
+5. Waits until every validator of the proposed change has completed and passed, on two polls in a row,
+   counting only the latest run of each validator. A failure stops it with the names of the validators that
+   did not pass. Only then does it print `Ready`.
+
+The release number is chosen for you: `demo-release` takes the next one that no Infrahub branch, remote
+branch or worker clone has used, and `demo-reset` removes the latest one in use. Pass `--run <n>` to name
+one yourself.
 
 Review the proposed change in the Infrahub UI and merge it there. Then check the router and the two
 sites. The merge moved the code, so nothing else is needed.
@@ -92,8 +103,8 @@ sites. The merge moved the code, so nothing else is needed.
 ## Rehearse again
 
 ```bash
-uv run invoke demo-reset               # --run <n> names the release to remove; the default is 1
-uv run invoke demo-release --run 2
+uv run invoke demo-reset               # removes the latest release; --run <n> names one
+uv run invoke demo-release             # takes the next unused release number
 ```
 
 `demo-reset` works whether or not the merge happened, and it can be run again if it was interrupted.
@@ -104,6 +115,19 @@ around it. It creates a second branch with Sync with Git on, commits the baselin
 the kind's data and schema node there, and merges it. Infrahub's own merge then pushes the restored
 `demo-main`. It then regenerates the artifacts and deletes every branch it made, in Infrahub and on the
 remote.
+
+## Run the whole demonstration, and restore the lab
+
+```bash
+uv run invoke demo-run                  # acts one and two through the portal, then this branch, then its reset
+uv run invoke demo-run --acts builder   # only this branch
+uv run invoke demo-restore              # the whole lab back to the baseline
+```
+
+`demo-run` prints a PASS or FAIL line for every check and a timing table, and exits non-zero on any failure.
+`demo-restore` includes `demo-reset`, then withdraws every application and grant the acts created and checks
+the lab against the baseline; the [runbook](./demo-runbook.md#run-it-all-and-put-it-back) lists its steps. Both
+change the live lab, and `demo-restore` can be run again if it was interrupted.
 
 ## Rules that each cost a failed run
 
