@@ -217,7 +217,52 @@ def merge_by_mutation(pc_id: str) -> bool:
     return bool(result["CoreProposedChangeMerge"]["ok"])
 
 
-def act_builder(name: str, reset: bool) -> None:
+def capture_builder_diff(branch: str, path: str) -> None:
+    """Print what the builder's proposed change contains, and save it as JSON when `path` is given.
+
+    The node list is the data diff by kind and status; the artifacts are the ones whose rendered
+    output differs from main's, with the number of lines added and removed. Two builder branches
+    (the revert-based one and a Spec Kit build) can be compared by comparing two captures.
+    """
+    import json
+    from collections import Counter
+
+    tree = dr.gql(
+        "query ($b: String!) { DiffTree(branch: $b) { num_added num_updated num_removed nodes { kind label status } } }",
+        {"b": branch},
+    ).get("DiffTree") or {"nodes": []}
+    kinds = Counter(
+        (n["status"], n["kind"]) for n in tree["nodes"] if n["kind"] not in ("CoreArtifact", "CoreGeneratorInstance")
+    )
+    artifacts = {
+        f"{name} / {target}": [len(added), len(removed)]
+        for (name, target), (removed, added) in sorted(dr.changed_artifacts(branch).items())
+    }
+    labels = sorted(f"{n['status']} {n['kind']} {n['label']}" for n in tree["nodes"] if n["status"] == "ADDED")
+    print(
+        f"    diff: {tree.get('num_added')} added, {tree.get('num_updated')} updated, {tree.get('num_removed')} removed",
+        flush=True,
+    )
+    for (status, kind), count in sorted(kinds.items()):
+        print(f"      {status:9} {count:3} x {kind}", flush=True)
+    for key, (added, removed) in artifacts.items():
+        print(f"      artifact {key}: +{added} -{removed}", flush=True)
+    if path:
+        Path(path).write_text(
+            json.dumps(
+                {
+                    "branch": branch,
+                    "counts": {f"{s} {k}": c for (s, k), c in sorted(kinds.items())},
+                    "added": labels,
+                    "artifacts": artifacts,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+
+def act_builder(name: str, reset: bool, capture: str = "") -> None:
     dr.stage(f"THE BUILDER BRANCH: release stage/{name}, review it, merge it" + (", take it out" if reset else ""))
     started = time.monotonic()
     upstream = remote_tip("main")
@@ -245,6 +290,8 @@ def act_builder(name: str, reset: bool) -> None:
         "the diff removes nothing and has no conflicts",
         str(diff),
     )
+
+    capture_builder_diff(branch, capture)
 
     if any(r[0] == "FAIL" for r in dr.RESULTS):
         dr.record("FAIL", "the builder stops before the merge: a check above failed")
@@ -292,9 +339,16 @@ def act_builder(name: str, reset: bool) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--acts", default=",".join(ACTS), help=f"comma-separated, from {', '.join(ACTS)}")
-    parser.add_argument("--reference", default="demo1", help="request reference for the portal acts")
+    parser.add_argument(
+        "--reference",
+        default=time.strftime("d%m%d-%H%M"),
+        help="request reference for the portal acts (default: from the clock, so a second run never reuses one)",
+    )
     parser.add_argument("--name", default="internet-access", help="the builder capability (stage/<name>)")
     parser.add_argument("--no-builder-reset", action="store_true", help="leave the builder capability merged")
+    parser.add_argument(
+        "--capture", default="", help="write the builder proposed change's diff summary to this JSON file"
+    )
     parser.add_argument("--restore", action="store_true", help="afterwards run `invoke demo-restore`")
     args = parser.parse_args()
     chosen = [a for a in ACTS if a in args.acts.split(",")]
@@ -305,7 +359,7 @@ def main() -> int:
     table: dict[str, Callable[[], None]] = {
         "one": lambda: act_one(args.reference),
         "two": lambda: act_two(args.reference),
-        "builder": lambda: act_builder(args.name, not args.no_builder_reset),
+        "builder": lambda: act_builder(args.name, not args.no_builder_reset, args.capture),
     }
     for act in chosen:
         try:

@@ -1373,6 +1373,23 @@ def _delete_dangling_generator_records() -> None:
             )
 
 
+def _delete_leftover_branches(ctx: Context) -> None:
+    """Delete every Infrahub branch still open besides the default, with its proposed change.
+
+    The baseline has one branch. What is left after a demonstration that stopped early (an act that failed
+    before its merge, a release that was never merged or reset) is the demonstration's own work.
+    """
+    rehearsal = _rehearsal()
+    branches = _branches() or {}
+    leftovers = [b for b, is_default in branches.items() if not is_default]
+    for branch in [b for b in leftovers if b.startswith("demo/")]:
+        _delete_demo_branch(ctx, branch)
+    others = [b for b in leftovers if not b.startswith("demo/")]
+    if others:
+        print(f" - Deleting the leftover branches {others}", flush=True)
+        rehearsal.cleanup(others)
+
+
 def _delete_merged_branches(ctx: Context) -> None:
     """Delete every Infrahub branch whose proposed change merged. The proposed change stays as history."""
     merged = {
@@ -1440,6 +1457,7 @@ def demo_restore(ctx: Context, name: str = DEMO_NAME, timeout: int = 600, no_ver
 
     print("\n=== 4. Merged branches ===", flush=True)
     _delete_merged_branches(ctx)
+    _delete_leftover_branches(ctx)
 
     upstream_after = _remote_tip(ctx, "main")
     if upstream_before != upstream_after:
@@ -1462,6 +1480,7 @@ def demo_restore(ctx: Context, name: str = DEMO_NAME, timeout: int = 600, no_ver
         "name": f"The builder capability (default {DEMO_NAME})",
         "no_builder_reset": "Leave the builder capability merged instead of taking it back out",
         "restore": "Afterwards run `invoke demo-restore` to return the lab to the baseline",
+        "capture": "Write the builder proposed change's diff summary to this JSON file, to compare two builds",
     }
 )
 def demo_run(
@@ -1471,6 +1490,7 @@ def demo_run(
     name: str = DEMO_NAME,
     no_builder_reset: bool = False,
     restore: bool = False,
+    capture: str = "",
 ) -> None:
     """Run the whole demo against the live lab, merges included: a PASS/FAIL line per check and a timing table.
 
@@ -1484,6 +1504,8 @@ def demo_run(
         command.append("--no-builder-reset")
     if restore:
         command.append("--restore")
+    if capture:
+        command += ["--capture", capture]
     ctx.run(" ".join(shlex.quote(c) for c in command), pty=False)
 
 
