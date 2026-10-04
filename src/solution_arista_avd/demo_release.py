@@ -267,17 +267,17 @@ def decide_validators(validators: list[dict[str, str]]) -> tuple[str, str]:
     return "passed", f"{len(validators)} validators passed"
 
 
-def worker_needs_default_branch(current: str, default_branch: str) -> bool:
-    """Whether a task worker's main worktree sits on a branch other than the repository's default branch.
+def worker_needs_realignment(current: str, default_branch: str, head: str, remote_tip: str) -> bool:
+    """Whether a task worker's main worktree is off the default branch or behind or beside the remote's tip.
 
-    Measured: with ``default_branch: demo-main`` a worker that cloned the remote keeps its worktree on
-    the clone's own default (``main``), and only the worker that handled the first sync switched to
-    ``demo-main``. Infrahub pushes a merge with ``git push origin demo-main``, which fails on the
-    other worker with "src refspec demo-main does not match any" after the merge has already happened
-    there, so which worker takes the task decides whether a merge reaches the remote. Release and reset
-    are merges, so each worker must be on the default branch before either runs.
+    Measured, with ``default_branch: demo-main``: a worker can keep its worktree on the clone's own default
+    (``main``), and Infrahub's ``git push origin demo-main`` then fails there after the graph has merged.
+    Separately, the periodic sync broadcasts one worker's local default branch as the commit every worker
+    hard-resets to, so after a merge the pool converges on a stale commit; the next merge builds on it and
+    its push is a silent non-fast-forward. Both are cured by every worker sitting on the default branch at
+    the remote's tip, which is a fixed point of that broadcast.
     """
-    return bool(current) and current != default_branch
+    return bool(current) and (current != default_branch or head != remote_tip)
 
 
 def declare_schemas_and_objects(infrahub_yml: str, schema_files: list[str], object_files: list[str]) -> str:
