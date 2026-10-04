@@ -64,6 +64,86 @@ spec:
         commonLabels:
           otternet.lab/advertise: "true"
 
+    - name: podinfo
+      title: "Podinfo"
+      description: "A small Go web service with a status page, health endpoints and a JSON API, a common Kubernetes demo workload"
+      status: active
+      requestable: true
+      chart_repository: https://stefanprodan.github.io/podinfo
+      chart_name: podinfo
+      chart_version: "6.15.0"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-http
+      # podinfo listens on 9898 and the firewall's `junos-http` is 80/tcp, so the
+      # Service publishes 80 and targets the container port by name. The label
+      # the selector matches goes on the Service through `additionalLabels`
+      # (this chart has no commonLabels).
+      default_values: |
+        replicaCount: 1
+
+        service:
+          type: LoadBalancer
+          externalTrafficPolicy: Local
+          externalPort: 80
+          additionalLabels:
+            otternet.lab/advertise: "true"
+
+    - name: grafana
+      title: "Grafana"
+      description: "Dashboards and visualisation, on its own with no data source configured"
+      status: active
+      requestable: true
+      chart_repository: https://grafana.github.io/helm-charts
+      chart_name: grafana
+      chart_version: "10.5.15"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-http
+      default_values: |
+        replicas: 1
+
+        service:
+          type: LoadBalancer
+          externalTrafficPolicy: Local
+          port: 80
+          labels:
+            otternet.lab/advertise: "true"
+
+    - name: argo-cd
+      title: "Argo CD"
+      description: "Declarative GitOps continuous delivery for Kubernetes, with its web interface"
+      status: active
+      requestable: true
+      chart_repository: https://argoproj.github.io/argo-helm
+      chart_name: argo-cd
+      chart_version: "10.9.6"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-http
+      # The web interface is the argocd-server Service, so the exposure keys sit
+      # under `server.service`. Dex and the notifications controller are switched
+      # off: a demo needs the interface, not single sign-on or alerting.
+      default_values: |
+        dex:
+          enabled: false
+
+        notifications:
+          enabled: false
+
+        server:
+          service:
+            type: LoadBalancer
+            externalTrafficPolicy: Local
+            labels:
+              otternet.lab/advertise: "true"
+
     - name: lab-whoami
       title: "OTTERNET demo workload"
       description: "The lab's own whoami demonstration, three replicas across the fabric"
