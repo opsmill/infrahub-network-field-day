@@ -77,8 +77,23 @@ uv run invoke demo-stage
 This builds `stage/internet-access` on your machine: `main` with the capability put back, plus the
 `schemas:` and `objects:` sections in `.infrahub.yml` that let one repository import carry the schema
 and the data as well as the code. `main` declares neither, so nothing else loads them. It is a prepared
-implementation, the revert of the commit that removed the capability. Replace it with the output of a
-Spec Kit run when there is one, and say which it is.
+implementation, the revert of the commit that removed the capability, and you should say so when you show it.
+
+To show a real Spec Kit build instead, cherry-pick that branch's commits onto today's `main`:
+
+```bash
+uv run invoke demo-stage --implementation speckit/internet-access --name internet-access-speckit
+uv run invoke demo-release --name internet-access-speckit
+uv run invoke demo-reset --name internet-access-speckit
+```
+
+The branch `speckit/internet-access` holds the Spec Kit run: the specification, plan and tasks under
+`specs/035-internet-access/`, and `RUN-NOTES.md` there, which says plainly what the skills produced, where
+a correction was needed and where the removed code was consulted. Its schema, queries, check and menu
+differ from the revert in 17 files, so read the notes before claiming the two are the same. Measured on the
+lab, both gave a proposed change with every validator green and the same diff (6 added, 0 removed), statement
+30 on `isp-pe1`, and acme reaching the internet host while globex does not. The Spec Kit branch lists the
+Internet Access menu entry after Tenant Clouds instead of before it.
 
 The branch is never pushed under its own name. Rebuild it with `--force` when `main` has moved on: the reset
 puts back the tree the staged branch was cut from, so a staged branch cut from an older `main` than
