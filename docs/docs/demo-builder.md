@@ -31,16 +31,11 @@ help, so do not retry it. Plan the 2 to 4 minutes into the story.
 
 ## One-time setup
 
-Run **one task worker** for the demonstration. Infrahub starts two, and with a read-write repository whose
-default branch is not `main` their clones diverge after a merge (see [Why one task worker](#why-one-task-worker)).
-Put this in `.env` before the first start, or on a running stack run
-`docker compose up -d task-worker` after adding it:
-
-```bash
-echo 'TASK_WORKER_REPLICAS=1' >> .env
-```
-
-The stack's default stays two; only this demonstration sets one.
+Keep Infrahub's default of **two task workers**. That is what a real stack runs, and a single worker would have
+to run every generator and artifact task alone. One worker was measured and does remove the divergence described
+under [the task workers](#the-task-workers), but it is not the configuration to show, so nothing needs setting.
+A worker that has just cloned the remote sits on `main` instead of `demo-main`. `invoke demo-release`,
+`demo-reset` and `demo-restore` correct that before they start, and print what they changed.
 
 The repository is registered against the Git remote when the stack is first loaded, and the kind of
 repository cannot change afterwards: Infrahub refuses to change it in place, and refuses to delete one
@@ -158,14 +153,15 @@ uv run invoke demo-restore              # the whole lab back to the baseline
 the lab against the baseline; the [runbook](./demo-runbook.md#run-it-all-and-put-it-back) lists its steps. Both
 change the live lab, and `demo-restore` can be run again if it was interrupted.
 
-## Why one task worker
+## The task workers
 
-With `default_branch: demo-main` and a remote whose own default is `main`, two task workers disagree about
-the default branch, and a merge can succeed in Infrahub's graph without ever reaching the remote. Measured, with
-two workers:
+With `default_branch: demo-main` and a remote whose own default is `main`, the two task workers can disagree
+about the default branch, and a merge can succeed in Infrahub's graph without ever reaching the remote.
+Measured, with two workers and no correction:
 
 - A worker's main worktree can sit on `main` instead of `demo-main`. Infrahub pushes a merge with
-  `git push origin demo-main`, which fails there with `src refspec demo-main does not match any`.
+  `git push origin demo-main`, which fails there with `src refspec demo-main does not match any`. A worker
+  that has just been recreated clones the remote this way.
 - Infrahub never imports a commit pushed to `demo-main` from outside, and the periodic git sync broadcasts
   the local default branch of the worker that happens to run it as the pinned commit that every worker
   hard-resets to, once a minute. After a merge only one worker has the new commit, so the next sync pins a
@@ -174,12 +170,16 @@ two workers:
   builder runs never reached the remote.
 
 This is a finding for Infrahub: the sync should pin the remote's tip, or a push that is rejected should fail the
-merge. With one worker there is nothing to diverge from, and the measured runs held: two full `demo-run` cycles and a Spec Kit builder act with no
-merge missing the remote and no `directory for the main commit is missing` error.
+merge.
 
-`invoke demo-release`, `demo-reset` and `demo-restore` still run a cheap safety check that fetches the
-remote's `demo-main` into every worker, puts the worker on that branch at that commit, and creates the
-`commits/<sha>` worktree Infrahub reads. With one worker it does nothing and prints nothing.
+`invoke demo-release`, `demo-reset` and `demo-restore` therefore run a check first. It fetches the remote's
+`demo-main` into every worker, puts the worker on that branch at that commit, and creates the `commits/<sha>`
+worktree Infrahub reads, and it prints a line for every worker it changed. It refuses, naming the worker, if a
+worker has local changes it would lose. Do not remove it, and run a merge only through these commands.
+
+Measured with the default two workers, starting from a worker that had just been recreated and sat on `main`: the
+check moved it to `demo-main` on its own, a full `demo-run` passed 44 checks with none failed or warned, and
+`demo-restore` finished with `make -C lab verify` at 121 passed and 0 failed.
 
 ## Rules that each cost a failed run
 
