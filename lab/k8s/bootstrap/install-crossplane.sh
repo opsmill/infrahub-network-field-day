@@ -101,13 +101,27 @@ for xrd in fabricpeerings.otternet.lab fabricapps.otternet.lab appaccesses.otter
         || die "$xrd never established"
 done
 
+# Vidra is installed before this script runs and delivers the modelled peering and applications as soon
+# as their XRDs exist, so `kubectl apply` can find nothing, lose the race, and fail with AlreadyExists on
+# the create. Applying again is a plain update, so retry. Measured: a cold bootstrap died here.
+apply_claim() {
+    local attempt out
+    for attempt in 1 2 3 4 5; do
+        out=$(kubectl apply -f "$1" 2>&1) && { printf '%s\n' "$out"; return 0; }
+        printf '%s\n' "$out" >&2
+        grep -q AlreadyExists <<<"$out" || return 1
+        sleep 3
+    done
+    return 1
+}
+
 say "Claiming the fabric peering"
-kubectl apply -f "$LAB_DIR/crossplane/platform/10-peering.yaml"
+apply_claim "$LAB_DIR/crossplane/platform/10-peering.yaml" || die "could not apply the fabric peering"
 kubectl wait fabricpeering/otternet --for=condition=Ready --timeout=5m \
     || die "FabricPeering did not become ready: kubectl describe fabricpeering otternet"
 
 say "Deploying the applications"
-kubectl apply -f "$LAB_DIR/crossplane/apps/10-demo.yaml"
+apply_claim "$LAB_DIR/crossplane/apps/10-demo.yaml" || die "could not apply the demo application"
 # OTTERNET_SKIP_OBSERVABILITY=1 is set by this repository's `invoke
 # cluster`, which delivers its own kube-prometheus-stack (`otternet-metrics`)
 # through Vidra. Two releases of that chart in one cluster contend for the same
