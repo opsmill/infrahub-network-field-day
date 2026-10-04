@@ -90,10 +90,10 @@ lab, both gave a proposed change with every validator green and the same diff (6
 30 on `isp-pe1`, and acme reaching the internet host while globex does not. The Spec Kit branch lists the
 Internet Access menu entry after Tenant Clouds instead of before it.
 
-The branch is never pushed under its own name. Rebuild it with `--force` when `main` has moved on: the reset
-puts back the tree the staged branch was cut from, so a staged branch cut from an older `main` than
-`demo-main` holds sets the baseline back to that older commit, and `demo-run` reports that the baseline tree
-is not the one it started with.
+The branch is never pushed under its own name. Rebuild it with `--force` when `main` has moved on. The reset
+takes the capability back out by comparing the staged branch with the `main` commit it was cut from, so a staged
+branch that is older than the files it changed leaves those files at the older version, and `demo-run` reports
+that the baseline tree is not the one it started with.
 
 ## Run it
 
@@ -101,7 +101,10 @@ is not the one it started with.
 uv run invoke demo-release
 ```
 
-One command. It stops with a message when a step fails:
+One command. It first refuses a staged branch that adds no file besides `.infrahub.yml` compared with the
+`main` commit it was cut from, because that branch carries no schema and the release would wait for it until the
+timeout. The message says to rebuild the branch with `invoke demo-stage --force`. It then stops with a message
+when a step fails:
 
 1. Creates the Infrahub branch `demo/internet-access-1` with Sync with Git on. Infrahub creates the git
    branch itself and pushes it.
@@ -135,10 +138,28 @@ uv run invoke demo-release             # takes the next unused release number
 It decides what to undo from the data and from git, so a half-done reset is finished, not skipped.
 
 After a merge, the capability is on `demo-main`, and the reset takes it back out through Infrahub, not
-around it. It creates a second branch with Sync with Git on, commits the baseline's tree on it, removes
-the kind's data and schema node there, and merges it. Infrahub's own merge then pushes the restored
-`demo-main`. It then regenerates the artifacts and deletes every branch it made, in Infrahub and on the
-remote.
+around it. It creates a second branch with Sync with Git on and commits on it the tree of `demo-main`'s current
+tip with only the release's own changes undone, removes the kind's data and schema node there, and merges it.
+Infrahub's own merge then pushes the restored `demo-main`. It then regenerates the artifacts and deletes every
+branch it made, in Infrahub and on the remote.
+
+What the reset undoes is the difference between the staged branch and the `main` commit the staged branch was
+cut from (`git merge-base main stage/<name>`):
+
+- A file the staged branch added is removed from `demo-main`.
+- A file the staged branch changed is returned to its version at that commit, even if `demo-main` was edited
+  afterwards. The command prints each such file, so the edit is not lost silently.
+- The entries the staged branch added to `.infrahub.yml` (the capability's declarations, and the `schemas:` and
+  `objects:` sections) are removed. Other entries are kept. An entry that cannot be found is printed.
+- Every other file keeps the version `demo-main` has now.
+
+The earlier reset copied the whole tree of the merge-base of the Infrahub branch and the staged branch, which is
+an old `main` commit, because `demo-main`'s history never contains the newer commits of the remote `main`. Every
+reset therefore moved `demo-main` back to that old tree and reverted the later changes to files such as
+`triggers.yml`, `tasks.py` and the skills. This was found on the live stack.
+
+Not verified: a reset of a capability whose files were deleted on `main` after staging, and a staged branch built
+with `--implementation` after `main` changed the same files as that branch.
 
 ## Run the whole demonstration, and restore the lab
 
@@ -205,6 +226,9 @@ check moved it to `demo-main` on its own, a full `demo-run` passed 44 checks wit
 - **Never reuse a branch name.** Deleting a branch in Infrahub leaves the workers' local ref behind, so a
   branch of the same name starts on the old commit, nothing looks new, and the import never happens. Each
   release takes the next `--run` number, and each reset attempt names its branch with a timestamp.
+- **Rebuild the staged branch after `main` changes the files the capability touches.** The reset returns
+  those files to the version at the commit the staged branch was cut from, so an old staged branch writes old
+  versions back.
 - **Do not merge before the command says the branch is fully imported.** The graph records the import
   before the workers pull it. A merge in that gap reads a stale local branch, merges a commit that
   `demo-main` already holds, and does nothing: the data merges and the code does not.

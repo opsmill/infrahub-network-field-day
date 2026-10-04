@@ -944,6 +944,15 @@ def demo_release(
     if not tip or not tip.ok:
         raise Exit(f"No local branch '{stage}'. Create it first; see docs/docs/demo-builder.md.", code=1)
     commit = tip.stdout.strip()
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        cut = ctx.run(f"git merge-base main {shlex.quote(stage)}", hide=True, warn=True).stdout.strip()
+        added = ctx.run(
+            f"git diff --name-only --diff-filter=A {shlex.quote(cut)} {shlex.quote(stage)}", hide=True, warn=True
+        ).stdout.split()
+    try:
+        dr.require_capability_files(added, stage)
+    except dr.DemoReleaseError as exc:
+        raise Exit(str(exc), code=1) from exc
     repo = _repository()
     if not repo:
         raise Exit("No repository is registered. Bootstrap with INFRAHUB_REPOSITORY_URL set.", code=1)
@@ -1000,34 +1009,74 @@ def demo_release(
 
 
 def _restore_baseline_onto_branch(ctx: Context, location: str, branch: str, stage: str, default_branch: str) -> str:
-    """Make `branch` hold the baseline's tree and descend from `default_branch`'s tip; push it.
+    """Make `branch` hold `default_branch`'s tree minus the release's own changes, and descend from it; push it.
 
-    The baseline is the merge-base of `branch` and the local `stage` branch. Infrahub creates the
-    git branch for a new Infrahub branch at the old baseline, not at the merged tip, and the
-    baseline is already an ancestor of `default_branch`, so merging it would change nothing. The
-    branch therefore takes a commit holding the baseline tree and then a `-s ours` merge of the
-    default branch's tip, which keeps that tree and makes Infrahub's merge a fast-forward that
-    really restores it. Returns the new tip.
+    Only the capability is undone: the files the local `stage` branch changes relative to the `main`
+    commit it was cut from (`demo_release.plan_restore`, and `revert_declarations` for `.infrahub.yml`).
+    Every other file keeps the version `default_branch` has, which can be newer than that commit, because
+    Infrahub's merges are the only thing that advances `demo-main`. Copying a whole old baseline tree back,
+    as this used to, reverted every later change to `main`.
+
+    Infrahub creates the git branch for a new Infrahub branch at the old baseline, not at the merged tip,
+    so the branch takes a commit holding the target tree and then a `-s ours` merge of the default
+    branch's tip, which keeps that tree and makes Infrahub's merge a fast-forward that really restores it.
+    Returns the new tip.
     """
     import tempfile
+
+    from solution_arista_avd import demo_release as dr
 
     with tempfile.TemporaryDirectory() as tmp:
         clone = Path(tmp) / "clone"
         ctx.run(f"git clone --quiet --branch {shlex.quote(branch)} {shlex.quote(location)} {shlex.quote(str(clone))}")
         with ctx.cd(clone):
-            ctx.run(
-                f"git fetch --quiet {shlex.quote(str(MAIN_DIRECTORY_PATH))} "
-                f"{shlex.quote(f'refs/heads/{stage}:refs/tmp/stage')}"
-            )
+            for local, ref in ((stage, "stage"), ("main", "main")):
+                ctx.run(
+                    f"git fetch --quiet {shlex.quote(str(MAIN_DIRECTORY_PATH))} "
+                    f"{shlex.quote(f'refs/heads/{local}:refs/tmp/{ref}')}"
+                )
             ctx.run(f"git fetch --quiet origin {shlex.quote(f'refs/heads/{default_branch}:refs/tmp/default')}")
-            base = ctx.run("git merge-base HEAD refs/tmp/stage", hide=True).stdout.strip()
+            base = ctx.run("git merge-base refs/tmp/main refs/tmp/stage", hide=True).stdout.strip()
+
+            def files(ref: str) -> dict[str, str]:
+                return dr.parse_tree_listing(ctx.run(f"git ls-tree -r {shlex.quote(ref)}", hide=True).stdout)
+
+            def show(ref: str) -> str:
+                shown = ctx.run(f"git show {shlex.quote(ref)}:.infrahub.yml", hide=True, warn=True)
+                return shown.stdout if shown.ok else ""
+
+            plan = dr.plan_restore(files(base), files("refs/tmp/stage"), files("refs/tmp/default"))
+            declarations, unresolved = dr.revert_declarations(
+                show(base), show("refs/tmp/stage"), show("refs/tmp/default")
+            )
             who = "git -c user.name=demo-reset -c user.email=demo-reset@example.invalid"
-            if not ctx.run(f"git diff --quiet HEAD {shlex.quote(base)}", warn=True).ok:
-                ctx.run(f"git read-tree -u --reset {shlex.quote(base)}")
-                ctx.run(f"{who} commit --quiet -m {shlex.quote(f'Restore the baseline {base[:10]}')}")
+            ctx.run("git read-tree -u --reset refs/tmp/default")
+            if plan.remove:
+                ctx.run(f"git rm -q -f -- {' '.join(shlex.quote(f) for f in plan.remove)}")
+            if plan.restore:
+                ctx.run(f"git checkout {shlex.quote(base)} -- {' '.join(shlex.quote(f) for f in plan.restore)}")
+            if declarations:
+                (clone / ".infrahub.yml").write_text(declarations, encoding="utf-8")
+            ctx.run("git add -A")
+            print(
+                f" - Undoing the release: {len(plan.remove)} file(s) removed, {len(plan.restore)} put back to the "
+                f"baseline, the capability's .infrahub.yml entries removed; every other file of '{default_branch}' kept",
+                flush=True,
+            )
+            for path in plan.diverged:
+                print(
+                    f"   {path} was edited on '{default_branch}' after staging; returned to the baseline version",
+                    flush=True,
+                )
+            for note in unresolved:
+                print(f"   .infrahub.yml: {note}", flush=True)
+            # The branch is at an older commit than the default branch's tip; the target tree goes on top of it,
+            # then the default tip is merged with `-s ours` so the branch descends from it and keeps that tree.
+            if not ctx.run("git diff --cached --quiet HEAD", warn=True).ok:
+                ctx.run(f"{who} commit --quiet -m {shlex.quote('Take the capability back out')}")
             if not ctx.run("git merge-base --is-ancestor refs/tmp/default HEAD", warn=True).ok:
                 ctx.run(
-                    f"{who} merge --quiet -s ours --no-edit -m 'Take the merged tip, keep the baseline' refs/tmp/default"
+                    f"{who} merge --quiet -s ours --no-edit -m 'Take the merged tip, keep the restored tree' refs/tmp/default"
                 )
             ctx.run(f"git push --quiet origin {shlex.quote(branch)}")
             return ctx.run("git rev-parse HEAD", hide=True).stdout.strip()
@@ -1063,7 +1112,7 @@ def _code_is_merged(ctx: Context, default_branch: str, stage: str) -> bool:
         if not fetched or not fetched.ok:
             return True
         base = ctx.run(
-            f"git merge-base refs/tmp/default {shlex.quote(f'refs/heads/{stage}')}", hide=True, warn=True
+            f"git merge-base refs/heads/main {shlex.quote(f'refs/heads/{stage}')}", hide=True, warn=True
         ).stdout.strip()
         if not base:
             return False
