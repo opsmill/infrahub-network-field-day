@@ -132,20 +132,35 @@ What was measured on `infrahub-mcp` v1.1.7 against Infrahub 1.10.6:
 - **`requester` is a separate, free-text attribute.** A grant created with the token of `alice` and
   `requester: someone-else@otternet.lab` kept that value. Infrahub does not set or check it against the
   token, so the account that wrote the node and the requester it names can differ.
-- **She cannot open a proposed change.** `propose_changes` was refused with
+- **She can open a proposed change once `Requester Access` is attached to her group.** Before that,
+  `propose_changes` was refused with
   `You do not have one of the following permissions: object:Core:ProposedChange:create:allow_default`.
-  `mcp-agent` has that permission; the `Infrahub Users` group does not. Her roles
-  (`GeneralAccess`, `ProposedChangeReviewer`) allow writes on branches other than `main`, viewing
-  everything, editing the default branch, reviewing and updating proposed changes, and the global
-  permissions `merge_proposed_change`, `manage_schema` and `manage_repositories`. With her token
-  an operator or the `mcp-agent` session must open the proposed change, or the permission
-  `object:Core:ProposedChange:create` must be added to a role she holds. That choice is not made here.
+  `mcp-agent` has that permission through its own role; the built-in `Infrahub Users` group did not.
+  `scripts/provision_requester_access.py` (run by `uv run invoke mcp`) creates the role `Requester Access`
+  and attaches it to `Infrahub Users`. The role holds two permissions: the object permission
+  `object:Core:ProposedChange:create:allow_default` and the global permission `edit_default_branch`.
+  After the role was attached, a scratch node written on her session branch and `propose_changes` with her
+  token succeeded, and the change was recorded with the session branch as source and `main` as destination.
+- **The global permission in the role changes nothing on 1.10.6.** The group already holds
+  `edit_default_branch` through the built-in role `Proposed Change Reviewer`. The refusal named only the
+  object permission, so the object permission is the part that changed the result. It was not measured
+  with `Proposed Change Reviewer` removed, because that would change the permissions of every member. The
+  role lists `edit_default_branch` so the grant does not depend on a built-in role an administrator may edit.
+- **Her roles before and after.** `General Access`: `manage_repositories`, `manage_schema`,
+  `merge_proposed_change`, view on every kind, and any action on branches other than the default branch.
+  `Proposed Change Reviewer`: `edit_default_branch`, `review_proposed_change` and update on
+  `CoreProposedChange`. `Requester Access`: the two permissions above, and nothing else.
+  `Requester Access` widens the group by one action only: creating a proposed change on the default branch.
 - **Her token carries more power than `mcp-agent`'s.** She holds `manage_schema` and
   `merge_proposed_change`, which `mcp-agent` does not. A model working with her token can load a schema
   or merge a branch. Treat `INFRAHUB_MCP_TOKEN_ALICE` as her credential: use it only for a request she
-  made, and never merge.
+  made, and never merge. `Requester Access` does not add to this and does not remove from it: the
+  permissions that give her that power come from the built-in roles.
 - **A write to `main` as her was not tried.** From her roles, `any:allow_other` allows object writes on
   branches other than the default branch only, and the MCP server writes on the session branch.
+- **What `CoreProposedChangeMerge` does for her was not measured.** She holds `merge_proposed_change`
+  through `General Access`, so the permission does not stop her. Whether 1.10.6 checks it at all is not
+  known from this measurement. Her token must not be used to merge.
 
 ### Claude Desktop
 
