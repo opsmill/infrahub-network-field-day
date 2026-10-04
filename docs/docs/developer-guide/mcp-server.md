@@ -1,6 +1,6 @@
 ---
 title: The MCP server and the account it must not use
-description: How infrahub-mcp runs beside Infrahub, why it signs in as mcp-agent, and the measured facts about its role.
+description: How infrahub-mcp runs beside Infrahub, why Claude Code acts only as alice, and the measured facts about her token and the mcp-agent role.
 audience: developer
 sidebar_position: 22
 ---
@@ -12,12 +12,40 @@ sidebar_position: 22
 and `.mcp.json` registers it for Claude Code. `uv run invoke mcp` provisions its
 account and starts it, and `uv run invoke mcp-tokens` mints alice's token. The bootstrap runs `mcp`
 after `tooling` and `mcp-tokens` after that, because alice's token is minted through Dex. `uv run invoke ready`
-checks both identities (see [bootstrap](./bootstrap.md#what-a-finished-bootstrap-checks)).
+checks the account and token that `.mcp.json` uses (see [bootstrap](./bootstrap.md#what-a-finished-bootstrap-checks)).
 
-**Clients act as `mcp-agent`, never as `agent`.** The server runs in
+## Claude Code acts as alice only
+
+`.mcp.json` has one server, `infrahub-lab`, and it sends alice's API token
+(`INFRAHUB_MCP_TOKEN_ALICE`). It has no `mcp-agent` entry and no second entry, so every tool
+call from Claude Code in this repository is recorded as `alice`. The `mcp-agent` account, its role
+and its token (`INFRAHUB_MCP_TOKEN`) are still provisioned: `scripts/demo_rehearsal.py` act five
+calls the server as `mcp-agent` on purpose, to show what that role can and cannot do. Claude Code
+does not read that token.
+
+**Security consequence: an agent using alice's token holds her permissions, which are wider than
+`mcp-agent`'s.** Her built-in roles include `merge_proposed_change`, `review_proposed_change`,
+`manage_schema` and `manage_repositories` (see the measured roles below). An agent using her token
+can therefore merge a proposed change or load a schema if it chooses to. What is and is not known
+on Infrahub 1.10.6:
+
+- Recorded earlier in this page: on 1.10.6 the code of `CoreProposedChangeMerge` does not consult
+  `merge_proposed_change` (the rule is in `proposed_change/action_checker.py`). That is a reading of
+  the source, see "Three measured facts about that role" below. It was not tested by merging.
+- Not known: what the merge does when alice's token calls it. She holds the permission, so it does
+  not stop her either way, and it was not measured whether the mutation checks anything else.
+- Not known: whether `manage_schema` lets her token load a schema through the MCP server's tools.
+  The MCP server exposes the GraphQL mutation tools, and Infrahub, not the server, decides.
+- Nothing in the server or in Infrahub prevents an agent from merging as alice. The only
+  control is the instruction in the skill
+  [infrahub-requesting-app-access](https://github.com/opsmill/infrahub-network-field-day/blob/main/.agents/skills/infrahub-requesting-app-access/SKILL.md),
+  which tells the agent never to merge. That is an instruction to the model, not a permission.
+- No permission or role was changed to compensate. This repository does not narrow alice's roles.
+
+**Clients never act as `agent`.** The server runs in
 `INFRAHUB_MCP_AUTH_MODE=token-passthrough` and holds no Infrahub credential. Each
-client sends `Authorization: Bearer <mcp-agent API token>` and the server forwards
-it to Infrahub, so Infrahub attributes each action to `mcp-agent`. The upstream
+client sends `Authorization: Bearer <API token>` and the server forwards
+it to Infrahub, so Infrahub attributes each action to the account that owns the token. The upstream
 sidecar example uses `INFRAHUB_INITIAL_AGENT_TOKEN`, and here `agent` is a Super
 Administrator **the task workers run as** — so it cannot be demoted without
 breaking every generator, and it cannot be handed to a model without a back door
@@ -28,11 +56,11 @@ values are kept in `.env` as `INFRAHUB_MCP_PASSWORD` and `INFRAHUB_MCP_TOKEN`; t
 password is used only by the script. An existing token that still authenticates as
 `mcp-agent` is kept on re-run.
 `tests/unit/test_mcp_service_contract.py` pins the mode, the absence of a server-side
-credential, and the client header.
+credential, and the single `.mcp.json` entry that sends alice's token.
 
 ## Connecting Claude Code to the server
 
-`.mcp.json` registers `infrahub-lab` over HTTP and sends the token
+`.mcp.json` registers `infrahub-lab` over HTTP and sends alice's token
 from the environment:
 
 ```json
@@ -41,7 +69,7 @@ from the environment:
     "infrahub-lab": {
       "type": "http",
       "url": "http://127.0.0.1:8001/mcp",
-      "headers": { "Authorization": "Bearer ${INFRAHUB_MCP_TOKEN}" }
+      "headers": { "Authorization": "Bearer ${INFRAHUB_MCP_TOKEN_ALICE}" }
     }
   }
 }
@@ -65,11 +93,11 @@ What was measured on `infrahub-mcp` v1.1.7 against Infrahub 1.10.6:
   with no header the tool result is an error, `Authentication required: no Infrahub API
   token in request header.`, and with a wrong token it is `Invalid token`. A check that
   only looks at the HTTP status code therefore cannot tell whether authentication works.
-- **A tool call with the token runs as `mcp-agent`.** `query_graphql` with
+- **A tool call with the `mcp-agent` token runs as `mcp-agent`.** `query_graphql` with
   `AccountProfile { name { value } }` returned `mcp-agent`.
 - **`claude mcp list` reports `Connected` even when the variable is unset**, because
   the connection check does not call a tool. It adds the warning `Missing environment
-  variables: INFRAHUB_MCP_TOKEN`. Tool calls then fail with the error above.
+  variables: INFRAHUB_MCP_TOKEN_ALICE`. Tool calls then fail with the error above.
 - The loopback binding (`127.0.0.1`) therefore still matters: anyone who can reach the
   port can open a session, and only the token decides what the session can do.
 
@@ -94,7 +122,7 @@ network open so it cannot be removed.
 
 ## Acting as a named user, such as alice
 
-A person who asks an agent for access wants the request recorded as theirs, not as `mcp-agent`. In
+A person who asks an agent for access wants the request recorded as theirs, not as `mcp-agent`. Claude Code in this repository always does that. In
 token-passthrough mode Infrahub records the account that owns the token, so a second token gives a
 second identity. `scripts/provision_mcp_user_token.py --user alice` obtains that token:
 
@@ -112,9 +140,10 @@ without minting. `uv run invoke mcp-tokens` runs it for every user the bootstrap
 the portal accounts exist, and bootstrap runs that task after `tooling`. The Dex sign-in needs the Dex address (`OTTERNET_DEX_ADDRESS`, default
 `http://10.90.0.11:32556`) to be reachable from where the script runs.
 
-`.mcp.json` registers a second server, `infrahub-lab-alice`, with the same URL and the header
-`Authorization: Bearer ${INFRAHUB_MCP_TOKEN_ALICE}`. In Claude Code the identity is chosen by server:
-tools of `infrahub-lab` act as `mcp-agent`, tools of `infrahub-lab-alice` act as `alice`. Source the
+`.mcp.json` registers the one server, `infrahub-lab`, with the header
+`Authorization: Bearer ${INFRAHUB_MCP_TOKEN_ALICE}`, so tools in Claude Code act as `alice`. Before
+this change `.mcp.json` also had a `mcp-agent` entry and an `infrahub-lab-alice` entry; both are gone.
+Source the
 `.env` in the shell that starts `claude`, as described above, and restart Claude Code after the first
 run so it reads the variable.
 
@@ -207,10 +236,10 @@ Not verified: that Claude Desktop starts this entry and lists the tools.
 ## Requesting application access through the MCP server
 
 A person who asks an agent for access to an application is creating a `ServiceAppAccess` node on a
-branch. The agent works as `mcp-agent` (its token), so the change lands on a session branch and a human merges
+branch. The agent works as `alice` (her token), so the change lands on a session branch and a human merges
 it. The step-by-step process is the project skill
 [infrahub-requesting-app-access](https://github.com/opsmill/infrahub-network-field-day/blob/main/.agents/skills/infrahub-requesting-app-access/SKILL.md).
-Two facts from a live run (act two, Grafana, requested as `mcp-agent`) shape it. Both come from
+Two facts from a live run (act two, Grafana, first measured with the `mcp-agent` token) shape it. Both come from
 how `infrahub-mcp` works. The server is the published image
 `registry.opsmill.io/opsmill/infrahub-mcp:v1.1.7`, not code in this repository, so this repository
 cannot change them and documents the way around each.

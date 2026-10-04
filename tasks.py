@@ -2995,10 +2995,12 @@ def mcp(ctx: Context) -> None:
     **The account first, then the container.** `scripts/provision_mcp_agent.py`
     creates `mcp-agent` -- read everything, write only on branches, open a
     proposed change -- and mints its API token into `.env` as
-    `INFRAHUB_MCP_TOKEN`. The server holds no credential: each client sends that
-    token as `Authorization: Bearer ...`. The upstream example uses `agent`
+    `INFRAHUB_MCP_TOKEN`. The server holds no credential: each client sends its
+    own token as `Authorization: Bearer ...`. The upstream example uses `agent`
     instead, which here is a Super Administrator the task workers run as.
-    Export `INFRAHUB_MCP_TOKEN` in the shell that launches Claude Code.
+    Claude Code does not use the `mcp-agent` token: `.mcp.json` has one server,
+    which sends alice's token (`INFRAHUB_MCP_TOKEN_ALICE`, minted by `mcp-tokens`).
+    The `mcp-agent` token is for the demo rehearsal's act five.
 
     `scripts/provision_requester_access.py` also gives the built-in `Infrahub Users`
     group the permission to open a proposed change, so a client working with a
@@ -3021,6 +3023,8 @@ def mcp(ctx: Context) -> None:
 def mcp_tokens(ctx: Context) -> None:
     """
     Mint an MCP API token for each person an MCP client acts as (`alice`), into `.env`.
+
+    Claude Code acts as alice only: `.mcp.json` sends this token and no other.
 
     **After the tooling cluster, not inside `invoke mcp`.** A portal user has no password in
     Infrahub. The account exists once the person has signed in through Dex, and the token is
@@ -3173,7 +3177,7 @@ def bootstrap(
         lab        the ContainerLab topology, management connectivity only
         provision  every device configured from its rendered artifact
         tooling    Dex and the Backstage portal, in the tooling cluster
-        mcp        the Infrahub MCP server (token passthrough; clients use the `mcp-agent` token)
+        mcp        the Infrahub MCP server (token passthrough; Claude Code sends alice's token)
         mcp-tokens an MCP token for `alice`, after Dex and the portal accounts exist
         metrics    the Infrahub exporter, reading as `metrics-exporter`
         cluster    Cilium, Vidra, Crossplane, the resource handover, and the

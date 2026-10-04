@@ -112,30 +112,35 @@ def test_a_script_check_reports_its_problem_lines() -> None:
 
 def test_mcp_config_matches_the_variables_in_env() -> None:
     config = json.loads((REPO / ".mcp.json").read_text(encoding="utf-8"))
-    names = {"INFRAHUB_MCP_TOKEN", "INFRAHUB_MCP_TOKEN_ALICE"}
+    names = {"INFRAHUB_MCP_TOKEN_ALICE"}
     assert r.decide_mcp_config(config, names, ("alice",)).status is Status.PASS
     assert r.decide_mcp_config(config, {"INFRAHUB_MCP_TOKEN"}, ("alice",)).status is Status.FAIL
+    # A second server, such as one that sends the mcp-agent token, is refused.
+    extra = {
+        "mcpServers": {**config["mcpServers"], "other": {"headers": {"Authorization": "Bearer ${INFRAHUB_MCP_TOKEN}"}}}
+    }
+    refused = r.decide_mcp_config(extra, names, ("alice",))
+    assert refused.status is Status.FAIL
+    assert "unexpected server 'other'" in refused.detail
     assert r.decide_mcp_config({"mcpServers": {}}, names, ("alice",)).status is Status.FAIL
 
 
 def test_the_variable_names_the_scripts_write_are_the_ones_mcp_json_reads() -> None:
-    agent = _module("scripts/provision_mcp_agent.py")
     user = _module("scripts/provision_mcp_user_token.py")
     config = json.loads((REPO / ".mcp.json").read_text(encoding="utf-8"))
     headers = {name: entry["headers"]["Authorization"] for name, entry in config["mcpServers"].items()}
-    assert headers["infrahub-lab"] == f"Bearer ${{{agent.TOKEN_VAR}}}"
-    for who in r.MCP_TOKEN_USERS:
-        assert user.token_var(who) == r.token_var(who)
-        assert headers[f"infrahub-lab-{who}"] == f"Bearer ${{{r.token_var(who)}}}"
+    assert list(headers) == [r.MCP_SERVER_NAME]
+    assert r.MCP_TOKEN_USERS == ("alice",)
+    assert user.token_var("alice") == r.token_var("alice")
+    assert headers[r.MCP_SERVER_NAME] == f"Bearer ${{{r.token_var('alice')}}}"
 
 
 def test_claude_mcp_list_needs_every_server_connected() -> None:
-    good = "infrahub-lab: http://127.0.0.1:8001/mcp (HTTP) - ✓ Connected\ninfrahub-lab-alice: x (HTTP) - ✓ Connected\n"
-    assert r.decide_claude_mcp_list(good, ["infrahub-lab", "infrahub-lab-alice"]).status is Status.PASS
+    good = "infrahub-lab: http://127.0.0.1:8001/mcp (HTTP) - ✓ Connected\n"
+    assert r.decide_claude_mcp_list(good, ["infrahub-lab"]).status is Status.PASS
     bad = "infrahub-lab: x (HTTP) - ✗ Failed to connect\n"
-    result = r.decide_claude_mcp_list(bad, ["infrahub-lab", "infrahub-lab-alice"])
-    assert result.status is Status.FAIL
-    assert "infrahub-lab-alice is not listed" in result.detail
+    assert r.decide_claude_mcp_list(bad, ["infrahub-lab"]).status is Status.FAIL
+    assert "infrahub-lab is not listed" in r.decide_claude_mcp_list("", ["infrahub-lab"]).detail
 
 
 READWRITE = {"kind": "CoreRepository", "default_branch": "demo-main", "sync_status": "in-sync"}
@@ -217,6 +222,8 @@ def test_the_summary_says_what_a_person_must_do_and_prints_no_token_value() -> N
     text = r.render_summary([Result("a", Status.PASS, "ok")], REPO)
     assert "set -a; source .env; set +a" in text
     assert "INFRAHUB_MCP_TOKEN_ALICE" in text
+    assert "INFRAHUB_MCP_TOKEN," not in text
+    assert "infrahub-lab-alice" not in text
     assert "1 PASS" in text
 
 
@@ -282,10 +289,9 @@ def test_doctor_runs_the_readiness_checks_too() -> None:
     assert "readiness.run_checks(" in _body("doctor")
 
 
-def test_the_mcp_token_users_have_a_server_in_mcp_json() -> None:
+def test_mcp_json_has_one_server_for_the_one_token_user() -> None:
     config = json.loads((REPO / ".mcp.json").read_text(encoding="utf-8"))
-    for who in r.MCP_TOKEN_USERS:
-        assert f"infrahub-lab-{who}" in config["mcpServers"]
+    assert list(config["mcpServers"]) == [r.MCP_SERVER_NAME]
 
 
 def test_verify_bootstrap_runs_the_readiness_checks_and_the_act_smoke() -> None:

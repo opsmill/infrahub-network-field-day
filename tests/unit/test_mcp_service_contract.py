@@ -63,13 +63,7 @@ def test_the_mcp_server_runs_in_token_passthrough_mode_with_no_credential() -> N
     )
 
 
-def test_the_client_sends_the_mcp_agent_token_from_the_environment() -> None:
-    server = json.loads((REPO / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["infrahub-lab"]
-    assert server["type"] == "http"
-    assert server["headers"] == {"Authorization": "Bearer ${INFRAHUB_MCP_TOKEN}"}
-
-
-def test_the_token_is_minted_for_mcp_agent_and_no_admin_token_is_referenced() -> None:
+def test_the_mcp_agent_token_is_still_minted_but_no_admin_token_is_referenced() -> None:
     provisioner = _provisioner()
     assert provisioner.ACCOUNT == "mcp-agent"
     assert provisioner.TOKEN_VAR == "INFRAHUB_MCP_TOKEN"  # noqa: S105
@@ -88,16 +82,16 @@ def _user_token_provisioner() -> ModuleType:
     return module
 
 
-def test_the_alice_server_entry_reads_her_token_from_an_environment_variable() -> None:
+def test_mcp_json_has_one_server_and_it_authenticates_as_alice() -> None:
     text = (REPO / ".mcp.json").read_text(encoding="utf-8")
     servers = json.loads(text)["mcpServers"]
-    alice = servers["infrahub-lab-alice"]
-    assert alice["type"] == "http"
-    assert alice["url"] == servers["infrahub-lab"]["url"]
-    assert alice["headers"] == {"Authorization": "Bearer ${INFRAHUB_MCP_TOKEN_ALICE}"}
-    # No literal token anywhere, and neither the admin nor the `agent` token.
-    for server in servers.values():
-        assert server["headers"]["Authorization"].startswith("Bearer ${INFRAHUB_MCP_TOKEN")
+    assert list(servers) == ["infrahub-lab"], "Claude Code may act as alice only: one entry, no mcp-agent entry"
+    server = servers["infrahub-lab"]
+    assert server["type"] == "http"
+    assert server["url"] == "http://127.0.0.1:8001/mcp"
+    assert server["headers"] == {"Authorization": "Bearer ${INFRAHUB_MCP_TOKEN_ALICE}"}
+    # No literal token anywhere, and neither the admin, the `agent` nor the mcp-agent token.
+    assert "INFRAHUB_MCP_TOKEN}" not in text
     assert "INFRAHUB_API_TOKEN" not in text
     assert "INITIAL_ADMIN_TOKEN" not in text
     assert "INITIAL_AGENT_TOKEN" not in text
