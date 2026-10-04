@@ -947,7 +947,7 @@ def demo_release(
     with ctx.cd(MAIN_DIRECTORY_PATH):
         cut = ctx.run(f"git merge-base main {shlex.quote(stage)}", hide=True, warn=True).stdout.strip()
         added = ctx.run(
-            f"git diff --name-only --diff-filter=A {shlex.quote(cut)} {shlex.quote(stage)}", hide=True, warn=True
+            f"git diff --name-only {shlex.quote(cut)} {shlex.quote(stage)}", hide=True, warn=True
         ).stdout.split()
     try:
         dr.require_capability_files(added, stage)

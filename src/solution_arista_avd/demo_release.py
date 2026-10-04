@@ -355,15 +355,15 @@ def capability_paths(base: dict[str, str], stage: dict[str, str]) -> list[str]:
     )
 
 
-def require_capability_files(added_by_stage: list[str], stage: str) -> None:
-    """Refuse a release whose staged branch adds no capability file.
+def require_capability_files(changed_by_stage: list[str], stage: str) -> None:
+    """Refuse a release whose staged branch changes no capability file.
 
     Such a branch carries no schema node, so the release would wait for the schema to load until
     its timeout. Commonly the cause is a staged branch built before the capability existed.
     """
-    if all(f in _STAGE_BOOKKEEPING_FILES for f in added_by_stage):
+    if all(f in _STAGE_BOOKKEEPING_FILES for f in changed_by_stage):
         msg = (
-            f"'{stage}' adds no file besides .infrahub.yml compared with the main commit it was cut from, "
+            f"'{stage}' changes no file besides .infrahub.yml compared with the main commit it was cut from, "
             "so it carries no capability and the release would wait for a schema that never loads. "
             "Rebuild it with `invoke demo-stage --force`."
         )

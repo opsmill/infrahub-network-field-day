@@ -496,7 +496,7 @@ def test_declarations_on_a_default_branch_that_lacks_newer_entries_do_not_gain_t
 
 
 def test_a_stage_with_no_capability_file_is_refused_before_a_release_waits_for_a_schema() -> None:
-    with pytest.raises(dr.DemoReleaseError, match=r"adds no file besides \.infrahub\.yml"):
+    with pytest.raises(dr.DemoReleaseError, match=r"changes no file besides \.infrahub\.yml"):
         dr.require_capability_files([".infrahub.yml"], "stage/x")
     with pytest.raises(dr.DemoReleaseError):
         dr.require_capability_files([], "stage/x")

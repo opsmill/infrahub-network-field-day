@@ -101,7 +101,7 @@ that the baseline tree is not the one it started with.
 uv run invoke demo-release
 ```
 
-One command. It first refuses a staged branch that adds no file besides `.infrahub.yml` compared with the
+One command. It first refuses a staged branch that changes no file besides `.infrahub.yml` compared with the
 `main` commit it was cut from, because that branch carries no schema and the release would wait for it until the
 timeout. The message says to rebuild the branch with `invoke demo-stage --force`. It then stops with a message
 when a step fails:
@@ -157,6 +157,10 @@ The earlier reset copied the whole tree of the merge-base of the Infrahub branch
 an old `main` commit, because `demo-main`'s history never contains the newer commits of the remote `main`. Every
 reset therefore moved `demo-main` back to that old tree and reverted the later changes to files such as
 `triggers.yml`, `tasks.py` and the skills. This was found on the live stack.
+
+Measured once on the live stack with `demo-stage --force`, `demo-release`, a merge and `demo-restore`: the restore
+put 37 files back to the baseline, `git diff origin/demo-main main` was empty afterwards, and `make -C lab verify`
+reported 121 passed and 0 failed.
 
 Not verified: a reset of a capability whose files were deleted on `main` after staging, and a staged branch built
 with `--implementation` after `main` changed the same files as that branch.
