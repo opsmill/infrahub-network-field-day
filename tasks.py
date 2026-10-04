@@ -846,6 +846,23 @@ def _ensure_workers_on_default_branch(repo: dict[str, str]) -> None:
         tip = git("rev-parse", f"refs/remotes/origin/{default}").stdout.strip()
         if not tip:
             raise Exit(f"Worker {container[:12]} cannot see origin/{default}.", code=1)
+        # Infrahub reads a commit from its own worktree under commits/<sha>, which a merge or a pull creates and
+        # a bare reset does not. A worker missing the directory of the commit the graph holds fails every
+        # generator with "The directory for the main commit is missing", so create what is missing.
+        graph_commit = repo.get("commit", "")
+        for sha in dict.fromkeys([tip, graph_commit]):
+            if sha and git("cat-file", "-e", f"{sha}^{{commit}}").returncode == 0:
+                parent = clone.rsplit("/", 1)[0]
+                present = (
+                    subprocess.run(  # noqa: S603
+                        ["docker", "exec", container, "test", "-d", f"{parent}/commits/{sha}"],  # noqa: S607
+                        check=False,
+                    ).returncode
+                    == 0
+                )
+                if not present:
+                    git("worktree", "add", "--detach", f"{parent}/commits/{sha}", sha)
+                    print(f" - Worker {container[:12]}: created the worktree for commit {sha[:7]}", flush=True)
         if not dr.worker_needs_realignment(current, default, head, tip):
             continue
         if git("status", "--porcelain").stdout.strip():
@@ -1116,7 +1133,6 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int =
     for leftover in sorted(b for b in (_branches() or {}) if b.startswith(f"{demo}-reset")):
         _delete_demo_branch(ctx, leftover)  # an attempt that was interrupted or had nothing to undo
     _delete_demo_branch(ctx, demo)
-    _ensure_workers_on_default_branch(_repository())  # leave the pool aligned with what the reset pushed
     print(f"\nNext release: invoke demo-release --name {name}  (it takes the next unused number, {run + 1} or later)")
 
 
@@ -1458,6 +1474,7 @@ def demo_restore(ctx: Context, name: str = DEMO_NAME, timeout: int = 600, no_ver
     demo_reset(ctx, name=name, timeout=timeout)
 
     print("\n=== 2. Grants and applications a presenter created ===", flush=True)
+    _ensure_workers_on_default_branch(_repository())
     _delete_leftover_restore_branches()
     removed = _withdraw_demo_services(timeout)
     _delete_orphan_artifacts()
@@ -1513,6 +1530,7 @@ def demo_run(
 
     CHANGES THE LAB. Exits non-zero on any FAIL. See scripts/demo_full_run.py and docs/docs/demo-builder.md.
     """
+    _ensure_workers_on_default_branch(_repository())
     command = [
         "uv", "run", "python", "scripts/demo_full_run.py",
         "--acts", acts, "--reference", reference, "--name", name,
