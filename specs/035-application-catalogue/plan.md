@@ -28,7 +28,7 @@ The pin is made in two places that agree. The portal reads the entry at request 
 
 **Constraints**: Offline run: no live Infrahub, no docker, no portal build. `schema.graphql` cannot be re-exported offline. Hard rules in `AGENTS.md` apply (never mandatory-on-existing-data, never hand-edit generated files, no `Deployment*` or `Monitoring*` trigger).
 
-**Scale/Scope**: Four seeded entries, one requestable. One schema file, one schema extension, one objects file, one generator step, one transform guard, one template, one provider tag, two scripts, six doc pages.
+**Scale/Scope**: Six seeded entries, three requestable (later growth: podinfo, grafana). One schema file, one schema extension, one objects file, one generator step, one transform guard, one template, one provider tag, two scripts, six doc pages.
 
 ## Constitution Check
 

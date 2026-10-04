@@ -59,11 +59,17 @@ def _seed_script() -> Any:
     return module
 
 
-def test_the_catalogue_has_one_requestable_entry_and_one_per_seeded_application() -> None:
+REQUESTABLE = {"whoami", "podinfo", "grafana"}
+
+# Where each requestable chart takes the label its Service must carry.
+LABEL_KEY = {"whoami": "commonLabels", "podinfo": "service.additionalLabels", "grafana": "service.labels"}
+
+
+def test_the_catalogue_has_the_requestable_entries_and_one_per_seeded_application() -> None:
     entries = _entries()
-    assert set(entries) == {"whoami", *SEEDED.values()}
+    assert set(entries) == {*REQUESTABLE, *SEEDED.values()}
     requestable = {name for name, entry in entries.items() if entry["requestable"] is True}
-    assert requestable == {"whoami"}
+    assert requestable == REQUESTABLE
 
 
 def test_infrastructure_entries_are_never_requestable() -> None:
@@ -145,6 +151,32 @@ def test_whoami_values_are_valid_yaml_that_makes_the_application_reachable() -> 
     assert selectors == labels, "commonLabels must carry every label the selector matches on"
     # A key with a dot and a slash survived: it is text, not JSON.
     assert "otternet.lab/advertise" in labels
+
+
+@pytest.mark.parametrize("name", sorted(REQUESTABLE))
+def test_every_requestable_entry_is_reachable_and_labelled(name: str) -> None:
+    entry = _entries()[name]
+    values = yaml.safe_load(entry["default_values"])
+
+    service = values["service"]
+    assert service["type"] == "LoadBalancer"
+    assert service["externalTrafficPolicy"] == "Local"
+
+    labels: Any = values
+    for part in LABEL_KEY[name].split("."):
+        labels = labels[part]
+    selectors = dict(item.split("=", 1) for item in entry["default_service_selector"])
+    assert selectors == {str(key): str(value) for key, value in labels.items()}
+    assert entry["default_advertised_services"] == ["junos-http"]
+
+
+@pytest.mark.parametrize("name", sorted(REQUESTABLE))
+def test_requestable_values_render_through_the_transform_unchanged(name: str) -> None:
+    from transforms.crossplane_fabric_app import apply_local_traffic
+
+    entry = _entries()[name]
+    values = yaml.safe_load(entry["default_values"])
+    assert apply_local_traffic(exposed=True, chart=entry["chart_name"], values=values, name="x") == values
 
 
 def test_whoami_values_render_through_the_transform_unchanged() -> None:

@@ -347,6 +347,7 @@ _LB_SERVICE_VALUES_PATH: dict[str, tuple[str, ...]] = {
     "whoami": ("service",),
     "kube-prometheus-stack": ("grafana", "service"),
     "grafana": ("service",),
+    "podinfo": ("service",),
 }
 
 _TRAFFIC_POLICY = "externalTrafficPolicy"
