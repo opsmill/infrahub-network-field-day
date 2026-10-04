@@ -1,0 +1,159 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+---
+version: "1.0"
+
+# ============================================================================
+# The application catalogue (specs/035-application-catalogue).
+#
+# A catalogue entry is what the platform team has decided an application IS:
+# which chart, which version, which values, how it is advertised. A requester
+# picks an entry and supplies only what is theirs.
+#
+# THIS IS NOT A SERVICE, and that is why the file is not under schemas/service/.
+# A service is ordered intent, owned by a consumer, with a lifecycle a generator
+# moves and a group that generator targets. An entry has none of that: it is
+# platform data that a requested application is PINNED from. The service-layer
+# contract tests (tests/unit/test_service_layer_schema_contract.py) hold every
+# node under schemas/service/ to ServiceGeneric and GeneratorTarget, and moving
+# the kind is cheaper and more honest than loosening them.
+#
+# The one coupling is ServiceFabricApp.definition, declared next to the other
+# application fields in schemas/service/kubernetes_services.yml, and its
+# inverse `applications` below.
+#
+# `default_values` IS TEXT, NEVER JSON. Infrahub 1.10.6 answers HTTP 500 for a
+# JSON attribute whose key contains a dot or a slash, and every Kubernetes label
+# does -- see the comment at the top of objects/36_otternet_app_services.yml.
+# ============================================================================
+
+nodes:
+  - name: ApplicationDefinition
+    namespace: Service
+    description: "A catalogue entry: the chart, version and defaults an application is pinned from"
+    label: Application Catalogue Entry
+    icon: mdi:store-outline
+    # Reached through the Services menu entry, so the auto-generated one would
+    # be a duplicate.
+    include_in_menu: false
+    human_friendly_id:
+      - name__value
+    # What a person reads in a picker or a proposed-change diff: "Who am I", not
+    # "whoami" and not a UUID.
+    display_label: "{{ title__value }}"
+    order_by:
+      - name__value
+    uniqueness_constraints:
+      - ["name__value"]
+    attributes:
+      - name: name
+        kind: Text
+        label: Name
+        optional: false
+        unique: true
+        description: "Catalogue key, such as whoami"
+        order_weight: 100
+      - name: title
+        kind: Text
+        label: Title
+        optional: false
+        description: "What a requester sees, such as Who am I"
+        order_weight: 110
+      - name: description
+        kind: Text
+        label: Description
+        optional: true
+        description: "One sentence for someone who has never seen the application"
+        order_weight: 120
+      - name: chart_repository
+        kind: Text
+        label: Chart Repository
+        optional: false
+        order_weight: 1400
+      - name: chart_name
+        kind: Text
+        label: Chart Name
+        optional: false
+        order_weight: 1410
+      - name: chart_version
+        kind: Text
+        label: Chart Version
+        optional: false
+        description: "Copied onto an application when it is requested; changing it never moves a running one"
+        order_weight: 1420
+      - name: default_values
+        kind: TextArea
+        label: Default Values
+        optional: true
+        description: "Helm values as YAML text, attached to an application when it is requested"
+        order_weight: 1430
+      - name: default_vip_block_size
+        kind: Number
+        label: Default VIP Block Size
+        optional: false
+        default_value: 28
+        description: "Prefix length of the VIP block an application of this kind is given"
+        order_weight: 1500
+        parameters:
+          # The application's own bounds: see ServiceFabricApp.vip_block_size.
+          min_value: 24
+          max_value: 30
+      - name: default_service_selector
+        kind: List
+        label: Default Service Selector
+        optional: true
+        # `key=value` strings rather than a JSON map, for the same 500 as above.
+        description: "Which Services in the namespace get a VIP, as key=value strings"
+        order_weight: 1510
+      - name: requestable
+        kind: Boolean
+        label: Requestable
+        optional: false
+        default_value: false
+        # False by default so that a new entry is never user-facing by
+        # accident. The seeded infrastructure applications stay false and must
+        # never appear in the portal picker.
+        description: "Whether a requester may pick this entry in the portal"
+        order_weight: 1600
+      - name: status
+        kind: Dropdown
+        label: Status
+        optional: false
+        default_value: active
+        description: "Only an active entry is requestable; deprecated entries leave the picker and change nothing else"
+        order_weight: 1610
+        choices:
+          - name: active
+            label: Active
+            description: "Offered, if requestable"
+            color: "#7fbf7f"
+          - name: deprecated
+            label: Deprecated
+            description: "No longer offered; applications already built from it are unaffected"
+            color: "#bfbfbf"
+    relationships:
+      # The same SecurityService objects a grant derives its ports from, so the
+      # port an application advertises and the port a rule permits stay one
+      # object. `no-action`: `cascade` would delete the PEER.
+      - name: default_advertised_services
+        peer: SecurityService
+        label: Default Advertised Services
+        kind: Generic
+        cardinality: many
+        optional: true
+        on_delete: no-action
+        description: "Services an application of this kind answers on; a grant permits these"
+        identifier: service__definition_advertised_services
+        order_weight: 940
+      # The inverse of ServiceFabricApp.definition: what was built from this
+      # entry. Read-only in practice, and never a cascade -- deleting an entry
+      # must not delete the applications pinned from it.
+      - name: applications
+        peer: ServiceFabricApp
+        label: Applications
+        kind: Generic
+        cardinality: many
+        optional: true
+        direction: inbound
+        on_delete: no-action
+        identifier: service__app_definition
+        order_weight: 950

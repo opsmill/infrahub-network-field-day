@@ -12,7 +12,20 @@ This generator makes stating a SIZE the request, and naming a block the
 exception, which is the same inversion `generate-network-segment` performs for
 subnets and VLAN ids.
 
-FOUR THINGS THAT LOOK ARBITRARY AND ARE NOT.
+FIVE THINGS THAT LOOK ARBITRARY AND ARE NOT.
+
+* **A catalogue entry is PINNED onto the application once, and then never read
+  again** (specs/035-application-catalogue). An application requested from a
+  `ServiceApplicationDefinition` gets the entry's chart repository, name and
+  version, its values as an attached file, and -- when the request left them
+  empty -- its service selector and advertised services. `definition_pinned`
+  is set in the SAME save as the chart fields and is the whole guard: a later
+  run, or a later edit to the entry, finds it true and touches nothing, so a
+  catalogue change can never silently upgrade a running application. The file
+  is created BEFORE that save, so the marker is the commit point and a failure
+  in between is retried rather than recorded as done. `vip_block_size` is never
+  written here: it is a watched input, and a write-back to one would feed the
+  run into the next. The portal sends the entry's block size in the create.
 
 * **`vip_block_managed` exists because one field holds two different things.**
   `vip_block` may be a block a human declared in `objects/` or a block this
@@ -42,10 +55,13 @@ FOUR THINGS THAT LOOK ARBITRARY AND ARE NOT.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
 from infrahub_sdk.generator import InfrahubGenerator
+
+from solution_arista_avd.generator import save_file_if_changed
 
 from .artifact_render import request_artifact_render
 from .generate_fabric_app_query import (
@@ -186,6 +202,16 @@ class FabricAppGenerator(InfrahubGenerator):
             msg = "no ServiceFabricApp matched the requested name"
             raise ValueError(msg)
 
+        # BEFORE anything that allocates or withdraws, and never for an
+        # application being withdrawn: pinning a chart onto something on its way
+        # out is a write with no purpose.
+        if _value(app.status) not in WITHDRAWN_STATUSES:
+            try:
+                await self._pin_definition(app.id)
+            except Exception:
+                await self._set_status(app.id, "error")
+                raise
+
         if not wants_a_block(app):
             await self._withdraw(app)
             # `decommissioned` ONLY when it is actually being withdrawn.
@@ -221,6 +247,79 @@ class FabricAppGenerator(InfrahubGenerator):
             await self._set_status(app.id, "error")
             raise
         await self._set_status(app.id, "active")
+
+    async def _pin_definition(self, app_id: str) -> None:
+        """Copy the catalogue entry onto the application, once.
+
+        Reads through the SDK rather than the generator's query: a new query
+        model needs `schema.graphql`, which only a live Infrahub can re-export.
+        Returns without writing when there is no definition, when the pin has
+        been taken, or when the entry has nothing to say.
+        """
+        service = await self.client.get(kind="ServiceFabricApp", id=app_id)
+        if service.definition.id is None:  # type: ignore[attr-defined]
+            return
+        if _value(service.definition_pinned):  # type: ignore[attr-defined]
+            return
+
+        await service.definition.fetch()  # type: ignore[attr-defined]
+        entry = service.definition.peer  # type: ignore[attr-defined]
+        name = _value(service.name)  # type: ignore[attr-defined]
+
+        # The file first, so the marker below is the commit point.
+        values = _value(entry.default_values)
+        if values:
+            await self._attach_values(service, str(values))
+
+        for field_name in ("chart_repository", "chart_name", "chart_version"):
+            requested = _value(getattr(service, field_name))
+            pinned = _value(getattr(entry, field_name))
+            if requested and requested != pinned:
+                self.logger.warning(
+                    "Application %r asked for %s %r; the catalogue entry decides, so it is pinned to %r",
+                    name,
+                    field_name,
+                    requested,
+                    pinned,
+                )
+            getattr(service, field_name).value = pinned
+
+        # Only what the request left empty. Both are unwatched, so neither write
+        # fires a run.
+        if not _value(service.service_selector):  # type: ignore[attr-defined]
+            service.service_selector.value = list(_value(entry.default_service_selector) or [])  # type: ignore[attr-defined]
+        if not service.advertised_services.peer_ids:  # type: ignore[attr-defined]
+            for peer_id in entry.default_advertised_services.peer_ids:
+                service.advertised_services.add(peer_id)  # type: ignore[attr-defined]
+
+        service.definition_pinned.value = True  # type: ignore[attr-defined]
+        await service.save(update_group_context=False)
+        self.logger.info(
+            "Pinned application %r to catalogue entry %r %s",
+            name,
+            _value(entry.name),
+            _value(entry.chart_version),
+        )
+
+    async def _attach_values(self, service: Any, values: str) -> None:
+        """Attach the entry's values as the application's values file."""
+        content = values.encode("utf-8")
+        existing_file = None
+        existing_checksum = None
+        if service.values_file.id is not None:
+            await service.values_file.fetch()
+            existing_file = service.values_file.peer
+            if existing_file is not None:
+                existing_checksum = hashlib.sha256(await existing_file.download_file()).hexdigest()
+
+        await save_file_if_changed(
+            existing_file=existing_file,
+            existing_checksum=existing_checksum,
+            new_checksum=hashlib.sha256(content).hexdigest(),
+            new_content=content,
+            filename="values.yaml",
+            create_file=lambda: self.client.create(kind="ServiceFabricAppValuesFile", data={"app": service.id}),
+        )
 
     async def _allocate(self, context: AppContext) -> None:
         """Take the next free block and record that it is ours.

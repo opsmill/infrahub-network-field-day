@@ -189,11 +189,18 @@ class _RecordingAttribute:
     value: Any = None
 
 
+class _NoDefinition:
+    id = None
+
+
 class _RecordingNode:
     def __init__(self, node_id: str, **attributes: Any) -> None:
         self.id = node_id
         self.saves: list[dict[str, Any]] = []
         self.vip_block: Any = "unset"
+        # An application with no catalogue entry: `generate-fabric-app` reads this
+        # first to decide whether there is anything to pin (specs/035).
+        self.definition = _NoDefinition()
         self.vip_block_managed = _RecordingAttribute(False)
         # The generator records the outcome on the service, so the double needs
         # the attribute it writes. Overridden by a `status=` kwarg below, which

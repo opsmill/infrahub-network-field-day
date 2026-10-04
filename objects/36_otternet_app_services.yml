@@ -37,6 +37,12 @@ spec:
       chart_name: whoami
       chart_version: "6.0.0"
 
+      # The catalogue entry this application describes (objects/35a_...), and the
+      # marker that the chart below is already its pinned copy. Seeded on main,
+      # where no event rule fires, so the seed carries the pin itself.
+      definition: lab-whoami
+      definition_pinned: true
+
       # Exposure. The /28 is this app's own block out of the cluster-wide VIP
       # pool, so a claim cannot hand itself an address from another app's range.
       exposed: true
@@ -110,6 +116,12 @@ spec:
       chart_name: kube-prometheus-stack
       chart_version: "90.0.0"
 
+      # The catalogue entry this application describes (objects/35a_...), and the
+      # marker that the chart below is already its pinned copy. Seeded on main,
+      # where no event rule fires, so the seed carries the pin itself.
+      definition: lab-metrics
+      definition_pinned: true
+
       # People sign in through the lab's one Dex issuer, and land as Viewer.
       sso_provider: dex
 
@@ -181,6 +193,12 @@ spec:
       chart_repository: https://helm.influxdata.com/
       chart_name: telegraf
       chart_version: "1.8.77"
+
+      # The catalogue entry this application describes (objects/35a_...), and the
+      # marker that the chart below is already its pinned copy. Seeded on main,
+      # where no event rule fires, so the seed carries the pin itself.
+      definition: lab-telemetry
+      definition_pinned: true
 
       exposed: false
 

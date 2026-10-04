@@ -59,6 +59,12 @@ spec:
             icon: "mdi:apps"
 
           - namespace: Service
+            name: ApplicationDefinitionCatalogue
+            label: Application Catalogue
+            kind: ServiceApplicationDefinition
+            icon: "mdi:store-outline"
+
+          - namespace: Service
             name: AppAccessServices
             label: Application Access
             kind: ServiceAppAccess

@@ -68,7 +68,12 @@ WRITE_BACKS: dict[str, set[str]] = {
     "ServiceNetworkSegment": {"subnet", "vlan", "svi"},
     # `allowed_source_prefixes` is written by generate-app-access, not by this
     # kind's generator -- watching it would run generate-fabric-app per grant.
-    "ServiceFabricApp": {"vip_block", "vip_block_managed", "allowed_source_prefixes"},
+    #
+    # `definition_pinned` is written once by the generator's pin step
+    # (specs/035-application-catalogue), and `definition` is deliberately NOT
+    # watched either: re-pointing an application at another catalogue entry is
+    # an upgrade, which is its own reviewed change and not an automatic rebuild.
+    "ServiceFabricApp": {"vip_block", "vip_block_managed", "allowed_source_prefixes", "definition_pinned"},
     "ServiceTenantOnboarding": {"evpn_tenant", "mac_vrf_vni_base"},
     "ServiceServerPlacement": {"server"},
     "ServiceFabricPeering": {"peerings"},
@@ -189,3 +194,15 @@ def test_each_service_kind_still_builds_on_creation(kind: str) -> None:
 def test_rule_names_are_unique() -> None:
     names = [r["name"] for r in _rules()]
     assert len(names) == len(set(names))
+
+
+def test_a_catalogue_pin_is_not_an_input() -> None:
+    """The pin is taken once, on creation. Watching either field would re-pin or loop."""
+    watched = {_matched_field(r) for r in _updated_rules("ServiceFabricApp")}
+    assert "definition" not in watched, "re-pointing an application is an upgrade, not a rebuild"
+    assert "definition_pinned" not in watched, "the generator writes it; watching it loops"
+
+
+def test_no_rule_names_the_catalogue_entry() -> None:
+    """An entry is data, not a service: no generator sits beneath it."""
+    assert [r["name"] for r in _rules() if r["node_kind"] == "ServiceApplicationDefinition"] == []

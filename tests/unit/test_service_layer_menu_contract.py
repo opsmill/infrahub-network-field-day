@@ -48,6 +48,15 @@ SERVICE_KINDS = {
 }
 
 
+# The catalogue of applications a requester may pick from (specs/035). It sits
+# in the Services section because it is what the requests are made from, but it
+# is not a service: it inherits neither `ServiceGeneric` nor `GeneratorTarget`.
+# Kept apart from SERVICE_KINDS so that set stays "every concrete service kind".
+CATALOGUE_KINDS = {
+    "ServiceApplicationDefinition",
+}
+
+
 def _menu() -> dict[str, Any]:
     return yaml.safe_load(MENU_PATH.read_text(encoding="utf-8"))
 
@@ -141,7 +150,7 @@ def test_every_service_kind_sits_under_the_service_section() -> None:
     service_section = _section("Service", "ServiceMenu")
     kinds = {item["kind"] for item in _flatten(service_section["children"]["data"]) if item.get("kind")}
 
-    assert kinds == SERVICE_KINDS
+    assert kinds == SERVICE_KINDS | CATALOGUE_KINDS
 
 
 def test_no_service_kind_appears_outside_the_service_section() -> None:

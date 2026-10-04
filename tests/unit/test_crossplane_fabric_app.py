@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -24,6 +25,7 @@ from transforms.crossplane_fabric_app import (
     CrossplaneFabricAppTransform,
     apply_local_traffic,
     apply_sso,
+    build_chart,
     build_expose,
     build_monitoring,
     build_policy,
@@ -587,3 +589,59 @@ def test_an_application_monitoring_does_not_probe_renders_byte_identically(profi
     text = _manifest(profiles=profiles)
     assert "monitoring" not in text
     assert text == _manifest(profiles=[])
+
+
+# ---------------------------------------------------------------------------
+# specs/035-application-catalogue: a chart is all three fields, and the
+# artifact reads the application's own pin, never the catalogue entry.
+# ---------------------------------------------------------------------------
+
+
+def _chart_app(**fields: str | None) -> Any:
+    app = _app()
+    update = {key: (SimpleNamespace(value=value) if value is not None else None) for key, value in fields.items()}
+    return app.model_copy(update=update)
+
+
+def test_a_complete_chart_builds_as_it_always_did() -> None:
+    app = _chart_app(
+        chart_repository="https://cowboysysop.github.io/charts/", chart_name="whoami", chart_version="6.0.0"
+    )
+
+    assert build_chart(app, {"replicaCount": 3}) == {
+        "name": "whoami",
+        "repository": "https://cowboysysop.github.io/charts/",
+        "version": "6.0.0",
+        "values": {"replicaCount": 3},
+    }
+
+
+@pytest.mark.parametrize(
+    ("fields", "missing"),
+    [
+        ({"chart_repository": "https://x/", "chart_name": "whoami", "chart_version": None}, "version"),
+        ({"chart_repository": None, "chart_name": "whoami", "chart_version": "6.0.0"}, "repository"),
+        ({"chart_repository": None, "chart_name": "whoami", "chart_version": None}, "repository or version"),
+    ],
+)
+def test_a_half_pinned_chart_is_refused_where_it_names_itself(fields: dict[str, str | None], missing: str) -> None:
+    """The XRD requires all three; the cluster would reject it, quietly, after delivery."""
+    with pytest.raises(ValueError, match=f"no {missing}"):
+        build_chart(_chart_app(**fields), None)
+
+
+def test_no_chart_name_still_means_no_chart() -> None:
+    assert build_chart(_chart_app(chart_name=None), None) == {}
+
+
+def test_the_artifact_reads_the_applications_pin_and_never_the_catalogue_entry() -> None:
+    """FR-016. A catalogue edit must not reach a running application's artifact, and
+    the only way to guarantee it is for the query never to select the entry."""
+    query = Path("transforms/crossplane_fabric_app.gql").read_text(encoding="utf-8")
+    assert "definition" not in query
+    assert (
+        "definition"
+        not in CrossplaneFabricAppQuery.model_json_schema()["$defs"]["CrossplaneFabricAppQueryTargetEdgesNode"][
+            "properties"
+        ]
+    )
