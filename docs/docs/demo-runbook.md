@@ -95,7 +95,7 @@ Allow ten minutes. Each check guards against something that goes wrong quietly.
 ```bash
 docker compose ps deployment-reconciler
 docker exec infrahub-deployment-reconciler-1 env | grep RECONCILE
-docker logs --tail 3 infrahub-deployment-reconciler-1 | grep cycle
+docker logs --tail 200 infrahub-deployment-reconciler-1 2>&1 | grep cycle | tail -1
 ```
 
 You want the container `Up`, and these two values:
@@ -705,7 +705,8 @@ uv run invoke demo-release    # the one command: branch, import, validators, pro
 ## Run it all, and put it back
 
 ```bash
-uv run invoke demo-run                       # acts one, two and the builder, with every merge
+uv run invoke demo-run                       # acts one, two and the builder, with every merge; the request
+                                             # reference comes from the clock, so a second run never reuses one
 uv run invoke demo-run --acts builder        # a subset: one, two, builder
 uv run invoke demo-run --no-builder-reset    # leave the capability merged, for the next act
 uv run invoke demo-run --restore             # and finish with demo-restore
@@ -723,13 +724,17 @@ can be run again if it was interrupted, because it decides what to do from what 
 2. withdraws every application and grant that is not in the seed files under `objects/` and is not
    named `otternet-*`, grants first, on one branch: status `decommissioning`, the generators run, the
    objects, their generator records and the application's Crossplane artifact deleted there, one
-   proposed change with every validator green, one merge;
+   proposed change with every validator green, one merge. It waits for main to be quiet first, and
+   starts the branch again if the proposed change reports a data conflict with work Infrahub was still
+   doing on main;
 3. waits for the reconciler to push and confirm, for the application's namespace and `FabricApp` to
    leave the cluster, and for its VIP block to be released;
 4. sweeps what a merge leaves behind: an artifact with no object (Vidra keeps delivering it, so the
    application never leaves the cluster) and generator instances and tracking groups whose object is gone;
-5. deletes the merged branches, checks that upstream `main` did not move, and runs the preflight and
-   `make -C lab verify`.
+5. deletes the merged branches and any other branch left open, checks that upstream `main` did not move,
+   and runs the preflight (tried up to six times, because the Services dashboard lags Prometheus by a
+   scrape or two) and `make -C lab verify`. Do not merge a pull request to the upstream `main` while it runs:
+   the check that `main` did not move would stop it.
 
 If a step cannot be made to work, the fallback is a fresh `uv run invoke bootstrap --fresh`, which takes
 about 25 minutes.

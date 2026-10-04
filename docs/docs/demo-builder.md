@@ -31,6 +31,17 @@ help, so do not retry it. Plan the 2 to 4 minutes into the story.
 
 ## One-time setup
 
+Run **one task worker** for the demonstration. Infrahub starts two, and with a read-write repository whose
+default branch is not `main` their clones diverge after a merge (see [Why one task worker](#why-one-task-worker)).
+Put this in `.env` before the first start, or on a running stack run
+`docker compose up -d task-worker` after adding it:
+
+```bash
+echo 'TASK_WORKER_REPLICAS=1' >> .env
+```
+
+The stack's default stays two; only this demonstration sets one.
+
 The repository is registered against the Git remote when the stack is first loaded, and the kind of
 repository cannot change afterwards: Infrahub refuses to change it in place, and refuses to delete one
 while trigger actions reference its generators. Do this on a fresh stack.
@@ -69,7 +80,10 @@ and the data as well as the code. `main` declares neither, so nothing else loads
 implementation, the revert of the commit that removed the capability. Replace it with the output of a
 Spec Kit run when there is one, and say which it is.
 
-The branch is never pushed under its own name. Rebuild it with `--force` when `main` has moved on.
+The branch is never pushed under its own name. Rebuild it with `--force` when `main` has moved on: the reset
+puts back the tree the staged branch was cut from, so a staged branch cut from an older `main` than
+`demo-main` holds sets the baseline back to that older commit, and `demo-run` reports that the baseline tree
+is not the one it started with.
 
 ## Run it
 
@@ -128,6 +142,29 @@ uv run invoke demo-restore              # the whole lab back to the baseline
 `demo-restore` includes `demo-reset`, then withdraws every application and grant the acts created and checks
 the lab against the baseline; the [runbook](./demo-runbook.md#run-it-all-and-put-it-back) lists its steps. Both
 change the live lab, and `demo-restore` can be run again if it was interrupted.
+
+## Why one task worker
+
+With `default_branch: demo-main` and a remote whose own default is `main`, two task workers disagree about
+the default branch, and a merge can succeed in Infrahub's graph without ever reaching the remote. Measured, with
+two workers:
+
+- A worker's main worktree can sit on `main` instead of `demo-main`. Infrahub pushes a merge with
+  `git push origin demo-main`, which fails there with `src refspec demo-main does not match any`.
+- Infrahub never imports a commit pushed to `demo-main` from outside, and the periodic git sync broadcasts
+  the local default branch of the worker that happens to run it as the pinned commit that every worker
+  hard-resets to, once a minute. After a merge only one worker has the new commit, so the next sync pins a
+  stale one and the whole pool converges on a commit older than the remote's. The next merge builds on it
+  and its push is a non-fast-forward, which Infrahub does not report. Three merges in the first
+  builder runs never reached the remote.
+
+This is a finding for Infrahub: the sync should pin the remote's tip, or a push that is rejected should fail the
+merge. With one worker there is nothing to diverge from, and the measured runs held: two full `demo-run` cycles and a Spec Kit builder act with no
+merge missing the remote and no `directory for the main commit is missing` error.
+
+`invoke demo-release`, `demo-reset` and `demo-restore` still run a cheap safety check that fetches the
+remote's `demo-main` into every worker, puts the worker on that branch at that commit, and creates the
+`commits/<sha>` worktree Infrahub reads. With one worker it does nothing and prints nothing.
 
 ## Rules that each cost a failed run
 
