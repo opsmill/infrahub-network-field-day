@@ -210,9 +210,11 @@ By default the agent acts as `mcp-agent`. To record the request as the person wh
 `alice`), use that person's server in Claude Code, `infrahub-lab-alice`, which sends her API token
 (`INFRAHUB_MCP_TOKEN_ALICE`, minted by `scripts/provision_mcp_user_token.py --user alice`). Measured on
 Infrahub 1.10.6: the grant's attributes then show `updated_by: alice`, and `requester` stays a separate
-free-text value. With her token `propose_changes` is refused (`object:Core:ProposedChange:create`), so an
-operator or an `mcp-agent` session opens the proposed change. Her token can also load a schema and merge,
-so never merge. Details:
+free-text value. With her token `propose_changes` succeeds once `uv run invoke mcp` has run
+`scripts/provision_requester_access.py`, which attaches the role `Requester Access` (create a proposed
+change, plus `edit_default_branch`) to her group `Infrahub Users`. If `propose_changes` is refused naming
+`object:Core:ProposedChange:create:allow_default`, run that script. Her token can also load a schema
+and merge through her built-in roles, so never merge. Details:
 [acting as a named user](../../../docs/docs/developer-guide/mcp-server.md#acting-as-a-named-user-such-as-alice).
 
 ## Related

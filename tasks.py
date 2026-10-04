@@ -2948,9 +2948,16 @@ def mcp(ctx: Context) -> None:
     instead, which here is a Super Administrator the task workers run as.
     Export `INFRAHUB_MCP_TOKEN` in the shell that launches Claude Code.
 
+    `scripts/provision_requester_access.py` also gives the built-in `Infrahub Users`
+    group the permission to open a proposed change, so a client working with a
+    signed-in user's token (`alice`) can call `propose_changes`.
+
     The server listens on http://127.0.0.1:8001/mcp. Idempotent.
     """
     ctx.run("python scripts/provision_mcp_agent.py", pty=True)
+    # Lets signed-in users, such as alice, open a proposed change with their own
+    # token. One extra role on `Infrahub Users`; grants no merge or approval.
+    ctx.run("python scripts/provision_requester_access.py", pty=True)
     # --force-recreate so a changed compose service reaches a running container,
     # and --no-deps because without it the recreate cascades to infrahub-server.
     ctx.run(f"{compose_cmd()} --profile mcp up -d --no-deps --force-recreate infrahub-mcp", pty=True)
