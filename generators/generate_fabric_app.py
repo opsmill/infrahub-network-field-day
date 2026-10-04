@@ -288,7 +288,12 @@ class FabricAppGenerator(InfrahubGenerator):
         # fires a run.
         if not _value(service.service_selector):  # type: ignore[attr-defined]
             service.service_selector.value = list(_value(entry.default_service_selector) or [])  # type: ignore[attr-defined]
+        # A cardinality-many relationship is only populated when asked for: the
+        # SDK's plain `get` leaves it uninitialised, and `peer_ids` on one that
+        # was never fetched is not an answer.
+        await service.advertised_services.fetch()  # type: ignore[attr-defined]
         if not service.advertised_services.peer_ids:  # type: ignore[attr-defined]
+            await entry.default_advertised_services.fetch()
             for peer_id in entry.default_advertised_services.peer_ids:
                 service.advertised_services.add(peer_id)  # type: ignore[attr-defined]
 

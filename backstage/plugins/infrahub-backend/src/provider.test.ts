@@ -294,6 +294,8 @@ describe('InfrahubEntityProvider', () => {
       changeState?: string;
       /** A path that fails, the way /api/schema/json_schema does for a List. */
       broken?: string;
+      /** Attributes added to the service as read from main. */
+      wireless?: Record<string, any>;
     } = {},
   ): Promise<Record<string, Entity>> => {
     const changeState = options.changeState ?? 'open';
@@ -334,7 +336,7 @@ describe('InfrahubEntityProvider', () => {
                 {
                   node: request.branch
                     ? wireless({ ssid: value('acme-corp') })
-                    : wireless(),
+                    : wireless(options.wireless),
                 },
               ],
             },
@@ -961,6 +963,36 @@ describe('InfrahubEntityProvider', () => {
 
     expect(Object.keys(entities)).not.toContain('System:infrahub-services');
     expect(entities['Component:wifi-001'].spec!.system).toBeUndefined();
+  });
+
+  describe('the requestable tag of a catalogue entry', () => {
+    // The picker filters on this one tag, and a catalogue filter ORs the values
+    // it is given for a key, so it has to mean "requestable AND active".
+    const tags = async (attributes: Record<string, any>) =>
+      (await run({ wireless: attributes }))['Component:wifi-001'].metadata
+        .tags;
+
+    it('is present for an entry that is requestable and active', async () => {
+      expect(
+        await tags({ requestable: value(true), status: value('active') }),
+      ).toContain('requestable');
+    });
+
+    it('is absent for an entry that is not requestable', async () => {
+      expect(
+        await tags({ requestable: value(false), status: value('active') }),
+      ).not.toContain('requestable');
+    });
+
+    it('is absent for a deprecated entry, which leaves the picker', async () => {
+      expect(
+        await tags({ requestable: value(true), status: value('deprecated') }),
+      ).not.toContain('requestable');
+    });
+
+    it('is absent for a kind with no such attribute', async () => {
+      expect((await tags({})) ?? []).not.toContain('requestable');
+    });
   });
 
   it('marks an object with an open request as pending and links the change', async () => {

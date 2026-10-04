@@ -36,10 +36,20 @@ class _Peers:
     """A cardinality-many relationship: ids, and `add` by id."""
 
     def __init__(self, ids: list[str]) -> None:
-        self.peer_ids = list(ids)
+        self._ids = list(ids)
+        self.fetched = False
+
+    @property
+    def peer_ids(self) -> list[str]:
+        """Not an answer until fetched, as with the SDK's uninitialised manager."""
+        assert self.fetched, "peer_ids read on a cardinality-many relationship that was never fetched"
+        return self._ids
+
+    async def fetch(self) -> None:
+        self.fetched = True
 
     def add(self, peer_id: str) -> None:
-        self.peer_ids.append(peer_id)
+        self._ids.append(peer_id)
 
 
 class _One:

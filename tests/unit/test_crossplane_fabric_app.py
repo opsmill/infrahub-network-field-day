@@ -439,14 +439,21 @@ def test_an_unknown_chart_without_local_raises_rather_than_guessing(values: Any)
 
 
 def test_the_portal_prefill_states_local() -> None:
-    """The curated template's default values are what a requester who changes
-    nothing submits, so they must already be the right shape for another chart
-    that follows the same `service.*` convention."""
+    """What a requester who changes nothing gets must already be the right shape.
+
+    The curated template used to PREFILL the values; since specs/035 the requester
+    picks a catalogue entry and the entry's `default_values` are what the application
+    runs. Same claim, moved with the values: they must already say `Local`, so the
+    shape is right for another chart that follows the same `service.*` convention.
+    """
     template = yaml.safe_load(Path("backstage/catalog/exposed-app-with-access.yaml").read_text(encoding="utf-8"))
     fields = {
         name: spec for page in template["spec"]["parameters"] for name, spec in page.get("properties", {}).items()
     }
-    prefill = yaml.safe_load(fields["values_file_content"]["default"])
+    assert "values_file_content" not in fields, "the requester no longer supplies values"
+    catalogue = next(yaml.safe_load_all(Path("objects/35a_otternet_app_catalogue.yml").read_text(encoding="utf-8")))
+    whoami = next(entry for entry in catalogue["spec"]["data"] if entry["requestable"])
+    prefill = yaml.safe_load(whoami["default_values"])
     assert prefill["service"]["externalTrafficPolicy"] == "Local"
 
 

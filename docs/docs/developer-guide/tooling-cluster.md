@@ -84,6 +84,17 @@ template, so this one is curated — and `tests/unit/test_combined_app_template_
 holds it against the schema it was written from, because a hand-written template does not
 re-derive its fields and the failure would land on a branch user mid-request.
 
+**The application is a picker over the application catalogue, not a set of typed chart
+fields.** `ServiceApplicationDefinition` is ingested as a Resource of type
+`application-definition` (named in `infrahub.catalog.kinds`, because it inherits no
+`ServiceGeneric` for `discover` to find, and with no generated form). The provider tags an
+entry `requestable` only when it is requestable **and** active, and the picker filters on that
+one tag: a catalogue filter treats the values of one key as alternatives, so two tags would offer too much. The
+template then reads the entry again from Infrahub with the same two conditions before
+creating anything, which is the control; the filter is the convenience. A new entry needs no
+portal change, but the provider tag does need `invoke backstage-build` to reach a running
+portal. See [the catalogue](./schemas.md#the-application-catalogue).
+
 **The two creates are separated by a barrier, and that is the whole design.**
 `generate-app-access` reads the application's `vip_block`, `vrf` and `advertised_services`;
 `generate-fabric-app` is what allocates the block. Both fire on `created` through

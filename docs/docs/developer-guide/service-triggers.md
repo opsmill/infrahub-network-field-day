@@ -81,3 +81,13 @@ on the tenant: decommissioning an onboarding ran three times and ended `active` 
 tenant intact — a refused withdrawal silently reverted into a live service. The refusal now raises
 and leaves the status at `decommissioning`, which is true (asked for, not done) and fires
 nothing.
+
+**A catalogue pin is not an input, and writes nothing a rule watches.** `ServiceFabricApp.definition`
+and `definition_pinned` are both unwatched. The pin is taken once, on creation, by the run the
+`created` rule already fires: it sets the chart fields, `definition_pinned`, and (when empty) the
+selector and advertised services, none of which is watched, and it never writes `vip_block_size`,
+which is. The pin therefore adds no run: a create still costs the build plus the one no-op fired by
+`provisioning -> active`. `definition` is left unwatched because re-pointing an application at another
+catalogue entry is an upgrade, and an upgrade is its own reviewed change rather than an automatic
+rebuild. `tests/unit/test_service_trigger_contract.py` holds all of it, including that no rule names
+`ServiceApplicationDefinition`.

@@ -7,6 +7,17 @@
 # change an existing application and the way to grant access to one that already
 # exists; this is the two-for-one, and it is curated rather than derived.
 #
+# THE APPLICATION IS PICKED, NOT DESCRIBED (specs/035-application-catalogue). A
+# requester chooses an entry from the application catalogue -- "Who am I" -- and
+# supplies only what is theirs. Chart repository, chart name, chart version, the
+# values, the address-block size and the service selector are the platform
+# team's decision and live on the entry in Infrahub; this form no longer asks.
+# The entry is READ at request time and its chart fields are sent in the create
+# (the schema keeps them mandatory), then `generate-fabric-app` pins the rest on
+# the branch -- the values file, and the advertised services -- so a later change
+# to the catalogue never upgrades an application already requested. There is no
+# way to override the chart or its values from here, by design.
+#
 # THE ORDER OF THE STEPS IS THE WHOLE DESIGN. `generate-app-access` reads the
 # application's `vip_block`, `vrf` and `advertised_services`, and
 # `generate-fabric-app` is what allocates the block. Both generators fire on
@@ -50,10 +61,7 @@ spec:
         - cluster
         - vrf
         - owner
-        - chart_repository
-        - chart_name
-        - chart_version
-        - advertised_services
+        - catalogue_entry
       properties:
         app_name:
           title: Application name
@@ -126,113 +134,31 @@ spec:
             - OTTERNET-Internet
           # Used for both objects, the application and the grant.
           description: The organisation you are ordering this for.
-        chart_repository:
-          title: Chart repository
+        catalogue_entry:
+          title: Application
           type: string
-          description: The address of the Helm repository that holds the chart.
-        chart_name:
-          title: Chart name
-          type: string
-          description: The name of the Helm chart to install.
-        chart_version:
-          title: Chart version
-          type: string
-          # Repository, name and version are mandatory together -- the Crossplane
-          # XRD requires all three, so a two-of-three chart is a resource the
-          # cluster rejects.
-          description: The version of the Helm chart to install.
-        advertised_services:
-          title: Ports to advertise
-          type: array
-          minItems: 1
-          uniqueItems: true
-          default:
-            - junos-http
-          items:
-            type: string
-            enum:
-              - junos-http
-              - junos-https
-              - infrahub-api
-              - tooling-portal
-              - tooling-oidc
-          # Named `SecurityService` objects. REQUIRED here although the schema makes
-          # it optional: the grant derives its permitted ports from this
-          # relationship and REFUSES rather than guessing when an application
-          # advertises nothing. The firewall rule then references the very object
-          # named here, so the advertised port and the permitted port are one
-          # object rather than two numbers that have to agree.
-          description: The ports your users connect to, such as junos-http for web traffic on port 80.
-        service_selector:
-          title: Which Services get the VIP
-          type: array
-          minItems: 1
-          default:
-            - otternet.lab/advertise=true
-          items:
-            type: string
-          # MANDATORY IN PRACTICE, AND THE SCHEMA DOES NOT SAY SO. The Crossplane
-          # XRD requires `expose.serviceSelector` whenever an application is
-          # exposed, so without it the manifest is delivered and REFUSED:
-          #   FabricApp "x" is invalid: spec.expose.serviceSelector: Required value
-          # The sync still reports Succeeded and the VidraResource carries the
-          # error, so a request looks complete and the application never exists.
+          # A PICKER OVER THE CATALOGUE. The Infrahub provider ingests each entry
+          # as a Resource of type `application-definition` (the slug drops the
+          # `Service` prefix) and tags it `requestable` only when the entry is
+          # requestable AND active -- ONE tag, because a catalogue filter ORs the
+          # values of a key, so two tags would offer every active entry plus every
+          # requestable one. The lab's own infrastructure applications are not
+          # requestable and never appear here.
           #
-          # A Service is not exposed to the fabric merely by being of type
-          # LoadBalancer -- it has to be selected -- so the default matches the
-          # label the lab's own chart values put on a Service.
-          description: >-
-            Labels that pick which of the application's Kubernetes Services get
-            an address reachable from your site; the default suits most charts.
-        vip_block_size:
-          title: VIP block size
-          type: integer
-          default: 28
-          minimum: 24
-          maximum: 30
-          # A prefix length, allocated from the cluster's VIP pool.
-          description: How many addresses to reserve for the application, as a prefix length; 28 gives sixteen.
-        values_file_content:
-          title: Chart values
-          type: string
-          # PREFILLED, AND THE EXPOSURE BLOCK IS WHY. An application can be
-          # `exposed`, hold a VIP block, carry a firewall rule permitting it, and
-          # still answer nothing -- because a chart's Service is ClusterIP by
-          # default. Measured: a request that left this empty deployed cleanly,
-          # went Ready, and produced a ClusterIP Service with no VIP, with every
-          # object in Infrahub saying the application was reachable.
-          #
-          # Two things make it reachable and BOTH are needed: the Service has to
-          # be a LoadBalancer, and it has to carry the label named in
-          # `service_selector` above -- a Service is never advertised merely by
-          # being of that type. The default below is the seeded application's
-          # own exposure block, so a requester who changes nothing gets a working
-          # application, and one deploying a different chart edits the keys their
-          # chart uses.
-          default: |
-            replicaCount: 1
-
-            service:
-              type: LoadBalancer
-              externalTrafficPolicy: Local
-              ports:
-                http: 80
-
-            commonLabels:
-              otternet.lab/advertise: "true"
-          #
-          # The Service must be a LoadBalancer AND carry the label named in
-          # `service_selector`, or the application deploys, reports healthy, and
-          # is reachable by nothing. It must also set externalTrafficPolicy Local,
-          # or the pod sees a node address instead of the requester's and the
-          # source-prefix policy cannot apply; for a chart Infrahub does not know,
-          # rendering refuses values that omit it.
-          description: >-
-            The Helm values for the chart; the prefilled values already make the
-            application reachable, so change only what your chart needs.
-          ui:widget: textarea
+          # ITS VALUE IS AN ENTITY REF (`resource:default/whoami`), not the
+          # entry's name; the `fetch_definition` step resolves it to the Infrahub
+          # id. The filter is the convenience. `read_definition` re-reads the entry
+          # from Infrahub with the same two conditions and is the control: a stale
+          # or hand-edited form naming an entry that is not offered stops there.
+          ui:field: EntityPicker
           ui:options:
-            rows: 16
+            catalogFilter:
+              kind: Resource
+              spec.type: application-definition
+              metadata.tags: requestable
+            defaultKind: Resource
+            allowArbitraryValues: false
+          description: The application to deploy. Its chart, version and settings are chosen by the platform team.
 
     - title: Who may reach it
       required:
@@ -276,6 +202,13 @@ spec:
           pattern: '^[a-z0-9][a-z0-9-]*$'
 
   steps:
+    # ------------------------------------------------------- the catalogue entry
+    - id: fetch_definition
+      name: Look up the application
+      action: catalog:fetch
+      input:
+        entityRef: ${{ parameters.catalogue_entry }}
+
     # ------------------------------------------------------------------ branch
     - id: branch
       name: Create the branch
@@ -290,6 +223,53 @@ spec:
           }
         variables:
           name: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+
+    # ---------------------------------------------------- the entry, read again
+    # THE CONTROL BEHIND THE PICKER. The picker filters in the browser; this reads
+    # the entry from Infrahub with the same two conditions, requestable AND active.
+    #
+    # A scaffolder step can only fail on a GraphQL error, never on a value, so the
+    # refusal is made the way `assert_vip` makes its own: when no entry matches,
+    # `edges[0]` is empty, every expression below resolves to nothing, the
+    # REQUIRED variables of `create_app` are not provided, and Infrahub rejects
+    # the mutation. The run stops there, before an application exists.
+    #
+    # The entry's chart fields, block size and selector are read here and sent in
+    # the create. The advertised services are NOT: the scaffolder cannot template
+    # a list out of a relationship read, so `generate-fabric-app` fills them from
+    # the entry on the branch, when the request left them empty.
+    - id: read_definition
+      name: Read the application's catalogue entry
+      action: infrahub:graphql:execute
+      input:
+        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
+        query: |
+          query ($id: ID!) {
+            ServiceApplicationDefinition(ids: [$id], requestable__value: true, status__value: "active") {
+              edges {
+                node {
+                  id
+                  chart_repository {
+                    value
+                  }
+                  chart_name {
+                    value
+                  }
+                  chart_version {
+                    value
+                  }
+                  default_vip_block_size {
+                    value
+                  }
+                  default_service_selector {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        variables:
+          id: ${{ steps.fetch_definition.output.entity.metadata.annotations["infrahub.opsmill.com/id"] }}
 
     # ------------------------------------------------------------- application
     - id: create_app
@@ -318,10 +298,10 @@ spec:
             $vip_block_size: BigInt!
             $exposed: Boolean!
             $service_selector: GenericScalar!
+            $definition: String!
             $cluster: String!
             $vrf: String!
             $owner: String!
-            $advertised_services: [RelatedNodeInput]
           ) {
             ServiceFabricAppCreate(
               context: { account: { id: $infrahub_context_account } }
@@ -335,10 +315,10 @@ spec:
                 vip_block_size: { value: $vip_block_size }
                 exposed: { value: $exposed }
                 service_selector: { value: $service_selector }
+                definition: { id: $definition }
                 cluster: { hfid: [$cluster] }
                 vrf: { hfid: [$vrf] }
                 owner: { hfid: [$owner] }
-                advertised_services: $advertised_services
                 member_of_groups: [{ hfid: ["service_fabric_apps"] }]
               }
             ) {
@@ -353,35 +333,19 @@ spec:
           name: ${{ parameters.app_name }}
           description: ${{ parameters.description }}
           namespace_name: ${{ parameters.namespace_name }}
-          chart_repository: ${{ parameters.chart_repository }}
-          chart_name: ${{ parameters.chart_name }}
-          chart_version: ${{ parameters.chart_version }}
-          vip_block_size: ${{ parameters.vip_block_size }}
+          # From the entry, never from the form. Mandatory in the schema, so they
+          # are sent here; `generate-fabric-app` pins them again from the same
+          # entry, and `definition_pinned` is what stops it doing so twice.
+          chart_repository: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.chart_repository.value }}
+          chart_name: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.chart_name.value }}
+          chart_version: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.chart_version.value }}
+          vip_block_size: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.default_vip_block_size.value }}
           exposed: true
-          service_selector: ${{ parameters.service_selector }}
+          service_selector: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.default_service_selector.value }}
+          definition: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.id }}
           cluster: ${{ parameters.cluster }}
           vrf: ${{ parameters.vrf }}
           owner: ${{ parameters.owner }}
-          advertised_services: ${{ parameters.advertised_services }}
-        # The form collects plain hfids; a cardinality-many relationship needs
-        # them as [{ hfid: [value] }] and the scaffolder cannot build objects.
-        relatedNodeLists:
-          - advertised_services
-
-    - id: values
-      name: Attach the chart values
-      if: ${{ parameters.values_file_content }}
-      action: infrahub:file:upload
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        kind: ServiceFabricAppValuesFile
-        parentField: app
-        parentId: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
-        content: ${{ parameters.values_file_content }}
-        fileName: values.yaml
-        # Attributed to the requester like the two creates, rather than to the
-        # portal's service account.
-        account: ${{ user.entity.metadata.name }}
 
     # ------------------------------------------------------------- the barrier
     - id: await_app

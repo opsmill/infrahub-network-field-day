@@ -1251,6 +1251,16 @@ export class InfrahubEntityProvider implements EntityProvider {
         tags: [
           kind.tag,
           ...(live('status') ? [live('status')] : []),
+          // A catalogue entry (`ServiceApplicationDefinition`) a requester may
+          // pick. ONE derived tag, requestable AND active, because a catalogue
+          // filter ORs the values it is given for a key: filtering on the
+          // status tag and a requestable tag together would offer every active
+          // entry plus every requestable one. A deprecated entry loses the tag
+          // and leaves the picker; the template re-reads the entry from Infrahub
+          // as the control, so this is the convenience and that is the guarantee.
+          ...(live('requestable') === true && live('status') === 'active'
+            ? ['requestable']
+            : []),
           ...(pending ? ['pending-change'] : []),
         ],
         ...this.base(

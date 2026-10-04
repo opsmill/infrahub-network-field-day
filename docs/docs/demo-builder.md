@@ -153,6 +153,21 @@ uv run invoke demo-restore              # the whole lab back to the baseline
 the lab against the baseline; the [runbook](./demo-runbook.md#run-it-all-and-put-it-back) lists its steps. Both
 change the live lab, and `demo-restore` can be run again if it was interrupted.
 
+## Act one picks its application from the catalogue
+
+`demo-run` starts with act one, the portal request for **Exposed application, with access**. That request no
+longer types a chart: it submits one value, the picker's entity ref `resource:default/whoami`, and the rehearsal
+then checks that the application was pinned from that entry. The checks are listed in the
+[runbook](./demo-runbook.md#act-one-ask-for-an-application); the rendered Crossplane artifact must still show chart
+`whoami` 6.0.0 and the entry's values.
+
+The application catalogue is **seed data** (`objects/35a_otternet_app_catalogue.yml`, with the three
+infrastructure entries' values set by `scripts/seed_app_payloads.py`), so none of this branch's commands touch
+it. `demo-restore` withdraws the application act one created, which was pinned from `whoami`, and leaves the
+entry in place. The `ServiceApplicationDefinition` schema node belongs to the baseline schema, not to the capability
+this branch stages, so `demo-reset` never removes it. Changing an entry between two runs changes nothing already
+requested: an application keeps the chart it was pinned to.
+
 ## The task workers
 
 With `default_branch: demo-main` and a remote whose own default is `main`, the two task workers can disagree
