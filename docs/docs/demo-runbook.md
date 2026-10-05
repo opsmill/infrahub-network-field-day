@@ -89,8 +89,19 @@ checked against the lab in front of you.
 ## Presenter run sheet, from a freshly bootstrapped lab
 
 Follow this in order for the three-act demonstration. Every command runs from the repository root in a shell that
-has sourced `.env` (`set -a; source .env; set +a`) and, for `kubectl`, `export KUBECONFIG=lab/k8s/.kubeconfig/kubeconfig.yaml`. Timings are measured on this lab: bootstrap 1164 to 1644 s
-(five runs; 1250 s in the sixth), act one 321 to 342 s, the builder act 819 to 1252 s, `demo-restore` 460 to 611 s.
+has three things, each of which was found missing in a clean shell:
+
+- `.env` sourced (`set -a; source .env; set +a`). It holds the MCP, portal and exporter credentials.
+- `INFRAHUB_API_TOKEN` exported. `.env` does not hold it. `invoke demo-release` without it imported the branch for 124 s and then
+  printed `the proposed change could not be opened`; the GraphQL calls were sent with an empty token (the cause is inferred from the code, and the run with the token set worked). It now refuses at the start. Export it from `~/.zshrc`
+  (`source ~/.zshrc`), as in [the builder demo](./demo-builder.md), and `NFD_GITHUB_TOKEN` with it.
+- `KUBECONFIG` as an **absolute** path: `export KUBECONFIG="$PWD/lab/k8s/.kubeconfig/kubeconfig.yaml"`.
+  A relative path works for `kubectl` in the repository root, but `make -C lab verify` changes directory, then
+  skips the Kubernetes and Crossplane checks with `cluster not reachable` and ends `87 passed, 3 failed, 3 skipped`.
+
+Timings are measured on this lab: bootstrap 1164 to 1644 s (1564 s in the seventh run), act one 321 to 342 s, the builder act
+746 to 1252 s, `demo-restore` 460 to 611 s. In the seventh run the measured steps added up to 3303 s, about 55 minutes: bootstrap 1564 s, act one 331 s, act two 263 s,
+the builder act 746 s, and `demo-restore` with `make -C lab verify` 399 s. That does not count the time between steps.
 The rest of this page explains each step.
 
 **Before the audience arrives** (about ten minutes; it changes nothing):
@@ -145,6 +156,7 @@ sourced `.env` and ask it to give the branch office access to Grafana (`otternet
 | `demo-release` stops on a stale staged branch, or the reset puts older files back | `main` moved after `demo-stage` | `uv run invoke demo-stage --force` |
 | `demo-release` waits a long time at `waiting for every task worker to pull the commit` | A worker pulls a pushed branch 75 to 464 s after the push; restarting a worker made it 400 s once | Wait. Do not merge before `Ready` |
 | A request fails half way in the portal | `BranchCreate` is not idempotent | Use another request reference. See [Recovery](#recovery) |
+| `demo-restore` prints `FAIL  the Services dashboard reads otternet-demo as healthy` and `trying again in 45 s` | Cause not investigated. Seen in two restores in the seventh run; the next preflight passed each time | Wait: it retries up to five times by itself. Act only if it is still failing after the fifth |
 | Nothing moved on a device two minutes after a merge | The reconciler is waiting for artifacts to hold still | `uv run invoke reconcile --now` |
 
 ## Before anyone is watching
@@ -236,7 +248,7 @@ them; this tells you whether it did.
 ```bash
 make -C lab fabric-bgp     # underlay and EVPN sessions on all seven switches
 make -C lab wan-bgp        # every SR Linux WAN router's BGP neighbours, all `established`
-export KUBECONFIG=lab/k8s/.kubeconfig/kubeconfig.yaml
+export KUBECONFIG="$PWD/lab/k8s/.kubeconfig/kubeconfig.yaml"
 kubectl get fabricapp,fabricpeering    # otternet-demo, -metrics, -telemetry and the peering: READY True
 kubectl get infrahubsync -o custom-columns=NAME:.metadata.name,STATE:.status.syncState
 ```
