@@ -659,13 +659,13 @@ curl -s http://127.0.0.1:8001/health
 
 Claude Code picks the server up from `.mcp.json` as `infrahub-lab` and asks you
 to approve it the first time. The server holds no credential: `.mcp.json` sends the
-`mcp-agent` API token from `INFRAHUB_MCP_TOKEN`, so start `claude` from a shell that
-has sourced `.env` (`set -a; source .env; set +a`); bootstrap mints both `INFRAHUB_MCP_TOKEN` and
-`INFRAHUB_MCP_TOKEN_ALICE` there, and Claude Code has to be restarted to read new ones. The agent acts as `mcp-agent`, never as the
-Super Administrator `agent` the task workers run as. It reads everything, writes
+alice's API token from `INFRAHUB_MCP_TOKEN_ALICE`, so start `claude` from a shell that
+has sourced `.env` (`set -a; source .env; set +a`); bootstrap mints it there, and Claude Code has to be restarted to read a new one. The agent acts as `alice`, never as the
+Super Administrator `agent` the task workers run as. It writes
 only on a branch (the server creates one per session, named
-`mcp/session-<date>-<hex>`), and can open a proposed change. A write aimed at
-`main` is refused by Infrahub, not by the prompt.
+`mcp/session-<date>-<hex>`) and can open a proposed change. Her built-in roles also include
+`merge_proposed_change` and `manage_schema`, so Infrahub would not stop the agent from merging; the skill tells it never to
+([details](./developer-guide/mcp-server.md#claude-code-acts-as-alice-only)). Act five of the rehearsal still calls the server as `mcp-agent`, to show that role's limits.
 
 `provision_mcp_agent.py` reads the password and token from the main checkout's `.env`
 (`envfile.env_file`), also when run from a git worktree. If tool calls answer

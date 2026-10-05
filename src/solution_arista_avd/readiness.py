@@ -43,6 +43,8 @@ MCP_TOKEN_USERS = ("alice",)
 MCP_SERVER_URL = "http://127.0.0.1:8001/mcp"
 MCP_HEALTH_URL = "http://127.0.0.1:8001/health"
 MCP_AGENT = "mcp-agent"
+# The one server in .mcp.json. Claude Code acts as alice and as no other identity.
+MCP_SERVER_NAME = "infrahub-lab"
 DEFAULT_BRANCH_DEMO = "demo-main"
 EXPECTED_TASK_WORKERS = 2
 DESKTOP = "clab-otternet-branch-desktop"
@@ -184,11 +186,11 @@ def decide_script_check(label: str, returncode: int, output: str, fix: str) -> R
 
 
 def decide_mcp_config(config: dict[str, Any], env_names: set[str], users: tuple[str, ...]) -> Result:
-    """`.mcp.json` registers `infrahub-lab` and one `infrahub-lab-<user>` per token user, and `.env` has each variable."""
+    """`.mcp.json` has exactly one server, `infrahub-lab`, sending alice's token, and `.env` has that variable."""
     name = ".mcp.json servers match the variables the scripts write"
     servers = config.get("mcpServers") or {}
-    wanted = {"infrahub-lab": "INFRAHUB_MCP_TOKEN", **{f"infrahub-lab-{u}": token_var(u) for u in users}}
-    problems: list[str] = []
+    wanted = {MCP_SERVER_NAME: token_var(users[0])}
+    problems: list[str] = [f"unexpected server {extra!r}" for extra in sorted(set(servers) - set(wanted))]
     for server, variable in wanted.items():
         entry = servers.get(server)
         if entry is None:
@@ -482,7 +484,7 @@ def probe_mcp_server(env: Environment) -> Result:  # noqa: ARG001
 def probe_agent_identity(env: Environment) -> Result:
     token = _env_values(env.root).get("INFRAHUB_MCP_TOKEN", "")
     return decide_identity(
-        "mcp-agent token, minted into the main checkout's .env, works through MCP",
+        "mcp-agent token (used by the demo rehearsal, not by Claude Code) works through MCP",
         MCP_AGENT,
         account_through_mcp(token),
         "INFRAHUB_MCP_TOKEN",
@@ -671,7 +673,7 @@ def probe_claude_mcp_list(env: Environment) -> Result:
     except subprocess.TimeoutExpired as exc:
         msg = "`claude mcp list` timed out"
         raise Unavailable(msg) from exc
-    return decide_claude_mcp_list(proc.stdout, ["infrahub-lab", *(f"infrahub-lab-{u}" for u in MCP_TOKEN_USERS)])
+    return decide_claude_mcp_list(proc.stdout, [MCP_SERVER_NAME])
 
 
 def probe_mcp_config(env: Environment) -> Result:
@@ -740,12 +742,12 @@ def repository_environment_problems(environ: dict[str, str] | os._Environ[str]) 
 
 def human_steps(root: Path) -> list[str]:
     """What a person still has to do. Names variables, never values."""
-    variables = ["INFRAHUB_MCP_TOKEN", *(token_var(u) for u in MCP_TOKEN_USERS)]
+    variables = [token_var(u) for u in MCP_TOKEN_USERS]
     env_file = envfile.env_file(root)
     return [
         f"Start Claude Code from a shell that has loaded {env_file}: `cd {envfile.main_checkout(root)} && set -a; source .env; set +a; claude`.",
-        f"That file holds {', '.join(variables)}; .mcp.json sends them as Bearer headers. Do not print or commit them.",
-        "Approve the infrahub-lab and infrahub-lab-alice servers the first time Claude Code asks.",
+        f"That file holds {', '.join(variables)}; .mcp.json sends it as the Bearer header, so Claude Code acts as alice. Do not print or commit it.",
+        "Approve the infrahub-lab server the first time Claude Code asks.",
     ]
 
 

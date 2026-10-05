@@ -79,12 +79,12 @@ uv run invoke bootstrap --fresh
   `demo-stage --force`. It does so only when the local `main` equals `origin/main`, because
   `demo-stage` cuts from the local `main`; otherwise it prints the two commands to run.
 
-### The two MCP identities, and the order they are made in
+### The two MCP accounts, and the order they are made in
 
-`mcp` creates `mcp-agent` and mints `INFRAHUB_MCP_TOKEN` into the **main checkout's** `.env`, gives the
+`mcp` creates `mcp-agent` and mints `INFRAHUB_MCP_TOKEN` into the **main checkout's** `.env` (only the demo rehearsal uses it; Claude Code does not), gives the
 built-in `Infrahub Users` group the `Requester Access` role, and starts the MCP server in
 token-passthrough mode. `mcp-tokens` then mints `INFRAHUB_MCP_TOKEN_ALICE`. It runs after `tooling` and
-after `mcp` because alice has no password in Infrahub: her account exists once she has signed in through
+after `mcp` because `.mcp.json` sends her token, and alice has no password in Infrahub: her account exists once she has signed in through
 Dex, and her token is minted with the access token that sign-in returns. Before this wiring, only
 `invoke mcp` ran, and nothing in bootstrap minted her token.
 
@@ -114,7 +114,7 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | Menus | Every entry in `menus/` exists |
 | Seeded applications | `otternet-demo`, `otternet-metrics` and `otternet-telemetry` have a catalogue entry and are pinned |
 | MCP server | The container runs and `/health` reports `token-passthrough` |
-| `mcp-agent` | The account and its role exist; a tool call with `INFRAHUB_MCP_TOKEN` returns `AccountProfile` `mcp-agent` |
+| `mcp-agent` | The account and its role exist; a tool call with `INFRAHUB_MCP_TOKEN` (used by the demo rehearsal, not by Claude Code) returns `AccountProfile` `mcp-agent` |
 | Requester Access | The role is attached to `Infrahub Users` and holds only the proposed change permissions |
 | Portal accounts | Every Dex user has an Infrahub account |
 | alice | A tool call with `INFRAHUB_MCP_TOKEN_ALICE` returns `alice`, and she opens a proposed change on a throw-away branch that the check deletes |
@@ -122,8 +122,8 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | Leftover branches | Warns about any Infrahub branch besides `main`, such as an `mcp/session-*` branch |
 | Staged branch | Warns when `stage/internet-access` was cut from an older `main` |
 | Portal picker | The portal's catalogue lists exactly the requestable entries, asked from the branch desktop as alice |
-| `.mcp.json` | `infrahub-lab` and `infrahub-lab-alice` send the variables the scripts write |
-| `claude mcp list` | Both servers connect, from a process that has `.env` loaded |
+| `.mcp.json` | One server, `infrahub-lab`, sends `INFRAHUB_MCP_TOKEN_ALICE`; any other entry fails the check |
+| `claude mcp list` | `infrahub-lab` connects, from a process that has `.env` loaded |
 | Shell environment | Warns when this shell holds a generated credential that differs from `.env` |
 
 The repository check is skipped on a stack that is not read-write unless
@@ -131,7 +131,7 @@ The repository check is skipped on a stack that is not read-write unless
 the picker with the lab down, is reported as `SKIP` with the reason.
 
 **What a person still has to do.** Start Claude Code from a shell that has loaded `.env`, because
-`.mcp.json` takes the two tokens from the environment:
+`.mcp.json` takes alice's token from the environment:
 
 ```bash
 cd /home/ubuntu/dev/nfd41/infrahub
@@ -139,7 +139,7 @@ set -a; source .env; set +a
 claude
 ```
 
-and approve the `infrahub-lab` and `infrahub-lab-alice` servers the first time Claude Code asks. Claude
+and approve the `infrahub-lab` server the first time Claude Code asks. Claude Code then acts as alice. Claude
 Code reads `.mcp.json` at start, so restart it after a bootstrap that mints new tokens.
 
 **The bootstrap ends by starting the reconciler LOOP**, not just by converging

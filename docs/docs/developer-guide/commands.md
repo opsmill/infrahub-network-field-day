@@ -46,8 +46,8 @@ uv run invoke reconcile                 # the loop, 600s maximum, 60s floor, wak
 uv run invoke reconcile --now           # ask the running loop for an all-device cycle now
 uv run invoke backstage-build           # build the portal image (it runs in the tooling cluster)
 uv run invoke tooling                   # Dex and the portal, into the tooling cluster
-uv run invoke mcp                       # the MCP server beside Infrahub, as mcp-agent; also the Requester Access role
-uv run invoke mcp-tokens                # alice's MCP token into .env; needs Dex (run `tooling` first)
+uv run invoke mcp                       # the MCP server beside Infrahub, creates mcp-agent (demo rehearsal only); also the Requester Access role
+uv run invoke mcp-tokens                # alice's MCP token into .env, the one Claude Code sends; needs Dex (run `tooling` first)
 uv run invoke ready                     # the demonstration's prerequisites, and what a person still has to do
 uv run invoke metrics-exporter          # the Infrahub exporter beside Infrahub, as metrics-exporter
 uv run invoke cluster                   # Cilium, Vidra, Crossplane, then the handover

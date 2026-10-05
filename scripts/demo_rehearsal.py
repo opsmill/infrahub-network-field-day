@@ -791,6 +791,8 @@ class Mcp:
         if self.session:
             headers["Mcp-Session-Id"] = self.session
         # The server runs in token-passthrough mode: the token is the client's, not the server's.
+        # This client is `mcp-agent` ON PURPOSE (act five shows that role's limits). Claude Code in
+        # .mcp.json acts as alice, with INFRAHUB_MCP_TOKEN_ALICE; this script does not use that one.
         token = os.environ.get("INFRAHUB_MCP_TOKEN") or main_env("INFRAHUB_MCP_TOKEN")
         if token:
             headers["Authorization"] = f"Bearer {token}"
