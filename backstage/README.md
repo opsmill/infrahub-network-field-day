@@ -37,8 +37,9 @@ Three things about it are deliberate and each looks like an oversight:
   is refused rather than guessed at.
 - **It regenerates the fabric before opening the proposed change.** The grant writes a
   `permit <vip>` sequence into the border leaf's `avd_custom_hostvars`, and
-  `generate-avd-device-hostvar` runs on no trigger, so without this the change shows a JSON
-  blob and no configuration. Two `CoreGeneratorDefinitionRun` calls with `nodes` omitted and
+  the event rule `trigger-avd-hostvar-generator-update-custom-hostvars` also runs
+  `generate-avd-device-hostvar` on a branch, but only after the grant's generator has finished and with no
+  wait, so this step runs it and waits. Two `CoreGeneratorDefinitionRun` calls with `nodes` omitted and
   `wait_until_completion: true` cover all seven switches; the artifacts then render in the
   proposed change's own checks, because no GraphQL mutation can ask for an artifact.
 

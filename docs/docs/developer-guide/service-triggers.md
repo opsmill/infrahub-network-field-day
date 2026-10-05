@@ -132,3 +132,30 @@ write-back is guarded. The cost would be one extra no-op run.
 `infrahubctl object load` (`invoke load`), so these rules take effect only after a merge to `main` and
 a reload. Until they are loaded, the `service_app_accesses` membership must be sent with the grant.
 How the group action and the group rule behave on Infrahub 1.10.6 is read from its source, not from a run.
+
+## Withdrawing a grant with the hostvar rule loaded
+
+**Setting `status` to `decommissioning` on a branch is safe with the rule
+`trigger-avd-hostvar-generator-update-custom-hostvars` loaded.** It was measured on 2026-10-05 on four
+session branches of a stack that had loaded `triggers.yml` by itself, through the Infrahub MCP server as
+`alice`. On the three branches that revoked by `status`, every task finished `success` and the task count stopped
+rising, so the rule does not loop. The fourth branch deleted a grant; see the bullet on deleting.
+
+- **A revoked grant that holds the only copy of a border leaf sequence removes it.** Revoking the Grafana grant
+  moved it to `decommissioned` with no `granted_rules`, and `PL-DC-ADVERTISED-BRANCH` lost `seq 15111` while
+  `seq 305420`, which belongs to another grant, stayed. The proposed change then showed that one line removed
+  from the border leaf's configuration, and all 24 validators were green.
+- **A revoked grant whose sequence another grant still uses changes no hostvar.** The sequence is derived
+  from the destination prefix, so a second grant to the same application shares it. The proposed change had
+  no artifact diff and 22 validators, all green.
+- **Deleting a grant on a branch is not a withdrawal.** No rule fires on `deleted`. The grant's firewall rule
+  and its `permit` sequence stayed in the proposed change, its `CoreGeneratorInstance` pointed at nothing,
+  and `Generator Validator: generate-app-access` was red. Deleting the branch removed all of it, and the
+  generator instances on `main` all still had their objects. Withdraw with `status`, as above.
+- **Revoking every grant that advertises a prefix leaves the border leaf's `avd_custom_hostvars` empty,
+  and the rule still fires.** With both merged grants set to `decommissioning` on one branch, the value
+  became `null` about 30 seconds later. The hostvar generator and then the structured config generator ran
+  on the branch after that write, and the proposed change showed `seq 15111` and `seq 305420` removed from
+  the border leaf's configuration, with all 24 validators green and every task `success`.
+- **Validators take longer when one is red.** The 22 validators of the delete case took about 10 minutes
+  to settle after the checks were run again; those of the revoke cases took 80 to 90 seconds.

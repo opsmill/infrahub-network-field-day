@@ -17,7 +17,7 @@ The whole cycle, from release to reset, was run on a fresh stack with the final 
 
 | Step | What happens | Measured |
 | --- | --- | --- |
-| `invoke demo-release` | A branch arrives in Infrahub with its code, schema and data, and a proposed change opens. It says `Ready` only once every validator has finished and passed | 2 to 4 minutes on earlier runs; 414, 287 and 384 seconds in three runs on 2026-10-05. The command prints the time of each phase |
+| `invoke demo-release` | A branch arrives in Infrahub with its code, schema and data, and a proposed change opens. It says `Ready` only once every validator has finished and passed | 2 to 4 minutes on earlier runs; 414, 287, 384 and 289 seconds in four runs on 2026-10-05. The command prints the time of each phase |
 | Review in the Infrahub UI | 29 validators in the 2026-10-05 run (32 in an earlier run), every artifact check and every rule check, all run with the branch's own code. The diff is the new schema node and fields, the menu entry, `acme-internet` and the three queries that name the new kind | passes |
 | Merge in the Infrahub UI | The merge also merges git and pushes it to `demo-main` | 50 seconds |
 | After the merge | The `isp-pe1` artifact carries `statement 30` | 15 seconds |
