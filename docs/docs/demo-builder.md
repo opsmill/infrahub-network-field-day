@@ -26,7 +26,7 @@ The whole cycle, from release to reset, was run on a fresh stack with the final 
 | `invoke demo-reset` | Everything back to the baseline, ready to go again | 320 seconds on an earlier run, 488 seconds inside `demo-run` on 2026-10-05 |
 
 The release time is Infrahub's, not the command's. The task workers pull a pushed branch 75 to 256 s
-after the push, whatever the repository's git-sync schedule is. The longest measured was 464 s, in a `demo-advance` run on 2026-10-05 that came straight after two task workers had been killed and started again. The builder release right after it took 104 s for the same phase, and the cause of the 464 s was not found. A shorter schedule was tried and does not
+after the push, whatever the repository's git-sync schedule is. The longest measured was 464 s, in a `demo-advance` run on 2026-10-05 that came straight after two task workers had been killed and started again. The builder release right after it took 104 s for the same phase, and the cause of the 464 s was not found. Measured on 2026-10-05, the same phase took 136 s and 233 s in two releases on a stack from a fresh bootstrap, and 400 s in a `demo-advance` run that came straight after `uv run invoke restart --component task-worker`. In the task worker logs a `git fetch` takes 0.4 to 0.7 s and runs on both workers every minute, so the repository's git settings do not explain the wait. The wait is the time until each worker next logs `Starting the synchronization` followed by `New commit detected`: only that run takes a new branch into the worker's clone, and it runs on a minute boundary but not every minute. Over 70 minutes one worker's synchronization runs were 1 to 10 minutes apart (one gap of 10 minutes, 11:05:59 to 11:16:00, on a stack that had not been restarted), so a release waits for the slower of the two workers' next run. In the 400 s run the first worker's run came 5.5 minutes after the push and the second worker's one minute later. The restart is therefore not the cause by itself: long gaps also happened without one, and one restart was measured. What decides which worker runs a synchronization was not found in this repository, and `INFRAHUB_GIT_SYNC_INTERVAL` is 10 in the container. [CLAUDE RECOMMENDED – based on these gaps] Plan for up to 8 minutes for this phase, and do not restart a task worker in the minutes before a release. A shorter schedule was tried and does not
 help, so do not retry it. Plan for 2 to 8 minutes, and rehearse on the stack you will present on. Measured phases of two releases on 2026-10-05: the workers' pull of the branch 114 s and 256 s, the proposed change's validators 161 s and 90 s, and about 25 s for everything else. The second run used `--no-recheck`, which skips the second run of every check once the proposed change is open: it finished 70 s sooner and changed the same artifacts. That is one run each, so the second run of the checks is still the default.
 
 ## One-time setup
@@ -255,10 +255,24 @@ merge was running. Each case was recovered with commands this repository already
   `Flow run marked as crashed due to missing heartbeats`. The proposed change stayed in state `merging`. Nothing was
   merged: the capability's kind was not on `main`, and the remote's `demo-main` was at the same commit as before.
   Recovery was `uv run invoke start`, then `uv run invoke demo-reset` (13 s, which removed the release branch in Infrahub
-  and on the remote), and `invoke ready` reported 19 PASS. The proposed change record stays in state `merging`; it
-  is history on `main`, and `invoke ready` and `invoke doctor` do not report it.
+  and on the remote), and `invoke ready` reported 19 PASS. The proposed change record stays in state `merging`
+  for good. `invoke ready` and `invoke doctor` now report a proposed change that has been in `merging` for 15 minutes or more as a
+  `WARN` named `no proposed change stuck in merging`, with the recovery in its fix text. The check was run against a stack with no
+  such record (it passed) and is held by a unit test; it was not run against a real crashed merge on 2026-10-05, because the attempt
+  to kill a worker for that purpose was refused by the Claude Code permission check.
 - **Not measured:** a worker killed during the git push at the end of a merge, which is the step that could leave the remote
-  ahead of Infrahub, and a worker removed and created again (the case under [the task workers](#the-task-workers)).
+  ahead of Infrahub. It was attempted on 2026-10-05 and not carried out: the permission check of the Claude Code session refused
+  the command that would kill the worker. In the logs of a normal merge the push is the line `Pushing the latest update to the
+  remote origin for the branch` and it finishes about 4 s later, so the window to hit is short. Also not measured: a worker removed and created again (the case under [the task workers](#the-task-workers)).
+
+## A proposed change stuck in merging
+
+`invoke ready` prints a `WARN` named `no proposed change stuck in merging` when a proposed change has been in state `merging`
+for 15 minutes or more. A merge takes about 20 to 100 s, so one that old belongs to a merge whose task worker stopped.
+The recovery that was measured is the one in the section above: `uv run invoke start`, then `uv run invoke demo-reset`, then
+`uv run invoke ready`. That recovery does not change the record. Whether an operator can delete a proposed change in state
+`merging` with `CoreProposedChangeDelete` was not tested, so the record may keep the warning on until it is removed. The
+readiness check deletes its own throw-away proposed changes the same way, but only in state `open`.
 
 ## Rules that each cost a failed run
 

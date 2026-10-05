@@ -13,6 +13,8 @@ import httpx
 from invoke import Context, Exit, task
 
 MAIN_DIRECTORY_PATH = Path(__file__).parent
+# The image `docker-compose.override.yml` runs, without its tag (the testcontainers add the Infrahub version).
+PROJECT_IMAGE = "opsmill/infrahub-solution-arista-avd"
 
 
 def compose_root() -> Path:
@@ -3520,8 +3522,13 @@ def doctor(ctx: Context) -> None:  # noqa: ARG001
 def test(ctx: Context, integration: bool = False) -> None:
     """Run the unit tests -- what CI runs -- and optionally the integration suite."""
     target = "tests" if integration else "tests/unit"
+    # The integration stack must run THIS project's image: the repository import loads
+    # transforms/avd_eos_config.py, which imports pyavd, and the stock Infrahub image has no pyavd.
+    # Measured on 2026-10-05: with the stock image 6 integration tests failed with the repository in
+    # `error-import` (`No module named 'pyavd'` in the task worker); with the project image all passed.
+    env = {"INFRAHUB_TESTING_DOCKER_IMAGE": os.environ.get("INFRAHUB_TESTING_DOCKER_IMAGE", PROJECT_IMAGE)}
     with ctx.cd(MAIN_DIRECTORY_PATH):
-        ctx.run(f"pytest {target}", pty=True)
+        ctx.run(f"pytest {target}", pty=True, env=env if integration else None)
 
 
 @task(

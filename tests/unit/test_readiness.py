@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from solution_arista_avd import readiness as r
@@ -198,6 +199,42 @@ def test_a_leftover_mcp_session_branch_is_reported() -> None:
     )
     assert left.status is Status.WARN
     assert "MCP session" in left.detail
+
+
+def test_a_proposed_change_stuck_in_merging_is_reported_after_the_limit() -> None:
+    now = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
+
+    def row(minutes_ago: float) -> dict[str, str]:
+        return {
+            "name": "Release internet access",
+            "source_branch": "demo/internet-access-1",
+            "updated_at": (now - timedelta(minutes=minutes_ago)).isoformat(),
+        }
+
+    assert r.decide_stuck_merges([], now).status is Status.PASS
+    # A merge that is running now is not stuck: it takes under two minutes.
+    assert r.decide_stuck_merges([row(2)], now).status is Status.PASS
+    left = r.decide_stuck_merges([row(r.STUCK_MERGE_MINUTES + 1)], now)
+    assert left.status is Status.WARN
+    assert "demo/internet-access-1" in left.detail
+    assert "invoke start" in left.fix
+    assert r.decide_stuck_merges([{"name": "x", "source_branch": "b", "updated_at": "not a time"}], now).status is (
+        Status.WARN
+    )
+    naive = row(60) | {"updated_at": (now - timedelta(minutes=60)).replace(tzinfo=None).isoformat()}
+    assert r.decide_stuck_merges([naive], now).status is Status.WARN
+
+
+def test_the_integration_stack_runs_the_project_image_that_has_pyavd() -> None:
+    body = _body("test")
+    assert "INFRAHUB_TESTING_DOCKER_IMAGE" in body
+    assert "PROJECT_IMAGE" in body
+    override = (REPO / "docker-compose.override.yml").read_text(encoding="utf-8")
+    assert f"image: {_module('tasks.py').PROJECT_IMAGE}:" in override
+
+
+def test_the_stuck_merge_check_runs_in_the_readiness_list() -> None:
+    assert "stuck merges" in [name for name, _ in r.CHECKS]
 
 
 def test_a_stage_branch_cut_from_an_old_main_is_stale() -> None:
