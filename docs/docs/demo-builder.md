@@ -42,7 +42,7 @@ repository cannot change afterwards: Infrahub refuses to change it in place, and
 while trigger actions reference its generators. Do this on a fresh stack.
 
 ```bash
-source ~/.zshrc                      # exports NFD_GITHUB_TOKEN, a token with write access to the repo
+source ~/.zshrc                      # exports NFD_GITHUB_TOKEN (a token with write access to the repo) and INFRAHUB_API_TOKEN
 export INFRAHUB_REPOSITORY_URL=https://github.com/opsmill/infrahub-network-field-day.git
 export INFRAHUB_REPOSITORY_MODE=readwrite
 export INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='["demo/.*"]'
@@ -240,6 +240,25 @@ worker has local changes it would lose. Do not remove it, and run a merge only t
 Measured with the default two workers, starting from a worker that had just been recreated and sat on `main`: the
 check moved it to `demo-main` on its own, a full `demo-run` passed 44 checks with none failed or warned, and
 `demo-restore` finished with `make -C lab verify` at 121 passed and 0 failed.
+
+## A task worker stops during the demonstration
+
+Measured on 2026-10-05 on a stack with two task workers, by `docker kill` on one worker while a release or a
+merge was running. Each case was recovered with commands this repository already has.
+
+- **Killed while `demo-release` waits for the import.** The release did not stop. It counts only the workers
+  that are running, so it finished with the other worker: `Ready` after 323 s with 29 validators passed. `invoke ready`
+  then fails with `1 task workers, expected 2` and names `uv run invoke start`. `invoke start` started the worker again in 2 s,
+  and the worker kept its clone, on `demo-main` at the same commit as the other worker, so the realignment described
+  under [the task workers](#the-task-workers) was not needed.
+- **Killed 8 seconds into the merge of the proposed change.** The merge call failed after 97 s with
+  `Flow run marked as crashed due to missing heartbeats`. The proposed change stayed in state `merging`. Nothing was
+  merged: the capability's kind was not on `main`, and the remote's `demo-main` was at the same commit as before.
+  Recovery was `uv run invoke start`, then `uv run invoke demo-reset` (13 s, which removed the release branch in Infrahub
+  and on the remote), and `invoke ready` reported 19 PASS. The proposed change record stays in state `merging`; it
+  is history on `main`, and `invoke ready` and `invoke doctor` do not report it.
+- **Not measured:** a worker killed during the git push at the end of a merge, which is the step that could leave the remote
+  ahead of Infrahub, and a worker removed and created again (the case under [the task workers](#the-task-workers)).
 
 ## Rules that each cost a failed run
 

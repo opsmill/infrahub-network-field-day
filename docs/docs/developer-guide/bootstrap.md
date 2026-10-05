@@ -61,11 +61,14 @@ export INFRAHUB_REPOSITORY_URL=https://github.com/opsmill/infrahub-network-field
 export INFRAHUB_REPOSITORY_MODE=readwrite
 export INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='["demo/.*"]'
 export NFD_GITHUB_TOKEN=...          # a token with write access to the repository; never commit it
+export INFRAHUB_API_TOKEN=...        # the token infrahubctl uses; for a local stack, INFRAHUB_INITIAL_ADMIN_TOKEN
 uv run invoke bootstrap --fresh
 ```
 
-- **The settings are checked first.** Bootstrap stops before it destroys anything if the URL, the
-  token or the import setting is missing, and if a dry-run push with the token is refused. This used
+- **The settings are checked first.** Bootstrap stops before it destroys anything if `INFRAHUB_API_TOKEN`, the URL, the
+  token or the import setting is missing. Measured from a shell that held only `HOME`, `PATH`, `USER` and
+  `NFD_GITHUB_TOKEN`: without `INFRAHUB_API_TOKEN` the stack was destroyed and rebuilt for five minutes, and then the step
+  that uploads application payloads stopped with `INFRAHUB_API_TOKEN is not set`. The check now refuses at the start. Bootstrap also stops if a dry-run push with the token is refused. These used
   to be found out after the teardown.
 - **`--fresh` recreates `demo-main`.** After the stack and the lab are destroyed, bootstrap deletes
   `demo-main` on the remote and creates it again at the tip of `main`. Before this, an existing
