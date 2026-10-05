@@ -717,7 +717,7 @@ uv run invoke demo-release    # the one command: branch, import, validators, pro
 
 1. **Release.** `demo-release` creates the Infrahub branch, copies the staged code onto it, waits until
    every task worker has pulled it, opens the proposed change, and says `Ready` only when every
-   validator has finished and passed. It takes **2 to 4 minutes, and that wait is Infrahub's**. The
+   validator has finished and passed. It took **2 to 4 minutes** on earlier runs and 414 seconds on 2026-10-05, and that wait is Infrahub's. The
    workers pull a pushed branch 75 to 256 s after the push, whatever the repository's git-sync
    schedule is (changing the schedule was tried and does not speed it up). Fill the time with the
    story: what the capability is, and why a branch is the unit of review.
@@ -782,7 +782,7 @@ about 25 minutes.
 | Of that, the whole-fabric AVD regeneration (7 switches) | 21 to 25 s (15 to 19 s host vars, 6 s structured configs) |
 | Its proposed change, opened to every check finished | 60 to 80 s |
 | A single access grant through the portal | 20 to 40 s |
-| Its proposed change, opened to the border leaf's diff | about 60 s |
+| Its proposed change, opened to the border leaf's diff | about 60 s through the portal; through the MCP server (2026-10-05) no diff after 240 s, and about 80 s after the checks were re-run with `check_type: ALL` |
 | Act four, break to red check / `--revert` | 35 to 45 s / about 4 s |
 | `CoreProposedChangeMerge`, a grant or a revocation | 15 to 17 s |
 | Merge to the resource existing in Kubernetes | about a minute (Grafana's pod policy: 41 to 78 s) |
@@ -795,7 +795,7 @@ about 25 minutes.
 | Revocation, merge to the reconciler confirming both devices | 154 s (before the early wake change: about 5 minutes) |
 | Portal request **Exposed application, with access**, merged through `demo-run` | request 95 s, 24 validators green, merge 22 s |
 | Act one, merge to the application answering HTTP 200 / to the reconciler confirming | about 73 s / about 149 s |
-| Builder: `demo-release`, start to `Ready` | 2 to 4 minutes; the workers' pull of the branch is 75 to 256 s of it |
+| Builder: `demo-release`, start to `Ready` | 2 to 4 minutes on earlier runs, 414 s on 2026-10-05 (29 validators); the workers' pull of the branch is 75 to 256 s of it |
 | Builder: merge to `statement 30` on `isp-pe1` | see [Builder demo](./demo-builder.md) |
 | `uv run invoke reconcile --now` to the cycle starting | under a second; the cycle itself about 11 s, or about 25 s when it pushes |
 
