@@ -137,6 +137,12 @@ Three measured facts about that role:
 - **PyPI's `infrahub-mcp` 1.1.7 does not start.** It resolves against fastmcp 4 and
   mcp 2 and fails at import with `cannot import name 'McpError' from 'mcp'`. The
   published image carries the versions it was built with.
+- **Restarting the container keeps alice's token valid and ends open sessions.** Measured on 2026-10-05 with
+  `docker restart infrahub-infrahub-mcp-1`: `/health` answered again after about 4 s, a new session with
+  `INFRAHUB_MCP_TOKEN_ALICE` returned `alice`, and a request that still carried the session id of before the restart
+  was answered `404` with `Session not found`. The token lives in Infrahub, not in the server. That Claude Code starts a
+  new session after that answer, as the MCP specification says a client must, was not tested; if tool calls keep failing,
+  restart Claude Code from a shell that has loaded `.env`.
 
 `invoke stop` and `invoke destroy` pass `--profile '*'`. Without it `down` skips
 profiled services, and this one, being on the compose network, then holds that

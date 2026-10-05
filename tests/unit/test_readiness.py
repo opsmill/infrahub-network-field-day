@@ -176,6 +176,15 @@ def test_repository_fails_on_sync_worker_count_or_a_missing_demo_main() -> None:
     assert _repository(remote_demo_main="").status is Status.FAIL
 
 
+def test_each_repository_problem_names_its_own_fix() -> None:
+    one_worker = _repository(workers=1)
+    assert "invoke start" in one_worker.fix
+    assert "demo-advance" not in one_worker.fix
+    stale = _repository(remote_demo_main="b" * 40, trees_equal=False)
+    assert "demo-advance" in stale.fix
+    assert "invoke start" not in stale.fix
+
+
 def test_a_read_only_repository_fails_only_where_read_write_was_asked_for() -> None:
     read_only = {"kind": "CoreReadOnlyRepository", "ref": "main", "sync_status": "in-sync"}
     assert _repository(repo=read_only).status is Status.FAIL
@@ -233,10 +242,12 @@ def test_the_summary_says_what_a_person_must_do_and_prints_no_token_value() -> N
 
 
 def test_a_read_write_environment_is_checked_before_anything_is_destroyed() -> None:
-    assert r.repository_environment_problems({}) == []
+    assert r.repository_environment_problems({"INFRAHUB_API_TOKEN": "t"}) == []
     problems = r.repository_environment_problems({"INFRAHUB_REPOSITORY_MODE": "readwrite"})
-    assert len(problems) == 3
+    assert len(problems) == 4
+    assert any("INFRAHUB_API_TOKEN" in p for p in r.repository_environment_problems({}))
     complete = {
+        "INFRAHUB_API_TOKEN": "t",
         "INFRAHUB_REPOSITORY_MODE": "readwrite",
         "INFRAHUB_REPOSITORY_URL": "https://example.invalid/x.git",
         "NFD_GITHUB_TOKEN": "t",

@@ -252,27 +252,32 @@ def decide_repository(
             name, Status.SKIP, "this stack is not read-write; set INFRAHUB_REPOSITORY_MODE=readwrite to require it"
         )
     problems: list[str] = []
+    fixes: list[str] = []
     if repo.get("sync_status") != "in-sync":
         problems.append(f"sync_status {repo.get('sync_status') or 'unknown'}")
+        fixes.append(
+            "wait for the repository to reach in-sync, or read `docker compose logs task-worker` for the failed import"
+        )
     if workers != EXPECTED_TASK_WORKERS:
         problems.append(f"{workers} task workers, expected {EXPECTED_TASK_WORKERS}")
+        fixes.append("a stopped task worker is started again by `uv run invoke start`")
+    demo_main_differs = False
     if not remote_demo_main:
         problems.append("demo-main does not exist on the remote")
+        demo_main_differs = True
     elif remote_demo_main == remote_main or trees_equal:
         pass
     else:
         problems.append(f"demo-main ({remote_demo_main[:10]}) differs from main ({remote_main[:10]})")
-    if problems:
-        return Result(
-            name,
-            Status.FAIL,
-            "; ".join(problems),
-            (
-                "a demo-main behind main after a merge to main: `uv run invoke demo-advance` brings it level through Infrahub "
-                "(after `git pull --ff-only origin main`); after a bootstrap it is stale and `uv run invoke bootstrap --fresh` recreates it; "
-                "after a demonstration use `uv run invoke demo-restore`"
-            ),
+        demo_main_differs = True
+    if demo_main_differs:
+        fixes.append(
+            "a demo-main behind main after a merge to main: `uv run invoke demo-advance` brings it level through Infrahub "
+            "(after `git pull --ff-only origin main`); after a bootstrap it is stale and `uv run invoke bootstrap --fresh` recreates it; "
+            "after a demonstration use `uv run invoke demo-restore`"
         )
+    if problems:
+        return Result(name, Status.FAIL, "; ".join(problems), "; ".join(fixes))
     same = "same commit" if remote_demo_main == remote_main else "same tree, different commits"
     return Result(name, Status.PASS, f"in-sync, {workers} task workers, demo-main and main: {same}")
 
@@ -766,15 +771,20 @@ def run_checks(
 
 
 def repository_environment_problems(environ: dict[str, str] | os._Environ[str]) -> list[str]:
-    """What is wrong with the environment a read-write bootstrap needs, before anything is destroyed.
+    """What is wrong with the environment a bootstrap needs, before anything is destroyed.
 
-    Empty when the repository is not read-write. A read-write stack needs the remote's URL, a token with
+    Every bootstrap needs `INFRAHUB_API_TOKEN`: the step that uploads the application payloads reads it from
+    the environment and stops without it, five minutes in and after the teardown. A read-write stack needs the remote's URL, a token with
     write access, and Infrahub told to import the `demo/` branches; without the last, a demo branch pushed
     to the remote is never imported and the release waits until it times out.
     """
-    if environ.get("INFRAHUB_REPOSITORY_MODE") != "readwrite":
-        return []
     problems = []
+    if not environ.get("INFRAHUB_API_TOKEN"):
+        problems.append(
+            "INFRAHUB_API_TOKEN is not set (the token infrahubctl uses; for a local stack, INFRAHUB_INITIAL_ADMIN_TOKEN)"
+        )
+    if environ.get("INFRAHUB_REPOSITORY_MODE") != "readwrite":
+        return problems
     if not environ.get("INFRAHUB_REPOSITORY_URL"):
         problems.append("INFRAHUB_REPOSITORY_MODE=readwrite needs INFRAHUB_REPOSITORY_URL")
     if not environ.get("NFD_GITHUB_TOKEN"):

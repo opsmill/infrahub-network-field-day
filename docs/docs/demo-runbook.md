@@ -850,6 +850,9 @@ use live.
   (`main` moved since `demo-stage`) was read as a merged capability. Restore now looks for the
   capability's own files on the default branch. If it still stalls, rebuild the branch with
   `uv run invoke demo-stage --force`.
+- **A task worker stopped, or a merge crashed with `Flow run marked as crashed due to missing heartbeats`.**
+  `uv run invoke start` starts the stopped worker again, then `uv run invoke demo-reset` removes a half-done
+  release, and `uv run invoke ready` must show all PASS. Measured in [Builder demo](./demo-builder.md#a-task-worker-stops-during-the-demonstration).
 - **The cluster resource never appears.** Check `kubectl get vidraresource -A`, not
   the sync: a sync reports `Succeeded` over an empty or rejected set. A deleted
   resource is not redelivered until the `InfrahubSync` is deleted and re-applied

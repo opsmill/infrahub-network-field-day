@@ -539,6 +539,24 @@ carries the pin itself (`definition_pinned: true`).
 The `chart_*` fields on the application stay mandatory — an existing contract test asserts it — so the
 portal reads the entry and sends them in the create.
 
+**What was measured for each requestable entry (2026-10-05, fresh stack).** A request for each of `whoami`,
+`podinfo`, `grafana` and `argo-cd` went through the portal's **Exposed application, with access** template as
+`alice`, on its own branch, and was deleted without merging:
+
+- The template completed in 70 to 90 s, the application was pinned from its entry (chart repository, name and
+  version, one advertised service `junos-http`, a values file), and the proposed change had 24 validators, all green.
+  Five artifacts re-rendered: the border leaf's configuration and documentation, the Junos configuration, the
+  Crossplane FabricApp and the Telemetry Collector Configuration.
+- `helm template` of each chart with the entry's own values renders a `LoadBalancer` Service carrying the label
+  `otternet.lab/advertise: "true"`, with a port 80 that `junos-http` permits. `argo-cd` also renders three
+  CustomResourceDefinitions and a second, ClusterIP, Service.
+- The chart repositories answered HTTP 200 from the host and from a pod in the lab cluster. The container images
+  the charts name (`ghcr.io/stefanprodan/podinfo`, `docker.io/grafana/grafana`, `quay.io/argoproj/argocd`,
+  `ghcr.io/dexidp/dex`, the Redis image) were already present on a lab node, and `crictl pull` reported them up to date.
+  The three nodes have 32 CPUs and about 124 GiB of memory each, with under 1 % requested.
+- **Not measured:** that `podinfo`, `grafana` and `argo-cd` become Ready in the cluster and answer from the branch
+  desktop. Only `whoami` was deployed (by act one). `argo-cd` was deliberately not deployed.
+
 ## Application payload attachment
 
 ### `ServiceFabricAppValuesFile`
