@@ -978,6 +978,12 @@ def demo_release(
     """
     from solution_arista_avd import demo_release as dr
 
+    if not os.environ.get("INFRAHUB_API_TOKEN"):
+        # Without it every GraphQL call below is refused and the release ends, after the import,
+        # with "the proposed change could not be opened".
+        raise Exit(
+            "INFRAHUB_API_TOKEN is not set. Run `source ~/.zshrc`, or export the token infrahubctl uses.", code=1
+        )
     stage = dr.stage_branch(name)
     with ctx.cd(MAIN_DIRECTORY_PATH):
         tip = ctx.run(f"git rev-parse --verify {shlex.quote(stage)}", hide=True, warn=True)

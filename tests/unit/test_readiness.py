@@ -357,3 +357,8 @@ def test_every_task_that_renders_a_credential_ignores_a_stale_shell_first() -> N
 def test_bootstrap_builds_the_project_image_before_the_stack_starts() -> None:
     body = _body("bootstrap")
     assert _first(body, "build(ctx)") < _first(body, "start(ctx)")
+
+
+def test_demo_release_refuses_without_the_api_token_before_it_touches_anything() -> None:
+    body = _body("demo_release")
+    assert _first(body, 'os.environ.get("INFRAHUB_API_TOKEN")') < _first(body, "dr.stage_branch(")
