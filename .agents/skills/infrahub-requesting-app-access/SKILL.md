@@ -135,7 +135,7 @@ rule and no border leaf configuration. Do not read the first result as the answe
    about 90 seconds after the re-run in the next step
    ([act two](../../../docs/docs/demo-runbook.md#act-two-a-branch-user-asks-for-grafana),
    [the cause](../../../docs/docs/developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server)).
-3. Re-run the checks with `mutate_graphql`:
+3. Re-run the checks with `mutate_graphql`. **Do this even when the border leaf diff is already present.**
 
    ```graphql
    mutation {
@@ -145,10 +145,35 @@ rule and no border leaf configuration. Do not read the first result as the answe
    }
    ```
 
-   Without the rule above, the border leaf EOS diff was missing until this mutation ran with `check_type: ALL`.
-   The runbook names `ARTIFACT` for re-rendering only the artifacts. Which of the two is enough on every
-   stack was not tested, so use `ALL`.
-4. If the grant never reaches `active`, see "Failure modes" and do not re-run the checks repeatedly.
+   Measured on 2026-10-05 (two runs, rule loaded): the proposed change that `propose_changes` opens holds
+   **9 validators** (Data Integrity, Schema Integrity, five `Check:` validators, the Generator Validator
+   `generate-app-access` and the Artifact Validator `telemetry_collector_config`). All 9 concluded green
+   within 27 to 33 seconds, and the count stayed at 9 for the 240 seconds that were watched, although the
+   border leaf diff had appeared at 38 seconds. Infrahub chose the validators when the change opened, before
+   the AVD generators had written anything, and nothing starts that choice again. A merge at 9 validators is
+   **not safe**: no validator has judged the artifacts that changed afterwards (`avd_eos_configuration`,
+   `avd_device_documentation`, `junos_config` and, when the application's allowed sources changed,
+   `crossplane_fabric_app`), nor the generators `generate-avd-device-hostvar` and
+   `generate-avd-device-structured-config` that ran on the branch.
+   `check_type: ALL` raised the count to **24** in 56 seconds, the same 24 that the portal's proposed change
+   holds. `check_type: ARTIFACT`, measured once on a second grant for the same source (so the application's
+   Crossplane artifact did not change), raised it to 17 in 10 seconds: eight more artifact validators, and none
+   of the six generator validators that `ALL` adds (`generate-avd-device-hostvar`,
+   `generate-avd-device-structured-config`, `generate-fabric-app`, `generate-fabric-peering`,
+   `generate-network-segment`, `generate-tenant-onboarding`). Use `ALL`.
+4. **Wait for this exact condition before telling a human the change can be merged**, measured after the
+   `ALL` re-run was started:
+   - every validator of the proposed change has `state` `completed`, and the number of validators has not
+     changed on two reads 10 seconds apart;
+   - the count is 24 (the portal's count; it grows if the repository gains a generator, artifact definition or
+     check, so compare with a portal change if unsure); and
+   - every validator's `conclusion` is `success`, including `Artifact Validator: avd_eos_configuration`,
+     `Artifact Validator: junos_config`, `Generator Validator: generate-avd-device-hostvar` and
+     `Generator Validator: generate-avd-device-structured-config`.
+
+   If the count is below 24, or any of those four is missing, the checks have not judged the final branch:
+   run the mutation again and wait again. Do not report the change as ready.
+5. If the grant never reaches `active`, see "Failure modes" and do not re-run the checks repeatedly.
 
 ### 6. Confirm the results in the proposed change
 

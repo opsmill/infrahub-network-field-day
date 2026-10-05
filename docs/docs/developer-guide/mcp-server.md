@@ -319,9 +319,28 @@ cannot change them and documents the way around each.
   `generate-avd-device-hostvar` for a switch whose `avd_custom_hostvars` changed on a branch, and
   that run fires the existing structured config rule. With the rule loaded, the border leaf diff was
   in the proposed change 42 seconds after `propose_changes`, with no second run of the checks. The
-  checks are still worth re-running with `CoreProposedChangeRunCheck` and `check_type: ALL` before the
-  proposed change is read, so that the validators judge the final branch. Which check types other
-  than `ALL` the mutation accepts was not tested here.
+  checks must be re-run with `CoreProposedChangeRunCheck` and `check_type: ALL` before the
+  proposed change is read or merged (next item).
+
+- **The proposed change that `propose_changes` opens holds 9 validators, and a merge at 9 is not safe.**
+  Measured on 2026-10-05 in two runs as `alice` with the hostvar rule loaded. The nine are Data Integrity,
+  Schema Integrity, the five `Check:` validators, the Generator Validator `generate-app-access` and the
+  Artifact Validator `telemetry_collector_config`. They concluded green 27 to 33 seconds after the change
+  opened. The count then stayed at 9 for 240 seconds while the border leaf diff appeared at 38 seconds,
+  because Infrahub selects the validators when the change opens and nothing repeats that selection when the
+  AVD generators write to the branch. Missing at 9 are the Artifact Validators for artifacts that did change
+  (`avd_eos_configuration`, `avd_device_documentation`, `junos_config`, and `crossplane_fabric_app` when the
+  allowed sources of the application changed) and the Generator Validators `generate-avd-device-hostvar` and
+  `generate-avd-device-structured-config`. Nothing had judged the border leaf configuration or the firewall
+  configuration that the merge would deploy. `CoreProposedChangeRunCheck` with `check_type: ALL` raised the count
+  to 24 in 56 seconds, all green, the same 24 validators the portal's proposed change holds.
+  `check_type: ARTIFACT` raised it to 17 in 10 seconds in one run on a second grant for the same source (the
+  Crossplane artifact did not change in that run) and added no generator validator.
+  The condition to wait for before a human merges: after the `ALL` re-run, every validator is `completed`, the
+  count is 24 and has not changed on two reads, and every conclusion is `success`. The portal's template avoids
+  all of this because it opens the proposed change only after its own AVD generator run. No change to
+  `triggers.yml` or to a generator was made for this: a rule can run a generator or write a node, and none was
+  found that starts a proposed change's checks again (not exhaustively searched).
 
 How long the generators take on a given stack is not recorded here. Measured elsewhere in this
 documentation, a generator pass is 15 to 21 seconds, and artifacts settle in about a minute after a
