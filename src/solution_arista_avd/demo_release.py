@@ -32,7 +32,12 @@ from __future__ import annotations
 import difflib
 import json
 import re
+import time
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 STAGE_PREFIX = "stage/"
 DEMO_PREFIX = "demo/"
@@ -45,6 +50,39 @@ DEMO_IMPORT_FILTER = json.dumps([f"{DEMO_PREFIX}.*"], separators=(",", ":"))
 
 # Only characters that are safe in a Git ref, an Infrahub branch name and a shell word.
 _SAFE_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
+
+
+class PhaseTimer:
+    """Records how long each phase of a command took, so a slow release can be traced to one wait.
+
+    `mark(label)` closes the phase that has been running since the previous mark and returns a
+    line to print. `summary()` returns a table of every phase with its duration and share.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._start = clock()
+        self._last = self._start
+        self.phases: list[tuple[str, float]] = []
+
+    def mark(self, label: str) -> str:
+        now = self._clock()
+        seconds = now - self._last
+        self._last = now
+        self.phases.append((label, seconds))
+        return f"   [{label}: {seconds:.0f} s, {now - self._start:.0f} s since the start]"
+
+    def total(self) -> float:
+        return sum(seconds for _, seconds in self.phases)
+
+    def summary(self) -> str:
+        total = self.total()
+        lines = ["Time spent in each phase:"]
+        for label, seconds in self.phases:
+            share = 100 * seconds / total if total else 0
+            lines.append(f"  {seconds:6.0f} s  {share:3.0f} %  {label}")
+        lines.append(f"  {total:6.0f} s  total")
+        return "\n".join(lines)
 
 
 class DemoReleaseError(ValueError):
@@ -270,6 +308,19 @@ def decide_validators(validators: list[dict[str, str]]) -> tuple[str, str]:
     if not any(v["label"].startswith("Check:") for v in validators):
         return "pending", "the user-defined checks to start"
     return "passed", f"{len(validators)} validators passed"
+
+
+ADVANCE_NAME = "baseline-advance"
+
+
+def advance_needed(default_tree: str, main_tree: str) -> bool:
+    """Whether the default branch (`demo-main`) must be brought level with `main`.
+
+    Compares git tree ids, not commit ids: `demo-main` only ever advances through Infrahub's own
+    merges, so it never holds the commits of `main`, only the same tree. An empty id (the remote
+    branch could not be read) needs an advance, because nothing proves the two are level.
+    """
+    return not default_tree or default_tree != main_tree
 
 
 def worker_needs_realignment(current: str, default_branch: str, head: str, remote_tip: str) -> bool:

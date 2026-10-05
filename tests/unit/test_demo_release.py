@@ -501,3 +501,31 @@ def test_a_stage_with_no_capability_file_is_refused_before_a_release_waits_for_a
     with pytest.raises(dr.DemoReleaseError):
         dr.require_capability_files([], "stage/x")
     dr.require_capability_files([".infrahub.yml", "schemas/internet.yml"], "stage/x")
+
+
+def test_the_phase_timer_reports_each_phase_and_its_share() -> None:
+    now = [100.0]
+    timer = dr.PhaseTimer(clock=lambda: now[0])
+
+    now[0] = 110.0
+    assert timer.mark("create the branch") == "   [create the branch: 10 s, 10 s since the start]"
+    now[0] = 140.0
+    timer.mark("import")
+
+    assert timer.phases == [("create the branch", 10.0), ("import", 30.0)]
+    assert timer.total() == pytest.approx(40.0)
+    summary = timer.summary()
+    assert "75 %  import" in summary
+    assert "25 %  create the branch" in summary
+    assert summary.splitlines()[-1].strip() == "40 s  total"
+
+
+def test_the_phase_timer_with_no_phases_does_not_divide_by_zero() -> None:
+    assert dr.PhaseTimer(clock=lambda: 0.0).summary().splitlines()[-1].strip() == "0 s  total"
+
+
+def test_the_default_branch_is_advanced_only_when_its_tree_differs_from_main() -> None:
+    assert not dr.advance_needed("abc", "abc")
+    assert dr.advance_needed("abc", "def")
+    assert dr.advance_needed("", "def")
+    assert dr.demo_branch(dr.ADVANCE_NAME, 1) == "demo/baseline-advance-1"

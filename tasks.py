@@ -641,7 +641,7 @@ def _wait_for_validators(pc_id: str, timeout: int) -> None:
         snapshot = repr(sorted((r["label"], r["state"], r["conclusion"]) for r in rows))
         consecutive = consecutive + 1 if state == "passed" and snapshot == previous else 0
         if consecutive >= 1:  # the same all-passed picture on two polls in a row
-            print(f" - All {len(rows)} validators passed", flush=True)
+            print(f" - {detail}", flush=True)
             return
         previous = snapshot if state == "passed" else ""
         print(f"   waiting for the validators ({detail})", flush=True)
@@ -958,10 +958,16 @@ def _taken_branch_names(ctx: Context, repo_id: str) -> list[str]:
         "run": "Release number. 0 (the default) takes the next one no branch, remote ref or worker clone has used",
         "timeout": "Seconds to wait for the import (default 600)",
         "proposed_change": "Open the proposed change once the branch is imported (default true)",
+        "recheck": "Run every check of the proposed change a second time once it is open (default true)",
     }
 )
 def demo_release(
-    ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int = 600, proposed_change: bool = True
+    ctx: Context,
+    name: str = DEMO_NAME,
+    run: int = 0,
+    timeout: int = 600,
+    proposed_change: bool = True,
+    recheck: bool = True,
 ) -> None:
     """Publish stage/<name> as demo/<name>-<run> and wait for Infrahub to have it, schema and data included.
 
@@ -1003,6 +1009,7 @@ def demo_release(
             f"Infrahub already has '{demo}'. Use `--run {run + 1}`, or `invoke demo-reset --run {run}` first.", code=1
         )
 
+    timer = dr.PhaseTimer()
     print(f"\n=== Releasing {stage} ({commit[:10]}) as {demo} ===", flush=True)
     if read_write:
         # A branch created with sync-with-git on is the only kind whose merge also merges git
@@ -1011,9 +1018,12 @@ def demo_release(
         # on top as one commit.
         print(f" - Creating the Infrahub branch '{demo}' with Sync with Git", flush=True)
         ctx.run(f"infrahubctl branch create {shlex.quote(demo)} --sync-with-git", pty=True)
+        print(timer.mark("create the Infrahub branch"), flush=True)
         _wait_for(lambda: bool(_remote_tip(ctx, demo)), f"Infrahub to publish '{demo}' on the remote", timeout)
+        print(timer.mark("Infrahub publishes the git branch"), flush=True)
         print(" - Copying the staged content onto it and pushing", flush=True)
         expected = _copy_stage_onto_branch(ctx, repo["location"], demo, stage)
+        print(timer.mark("copy the staged content and push"), flush=True)
     else:
         with ctx.cd(MAIN_DIRECTORY_PATH):
             ctx.run(f"git push origin {shlex.quote(dr.refspec(name, run))}", pty=True)
@@ -1021,12 +1031,15 @@ def demo_release(
         ctx.run(f"infrahubctl branch create {shlex.quote(demo)}", pty=True)
         _graphql(dr.set_ref_mutation(repo["id"], demo), demo)
         expected = commit
+        print(timer.mark("push the staged branch and set the ref"), flush=True)
 
     print(" - Waiting for the branch to be fully imported", flush=True)
     _wait_until_settled(demo, expected, timeout, repo_id=repo["id"] if read_write else "")
+    print(timer.mark("Infrahub imports the branch on every worker"), flush=True)
 
     if not proposed_change:
         print(f"\nBranch '{demo}' is ready. Open a proposed change from it into main.")
+        print(timer.summary())
         return
     mutation = dr.proposed_change_mutation(
         demo, f"Add {name}", f"Prepared implementation of {name}, released from {stage} at {commit[:10]}."
@@ -1035,11 +1048,91 @@ def demo_release(
     if not pc_id:
         print(f"\nBranch '{demo}' is ready, but the proposed change could not be opened. Open it in the UI.")
         return
-    # Creating one starts its validators at once; asking again makes them judge the final branch.
-    _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
+    print(timer.mark("open the proposed change"), flush=True)
+    if recheck:
+        # Creating one starts its validators at once; asking again makes them judge the final branch.
+        _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
     print(" - Waiting for the proposed change's validators", flush=True)
     _wait_for_validators(pc_id, timeout)
+    print(timer.mark("validators finish"), flush=True)
     print(f"\nReady: {INFRAHUB_ADDRESS}/proposed-changes/{pc_id}")
+    print(timer.summary())
+
+
+@task(
+    help={
+        "timeout": "Seconds to wait for each step (default 900)",
+        "force": "Advance even when the trees already match",
+    }
+)
+def demo_advance(ctx: Context, timeout: int = 900, force: bool = False) -> None:
+    """Bring `demo-main` level with `main`, through Infrahub, after `main` has moved.
+
+    `demo-main` is Infrahub's own default branch and nothing may push to it from outside, so it
+    holds main's tree only after an Infrahub merge puts it there. This creates a branch with Sync
+    with Git on, copies the tree of `main` onto it, opens a proposed change, waits for every
+    validator and merges it; Infrahub's merge pushes `demo-main`. `invoke ready` then reports
+    `demo-main` equal to `main`. CHANGES THE LIVE STACK; run it with the stack idle.
+    """
+    from solution_arista_avd import demo_release as dr
+    from solution_arista_avd import demo_restore as restore_module
+
+    repo = _repository()
+    if repo.get("kind") != "CoreRepository":
+        raise Exit("This needs the read-write repository (bootstrap with INFRAHUB_REPOSITORY_MODE=readwrite).", code=1)
+    default = repo["default_branch"]
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ctx.run("git fetch --quiet origin main", warn=True, hide=True)
+        main_tree = ctx.run("git rev-parse --verify refs/heads/main^{tree}", hide=True, warn=True).stdout.strip()
+    default_tree = _remote_tree(ctx, default)
+    if not force and not dr.advance_needed(default_tree, main_tree):
+        print(f"'{default}' already holds the tree of main; nothing to do.")
+        return
+    _ensure_workers_on_default_branch(repo)
+    run = restore_module.next_run(dr.ADVANCE_NAME, _taken_branch_names(ctx, repo["id"]))
+    branch = dr.demo_branch(dr.ADVANCE_NAME, run)
+    timer = dr.PhaseTimer()
+    print(f"\n=== Advancing '{default}' to the tree of main through '{branch}' ===", flush=True)
+    ctx.run(f"infrahubctl branch create {shlex.quote(branch)} --sync-with-git", pty=True)
+    _wait_for(lambda: bool(_remote_tip(ctx, branch)), f"Infrahub to publish '{branch}'", timeout)
+    tip = _copy_stage_onto_branch(ctx, repo["location"], branch, "main")
+    print(timer.mark("create the branch and push main's tree"), flush=True)
+    _wait_until_settled(branch, tip, timeout, require_capability=False, repo_id=repo["id"])
+    print(timer.mark("Infrahub imports the branch on every worker"), flush=True)
+    mutation = dr.proposed_change_mutation(
+        branch, "Advance the baseline to main", f"main's tree, copied at {tip[:10]}."
+    )
+    pc_id = ((_graphql(mutation).get("CoreProposedChangeCreate") or {}).get("object") or {}).get("id")
+    if not pc_id:
+        raise Exit(f"The proposed change for '{branch}' could not be opened.", code=1)
+    _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
+    _wait_for_validators(pc_id, timeout)
+    print(timer.mark("validators finish"), flush=True)
+    before = _repository().get("commit", "")
+    _graphql(f'mutation {{ CoreProposedChangeMerge(data: {{id: "{pc_id}"}}, wait_until_completion: true) {{ ok }} }}')
+    _wait_for(
+        lambda: _repository().get("commit") not in {"", before} and _repository().get("sync_status") == "in-sync",
+        f"Infrahub's '{default}' to take the merge",
+        timeout,
+    )
+    _wait_for(
+        lambda: _remote_tree(ctx, default) == main_tree, f"'{default}' on the remote to hold main's tree", timeout
+    )
+    print(timer.mark("merge and push"), flush=True)
+    _delete_demo_branch(ctx, branch)
+    print(f"\n'{default}' now holds the tree of main.")
+    print(timer.summary())
+
+
+def _remote_tree(ctx: Context, branch: str) -> str:
+    """The tree id of the remote's `branch`, or '' if it cannot be read."""
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        fetched = ctx.run(
+            f"git fetch --quiet origin {shlex.quote(f'+refs/heads/{branch}:refs/tmp/default')}", hide=True, warn=True
+        )
+        if not fetched or not fetched.ok:
+            return ""
+        return ctx.run("git rev-parse --verify refs/tmp/default^{tree}", hide=True, warn=True).stdout.strip()
 
 
 def _restore_baseline_onto_branch(ctx: Context, location: str, branch: str, stage: str, default_branch: str) -> str:

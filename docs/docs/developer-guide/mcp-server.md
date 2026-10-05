@@ -295,13 +295,27 @@ cannot change them and documents the way around each.
   but sending it does no harm and is what the portal does. On a stack that has not yet loaded those
   rules (`invoke load` loads `triggers.yml`), a grant without the membership is never built.
 
-- **`propose_changes` opens the proposed change before the generators finish.** The proposed change
-  is created in well under a second, before the generators the grant triggers
-  (`generate-app-access`, then the AVD generators) have finished. The first set of checks therefore
-  ran against a branch that did not yet hold the border leaf configuration, and the proposed change showed no EOS diff for the border
-  leaf. Re-running the checks after the generators finished fixed it: the `CoreProposedChangeRunCheck`
-  mutation with `check_type: ALL`, sent through `mutate_graphql`. Which check types the mutation
-  accepts other than `ALL` was not tested.
+- **`propose_changes` opens the proposed change while the grant is still being built, and the
+  border leaf configuration was missing from it.** Measured on 2026-10-05 with the grant created
+  through the MCP server as `alice`. The proposed change is created about 0.6 seconds after the grant.
+  The grant's own generator (`generate-app-access`) is still writing, and its last write, the
+  `permit <vip>` sequence in the border leaf's `avd_custom_hostvars`, lands about 5 seconds after the
+  change opens. Infrahub chooses the generators and artifact checks of a proposed change from the
+  branch's differences at the moment the pipeline starts, so that pipeline ran only
+  `generate-app-access` and the telemetry collector artifact check. Nothing in `triggers.yml` ran
+  `generate-avd-device-hostvar` on the branch, so no border leaf hostvars or structured config were
+  written and the proposed change showed the firewall rule and no EOS diff for 300 seconds
+  (the longest wait). A second `CoreProposedChangeRunCheck` with `check_type: ALL` selected all of the
+  generators, and the diff arrived about 90 seconds later. The portal avoids this because its template
+  waits for the grant's generator and then runs the two AVD generators on the branch before it opens
+  the proposed change.
+  Fix: the rule `trigger-avd-hostvar-generator-update-custom-hostvars` in `triggers.yml` runs
+  `generate-avd-device-hostvar` for a switch whose `avd_custom_hostvars` changed on a branch, and
+  that run fires the existing structured config rule. With the rule loaded, the border leaf diff was
+  in the proposed change 42 seconds after `propose_changes`, with no second run of the checks. The
+  checks are still worth re-running with `CoreProposedChangeRunCheck` and `check_type: ALL` before the
+  proposed change is read, so that the validators judge the final branch. Which check types other
+  than `ALL` the mutation accepts was not tested here.
 
 How long the generators take on a given stack is not recorded here. Measured elsewhere in this
 documentation, a generator pass is 15 to 21 seconds, and artifacts settle in about a minute after a
