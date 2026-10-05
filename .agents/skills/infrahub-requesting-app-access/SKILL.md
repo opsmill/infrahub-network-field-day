@@ -128,7 +128,9 @@ rule and no border leaf configuration. Do not read the first result as the answe
 1. Wait until the grant's `status` is `active` and its `granted_rules` holds a rule. The portal path
    takes 20 to 40 seconds for this.
 2. Wait for the AVD generators that run in the proposed change's pipeline. The border leaf diff
-   arrives last, about a minute after the change opens
+   arrives last, about a minute after the change opens in the portal path. In a run through this server on
+   2026-10-05 it had not arrived 240 seconds after `propose_changes`, and arrived about 80 seconds after the
+   re-run in the next step; do not wait longer than that for it
    ([act two](../../../docs/docs/demo-runbook.md#act-two-a-branch-user-asks-for-grafana)).
 3. Re-run the checks with `mutate_graphql`:
 
