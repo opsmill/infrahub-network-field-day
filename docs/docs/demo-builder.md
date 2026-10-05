@@ -26,8 +26,8 @@ The whole cycle, from release to reset, was run on a fresh stack with the final 
 | `invoke demo-reset` | Everything back to the baseline, ready to go again | 320 seconds on an earlier run, 488 seconds inside `demo-run` on 2026-10-05 |
 
 The release time is Infrahub's, not the command's. The task workers pull a pushed branch 75 to 256 s
-after the push, whatever the repository's git-sync schedule is. A shorter schedule was tried and does not
-help, so do not retry it. Plan for 2 to 7 minutes, and rehearse on the stack you will present on. Measured phases of two releases on 2026-10-05: the workers' pull of the branch 114 s and 256 s, the proposed change's validators 161 s and 90 s, and about 25 s for everything else. The second run used `--no-recheck`, which skips the second run of every check once the proposed change is open: it finished 70 s sooner and changed the same artifacts. That is one run each, so the second run of the checks is still the default.
+after the push, whatever the repository's git-sync schedule is. The longest measured was 464 s, in a `demo-advance` run on 2026-10-05 that came straight after two task workers had been killed and started again. The builder release right after it took 104 s for the same phase, and the cause of the 464 s was not found. A shorter schedule was tried and does not
+help, so do not retry it. Plan for 2 to 8 minutes, and rehearse on the stack you will present on. Measured phases of two releases on 2026-10-05: the workers' pull of the branch 114 s and 256 s, the proposed change's validators 161 s and 90 s, and about 25 s for everything else. The second run used `--no-recheck`, which skips the second run of every check once the proposed change is open: it finished 70 s sooner and changed the same artifacts. That is one run each, so the second run of the checks is still the default.
 
 ## One-time setup
 

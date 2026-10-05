@@ -719,7 +719,7 @@ uv run invoke demo-release    # the one command: branch, import, validators, pro
 1. **Release.** `demo-release` creates the Infrahub branch, copies the staged code onto it, waits until
    every task worker has pulled it, opens the proposed change, and says `Ready` only when every
    validator has finished and passed. It took **2 to 4 minutes** on earlier runs, 414 seconds in one run on 2026-10-05 and 287 and 384 seconds in two later runs the same day. The command prints how long each phase took; the workers' pull of the branch (114 s and 256 s in those two runs) and the validators (161 s, and 90 s with `--no-recheck`) are almost all of it. The
-   workers pull a pushed branch 75 to 256 s after the push, whatever the repository's git-sync
+   workers pull a pushed branch 75 to 464 s after the push (464 s once, see [Builder demo](./demo-builder.md)), whatever the repository's git-sync
    schedule is (changing the schedule was tried and does not speed it up). Fill the time with the
    story: what the capability is, and why a branch is the unit of review.
 2. **Review.** Open the proposed change from the link the command prints. The diff is one schema node, its
