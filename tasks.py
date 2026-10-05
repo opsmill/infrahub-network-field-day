@@ -3002,16 +3002,17 @@ def mcp(ctx: Context) -> None:
     which sends alice's token (`INFRAHUB_MCP_TOKEN_ALICE`, minted by `mcp-tokens`).
     The `mcp-agent` token is for the demo rehearsal's act five.
 
-    `scripts/provision_requester_access.py` also gives the built-in `Infrahub Users`
-    group the permission to open a proposed change, so a client working with a
-    signed-in user's token (`alice`) can call `propose_changes`.
+    `scripts/provision_requester_access.py` also makes `Requester Access` the only
+    role of the built-in `Infrahub Users` group: view everything, write service
+    objects on a branch, open a proposed change. It detaches `General Access` and
+    `Proposed Change Reviewer`, so a signed-in user's token (`alice`) cannot write to main.
 
     The server listens on http://127.0.0.1:8001/mcp. Idempotent.
     """
     _use_dotenv_credentials()
     ctx.run("python scripts/provision_mcp_agent.py", pty=True)
     # Lets signed-in users, such as alice, open a proposed change with their own
-    # token. One extra role on `Infrahub Users`; grants no merge or approval.
+    # token, and takes the built-in roles away from `Infrahub Users`.
     ctx.run("python scripts/provision_requester_access.py", pty=True)
     # --force-recreate so a changed compose service reaches a running container,
     # and --no-deps because without it the recreate cascades to infrahub-server.

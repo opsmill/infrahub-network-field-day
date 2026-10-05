@@ -23,24 +23,46 @@ and its token (`INFRAHUB_MCP_TOKEN`) are still provisioned: `scripts/demo_rehear
 calls the server as `mcp-agent` on purpose, to show what that role can and cannot do. Claude Code
 does not read that token.
 
-**Security consequence: an agent using alice's token holds her permissions, which are wider than
-`mcp-agent`'s.** Her built-in roles include `merge_proposed_change`, `review_proposed_change`,
-`manage_schema` and `manage_repositories` (see the measured roles below). An agent using her token
-can therefore merge a proposed change or load a schema if it chooses to. What is and is not known
-on Infrahub 1.10.6:
+**What an agent holding alice's token can and cannot do.** `Infrahub Users` holds one role,
+`Requester Access`, set by `scripts/provision_requester_access.py`. The built-in roles
+`General Access` and `Proposed Change Reviewer` are detached from the group (not deleted, and no other group
+is changed). The measurements below were taken on Infrahub 1.10.6 with alice's own token, before and after
+the change, with scratch objects on scratch branches that were deleted afterwards.
 
-- Recorded earlier in this page: on 1.10.6 the code of `CoreProposedChangeMerge` does not consult
-  `merge_proposed_change` (the rule is in `proposed_change/action_checker.py`). That is a reading of
-  the source, see "Three measured facts about that role" below. It was not tested by merging.
-- Not known: what the merge does when alice's token calls it. She holds the permission, so it does
-  not stop her either way, and it was not measured whether the mutation checks anything else.
-- Not known: whether `manage_schema` lets her token load a schema through the MCP server's tools.
-  The MCP server exposes the GraphQL mutation tools, and Infrahub, not the server, decides.
-- Nothing in the server or in Infrahub prevents an agent from merging as alice. The only
-  control is the instruction in the skill
+| Action with alice's token | Before (built-in roles) | After (`Requester Access` only) |
+| --- | --- | --- |
+| View nodes of any kind | Allowed | Allowed |
+| Create a branch | Allowed | Allowed |
+| Write a `BuiltinTag` on her branch | Allowed | Refused: `object:Builtin:Tag:create:allow_other` |
+| Write a `Service` kind on her branch | Not measured | Allowed (a `ServiceApplicationDefinition`) |
+| Open a proposed change | Allowed | Allowed |
+| Write a `BuiltinTag` on `main` | Refused: `object:Builtin:Tag:create:allow_default` | Refused: the same permission |
+| Merge her own proposed change with `CoreProposedChangeMerge` | **Succeeded** (permission held) | **Succeeded** (permission not held) |
+
+- **Merging is not blocked by the role change.** After `General Access` (which holds `merge_proposed_change`)
+  was detached, alice's token still merged a scratch proposed change into `main`, and its scratch node
+  appeared on `main`. This agrees with the reading of the source recorded below: `CoreProposedChangeMerge`
+  does not consult `merge_proposed_change` on 1.10.6. No permission in this repository can stop alice, or
+  any account that can open a proposed change, from merging it.
+- **What could stop a merge is not known.** It was not measured whether the MCP server's `mutate_graphql`
+  tool refuses `CoreProposedChangeMerge`; the `mcp-agent` notes in `scripts/provision_mcp_agent.py` say it does
+  not. The remaining control is the instruction in the skill
   [infrahub-requesting-app-access](https://github.com/opsmill/infrahub-network-field-day/blob/main/.agents/skills/infrahub-requesting-app-access/SKILL.md),
-  which tells the agent never to merge. That is an instruction to the model, not a permission.
-- No permission or role was changed to compensate. This repository does not narrow alice's roles.
+  which tells the agent never to merge. That is an instruction to the model, not a permission. A guarantee
+  needs an Infrahub fix, or a proxy in front of the server that rejects the mutation; neither exists here.
+- **A write to `main` is refused.** Her only write permission on objects is decision 4 (branches other than
+  the default branch), restricted to the `Service` namespace. The one exception is the proposed change, which
+  is stored on `main`.
+- **Other actions are no longer granted.** Review, `manage_schema` and `manage_repositories` came from the
+  detached roles. Whether a given tool call would have used them was not measured; the absence of the grants
+  is read from the role definitions, and a schema load or an approval by her token was not tried.
+- **A grant of access through `ServiceAppAccessCreate` with `member_of_groups` was not measured after the
+  change** because the lab held no `ServiceFabricApp` at the time (the demo creates it in act one). With a
+  non-existent application the mutation passed the permission check and failed on the missing application,
+  while a `BuiltinTag` write was refused for permission. Re-run act two to confirm it end to end.
+- **A write to any kind outside the `Service` namespace through alice's token is now
+  refused.** The portal is not affected: it writes with its own `backstage-portal` account and attributes the
+  write to the signed-in user through the mutation `context`.
 
 **Clients never act as `agent`.** The server runs in
 `INFRAHUB_MCP_AUTH_MODE=token-passthrough` and holds no Infrahub credential. Each
@@ -164,35 +186,34 @@ What was measured on `infrahub-mcp` v1.1.7 against Infrahub 1.10.6:
 - **`requester` is a separate, free-text attribute.** A grant created with the token of `alice` and
   `requester: someone-else@otternet.lab` kept that value. Infrahub does not set or check it against the
   token, so the account that wrote the node and the requester it names can differ.
-- **She can open a proposed change once `Requester Access` is attached to her group.** Before that,
-  `propose_changes` was refused with
+- **She can open a proposed change through `Requester Access`.** Before the role existed, `propose_changes`
+  was refused with
   `You do not have one of the following permissions: object:Core:ProposedChange:create:allow_default`.
   `mcp-agent` has that permission through its own role; the built-in `Infrahub Users` group did not.
-  `scripts/provision_requester_access.py` (run by `uv run invoke mcp`) creates the role `Requester Access`
-  and attaches it to `Infrahub Users`. The role holds two permissions: the object permission
-  `object:Core:ProposedChange:create:allow_default` and the global permission `edit_default_branch`.
-  After the role was attached, a scratch node written on her session branch and `propose_changes` with her
-  token succeeded, and the change was recorded with the session branch as source and `main` as destination.
-- **The global permission in the role changes nothing on 1.10.6.** The group already holds
-  `edit_default_branch` through the built-in role `Proposed Change Reviewer`. The refusal named only the
-  object permission, so the object permission is the part that changed the result. It was not measured
-  with `Proposed Change Reviewer` removed, because that would change the permissions of every member. The
-  role lists `edit_default_branch` so the grant does not depend on a built-in role an administrator may edit.
-- **Her roles before and after.** `General Access`: `manage_repositories`, `manage_schema`,
-  `merge_proposed_change`, view on every kind, and any action on branches other than the default branch.
-  `Proposed Change Reviewer`: `edit_default_branch`, `review_proposed_change` and update on
-  `CoreProposedChange`. `Requester Access`: the two permissions above, and nothing else.
-  `Requester Access` widens the group by one action only: creating a proposed change on the default branch.
-- **Her token carries more power than `mcp-agent`'s.** She holds `manage_schema` and
-  `merge_proposed_change`, which `mcp-agent` does not. A model working with her token can load a schema
-  or merge a branch. Treat `INFRAHUB_MCP_TOKEN_ALICE` as her credential: use it only for a request she
-  made, and never merge. `Requester Access` does not add to this and does not remove from it: the
-  permissions that give her that power come from the built-in roles.
-- **A write to `main` as her was not tried.** From her roles, `any:allow_other` allows object writes on
-  branches other than the default branch only, and the MCP server writes on the session branch.
-- **What `CoreProposedChangeMerge` does for her was not measured.** She holds `merge_proposed_change`
-  through `General Access`, so the permission does not stop her. Whether 1.10.6 checks it at all is not
-  known from this measurement. Her token must not be used to merge.
+  `scripts/provision_requester_access.py` (run by `uv run invoke mcp`) creates the role `Requester Access`,
+  attaches it to `Infrahub Users` and detaches `General Access` and `Proposed Change Reviewer` from that
+  group. `--check` reports a problem if a built-in role is attached again or if the role holds any other
+  permission. The role holds four permissions:
+  - `view` on every namespace and kind, everywhere, so she can read the data;
+  - `any` on every kind in the `Service` namespace, on branches other than the default branch only;
+  - the object permission `object:Core:ProposedChange:create:allow_default`;
+  - the global permission `edit_default_branch`, which admits a request to the default branch at all.
+- **The global permission `edit_default_branch` was held through the built-in role `Proposed Change Reviewer`
+  before.** That role is now detached, and opening a proposed change still works with the permission held
+  in `Requester Access`, so the measurement after the change is the evidence that it is needed or at least
+  sufficient. It was not measured with the permission removed and the object permission kept.
+- **Her roles before.** `General Access`: `manage_repositories`, `manage_schema`, `merge_proposed_change`,
+  view on every kind, and any action on branches other than the default branch. `Proposed Change Reviewer`:
+  `edit_default_branch`, `review_proposed_change` and update on `CoreProposedChange`. After: `Requester
+  Access` only.
+- **Creating a branch needs no permission that appears in the role.** She created a branch with only
+  `Requester Access`. Which Infrahub check allows it was not looked up.
+- **Her token is a credential for requests she made.** It can no longer write most kinds or load a schema through her
+  roles, and it can still merge (see above). Use `INFRAHUB_MCP_TOKEN_ALICE` only for a request she made,
+  and never merge.
+- **A fresh Infrahub install may attach the built-in roles again.** Whether Infrahub re-attaches them on a
+  restart or an upgrade is not known. `uv run invoke ready` runs `provision_requester_access.py --check`, which
+  reports it, and `uv run invoke mcp` repairs it.
 
 ### Claude Desktop
 
