@@ -86,6 +86,67 @@ Either way it prints a timing for every step, so the numbers below can be
 checked against the lab in front of you.
 :::
 
+## Presenter run sheet, from a freshly bootstrapped lab
+
+Follow this in order for the three-act demonstration. Every command runs from the repository root in a shell that
+has sourced `.env` (`set -a; source .env; set +a`) and, for `kubectl`, `export KUBECONFIG=lab/k8s/.kubeconfig/kubeconfig.yaml`. Timings are measured on this lab: bootstrap 1164 to 1644 s
+(five runs; 1250 s in the sixth), act one 321 to 342 s, the builder act 819 to 1252 s, `demo-restore` 460 to 611 s.
+The rest of this page explains each step.
+
+**Before the audience arrives** (about ten minutes; it changes nothing):
+
+1. `uv run invoke ready` must end `19 PASS, 0 WARN, 0 FAIL, 0 SKIP`. A `WARN` about the staged branch means:
+   `uv run invoke demo-stage --force`.
+2. `uv run infrahubctl branch list` shows `main` and nothing else.
+3. Open the screens in [Screens to have open](#screens-to-have-open).
+
+**Act one: an application, through the portal** (about 5 minutes on screen, see [act one](#act-one-ask-for-an-application)).
+
+| Step | What the presenter does | Expected | Idle wait and what to say |
+| --- | --- | --- | --- |
+| Request | In the branch desktop's portal, signed in as `alice@otternet.lab`, submit **Exposed application, with access** with the application **Who am I** | The run ends at a **Review the proposed change** link after 70 to 85 s | 70 to 85 s: read the step list as it runs (the catalogue entry is read twice, the VIP block is awaited, the fabric is regenerated) |
+| Review | Open the proposed change | 24 validators, all green, after a further 60 to 80 s. One line `seq <n> permit <vip block>` on `leaf-otternet-pod1-3-1` | 60 to 80 s while the validators run: show the diff, the firewall rule and OTTERNET / Services at **Requested** |
+| Merge | Merge in Infrahub | The merge call takes 15 to 22 s | none |
+| Cluster | `kubectl get fabricapp otter-shop` | `READY True` about 100 s after the merge; the Service has an external IP after about 40 s | |
+| Devices | `docker logs -f infrahub-deployment-reconciler-1 2>&1 \| grep --line-buffered cycle` | `differed=2 pushed=2`, then a confirmation cycle with `differed=0`, about 146 s after the merge | about 146 s: show OTTERNET / Deployment state and say that green means confirmed, not sent |
+| Packet | `docker exec clab-otternet-branch-desktop curl -s -m 10 http://<vip>/` | whoami answers about 70 s after the merge; `http://10.112.240.0/` times out | |
+
+**Act two: Grafana, asked for through an agent** ([act five](#act-five-the-agent-through-the-mcp-server) shows the
+server; the portal alternative is [act two](#act-two-a-branch-user-asks-for-grafana)). Start `claude` from the shell that
+sourced `.env` and ask it to give the branch office access to Grafana (`otternet-metrics`).
+
+| Step | Expected | Idle wait and what to say |
+| --- | --- | --- |
+| The agent creates the grant on `mcp/session-*` and opens the proposed change | `propose_changes` returns in under a second | none |
+| Border leaf diff | present about 40 s after `propose_changes` (36 to 42 s in four runs) | 40 s: the grant's generator, then the AVD generators, run on the branch |
+| The agent re-runs the checks (`check_type: ALL`) | The proposed change reaches **24** validators, all green, about 56 s after the re-run. At the first 9 validators it must not be merged: see [the MCP server](./developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server) | 56 s: say why a change that opened early is judged again |
+| A person merges, never the agent | merge 15 to 20 s | none |
+| Grafana | answers the branch desktop 57 to 86 s after the merge (`http://10.112.240.81/` redirects to the Dex sign-in); the reconciler confirms both devices about 134 s after the merge | about 134 s: Deployment state dashboard |
+
+**Act three: the builder branch** ([act six](#act-six-the-builder-branch)):
+
+1. Off stage, before the audience: `uv run invoke demo-stage --force` (under one second).
+2. On stage: `uv run invoke demo-release`. It prints `Ready: <proposed change link>` after 269 to 519 s
+   (import on every worker 136 to 343 s, validators 90 to 161 s). **This is the longest idle wait.** Tell the story
+   of the capability and of why a branch is the unit of review while the phase lines scroll.
+3. Review the proposed change (all validators green), merge it (43 to 50 s), then run the two `curl` commands
+   in act six: acme answers `200` 83 s after the merge, globex does not.
+4. Off stage: `uv run invoke demo-restore` (460 to 611 s) then `make -C lab verify` (121 passed). `demo-restore`
+   includes the builder reset (293 to 518 s), so it also takes the capability out.
+
+### If something goes wrong
+
+| Symptom | Cause | Recovery |
+| --- | --- | --- |
+| The proposed change from the agent has 9 validators, or no border leaf diff | Infrahub chose the validators when the change opened | `CoreProposedChangeRunCheck` with `check_type: ALL`, then wait for 24 |
+| Every agent tool answers `Authentication required` or `Invalid token` | `INFRAHUB_MCP_TOKEN_ALICE` was not in the environment of the shell that started `claude`, or it was minted again | `uv run invoke mcp`, source `.env`, restart `claude` |
+| A tool answers `404` or `Session not found` after the MCP container restarted | The old session id no longer exists. Measured with a plain client: a new `initialize` works with the same token | Whether Claude Code starts a new session by itself was not tested. If tool calls keep failing, restart `claude` from a shell that sourced `.env` |
+| A merge failed with `Flow run marked as crashed due to missing heartbeats`, or `invoke ready` says `1 task workers, expected 2` | A task worker stopped; the proposed change stays in state `merging` | `uv run invoke start`, then `uv run invoke demo-reset`, then `uv run invoke ready` |
+| `demo-release` stops on a stale staged branch, or the reset puts older files back | `main` moved after `demo-stage` | `uv run invoke demo-stage --force` |
+| `demo-release` waits a long time at `waiting for every task worker to pull the commit` | A worker pulls a pushed branch 75 to 464 s after the push; restarting a worker made it 400 s once | Wait. Do not merge before `Ready` |
+| A request fails half way in the portal | `BranchCreate` is not idempotent | Use another request reference. See [Recovery](#recovery) |
+| Nothing moved on a device two minutes after a merge | The reconciler is waiting for artifacts to hold still | `uv run invoke reconcile --now` |
+
 ## Before anyone is watching
 
 Allow ten minutes. Each check guards against something that goes wrong quietly.
@@ -468,10 +529,9 @@ the rule `trigger-avd-hostvar-generator-update-custom-hostvars` runs
 written its `avd_custom_hostvars`, and it arrives **last**: about a minute after the
 change opens, once the host vars and structured configs are written and the border leaf's
 artifacts re-render. Open the change, talk through the firewall rule, then show the leaf.
-If the leaf's diff is still missing after two minutes, retry the artifact
-checks from the **Checks** tab (the API equivalent is
-`CoreProposedChangeRunCheck` with `check_type: ARTIFACT`); that re-renders it from
-the files the pipeline wrote, in about fifteen seconds.
+If the leaf's diff is still missing after two minutes, run all the checks again from the **Checks** tab (the API
+equivalent is `CoreProposedChangeRunCheck` with `check_type: ALL`). `ARTIFACT` re-renders the artifacts in about ten
+seconds but adds none of the generator validators.
 
 **4. Merge, and sign in.** The merge itself takes about 15 seconds. Vidra
 delivers Grafana's pod policy with `10.70.0.0/24` 40 to 70 seconds later, but
@@ -690,7 +750,8 @@ Two refusals are worth showing, because they come from different places:
   (`object:Service:FabricApp:update:allow_default`).
 
 A write it is allowed lands on its session branch, and `propose_changes` opens
-the proposed change from there in well under a second.
+the proposed change from there in well under a second, with 9 validators. After `CoreProposedChangeRunCheck` with
+`check_type: ALL` it holds 24, the same as the portal's.
 
 To make the agent request Grafana access instead of using the portal (act two), see
 [requesting application access through the MCP server](./developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server).
@@ -718,8 +779,7 @@ uv run invoke demo-release    # the one command: branch, import, validators, pro
 
 1. **Release.** `demo-release` creates the Infrahub branch, copies the staged code onto it, waits until
    every task worker has pulled it, opens the proposed change, and says `Ready` only when every
-   validator has finished and passed. It took **2 to 4 minutes** on earlier runs, 414 seconds in one run on 2026-10-05 and 287 and 384 seconds in two later runs the same day. The command prints how long each phase took; the workers' pull of the branch (114 s and 256 s in those two runs) and the validators (161 s, and 90 s with `--no-recheck`) are almost all of it. The
-   workers pull a pushed branch 75 to 464 s after the push (464 s once, see [Builder demo](./demo-builder.md)), whatever the repository's git-sync
+   validator has finished and passed. It took **269 to 519 seconds** in the runs measured on 2026-10-05, 519 s in the last (import on every worker 343 s, validators 161 s; 41 validators once the demonstration's application and grant were on `main`). The command prints how long each phase took. The workers pull a pushed branch 75 to 464 s after the push, whatever the repository's git-sync
    schedule is (changing the schedule was tried and does not speed it up). Fill the time with the
    story: what the capability is, and why a branch is the unit of review.
 2. **Review.** Open the proposed change from the link the command prints. The diff is one schema node, its
@@ -783,7 +843,8 @@ about 25 minutes.
 | Of that, the whole-fabric AVD regeneration (7 switches) | 21 to 25 s (15 to 19 s host vars, 6 s structured configs) |
 | Its proposed change, opened to every check finished | 60 to 80 s |
 | A single access grant through the portal | 20 to 40 s |
-| Its proposed change, opened to the border leaf's diff | about 60 s through the portal; through the MCP server (2026-10-05) 42 s with the hostvar rule loaded, and no diff after 300 s without it (about 90 s after the checks were re-run with `check_type: ALL`) |
+| Its proposed change, opened to the border leaf's diff | about 60 s through the portal; through the MCP server (2026-10-05) 36 to 42 s with the hostvar rule loaded, and no diff after 300 s without it (about 90 s after the checks were re-run with `check_type: ALL`) |
+| Through the MCP server, the checks re-run with `check_type: ALL` to 24 validators all green | 56 s (`ARTIFACT`: 17 validators in 10 s). Without the re-run the change stays at 9 validators |
 | Act four, break to red check / `--revert` | 35 to 45 s / about 4 s |
 | `CoreProposedChangeMerge`, a grant or a revocation | 15 to 17 s |
 | Merge to the resource existing in Kubernetes | about a minute (Grafana's pod policy: 41 to 78 s) |
@@ -796,7 +857,7 @@ about 25 minutes.
 | Revocation, merge to the reconciler confirming both devices | 154 s (before the early wake change: about 5 minutes) |
 | Portal request **Exposed application, with access**, merged through `demo-run` | request 95 s, 24 validators green, merge 22 s |
 | Act one, merge to the application answering HTTP 200 / to the reconciler confirming | about 73 s / about 149 s |
-| Builder: `demo-release`, start to `Ready` | 2 to 4 minutes on earlier runs; 414, 287 and 384 s on 2026-10-05 (29 validators); the workers' pull of the branch is 75 to 256 s of it, the validators 90 to 161 s |
+| Builder: `demo-release`, start to `Ready` | 269 to 519 s across the measured runs (29 to 41 validators); the workers' pull of the branch is 75 to 464 s of it, the validators 90 to 161 s |
 | Builder: merge to `statement 30` on `isp-pe1` | see [Builder demo](./demo-builder.md) |
 | `uv run invoke reconcile --now` to the cycle starting | under a second; the cycle itself about 11 s, or about 25 s when it pushes |
 
@@ -808,7 +869,7 @@ its pod policy closed, about a minute before the reconciler pushed the firewall
 and the border leaf. Once the decommissioned grant was deleted, `fw1`'s and the
 border leaf's running configurations, all 36 artifacts on `main` and all 14
 `DeploymentState` records were byte-for-byte what they had been before the
-grant, and `make -C lab verify` passed 113 of 113.
+grant, and `make -C lab verify` passed 113 of 113 at the time; it now has 121 checks and passes 121.
 
 ## What is already there
 
@@ -840,11 +901,13 @@ use live.
   [service triggers](./developer-guide/service-triggers.md#a-grant-made-by-any-client-joins-its-generator-group)).
   On a stack that has not loaded those rules, send `member_of_groups: [{ hfid:
   ["service_app_accesses"] }]` with the grant, or add the membership afterwards.
-- **The proposed change from the MCP server has no border leaf diff.** The stack does not have the
-  rule `trigger-avd-hostvar-generator-update-custom-hostvars` (`invoke load` loads it from
-  `triggers.yml`; `invoke ready` checks it), so nothing ran the AVD generators on the branch after
-  the grant's generator wrote the border leaf's `avd_custom_hostvars`. Load the rule, then run
-  `CoreProposedChangeRunCheck` with `check_type: ALL` on the proposed change. See
+- **The proposed change from the MCP server has no border leaf diff, or holds only 9 validators.** The
+  proposed change that `propose_changes` opens holds 9 validators and Infrahub does not select more when the
+  AVD generators write to the branch (measured: still 9 after 240 s, with the border leaf diff there from 38 s).
+  Run `CoreProposedChangeRunCheck` with `check_type: ALL` on the proposed change and wait for 24 validators,
+  all `completed` and green, before anyone merges. Without the rule
+  `trigger-avd-hostvar-generator-update-custom-hostvars` (`invoke load` loads it from `triggers.yml`;
+  `invoke ready` checks it) the diff does not appear until that run. See
   [the MCP server](./developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server).
 - **`invoke demo-restore` waits out its timeout.** Fixed: a staged branch that is only stale
   (`main` moved since `demo-stage`) was read as a merged capability. Restore now looks for the
