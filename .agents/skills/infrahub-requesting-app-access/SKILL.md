@@ -206,11 +206,16 @@ or a `ServiceAppAccess` on `main`.
 Every tool call from Claude Code here acts as `alice`: `.mcp.json` has one server, `infrahub-lab`, and it sends her API token
 (`INFRAHUB_MCP_TOKEN_ALICE`, minted by `scripts/provision_mcp_user_token.py --user alice`). Measured on
 Infrahub 1.10.6: the grant's attributes then show `updated_by: alice`, and `requester` stays a separate
-free-text value. With her token `propose_changes` succeeds once `uv run invoke mcp` has run
-`scripts/provision_requester_access.py`, which attaches the role `Requester Access` (create a proposed
-change, plus `edit_default_branch`) to her group `Infrahub Users`. If `propose_changes` is refused naming
-`object:Core:ProposedChange:create:allow_default`, run that script. Her token can also load a schema
-and merge through her built-in roles, so never merge. Details:
+free-text value. Her group `Infrahub Users` holds one role, `Requester Access`, set by
+`scripts/provision_requester_access.py` (run by `uv run invoke mcp`). The role allows: view of every kind,
+any action on `Service` kinds on a branch other than `main`, and creating a proposed change. It does not
+allow writing to `main`, other kinds on a branch, approving a change, loading a schema or managing
+repositories. If a write to a `Service` kind or `propose_changes` is refused naming a permission, run
+that script. Do not retry on `main`.
+
+**Her token can still merge.** On Infrahub 1.10.6 `CoreProposedChangeMerge` succeeded with her token after
+`merge_proposed_change` was removed from her group, so no permission stops a merge. Never merge: a person
+reviews and merges. That is an instruction to you, not an enforced limit. Details:
 [acting as a named user](../../../docs/docs/developer-guide/mcp-server.md#acting-as-a-named-user-such-as-alice).
 
 ## Related

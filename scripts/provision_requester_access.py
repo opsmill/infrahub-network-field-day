@@ -1,31 +1,38 @@
 #!/usr/bin/env python3
-"""Let members of the built-in `Infrahub Users` group open a proposed change.
+"""Limit members of the built-in `Infrahub Users` group to what a requester needs.
 
 WHY THIS EXISTS. A person such as `alice` signs in through Dex and lands in
 `Infrahub Users`. Infrahub creates that group with two roles, `General Access` and
-`Proposed Change Reviewer`, and neither lets her OPEN a proposed change: the request
-is refused naming `object:Core:ProposedChange:create:allow_default`. An agent that
-works with her API token (the MCP server in token passthrough mode) is refused the
-same way on `propose_changes`. `mcp-agent` and `backstage-portal` can, because their
-own roles carry it.
+`Proposed Change Reviewer`. Between them they allow `merge_proposed_change`,
+`review_proposed_change`, `manage_schema`, `manage_repositories` and `edit_default_branch`,
+and any action on any kind on a branch. A requester needs none of the first four. An
+agent that works with her API token (the MCP server in token passthrough mode) holds
+whatever her group holds.
 
-WHAT THIS ADDS. One role, `Requester Access`, attached to `Infrahub Users` next to
-the two it already has. It holds exactly:
+WHAT A MEMBER MAY DO AFTER THIS SCRIPT, through one role, `Requester Access`:
 
-- `object:Core:ProposedChange:create:allow_default` -- create a proposed change. A
-  proposed change is stored on `main`, which is why the decision is `allow_default`;
-- the global `edit_default_branch`, which admits a request to the default branch at
-  all. Measured on 1.10.6: the group already holds it through the built-in
-  `Proposed Change Reviewer` role, so granting it here changes nothing today. The
-  refusal named only the object permission, and that permission was the only one that
-  was missing (see docs/docs/developer-guide/mcp-server.md). It is listed so the grant does not depend
-  on a built-in role that an administrator may edit.
+- view every kind, so people can read the data (`view` on every namespace and kind,
+  everywhere);
+- create and edit service objects on a branch other than the default branch: every
+  kind in the `Service` namespace, decision 4. A write on `main` is refused;
+- create a proposed change. A proposed change is stored on `main`, so this is
+  `object:Core:ProposedChange:create:allow_default` plus the global `edit_default_branch`,
+  which admits a request to the default branch at all. Object permissions still narrow
+  every other write on `main`.
 
-It grants no merge, approve, schema, repository or delete permission, and puts nobody in
-`Super Administrators`. It does NOT narrow what the group's other roles already allow;
-see docs/docs/developer-guide/mcp-server.md for what members could already do.
+Creating a branch needs no permission that appears in a role; see
+docs/docs/developer-guide/mcp-server.md for what was measured.
 
-Idempotent: it never removes a role from the group. Run `--check` to report only.
+WHAT IT REMOVES. The roles `General Access` and `Proposed Change Reviewer` are detached
+from `Infrahub Users`. They are not deleted and no other group is touched, so
+`Super Administrators` and the `Agents`, `Portal Services` and `Metrics Readers` groups
+keep what they have. Nobody is put in `Super Administrators`.
+
+WHAT THIS CANNOT BLOCK. On Infrahub 1.10.6 `CoreProposedChangeMerge` does not appear to
+check `merge_proposed_change`; see docs/docs/developer-guide/mcp-server.md for the
+measurement of whether a member can still merge.
+
+Idempotent. Run `--check` to report only.
 
     uv run python scripts/provision_requester_access.py
     uv run python scripts/provision_requester_access.py --check   # report only; exit 1 on a problem
@@ -45,11 +52,16 @@ ROLE = "Requester Access"
 # decision values: 2 = allow on the default branch only, 4 = allow on branches other
 # than the default, 6 = allow everywhere
 OBJECT_PERMISSIONS = [
+    {"namespace": "*", "name": "*", "action": "view", "decision": 6},
+    {"namespace": "Service", "name": "*", "action": "any", "decision": 4},
     {"namespace": "Core", "name": "ProposedChange", "action": "create", "decision": 2},
 ]
 GLOBAL_PERMISSIONS = [
     {"action": "edit_default_branch", "decision": 6},
 ]
+
+# Built-in roles that `Infrahub Users` must not hold. Detached from the group, never deleted.
+DETACHED_ROLES = ("General Access", "Proposed Change Reviewer")
 
 # Actions this role must never carry, whatever else changes. Pinned by
 # tests/unit/test_requester_access_contract.py.
@@ -106,8 +118,16 @@ def provision(client: InfrahubClientSync) -> None:
     role.save(allow_upsert=True)
 
     group.roles.fetch()
-    if role.id not in {peer.id for peer in group.roles.peers}:
+    held = {peer.id for peer in group.roles.peers}
+    changed = False
+    if role.id not in held:
         group.roles.add(role)
+        changed = True
+    for peer in list(group.roles.peers):
+        if (peer.display_label or "") in DETACHED_ROLES:
+            group.roles.remove(peer.id)
+            changed = True
+    if changed:
         group.save()
 
 
@@ -138,6 +158,10 @@ def check(client: InfrahubClientSync) -> list[str]:
         names = sorted(peer.display_label or "" for peer in group.roles.peers)
         if ROLE not in names:
             problems.append(f"{GROUP!r} does not hold {ROLE!r} (roles: {names or 'none'})")
+        problems.extend(f"{GROUP!r} still holds the built-in role {name!r}" for name in DETACHED_ROLES if name in names)
+        extra = [name for name in names if name not in (ROLE, *DETACHED_ROLES)]
+        if extra:
+            problems.append(f"{GROUP!r} holds roles this script does not manage: {extra}")
     return problems
 
 
@@ -149,13 +173,15 @@ def main() -> int:
     client = admin_client()
     if not args.check:
         provision(client)
-        print(f"{GROUP!r} now holds the role {ROLE!r}")
+        print(f"{GROUP!r} now holds the role {ROLE!r} and not {', '.join(DETACHED_ROLES)}")
 
     problems = check(client)
     for problem in problems:
         print(f"PROBLEM: {problem}")
     if not problems:
-        print(f"{GROUP!r} holds {ROLE!r}: open a proposed change, nothing else.")
+        print(
+            f"{GROUP!r} holds only {ROLE!r}: view everything, write service objects on a branch, open a proposed change."
+        )
     return 1 if problems else 0
 
 

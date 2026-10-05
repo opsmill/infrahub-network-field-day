@@ -339,6 +339,13 @@ def decide_proposed_change(opened: bool, detail: str) -> Result:
     return Result(name, Status.PASS, detail)
 
 
+def decide_alice_main_write(written: bool, detail: str) -> Result:
+    name = "alice cannot write to main"
+    if written:
+        return Result(name, Status.FAIL, detail, "uv run python scripts/provision_requester_access.py")
+    return Result(name, Status.PASS, detail)
+
+
 # --------------------------------------------------------------------------- probes
 
 
@@ -504,7 +511,7 @@ def probe_agent_role(env: Environment) -> Result:
 def probe_requester_role(env: Environment) -> Result:
     return _script_check(
         env,
-        "Requester Access is attached to Infrahub Users",
+        "Infrahub Users holds only Requester Access",
         "provision_requester_access.py",
         [],
         "uv run invoke mcp",
@@ -565,6 +572,41 @@ def probe_alice_proposed_change(env: Environment) -> Result:
             post(admin, f'mutation {{ BranchDelete(data: {{name: "{branch}"}}) {{ ok }} }}')
         except (httpx.HTTPError, ValueError):
             pass
+
+
+def probe_alice_main_write(env: Environment) -> Result:
+    """Ask for a scratch tag on `main` with alice's token. A refusal is the expected answer."""
+    user = MCP_TOKEN_USERS[0]
+    token = _env_values(env.root).get(token_var(user), "")
+    if not token:
+        msg = f"{token_var(user)} is not in .env"
+        raise Unavailable(msg)
+    tag = "ready-check-" + os.urandom(3).hex()
+    try:
+        response = httpx.post(
+            f"{env.address}/graphql",
+            json={
+                "query": f'mutation {{ BuiltinTagCreate(data: {{name: {{value: "{tag}"}}}}) {{ ok object {{ id }} }} }}'
+            },
+            headers={"X-INFRAHUB-KEY": token},
+            timeout=60,
+        )
+        reply = dict(response.json())
+    except (httpx.HTTPError, ValueError) as exc:
+        raise Unavailable(f"could not run the main write check ({type(exc).__name__})") from exc
+    if reply.get("errors"):
+        return decide_alice_main_write(False, str(reply["errors"][0].get("message", "refused"))[:160])
+    try:
+        created = str(reply["data"]["BuiltinTagCreate"]["object"]["id"])
+        httpx.post(
+            f"{env.address}/graphql",
+            json={"query": f'mutation {{ BuiltinTagDelete(data: {{id: "{created}"}}) {{ ok }} }}'},
+            headers={"X-INFRAHUB-KEY": env.token},
+            timeout=60,
+        )
+    except (httpx.HTTPError, KeyError, ValueError):
+        pass
+    return decide_alice_main_write(True, f"{user} created a tag on main; the check deleted it")
 
 
 def _git(root: Path, *args: str) -> str:
@@ -694,6 +736,7 @@ CHECKS: tuple[tuple[str, Callable[[Environment], Result]], ...] = (
     ("portal accounts", probe_portal_accounts),
     *((f"{u} MCP token", lambda env, u=u: probe_user_identity(env, u)) for u in MCP_TOKEN_USERS),
     ("alice proposed change", probe_alice_proposed_change),
+    ("alice main write", probe_alice_main_write),
     ("repository", probe_repository),
     ("leftover branches", probe_branches),
     ("stage branch", probe_stage_branch),

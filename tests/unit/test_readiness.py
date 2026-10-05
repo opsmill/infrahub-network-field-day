@@ -209,6 +209,11 @@ def test_a_refused_proposed_change_fails_with_the_refusal() -> None:
     assert r.decide_proposed_change(False, "PERMISSION_DENIED").status is Status.FAIL
 
 
+def test_a_write_to_main_by_alice_fails_the_check() -> None:
+    assert r.decide_alice_main_write(False, "refused").status is Status.PASS
+    assert r.decide_alice_main_write(True, "created a tag").status is Status.FAIL
+
+
 def test_a_probe_that_cannot_run_is_a_skip_not_a_crash() -> None:
     def broken(_env: object) -> Result:
         raise RuntimeError("boom")

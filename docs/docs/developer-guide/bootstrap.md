@@ -81,8 +81,8 @@ uv run invoke bootstrap --fresh
 
 ### The two MCP accounts, and the order they are made in
 
-`mcp` creates `mcp-agent` and mints `INFRAHUB_MCP_TOKEN` into the **main checkout's** `.env` (only the demo rehearsal uses it; Claude Code does not), gives the
-built-in `Infrahub Users` group the `Requester Access` role, and starts the MCP server in
+`mcp` creates `mcp-agent` and mints `INFRAHUB_MCP_TOKEN` into the **main checkout's** `.env` (only the demo rehearsal uses it; Claude Code does not), makes
+`Requester Access` the only role of the built-in `Infrahub Users` group (it detaches `General Access` and `Proposed Change Reviewer`), and starts the MCP server in
 token-passthrough mode. `mcp-tokens` then mints `INFRAHUB_MCP_TOKEN_ALICE`. It runs after `tooling` and
 after `mcp` because `.mcp.json` sends her token, and alice has no password in Infrahub: her account exists once she has signed in through
 Dex, and her token is minted with the access token that sign-in returns. Before this wiring, only
@@ -115,7 +115,8 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | Seeded applications | `otternet-demo`, `otternet-metrics` and `otternet-telemetry` have a catalogue entry and are pinned |
 | MCP server | The container runs and `/health` reports `token-passthrough` |
 | `mcp-agent` | The account and its role exist; a tool call with `INFRAHUB_MCP_TOKEN` (used by the demo rehearsal, not by Claude Code) returns `AccountProfile` `mcp-agent` |
-| Requester Access | The role is attached to `Infrahub Users` and holds only the proposed change permissions |
+| Requester Access | `Infrahub Users` holds only `Requester Access` (view, write service objects on a branch, open a proposed change); the two built-in roles are detached |
+| alice cannot write to main | A scratch tag created on `main` with her token is refused |
 | Portal accounts | Every Dex user has an Infrahub account |
 | alice | A tool call with `INFRAHUB_MCP_TOKEN_ALICE` returns `alice`, and she opens a proposed change on a throw-away branch that the check deletes |
 | Repository | Read-write on `demo-main`, `in-sync`, two task workers, and `demo-main` equal to `main` (same commit, or same tree) |
