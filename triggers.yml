@@ -12,6 +12,8 @@ spec:
       generator: generate-avd-device-structured-config
     - name: run-server-cabling-generator
       generator: generate-server-cabling
+    - name: run-avd-device-hostvar-generator
+      generator: generate-avd-device-hostvar
 
     # The service layer. Until these existed, a service created on a branch was
     # expanded only because the PORTAL asked for it -- so a service created any
@@ -164,6 +166,28 @@ spec:
           - attribute_name: avd_hostvars_ready
             value: "True"
             value_previous: "False"
+
+    # A switch's custom hostvars are fabric intent that a service generator writes
+    # (`generate-app-access` appends or removes a `permit <vip>` sequence on a border
+    # leaf), and nothing else regenerates the switch's hostvars. A client that opens a
+    # proposed change while the grant is still being built (the MCP server does, the
+    # portal waits for the generators first) gets a pipeline that selected its
+    # generators from a diff that did not yet hold the switch, so the proposed change
+    # showed the firewall rule and no border leaf configuration until every check was
+    # run again. Running the hostvar generator for the switch that changed puts the
+    # consequence on the branch whichever client made the request; its hostvar pass
+    # then fires the structured config rule above. The hostvar generator never writes
+    # `avd_custom_hostvars`, so this cannot loop.
+    - name: trigger-avd-hostvar-generator-update-custom-hostvars
+      branch_scope: "other_branches"
+      node_kind: DcimFabricSwitch
+      mutation_action: "updated"
+      action: run-avd-device-hostvar-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: avd_custom_hostvars
+            value_match: any
 
     - name: trigger-server-cabling-generator-created
       branch_scope: "other_branches"

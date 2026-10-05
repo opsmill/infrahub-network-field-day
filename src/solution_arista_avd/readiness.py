@@ -268,7 +268,8 @@ def decide_repository(
             Status.FAIL,
             "; ".join(problems),
             (
-                "a demo-main behind main after a bootstrap is stale: `uv run invoke bootstrap --fresh` recreates it; "
+                "a demo-main behind main after a merge to main: `uv run invoke demo-advance` brings it level through Infrahub "
+                "(after `git pull --ff-only origin main`); after a bootstrap it is stale and `uv run invoke bootstrap --fresh` recreates it; "
                 "after a demonstration use `uv run invoke demo-restore`"
             ),
         )

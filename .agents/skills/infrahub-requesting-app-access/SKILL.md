@@ -127,11 +127,14 @@ rule and no border leaf configuration. Do not read the first result as the answe
 
 1. Wait until the grant's `status` is `active` and its `granted_rules` holds a rule. The portal path
    takes 20 to 40 seconds for this.
-2. Wait for the AVD generators that run in the proposed change's pipeline. The border leaf diff
-   arrives last, about a minute after the change opens in the portal path. In a run through this server on
-   2026-10-05 it had not arrived 240 seconds after `propose_changes`, and arrived about 80 seconds after the
-   re-run in the next step; do not wait longer than that for it
-   ([act two](../../../docs/docs/demo-runbook.md#act-two-a-branch-user-asks-for-grafana)).
+2. Wait for the AVD generators. The rule `trigger-avd-hostvar-generator-update-custom-hostvars` in
+   `triggers.yml` runs `generate-avd-device-hostvar` for the border leaf once the grant's generator has
+   written its custom hostvars, and the structured config follows. The border leaf diff arrived 42 seconds
+   after `propose_changes` in a run on 2026-10-05 with that rule loaded. Without the rule, nothing ran the AVD
+   generators on the branch, and the diff had not arrived 300 seconds after `propose_changes`; it arrived
+   about 90 seconds after the re-run in the next step
+   ([act two](../../../docs/docs/demo-runbook.md#act-two-a-branch-user-asks-for-grafana),
+   [the cause](../../../docs/docs/developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server)).
 3. Re-run the checks with `mutate_graphql`:
 
    ```graphql
@@ -142,7 +145,7 @@ rule and no border leaf configuration. Do not read the first result as the answe
    }
    ```
 
-   In the live run the border leaf EOS diff was missing until this mutation ran with `check_type: ALL`.
+   Without the rule above, the border leaf EOS diff was missing until this mutation ran with `check_type: ALL`.
    The runbook names `ARTIFACT` for re-rendering only the artifacts. Which of the two is enough on every
    stack was not tested, so use `ALL`.
 4. If the grant never reaches `active`, see "Failure modes" and do not re-run the checks repeatedly.
@@ -196,7 +199,7 @@ or a `ServiceAppAccess` on `main`.
 | --- | --- | --- |
 | The grant stays `provisioning` or has no `granted_rules`, and the proposed change has no firewall rule, with green validators | The grant is not a member of `service_app_accesses`, so the generator run fails `Target ... is not part of the group` | Add the node to the group, or recreate the grant with `member_of_groups`. See step 3 |
 | `node_upsert` refuses or drops the relationships | The tool takes scalar attribute values only | Use `mutate_graphql` and `ServiceAppAccessCreate`. See step 3 |
-| The proposed change has the firewall rule but no border leaf EOS diff | `propose_changes` opened the change before the generators finished | Wait, then run `CoreProposedChangeRunCheck` with `check_type: ALL`. See step 5 |
+| The proposed change has the firewall rule but no border leaf EOS diff | The stack lacks the rule `trigger-avd-hostvar-generator-update-custom-hostvars`, so no AVD generator ran on the branch after the grant's generator wrote the border leaf's hostvars | Load `triggers.yml` (`invoke load`), then run `CoreProposedChangeRunCheck` with `check_type: ALL`. See step 5 |
 | `Writes to the default branch 'main' are not allowed` or `PERMISSION_DENIED` | The write was aimed at `main` | Write on the session branch. This is intended |
 | `Node must have at least one identifier (ID or HFID) to query it` on every proposed change | A deleted grant left its `CoreGeneratorInstance` behind | An operator deletes the instance. See [Recovery](../../../docs/docs/demo-runbook.md#recovery) |
 | Every tool says `Authentication required: no Infrahub API token in request header.` or `Invalid token` | `INFRAHUB_MCP_TOKEN_ALICE` was not in the environment of the shell that started Claude Code, or the token was re-minted | Run `uv run invoke mcp`, source `.env`, restart Claude Code. `claude mcp list` still shows `Connected` |

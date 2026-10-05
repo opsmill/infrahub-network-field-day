@@ -463,10 +463,11 @@ The Junos artifact re-renders alongside.
 
 The generated templates stop at the service's own generator, unlike the
 hand-written one. The fabric consequence still appears because
-`generate-avd-device-hostvar` runs in every proposed change's pipeline, and it
-arrives **last**: about a minute after the change opens, once the pipeline's
-host vars and structured configs are written and the border leaf's artifacts
-re-render. Open the change, talk through the firewall rule, then show the leaf.
+the rule `trigger-avd-hostvar-generator-update-custom-hostvars` runs
+`generate-avd-device-hostvar` for the border leaf as soon as the grant's generator has
+written its `avd_custom_hostvars`, and it arrives **last**: about a minute after the
+change opens, once the host vars and structured configs are written and the border leaf's
+artifacts re-render. Open the change, talk through the firewall rule, then show the leaf.
 If the leaf's diff is still missing after two minutes, retry the artifact
 checks from the **Checks** tab (the API equivalent is
 `CoreProposedChangeRunCheck` with `check_type: ARTIFACT`); that re-renders it from
@@ -717,7 +718,7 @@ uv run invoke demo-release    # the one command: branch, import, validators, pro
 
 1. **Release.** `demo-release` creates the Infrahub branch, copies the staged code onto it, waits until
    every task worker has pulled it, opens the proposed change, and says `Ready` only when every
-   validator has finished and passed. It took **2 to 4 minutes** on earlier runs and 414 seconds on 2026-10-05, and that wait is Infrahub's. The
+   validator has finished and passed. It took **2 to 4 minutes** on earlier runs, 414 seconds in one run on 2026-10-05 and 287 and 384 seconds in two later runs the same day. The command prints how long each phase took; the workers' pull of the branch (114 s and 256 s in those two runs) and the validators (161 s, and 90 s with `--no-recheck`) are almost all of it. The
    workers pull a pushed branch 75 to 256 s after the push, whatever the repository's git-sync
    schedule is (changing the schedule was tried and does not speed it up). Fill the time with the
    story: what the capability is, and why a branch is the unit of review.
@@ -782,7 +783,7 @@ about 25 minutes.
 | Of that, the whole-fabric AVD regeneration (7 switches) | 21 to 25 s (15 to 19 s host vars, 6 s structured configs) |
 | Its proposed change, opened to every check finished | 60 to 80 s |
 | A single access grant through the portal | 20 to 40 s |
-| Its proposed change, opened to the border leaf's diff | about 60 s through the portal; through the MCP server (2026-10-05) no diff after 240 s, and about 80 s after the checks were re-run with `check_type: ALL` |
+| Its proposed change, opened to the border leaf's diff | about 60 s through the portal; through the MCP server (2026-10-05) 42 s with the hostvar rule loaded, and no diff after 300 s without it (about 90 s after the checks were re-run with `check_type: ALL`) |
 | Act four, break to red check / `--revert` | 35 to 45 s / about 4 s |
 | `CoreProposedChangeMerge`, a grant or a revocation | 15 to 17 s |
 | Merge to the resource existing in Kubernetes | about a minute (Grafana's pod policy: 41 to 78 s) |
@@ -795,7 +796,7 @@ about 25 minutes.
 | Revocation, merge to the reconciler confirming both devices | 154 s (before the early wake change: about 5 minutes) |
 | Portal request **Exposed application, with access**, merged through `demo-run` | request 95 s, 24 validators green, merge 22 s |
 | Act one, merge to the application answering HTTP 200 / to the reconciler confirming | about 73 s / about 149 s |
-| Builder: `demo-release`, start to `Ready` | 2 to 4 minutes on earlier runs, 414 s on 2026-10-05 (29 validators); the workers' pull of the branch is 75 to 256 s of it |
+| Builder: `demo-release`, start to `Ready` | 2 to 4 minutes on earlier runs; 414, 287 and 384 s on 2026-10-05 (29 validators); the workers' pull of the branch is 75 to 256 s of it, the validators 90 to 161 s |
 | Builder: merge to `statement 30` on `isp-pe1` | see [Builder demo](./demo-builder.md) |
 | `uv run invoke reconcile --now` to the cycle starting | under a second; the cycle itself about 11 s, or about 25 s when it pushes |
 
@@ -839,9 +840,11 @@ use live.
   [service triggers](./developer-guide/service-triggers.md#a-grant-made-by-any-client-joins-its-generator-group)).
   On a stack that has not loaded those rules, send `member_of_groups: [{ hfid:
   ["service_app_accesses"] }]` with the grant, or add the membership afterwards.
-- **The proposed change from the MCP server has no border leaf diff.** `propose_changes` opens the
-  change before the generators finish. Wait for `generate-app-access` and the AVD generators, then
-  run `CoreProposedChangeRunCheck` with `check_type: ALL` on the proposed change. See
+- **The proposed change from the MCP server has no border leaf diff.** The stack does not have the
+  rule `trigger-avd-hostvar-generator-update-custom-hostvars` (`invoke load` loads it from
+  `triggers.yml`; `invoke ready` checks it), so nothing ran the AVD generators on the branch after
+  the grant's generator wrote the border leaf's `avd_custom_hostvars`. Load the rule, then run
+  `CoreProposedChangeRunCheck` with `check_type: ALL` on the proposed change. See
   [the MCP server](./developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server).
 - **`invoke demo-restore` waits out its timeout.** Fixed: a staged branch that is only stale
   (`main` moved since `demo-stage`) was read as a merged capability. Restore now looks for the

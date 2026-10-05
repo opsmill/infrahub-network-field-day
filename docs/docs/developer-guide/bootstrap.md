@@ -119,7 +119,7 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | alice cannot write to main | A scratch tag created on `main` with her token is refused |
 | Portal accounts | Every Dex user has an Infrahub account |
 | alice | A tool call with `INFRAHUB_MCP_TOKEN_ALICE` returns `alice`, and she opens a proposed change on a throw-away branch that the check deletes |
-| Repository | Read-write on `demo-main`, `in-sync`, two task workers, and `demo-main` equal to `main` (same commit, or same tree) |
+| Repository | Read-write on `demo-main`, `in-sync`, two task workers, and `demo-main` equal to `main` (same commit, or same tree). After a merge to `main` it differs until `uv run invoke demo-advance` brings it level through Infrahub |
 | Leftover branches | Warns about any Infrahub branch besides `main`, such as an `mcp/session-*` branch |
 | Staged branch | Warns when `stage/internet-access` was cut from an older `main` |
 | Portal picker | The portal's catalogue lists exactly the requestable entries, asked from the branch desktop as alice |

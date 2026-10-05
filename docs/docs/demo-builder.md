@@ -17,17 +17,17 @@ The whole cycle, from release to reset, was run on a fresh stack with the final 
 
 | Step | What happens | Measured |
 | --- | --- | --- |
-| `invoke demo-release` | A branch arrives in Infrahub with its code, schema and data, and a proposed change opens. It says `Ready` only once every validator has finished and passed | 2 to 4 minutes on earlier runs; 414 seconds in the 2026-10-05 run on a freshly bootstrapped stack, straight after acts one and two |
+| `invoke demo-release` | A branch arrives in Infrahub with its code, schema and data, and a proposed change opens. It says `Ready` only once every validator has finished and passed | 2 to 4 minutes on earlier runs; 414, 287 and 384 seconds in three runs on 2026-10-05. The command prints the time of each phase |
 | Review in the Infrahub UI | 29 validators in the 2026-10-05 run (32 in an earlier run), every artifact check and every rule check, all run with the branch's own code. The diff is the new schema node and fields, the menu entry, `acme-internet` and the three queries that name the new kind | passes |
 | Merge in the Infrahub UI | The merge also merges git and pushes it to `demo-main` | 50 seconds |
 | After the merge | The `isp-pe1` artifact carries `statement 30` | 15 seconds |
 | The router | The reconciler pushes it | within a minute |
 | The outcome | Acme's site gets HTTP 200 from the internet host. Globex's still gets nothing | |
-| `invoke demo-reset` | Everything back to the baseline, ready to go again | 320 seconds |
+| `invoke demo-reset` | Everything back to the baseline, ready to go again | 320 seconds on an earlier run, 488 seconds inside `demo-run` on 2026-10-05 |
 
 The release time is Infrahub's, not the command's. The task workers pull a pushed branch 75 to 256 s
 after the push, whatever the repository's git-sync schedule is. A shorter schedule was tried and does not
-help, so do not retry it. Plan for 2 to 4 minutes, and rehearse on the stack you will present on: the 2026-10-05 run took 414 seconds.
+help, so do not retry it. Plan for 2 to 7 minutes, and rehearse on the stack you will present on. Measured phases of two releases on 2026-10-05: the workers' pull of the branch 114 s and 256 s, the proposed change's validators 161 s and 90 s, and about 25 s for everything else. The second run used `--no-recheck`, which skips the second run of every check once the proposed change is open: it finished 70 s sooner and changed the same artifacts. That is one run each, so the second run of the checks is still the default.
 
 ## One-time setup
 
@@ -167,6 +167,23 @@ reported 121 passed and 0 failed.
 
 Not verified: a reset of a capability whose files were deleted on `main` after staging, and a staged branch built
 with `--implementation` after `main` changed the same files as that branch.
+
+## Bring `demo-main` level with `main` after `main` changes
+
+`demo-main` holds `main`'s tree only until `main` gets a new commit. `invoke ready` then fails on
+the check that `demo-main` equals `main`, and nothing may push to `demo-main` from outside (see the rules below). Run:
+
+```bash
+git pull --ff-only origin main      # the task copies the tree of the local main
+uv run invoke demo-advance          # --force advances even when the trees already match
+```
+
+It creates `demo/baseline-advance-<n>` with Sync with Git on, copies the tree of `main` onto it as one
+commit, waits until every task worker has pulled it, opens a proposed change, waits for every validator
+to pass, merges it and waits until the remote's `demo-main` holds `main`'s tree. Infrahub's own merge does
+the push. It deletes the branch and prints the time of each phase. It does nothing when the trees already
+match. Run it with the stack idle, and run `uv run invoke demo-stage --force` afterwards, because the staged
+branch is cut from `main`.
 
 ## Run the whole demonstration, and restore the lab
 
