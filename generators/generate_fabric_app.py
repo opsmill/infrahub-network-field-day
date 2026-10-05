@@ -288,6 +288,11 @@ class FabricAppGenerator(InfrahubGenerator):
         # fires a run.
         if not _value(service.service_selector):  # type: ignore[attr-defined]
             service.service_selector.value = list(_value(entry.default_service_selector) or [])  # type: ignore[attr-defined]
+        # The namespace's egress to the Kubernetes API server, for a chart whose install calls the API.
+        # Unwatched by every event rule, so this write fires no run. Only ever turned on: a request
+        # that already asked for it keeps it.
+        if _value(getattr(entry, "default_policy_allow_egress_api_server", None)):
+            service.policy_allow_egress_api_server.value = True  # type: ignore[attr-defined]
         # A cardinality-many relationship is only populated when asked for: the
         # SDK's plain `get` leaves it uninitialised, and `peer_ids` on one that
         # was never fetched is not an answer.

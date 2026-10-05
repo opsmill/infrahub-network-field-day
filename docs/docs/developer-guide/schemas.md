@@ -515,6 +515,7 @@ chart repository, name, version, values, block size and selector are no longer t
 | `default_values` | **Text**, never JSON: Infrahub 1.10.6 returns HTTP 500 for a JSON key containing a dot or a slash, and every Kubernetes label has both. |
 | `default_vip_block_size` | Bounded 24 to 30, like the application's own. |
 | `default_service_selector` | `key=value` strings, for the same 500. |
+| `default_policy_allow_egress_api_server` | Boolean, false by default. The pin copies a true value onto `ServiceFabricApp.policy_allow_egress_api_server`, so the namespace may reach the Kubernetes API server. Argo CD needs it: its `redis-secret-init` job calls the API before the install and, behind default-deny egress, fails with `dial tcp 10.112.0.1:443: i/o timeout`. |
 | `default_advertised_services` | `SecurityService` objects, the same ones a grant derives its ports from. |
 | `requestable` | Boolean, **false by default**, so an entry is never user-facing by accident. The lab's own applications stay false. |
 | `status` | `active` or `deprecated`. Only an active entry is requestable. |

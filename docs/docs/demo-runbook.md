@@ -511,14 +511,13 @@ ones still running. Times are from the merge.
 Argo CD did not become Ready with the catalogue entry as it is. The chart runs a `redis-secret-init` job before the install.
 The job calls the Kubernetes API to create a Secret, the application's namespace denies all egress by default, and the
 job's log ended with `dial tcp 10.112.0.1:443: i/o timeout`. The Helm release stayed `failed`, and a later change to the
-namespace policy did not start the install again. With `policy_allow_egress_api_server` set to true on the application's branch before the
+namespace policy did not start the install again. The catalogue entry now sets `default_policy_allow_egress_api_server`, which
+the pin copies onto the application. With `policy_allow_egress_api_server` set to true on the application's branch before the
 merge, a new request became `FabricApp` Ready 122 s after the merge, its Service had an external IP after 70 s, and the
-branch desktop got HTTP 307 (a redirect to the HTTPS address) after 92 s. That check set the application's field by hand.
-Not applied: no catalogue entry or generator sets that field, so the catalogue does not currently deploy Argo CD. Allowing
-egress to the Kubernetes API server widens what the namespace can reach, so it is a decision for a maintainer and is
-proposed separately from this page.
-[CLAUDE RECOMMENDED – based on the failed Argo CD release] Do not present Argo CD from the catalogue until that decision is
-made and the change has been rehearsed on the stack.
+branch desktop got HTTP 307 (a redirect to the HTTPS address) after 92 s. That check set the application's field by hand; the
+catalogue pin that now sets it was not run live, because Infrahub imports a generator only after it merges to `main`.
+[CLAUDE RECOMMENDED – based on the failed Argo CD release] After the change reaches the stack, request Argo CD once on a
+rehearsal reference before using it in front of an audience.
 
 A request for any of the three also withdraws cleanly: `uv run invoke demo-restore` removed all three, the failed Argo CD
 release included, in 507 s, and `make -C lab verify` reported 121 passed.

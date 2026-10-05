@@ -92,6 +92,7 @@ class _Entry:
         self.chart_version = _Attr("6.0.0")
         self.default_values = _Attr("replicaCount: 1\n")
         self.default_service_selector = _Attr(["otternet.lab/advertise=true"])
+        self.default_policy_allow_egress_api_server = _Attr(False)
         self.default_advertised_services = _Peers(["svc-junos-http"])
         for key, value in overrides.items():
             setattr(self, key, value)
@@ -106,6 +107,7 @@ class _Service:
         self.chart_name = _Attr("typed")
         self.chart_version = _Attr("0.0.1")
         self.service_selector = _Attr([])
+        self.policy_allow_egress_api_server = _Attr(False)
         self.advertised_services = _Peers([])
         self.definition_pinned = _Attr(False)
         self.vip_block_size = _Attr(28)
@@ -180,6 +182,28 @@ async def test_an_unpinned_application_is_pinned_from_its_entry() -> None:
     assert len(service.saves) == 1, "the chart fields and the marker are ONE save"
     assert service.saves[0]["pinned"] is True
     assert service.saves[0]["chart"][2] == "6.0.0"
+
+
+@pytest.mark.asyncio
+async def test_an_entry_that_needs_the_api_server_turns_the_namespace_egress_on() -> None:
+    service = _Service(_Entry(default_policy_allow_egress_api_server=_Attr(True)))
+
+    await _generator(_Client(service))._pin_definition("app-1")
+
+    assert service.policy_allow_egress_api_server.value is True
+    assert len(service.saves) == 1, "the egress setting rides on the same single save"
+
+
+@pytest.mark.asyncio
+async def test_an_entry_that_does_not_need_it_leaves_the_egress_alone() -> None:
+    asked = _Service(_Entry(), policy_allow_egress_api_server=_Attr(True))
+    plain = _Service(_Entry())
+
+    await _generator(_Client(asked))._pin_definition("app-1")
+    await _generator(_Client(plain))._pin_definition("app-1")
+
+    assert asked.policy_allow_egress_api_server.value is True, "a request's own setting is never turned off"
+    assert plain.policy_allow_egress_api_server.value is False
 
 
 @pytest.mark.asyncio
