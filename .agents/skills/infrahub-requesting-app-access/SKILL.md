@@ -130,7 +130,7 @@ rule and no border leaf configuration. Do not read the first result as the answe
 2. Wait for the AVD generators. The rule `trigger-avd-hostvar-generator-update-custom-hostvars` in
    `triggers.yml` runs `generate-avd-device-hostvar` for the border leaf once the grant's generator has
    written its custom hostvars, and the structured config follows. The border leaf diff arrived 42 seconds
-   after `propose_changes` in a run on 2026-10-05 with that rule loaded. Without the rule, nothing ran the AVD
+   after `propose_changes` in a run on 2026-10-05 with that rule loaded, and 40 seconds after it on a stack whose bootstrap had loaded `triggers.yml` by itself. Without the rule, nothing ran the AVD
    generators on the branch, and the diff had not arrived 300 seconds after `propose_changes`; it arrived
    about 90 seconds after the re-run in the next step
    ([act two](../../../docs/docs/demo-runbook.md#act-two-a-branch-user-asks-for-grafana),

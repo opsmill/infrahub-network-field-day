@@ -348,10 +348,15 @@ scopes by entry identity, so a device-scope sequence composes with the fabric's 
 replacing it, and the hand-authored policy every other switch shares is untouched.
 
 **The write is not configuration yet.** It lands in `avd_custom_hostvars`, which
-`generate-avd-device-hostvar` reads. That generator runs on no trigger, but it is registered
-`execute_in_proposed_change: true`, so the proposed change's pipeline regenerates the host vars and
-the structured configs, and the reviewer sees the border leaf's rendered configuration change. The
-portal's curated templates run both AVD stages themselves before opening the proposed change, so
+`generate-avd-device-hostvar` reads. On a branch, the event rule
+`trigger-avd-hostvar-generator-update-custom-hostvars` in `triggers.yml` runs that generator for the
+switch once its `avd_custom_hostvars` changes, and the structured config rule follows it, so a grant made
+through any client shows the border leaf's rendered configuration change in the proposed change. Measured
+on 2026-10-05 from a fresh bootstrap that loaded `triggers.yml` by itself: the border leaf diff was in the
+proposed change 40 seconds after `propose_changes`, with no re-run of the checks. The generator is also
+registered `execute_in_proposed_change: true`, but on a stack without the rule that did not produce the
+diff on its own (see [the MCP server](./mcp-server.md#requesting-application-access-through-the-mcp-server)).
+The portal's curated templates run both AVD stages themselves before opening the proposed change, so
 theirs carry the change from the start. The Junos half needs neither: step 8 re-renders the
 firewall's artifact, and the reconciler pushes it after the merge.
 

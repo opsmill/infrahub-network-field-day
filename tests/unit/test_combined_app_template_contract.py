@@ -203,9 +203,9 @@ def test_the_fabric_is_regenerated_before_the_proposed_change(template: dict[str
     """The grant writes fabric intent that nothing else regenerates.
 
     `generate-app-access` appends a `permit <vip>/32` to the border leaf's
-    `avd_custom_hostvars`. `generate-avd-device-hostvar` runs on no trigger and
-    is `execute_in_proposed_change: false`, so without these steps the proposed
-    change shows a changed JSON blob and no configuration -- the reviewer
+    `avd_custom_hostvars`. The event rule `trigger-avd-hostvar-generator-update-custom-hostvars` runs
+    `generate-avd-device-hostvar` on a branch, but asynchronously, so without these
+    steps the proposed change can open before it has run and shows a changed JSON blob and no configuration -- the reviewer
     approves a consequence they cannot see.
 
     Order is load bearing in both directions: after the grant, because the

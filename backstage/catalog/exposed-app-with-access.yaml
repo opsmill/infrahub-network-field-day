@@ -471,10 +471,11 @@ spec:
     # THE GRANT CHANGES THE FABRIC, AND NOTHING ELSE REGENERATES IT.
     # `generate-app-access` writes a `permit <vip>/32` into the border leaf's
     # `avd_custom_hostvars`, so the branch carries fabric intent. But
-    # `generate-avd-device-hostvar` runs on no trigger, with
-    # `execute_in_proposed_change: false` and `execute_after_merge: false`, so
-    # without these steps the proposed change shows a changed JSON blob and no
-    # configuration -- a reviewer approving a consequence they cannot see.
+    # the event rule `trigger-avd-hostvar-generator-update-custom-hostvars` also
+    # runs `generate-avd-device-hostvar` on a branch, but asynchronously, so
+    # without these steps the proposed change can open showing a changed JSON
+    # blob and no configuration -- a reviewer approving a consequence they
+    # cannot see.
     #
     # `infrahub:generators:await` cannot do this: it resolves definitions from
     # the node's OWN groups, and a service object is not in `avd_devices`.
