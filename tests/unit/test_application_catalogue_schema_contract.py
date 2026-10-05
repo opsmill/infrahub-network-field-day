@@ -92,6 +92,7 @@ def test_the_entry_carries_the_decided_attributes(definition: dict[str, Any]) ->
         "default_values",
         "default_vip_block_size",
         "default_service_selector",
+        "default_policy_allow_egress_api_server",
         "requestable",
         "status",
     }

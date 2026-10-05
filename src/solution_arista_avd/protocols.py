@@ -193,6 +193,7 @@ class ServiceApplicationDefinition(CoreNode):
     chart_name: String
     chart_repository: String
     chart_version: String
+    default_policy_allow_egress_api_server: Boolean
     default_service_selector: ListAttributeOptional
     default_values: StringOptional
     default_vip_block_size: Integer
