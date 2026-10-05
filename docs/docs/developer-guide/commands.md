@@ -56,7 +56,7 @@ uv run invoke vidra                     # the operator on its own, for a re-inst
 uv run invoke doctor                    # FIRST thing to run when something is odd: image staleness vs commits, duplicate reconcile processes, schema.graphql freshness, repository sync_status, dangling CoreGeneratorInstance, then the `ready` checks
 uv run invoke init-semaphore
 uv run invoke test                      # unit tests, as CI runs them
-uv run invoke test --integration        # ... plus the Docker-backed integration suite
+uv run invoke test --integration        # ... plus the Docker-backed integration suite, about 20 minutes, on this project's image
 uv run invoke lint
 uv run invoke lint-ruff
 uv run invoke lint-yaml
@@ -103,6 +103,13 @@ vale sync
 
 Use local `uv run pytest tests/integration` only for ad-hoc local/lab debugging when explicitly
 appropriate.
+
+The integration stack must run this project's image, `opsmill/infrahub-solution-arista-avd`, because the
+repository import loads `transforms/avd_eos_config.py`, which imports `pyavd`, and the stock Infrahub image has no
+`pyavd`. Measured on 2026-10-05 with the stock image: 6 tests failed, the repository stuck in `error-import` and the
+task worker logged `No module named 'pyavd'`. With `INFRAHUB_TESTING_DOCKER_IMAGE=opsmill/infrahub-solution-arista-avd`
+2524 tests passed in 1233 s. `invoke test --integration` sets that variable unless it is already set; a bare
+`uv run pytest tests/integration` does not.
 
 `infrahubctl` examples:
 

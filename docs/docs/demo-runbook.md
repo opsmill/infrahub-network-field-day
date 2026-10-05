@@ -496,6 +496,38 @@ pass: `otter-shop`'s pods ready and its VIP assigned, and the grant's rule on a
 `fw1` confirmed in sync. A purple **created** annotation marks the moment each
 reached `main`, and a green one the merge.
 
+### The other catalogue applications
+
+Act one uses **Who am I**. The three other requestable entries were each requested through the same portal template as
+`alice`, merged, and read back on 2026-10-05, on a stack from a fresh bootstrap, one after the other with the earlier
+ones still running. Times are from the merge.
+
+| Entry | Portal request to green proposed change | Service has an external IP | Branch desktop gets an answer | Pods Ready | `FabricApp` Ready |
+| --- | --- | --- | --- | --- | --- |
+| `podinfo` | 164 s, 24 validators | 28 s | HTTP 200 after 63 s | 41 s | 93 s |
+| **Grafana** | 150 s, 25 validators | 55 s | HTTP 302 (to its sign-in page) after 86 s | 86 s | 111 s |
+| **Argo CD** | 162 s, 24 validators | never | never | never | never, in 900 s |
+
+Argo CD did not become Ready with the catalogue entry as it is. The chart runs a `redis-secret-init` job before the install.
+The job calls the Kubernetes API to create a Secret, the application's namespace denies all egress by default, and the
+job's log ended with `dial tcp 10.112.0.1:443: i/o timeout`. The Helm release stayed `failed`, and a later change to the
+namespace policy did not start the install again. With `policy_allow_egress_api_server` set to true on the application's branch before the
+merge, a new request became `FabricApp` Ready 122 s after the merge, its Service had an external IP after 70 s, and the
+branch desktop got HTTP 307 (a redirect to the HTTPS address) after 92 s. That check set the application's field by hand.
+Not applied: no catalogue entry or generator sets that field, so the catalogue does not currently deploy Argo CD. Allowing
+egress to the Kubernetes API server widens what the namespace can reach, so it is a decision for a maintainer and is
+proposed separately from this page.
+[CLAUDE RECOMMENDED – based on the failed Argo CD release] Do not present Argo CD from the catalogue until that decision is
+made and the change has been rehearsed on the stack.
+
+A request for any of the three also withdraws cleanly: `uv run invoke demo-restore` removed all three, the failed Argo CD
+release included, in 507 s, and `make -C lab verify` reported 121 passed.
+
+Setting only `status` to `decommissioning` on an application, on a branch, is not a complete withdrawal. The generator takes
+the VIP block back and marks the application `decommissioned`, and then the Crossplane artifact check fails on that branch with
+`application 'podinfo-demo' is exposed but has no vip_block`. Measured on 2026-10-05 on `podinfo`. The withdrawal that
+passes every validator also deletes the application and its artifact on the branch, which is what `demo-restore` does.
+
 ## Act two: a branch user asks for Grafana
 
 Grafana is already running when the demo starts. It is `otternet-metrics`, a

@@ -24,6 +24,7 @@ import os
 import re
 import subprocess  # noqa: S404 - fixed-argv calls, never a shell string
 import sys
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -47,6 +48,9 @@ MCP_AGENT = "mcp-agent"
 MCP_SERVER_NAME = "infrahub-lab"
 DEFAULT_BRANCH_DEMO = "demo-main"
 EXPECTED_TASK_WORKERS = 2
+# A merge takes about 20 to 100 seconds. A proposed change still in `merging` after this many minutes belongs to a
+# merge whose task worker stopped, not to one that is running.
+STUCK_MERGE_MINUTES = 15
 DESKTOP = "clab-otternet-branch-desktop"
 SIGNIN_REMOTE = "/tmp/portal_signin.sh"  # noqa: S108 - a path inside the branch desktop container
 PORTAL = "https://10.90.0.11:32001"
@@ -293,6 +297,39 @@ def decide_leftover_branches(branches: list[dict[str, Any]]) -> Result:
             detail += f" ({len(mcp)} MCP session branch(es))"
         return Result(name, Status.WARN, detail, "delete a finished one with `uv run infrahubctl branch delete <name>`")
     return Result(name, Status.PASS, "only the default branch")
+
+
+def decide_stuck_merges(
+    proposed_changes: list[dict[str, str]], now: datetime, minutes: int = STUCK_MERGE_MINUTES
+) -> Result:
+    """A proposed change left in state `merging` after its merge crashed.
+
+    Each row holds `name`, `source_branch` and `updated_at` (ISO 8601). Infrahub does not move the record out of
+    `merging` when the task worker that ran the merge stops, so the record stays there for good and
+    nothing else reports it.
+    """
+    name = "no proposed change stuck in merging"
+    stuck = []
+    for row in proposed_changes:
+        try:
+            changed = datetime.fromisoformat(row["updated_at"])
+        except (KeyError, ValueError):
+            stuck.append(f"{row.get('name', '?')} (no usable update time)")
+            continue
+        if changed.tzinfo is None:
+            changed = changed.replace(tzinfo=UTC)
+        age = (now - changed).total_seconds() / 60
+        if age >= minutes:
+            stuck.append(f"{row.get('name', '?')} on {row.get('source_branch', '?')} ({age:.0f} min)")
+    if not stuck:
+        return Result(name, Status.PASS, f"none in state merging for more than {minutes} minutes")
+    return Result(
+        name,
+        Status.WARN,
+        f"{len(stuck)} in state merging for more than {minutes} minutes: {'; '.join(stuck[:3])}",
+        "a merge crashed: run `uv run invoke start`, then `uv run invoke demo-reset`, confirm that the merge did not "
+        "reach `main`, then delete the record (see demo-builder.md, 'A proposed change stuck in merging')",
+    )
 
 
 def decide_stage_branch(stage: str, exists: bool, merge_base: str, main_tip: str) -> Result:
@@ -668,6 +705,25 @@ def probe_branches(env: Environment) -> Result:
     return decide_leftover_branches(data["Branch"] or [])
 
 
+def probe_stuck_merges(env: Environment) -> Result:
+    data = env.graphql(
+        '{ CoreProposedChange(state__value: "merging") { edges { node { name { value } '
+        "source_branch { value } state { updated_at } } } } }"
+    )
+    if "CoreProposedChange" not in data:
+        msg = "Infrahub returned no proposed change list"
+        raise Unavailable(msg)
+    rows = [
+        {
+            "name": str(edge["node"]["name"]["value"]),
+            "source_branch": str(edge["node"]["source_branch"]["value"]),
+            "updated_at": str((edge["node"]["state"] or {}).get("updated_at") or ""),
+        }
+        for edge in data["CoreProposedChange"]["edges"]
+    ]
+    return decide_stuck_merges(rows, datetime.now(UTC))
+
+
 def probe_stage_branch(env: Environment) -> Result:
     stage = "stage/internet-access"
     root = envfile.main_checkout(env.root)
@@ -745,6 +801,7 @@ CHECKS: tuple[tuple[str, Callable[[Environment], Result]], ...] = (
     ("alice main write", probe_alice_main_write),
     ("repository", probe_repository),
     ("leftover branches", probe_branches),
+    ("stuck merges", probe_stuck_merges),
     ("stage branch", probe_stage_branch),
     ("portal picker", probe_picker),
     (".mcp.json", probe_mcp_config),
