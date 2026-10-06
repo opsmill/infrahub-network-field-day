@@ -278,6 +278,35 @@ def test_the_summary_says_what_a_person_must_do_and_prints_no_token_value() -> N
     assert "1 PASS" in text
 
 
+def test_the_summary_names_the_network_admin_account_and_its_password_variable_but_no_value() -> None:
+    text = r.render_summary([Result("a", Status.PASS, "ok")], REPO)
+    assert "network-admin" in text
+    assert "INFRAHUB_NETWORK_ADMIN_PASSWORD" in text
+    assert "INFRAHUB_NETWORK_ADMIN_PASSWORD=" not in text
+    assert "not a Dex sign-in" in text
+
+
+def test_the_network_admin_check_runs_the_script_check_and_is_registered() -> None:
+    assert "network-admin account" in [name for name, _ in r.CHECKS]
+    source = (REPO / "src/solution_arista_avd/readiness.py").read_text(encoding="utf-8")
+    assert '"provision_network_admin.py"' in source
+
+
+def test_a_failing_network_admin_check_names_the_fix() -> None:
+    failed = r.decide_script_check(
+        "x", 1, "PROBLEM: network-admin is in ['Super Administrators']\n", "uv run invoke network-admin"
+    )
+    assert failed.status is Status.FAIL
+    assert failed.fix == "uv run invoke network-admin"
+
+
+def test_network_admin_is_created_in_bootstrap_after_the_stack_is_loaded() -> None:
+    body = _body("bootstrap")
+    assert _first(body, "load(ctx)") < _first(body, "network_admin(ctx)") < _first(body, "Bootstrap complete")
+    assert _first(body, "mcp_tokens(ctx)") < _first(body, "network_admin(ctx)")
+    assert "provision_network_admin.py" in _body("network_admin")
+
+
 def test_a_read_write_environment_is_checked_before_anything_is_destroyed() -> None:
     assert r.repository_environment_problems({"INFRAHUB_API_TOKEN": "t"}) == []
     problems = r.repository_environment_problems({"INFRAHUB_REPOSITORY_MODE": "readwrite"})

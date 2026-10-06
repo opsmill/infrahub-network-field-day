@@ -47,6 +47,7 @@ uv run invoke reconcile --now           # ask the running loop for an all-device
 uv run invoke backstage-build           # build the portal image (it runs in the tooling cluster)
 uv run invoke tooling                   # Dex and the portal, into the tooling cluster
 uv run invoke mcp                       # the MCP server beside Infrahub, creates mcp-agent (demo rehearsal only); also the Requester Access role
+uv run invoke network-admin            # the local network-admin account (edits network data on a branch, merges a proposed change); password into .env
 uv run invoke mcp-tokens                # alice's MCP token into .env, the one Claude Code sends; needs Dex (run `tooling` first)
 uv run invoke ready                     # the demonstration's prerequisites, and what a person still has to do
 uv run invoke metrics-exporter          # the Infrahub exporter beside Infrahub, as metrics-exporter

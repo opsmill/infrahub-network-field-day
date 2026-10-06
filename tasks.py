@@ -3121,6 +3121,23 @@ def mcp(ctx: Context) -> None:
     print(" - Infrahub MCP server: http://127.0.0.1:8001/mcp")
 
 
+@task(name="network-admin")
+def network_admin(ctx: Context) -> None:
+    """
+    Create the local `network-admin` account: edits network data on a branch and merges a proposed change.
+
+    A person who signs in through Dex is limited to `Requester Access`; `admin` is a Super
+    Administrator. `scripts/provision_network_admin.py` makes the account in between: a local
+    password (not Dex), the group `Network Admins` and the role `Network Admin Access`, which
+    views every kind, writes any kind on a branch, opens a proposed change and holds the
+    permissions to merge and review it. It holds no schema, repository, account or permission
+    management. The password is generated into `.env` as `INFRAHUB_NETWORK_ADMIN_PASSWORD` and is
+    never printed. Needs only the loaded stack; idempotent.
+    """
+    _use_dotenv_credentials()
+    ctx.run("python scripts/provision_network_admin.py", pty=True)
+
+
 @task(name="mcp-tokens")
 def mcp_tokens(ctx: Context) -> None:
     """
@@ -3281,6 +3298,7 @@ def bootstrap(
         tooling    Dex and the Backstage portal, in the tooling cluster
         mcp        the Infrahub MCP server (token passthrough; Claude Code sends alice's token)
         mcp-tokens an MCP token for `alice`, after Dex and the portal accounts exist
+        network-admin the local `network-admin` account (edits network data, merges a proposed change)
         metrics    the Infrahub exporter, reading as `metrics-exporter`
         cluster    Cilium, Vidra, Crossplane, the resource handover, and the
                    observability Secrets Grafana and Telegraf wait for
@@ -3359,6 +3377,11 @@ def bootstrap(
     # replaced because it no longer authenticates.
     print("\n=== Minting the MCP tokens ===")
     mcp_tokens(ctx)
+
+    # A local account, so it needs neither Dex nor the MCP server; only the loaded stack, where
+    # the built-in groups and roles exist. Its password goes to `.env`, never to the output.
+    print("\n=== Creating the network-admin account ===")
+    network_admin(ctx)
 
     # Before the cluster, so Prometheus has organisation metrics to scrape the
     # moment Grafana comes up, and verify_bootstrap.sh's dashboard check has
