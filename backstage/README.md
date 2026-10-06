@@ -21,7 +21,14 @@ creates an exposed application *and* the access grant that opens the way to it,
 on one branch, under one proposed change. It is hand-written because nothing in
 the generated path can emit a two-kind template.
 
-Three things about it are deliberate and each looks like an oversight:
+Four things about it are deliberate and each looks like an oversight:
+
+- **The task page shows four steps, not fourteen.** The eleven Infrahub operations
+  that must run in order are one `infrahub:sequence` step (`build`), which writes one
+  numbered log line per operation and stops at the first failure, naming it. Nothing
+  is skipped or reordered. A value from an earlier operation is a
+  `{ fromStep, path }` reference, because the scaffolder renders a whole step's
+  input before it runs. See `plugins/infrahub-backend/src/sequence.ts`.
 
 - **It waits between the two creates.** `generate-app-access` reads the
   application's `vip_block`, which `generate-fabric-app` allocates. Both fire on

@@ -122,7 +122,38 @@ regenerates that on its own: `generate-avd-device-hostvar` runs on **no trigger*
 steps the proposed change shows a changed JSON blob and no configuration — a reviewer
 approving a consequence they cannot see, on the one workflow where merging *is* the approval.
 
-The steps are plain `infrahub:graphql:execute`, and three details are load bearing:
+**The task page shows four steps, and the fourteen operations are still all run, in the same
+order.** Backstage lists one line per template step and cannot group them. The template has
+four steps: `fetch_definition` (`catalog:fetch`), `build`, `proposed_change` and `catalog`.
+`build` is the custom action `infrahub:sequence`
+([`sequence.ts`](https://github.com/opsmill/infrahub-network-field-day/blob/main/backstage/plugins/infrahub-backend/src/sequence.ts)),
+which takes the eleven Infrahub operations as an ordered list and runs them one after the
+other. Each entry is one of the two existing actions, with the inputs that action already
+takes (`infrahub:graphql:execute` or `infrahub:generators:await`), and the YAML remains the
+source of the GraphQL text. Four things differ from separate steps:
+
+- **A value from an earlier operation is a `fromStep` reference.** The scaffolder renders a
+  whole step's input before the step runs, so `${{ steps.create_app.output... }}` cannot name an
+  operation inside `build`. Write `{ fromStep: create_app, path: "data.ServiceFabricAppCreate.object.id" }`
+  instead; it is resolved immediately before the operation that uses it. Values from the form and
+  the signed-in user keep the ordinary expression, so the mutation `context` that attributes each
+  write to the requester is unchanged.
+- **A reference that finds nothing leaves its variable out**, exactly as an unresolved expression did,
+  and a log warning says which. That is what keeps the gates working: `assert_vip` binds
+  `$vip: ID!`, so a block that does not exist means no variable and Infrahub refuses the query.
+- **The sequence checks itself before it runs anything.** It refuses duplicate ids and a reference
+  to an operation that does not come earlier, so a template typo fails before the branch exists.
+- **A failure names the operation**: `Step 7/11 Prove the block exists before granting access to it
+  failed: <Infrahub's error>`. The branch is left in place, as it was before.
+
+The log of `build` is the live view: it lists all eleven stages first, then writes
+`n/11 <name>` as each starts and `n/11 <name>: done in <s>s` as it ends. Later steps and the
+output links read the results as `steps.build.output.results.<operation id>.data...`.
+`tests/unit/test_combined_app_template_contract.py` holds the order, the gates and the step
+count (at most five). The other templates are unchanged: the generated ones have three to four
+steps, and Revoke keeps its separate steps.
+
+The operations inside `build` are plain GraphQL, and three details are load bearing:
 
 - **`nodes` omitted runs the definition across its whole target group.** It is optional on
   `GeneratorDefinitionRequestRunInput`, and omitting it covers all seven switches;

@@ -12,6 +12,7 @@ import {
   infrahubQuery,
   readInfrahubConfig,
 } from '@opsmill/backstage-plugin-infrahub-node';
+import { runSequence, wrapRelatedNodeLists } from './sequence';
 
 /**
  * Runs a GraphQL query or mutation against Infrahub, on a given branch.
@@ -90,6 +91,70 @@ export const infrahubActionsModule = createBackendModule({
 
               ctx.output('waited', result.waited);
               ctx.output('tasks', result.tasks);
+            },
+          }),
+          createTemplateAction({
+            id: 'infrahub:sequence',
+            description:
+              'Run an ordered list of Infrahub steps (GraphQL and generator ' +
+              'waits) as one scaffolder step, logging one line per step',
+            schema: {
+              input: {
+                branch: z =>
+                  z
+                    .string()
+                    .optional()
+                    .describe(
+                      'The branch a step runs on when it names none (default main)',
+                    ),
+                steps: z =>
+                  z
+                    .array(
+                      z.object({
+                        id: z
+                          .string()
+                          .describe('Unique in the sequence; what later steps refer to'),
+                        name: z
+                          .string()
+                          .describe('Shown in the log and in a failure message'),
+                        action: z
+                          .enum([
+                            'infrahub:graphql:execute',
+                            'infrahub:generators:await',
+                          ])
+                          .describe('The same inputs as that action takes'),
+                        input: z.record(z.any()),
+                      }),
+                    )
+                    .describe(
+                      'Run in order. A value from an earlier step is written ' +
+                        '{ fromStep: <id>, path: <dot path into its result> }; ' +
+                        'a graphql result is under `data`, an await result ' +
+                        'under `waited` and `tasks`',
+                    ),
+              },
+              output: {
+                results: z =>
+                  z
+                    .record(z.any())
+                    .describe('Each step\'s result, by its id'),
+                address: z =>
+                  z
+                    .string()
+                    .describe(
+                      'The browser-facing Infrahub base URL, for building links',
+                    ),
+              },
+            },
+            async handler(ctx) {
+              const output = await runSequence({
+                config: infrahub,
+                branch: ctx.input.branch,
+                steps: ctx.input.steps,
+                logger: ctx.logger,
+              });
+              ctx.output('results', output.results);
+              ctx.output('address', output.address);
             },
           }),
           createTemplateAction({
@@ -283,15 +348,10 @@ export const infrahubActionsModule = createBackendModule({
               // scaffolder templates a parameter to its own value and cannot
               // build objects, so the wrapping happens here and the step says
               // which variables need it.
-              const variables = { ...(ctx.input.variables ?? {}) };
-              for (const name of ctx.input.relatedNodeLists ?? []) {
-                const value = variables[name];
-                if (Array.isArray(value)) {
-                  variables[name] = value
-                    .filter(entry => entry !== undefined && entry !== null && entry !== '')
-                    .map(entry => ({ hfid: [String(entry)] }));
-                }
-              }
+              const variables = wrapRelatedNodeLists(
+                ctx.input.variables ?? {},
+                ctx.input.relatedNodeLists,
+              );
 
               const data = await infrahubQuery({
                 config: infrahub,
