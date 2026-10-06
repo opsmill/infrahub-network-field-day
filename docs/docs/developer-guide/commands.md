@@ -52,6 +52,7 @@ uv run invoke mcp-tokens                # alice's MCP token into .env, the one C
 uv run invoke ready                     # the demonstration's prerequisites, and what a person still has to do
 uv run invoke metrics-exporter          # the Infrahub exporter beside Infrahub, as metrics-exporter
 uv run invoke cluster                   # Cilium, Vidra, Crossplane, then the handover
+uv run invoke observability-secrets      # only the Grafana and Telegraf Secrets, on the current cluster; idempotent; run it when a Grafana pod sits in CreateContainerConfigError
 uv run invoke cluster --no-handover     # ... leaving the lab in charge of all four
 uv run invoke vidra                     # the operator on its own, for a re-install
 uv run invoke doctor                    # FIRST thing to run when something is odd: image staleness vs commits, duplicate reconcile processes, schema.graphql freshness, repository sync_status, dangling CoreGeneratorInstance, then the `ready` checks

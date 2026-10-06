@@ -150,7 +150,7 @@ uv run invoke start | stop | destroy | restart
 uv run invoke load                      # seed objects; runs NO generators
 uv run invoke avd [--branch X] [--merge]   # idempotent AVD stages; --topology only at build time
 uv run invoke bootstrap [--fresh]       # the whole environment; ends with `ready`
-uv run invoke ready                     # catalogue, rules, MCP tokens, Requester Access, demo-main, picker
+uv run invoke ready                     # catalogue, rules, MCP tokens, Requester Access, demo-main, picker, observability Secrets
 uv run invoke lab | provision | reconcile | tooling | cluster | vidra
 uv run invoke test [--integration]
 uv run invoke lint                      # also lint-ruff, lint-yaml, lint-mypy, lint-markdown, lint-prose

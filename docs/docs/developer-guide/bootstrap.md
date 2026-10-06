@@ -114,6 +114,34 @@ still signs in is kept, so a re-run changes nothing, and after `--fresh` the sam
 No API token is minted for it: a person signs in to the UI with the username and the password. What it can and cannot do is in
 [the network-admin account](./mcp-server.md#the-network-admin-account).
 
+### The observability Secrets, and why a missing namespace stops the bootstrap
+
+The last part of `invoke cluster` creates three Secrets that Grafana and Telegraf reference by name and that are not in the graph
+or in any artifact: `grafana-oidc` and `grafana-admin` in `otternet-metrics`, and `telemetry-credentials` in `otternet-telemetry`.
+The namespaces are created by Vidra's delivery of the two observability `FabricApp` claims, so the step waits for each namespace
+(up to 600 s each) and then applies the Secrets. `apply` makes a second run change nothing. The values go through a temporary file,
+never the command line or the log, and the Grafana admin password is generated once into `.env` as `GRAFANA_ADMIN_PASSWORD`.
+
+**A namespace that does not appear in time now stops `invoke cluster` and `invoke bootstrap` with exit code 1.** The Secrets
+for a namespace that did appear are still applied first. The error names the namespace, the seconds waited, what to check
+(`kubectl get vidraresource -A`, `kubectl get fabricapp`, the logs of `deploy/vidra-vidra-operator-controller-manager` in `vidra-system`)
+and the command to run once the namespace exists:
+
+```bash
+uv run invoke observability-secrets
+```
+
+That task runs only this step against the current cluster, with no Cilium, Vidra or Crossplane. It is idempotent, and it takes
+`--wait <seconds>` (default 600).
+
+Before this change the step printed a `WARNING` and carried on, and `invoke ready` did not check namespaces or Secrets. In one
+bootstrap the Grafana pod then stayed in `CreateContainerConfigError` for 6 hours: `otternet-demo` and `otternet-telemetry` were created
+at 03:57 UTC with the bootstrap, and `otternet-metrics` at 08:28 UTC, 4.5 hours later, after which the Secrets did not exist and nothing
+reported it. **Why Vidra delivered `otternet-metrics` 4.5 hours late is not known.** It has not been investigated, and nothing in the repository
+shows a cheap, documented way to make Vidra deliver again that would be safe here: the one documented re-delivery, `_force_resync`, deletes
+the syncs and so tears down what they delivered. The wait is 600 s because namespaces normally appear within minutes of the delivery
+starting (`_wait_for_syncs` allows 300 s for the claims themselves); a delay of hours is outside that, and is reported rather than waited out.
+
 ### What a finished bootstrap checks
 
 The last step is `invoke ready`, which runs by itself at the end of bootstrap and can be run at any time.
@@ -137,9 +165,16 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | Leftover branches | Warns about any Infrahub branch besides `main`, such as an `mcp/session-*` branch |
 | Staged branch | Warns when `stage/internet-access` was cut from an older `main` |
 | Portal picker | The portal's catalogue lists exactly the requestable entries, asked from the branch desktop as alice |
+| Observability namespaces | `otternet-metrics` and `otternet-telemetry` exist in the lab cluster |
+| Observability Secrets | `grafana-admin` (keys `admin-user`, `admin-password`) and `grafana-oidc` (key `client-secret`) exist in `otternet-metrics`, and `telemetry-credentials` (keys `GNMI_USERNAME`, `GNMI_PASSWORD`) exists in `otternet-telemetry`. The check lists key names only and never reads a value |
+| Grafana pod | No Grafana pod is in `CreateContainerConfigError`; a missing pod is a `WARN`. Every failure names `uv run invoke observability-secrets` |
 | `.mcp.json` | One server, `infrahub-lab`, sends `INFRAHUB_MCP_TOKEN_ALICE`; any other entry fails the check |
 | `claude mcp list` | `infrahub-lab` connects, from a process that has `.env` loaded |
 | Shell environment | Warns when this shell holds a generated credential that differs from `.env` |
+
+The three observability checks use the lab's `kubeconfig` file (`KUBECONFIG`, else `lab/k8s/.kubeconfig/kubeconfig.yaml` in the main checkout)
+and are reported as `SKIP` with the reason when it does not exist or the cluster does not answer, for example after `bootstrap --no-cluster`.
+A clean run prints 24 checks.
 
 The repository check is skipped on a stack that is not read-write unless
 `INFRAHUB_REPOSITORY_MODE=readwrite` is exported, in which case it fails. A check that cannot run, such as
