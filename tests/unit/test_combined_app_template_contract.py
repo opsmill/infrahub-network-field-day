@@ -82,6 +82,26 @@ def _fields_of(kind: dict[str, Any], generics: dict[str, dict[str, Any]]) -> dic
     return fields
 
 
+def _operations(template: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every operation the run performs, in the order it performs them.
+
+    The task page shows one line per template step, so the Infrahub operations that
+    must run in a fixed order are ONE `infrahub:sequence` step. This expands it in
+    place, so a test about order reads the order that runs, not the order the page lists.
+    """
+    operations: list[dict[str, Any]] = []
+    for step in template["spec"]["steps"]:
+        if step["action"] == "infrahub:sequence":
+            operations.extend(step["input"]["steps"])
+        else:
+            operations.append(step)
+    return operations
+
+
+def _operation_ids(template: dict[str, Any]) -> list[str]:
+    return [operation["id"] for operation in _operations(template)]
+
+
 def _mutation_fields(text: str, mutation: str) -> set[str]:
     """The field names inside one mutation's `data: { ... }` block."""
     start = text.index(mutation)
@@ -187,7 +207,7 @@ def test_the_application_is_created_exposed(template_text: str) -> None:
 
 def test_the_barrier_sits_between_the_two_creates(template: dict[str, Any]) -> None:
     """The whole design: the grant is created after the app's generators are quiet."""
-    ids = [step["id"] for step in template["spec"]["steps"]]
+    ids = _operation_ids(template)
     for step in ("create_app", "await_app", "assert_vip", "create_grant"):
         assert step in ids, f"step {step!r} is missing"
     assert ids.index("create_app") < ids.index("await_app") < ids.index("create_grant"), (
@@ -212,7 +232,7 @@ def test_the_fabric_is_regenerated_before_the_proposed_change(template: dict[str
     hostvars must pick up what its generator wrote; before the proposed change,
     because that is the point.
     """
-    ids = [step["id"] for step in template["spec"]["steps"]]
+    ids = _operation_ids(template)
     for step in ("lookup_avd", "run_avd_hostvars", "run_avd_structured_config"):
         assert step in ids, f"step {step!r} is missing; the branch would carry unrendered fabric intent"
 
@@ -230,7 +250,7 @@ def test_the_fabric_is_regenerated_before_the_proposed_change(template: dict[str
 
 def test_the_avd_runs_cover_every_device_and_block(template: dict[str, Any]) -> None:
     """`nodes` omitted means the whole target group; the wait is what makes it done."""
-    by_id = {step["id"]: step for step in template["spec"]["steps"]}
+    by_id = {step["id"]: step for step in _operations(template)}
     for step_id in ("run_avd_hostvars", "run_avd_structured_config"):
         query = by_id[step_id]["input"]["query"]
         assert "wait_until_completion: true" in query, (
@@ -242,21 +262,167 @@ def test_the_avd_runs_cover_every_device_and_block(template: dict[str, Any]) -> 
         )
 
 
-def test_every_infrahub_step_names_the_branch(template: dict[str, Any]) -> None:
-    """A step with no branch runs on main, where none of this exists.
+REQUEST_BRANCH = '${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}'
 
-    The two exceptions are deliberate: the branch is created on main, and a
-    proposed change is an object on main that names the branch.
+# The operations the run performs, in order. This was fourteen template steps; the
+# order is the design (see the template's header), so it is written out in full.
+OPERATIONS = [
+    "fetch_definition",
+    "branch",
+    "read_definition",
+    "create_app",
+    "await_app",
+    "read_app",
+    "assert_vip",
+    "create_grant",
+    "await_grant",
+    "lookup_avd",
+    "run_avd_hostvars",
+    "run_avd_structured_config",
+    "proposed_change",
+    "catalog",
+]
+
+
+def _sequence(template: dict[str, Any]) -> dict[str, Any]:
+    sequences = [step for step in template["spec"]["steps"] if step["action"] == "infrahub:sequence"]
+    assert len(sequences) == 1, "the Infrahub operations are one infrahub:sequence step"
+    return sequences[0]
+
+
+def test_every_infrahub_operation_runs_on_the_requests_branch(template: dict[str, Any]) -> None:
+    """An operation with no branch runs on main, where none of this exists.
+
+    The sequence carries the request's branch, so an operation that names nothing
+    inherits it. The two exceptions are deliberate and stay outside it: the branch
+    is created on main, and a proposed change is an object on main that names the
+    branch.
     """
-    on_main = {"branch", "proposed_change", "catalog"}
+    sequence = _sequence(template)
+    assert sequence["input"]["branch"] == REQUEST_BRANCH
+    for operation in sequence["input"]["steps"]:
+        named = (operation["input"] or {}).get("branch")
+        if operation["id"] == "branch":
+            assert named == "main", "the branch is created on main"
+        else:
+            assert named is None, (
+                f"operation {operation['id']!r} names the branch {named!r}; it must inherit the "
+                "request's branch from the sequence"
+            )
     for step in template["spec"]["steps"]:
-        if step["id"] in on_main:
+        if step["id"] in {"proposed_change", "catalog", "fetch_definition", "build"}:
             continue
-        if not step["action"].startswith("infrahub:"):
-            continue
-        assert "branch" in (step.get("input") or {}), (
-            f"step {step['id']!r} does not name the branch, so it would run against main"
-        )
+        raise AssertionError(f"unexpected step {step['id']!r} outside the sequence")
+    assert "branch" not in _by_id(template)["proposed_change"]["input"]
+
+
+def _by_id(template: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {step["id"]: step for step in template["spec"]["steps"]}
+
+
+def test_the_task_page_shows_at_most_five_steps(template: dict[str, Any]) -> None:
+    """Backstage lists one line per step and cannot group them."""
+    visible = [step["id"] for step in template["spec"]["steps"]]
+    assert len(visible) <= 5, f"the task page would show {len(visible)} steps: {visible}"
+    assert visible == ["fetch_definition", "build", "proposed_change", "catalog"]
+
+
+def test_every_operation_still_runs_in_the_order_it_always_did(template: dict[str, Any]) -> None:
+    """Hiding the steps behind one must not drop or reorder any of them."""
+    assert _operation_ids(template) == OPERATIONS
+
+
+def test_the_proposed_change_opens_only_after_the_whole_sequence(template: dict[str, Any]) -> None:
+    """A failing operation fails `build`; the scaffolder runs no step after a failed one."""
+    visible = [step["id"] for step in template["spec"]["steps"]]
+    assert visible.index("build") < visible.index("proposed_change") < visible.index("catalog")
+    # ...and the sequence itself ends with the two AVD runs, so nothing is left to run after them.
+    assert [operation["id"] for operation in _sequence(template)["input"]["steps"]][-2:] == [
+        "run_avd_hostvars",
+        "run_avd_structured_config",
+    ]
+
+
+def test_the_sequence_has_only_the_two_operations_it_can_run(template: dict[str, Any]) -> None:
+    for operation in _sequence(template)["input"]["steps"]:
+        assert operation["action"] in {"infrahub:graphql:execute", "infrahub:generators:await"}, operation["id"]
+        assert operation["name"], f"{operation['id']} has no name for the log line"
+
+
+def test_every_reference_names_an_earlier_operation(template: dict[str, Any]) -> None:
+    """`infrahub:sequence` refuses a forward reference at run time; this fails earlier, in CI."""
+    seen: set[str] = set()
+
+    def references(value: Any) -> list[str]:
+        if isinstance(value, dict):
+            if set(value) == {"fromStep", "path"}:
+                return [value["fromStep"]]
+            return [ref for inner in value.values() for ref in references(inner)]
+        if isinstance(value, list):
+            return [ref for inner in value for ref in references(inner)]
+        return []
+
+    for operation in _sequence(template)["input"]["steps"]:
+        for ref in references(operation["input"]):
+            assert ref in seen, f"{operation['id']} refers to {ref}, which does not run before it"
+        seen.add(operation["id"])
+
+
+def test_no_expression_reaches_into_the_sequence_except_through_its_output(template_text: str) -> None:
+    """An expression naming an operation inside the sequence is rendered, empty, before it runs."""
+    inside = [
+        "branch",
+        "read_definition",
+        "create_app",
+        "await_app",
+        "read_app",
+        "assert_vip",
+        "create_grant",
+        "await_grant",
+        "lookup_avd",
+        "run_avd_hostvars",
+        "run_avd_structured_config",
+    ]
+    for name in inside:
+        for match in re.finditer(rf"\$\{{\{{[^}}]*\bsteps\.{name}\b", template_text):
+            raise AssertionError(f"an expression names the sequence's operation {name!r}: {match.group(0)}")
+
+
+def test_the_output_links_read_the_sequences_results(template: dict[str, Any]) -> None:
+    urls = " ".join(link["url"] for link in template["spec"]["output"]["links"])
+    assert "steps.build.output.address" in urls
+    assert "steps.build.output.results.create_app.data.ServiceFabricAppCreate.object.id" in urls
+    assert "steps.build.output.results.create_grant.data.ServiceAppAccessCreate.object.id" in urls
+    assert "steps.proposed_change.output.data.CoreProposedChangeCreate.object.id" in urls
+
+
+def test_the_writes_still_carry_the_signed_in_users_account(template: dict[str, Any]) -> None:
+    """Attribution: the mutation `context` names the user, not the portal's service account."""
+    by_id = {operation["id"]: operation for operation in _operations(template)}
+    for step_id in ("create_app", "create_grant"):
+        assert "context: { account: { id: $infrahub_context_account } }" in by_id[step_id]["input"]["query"]
+        assert by_id[step_id]["input"]["variables"]["infrahub_context_account"] == "${{ user.entity.metadata.name }}"
+
+
+def test_the_vip_assertion_still_binds_a_required_variable(template: dict[str, Any]) -> None:
+    """With no block the reference finds nothing, `$vip` is not sent, and Infrahub refuses the query."""
+    by_id = {operation["id"]: operation for operation in _operations(template)}
+    assert "$vip: ID!" in by_id["assert_vip"]["input"]["query"]
+    assert by_id["assert_vip"]["input"]["variables"] == {
+        "vip": {
+            "fromStep": "read_app",
+            "path": "data.ServiceFabricApp.edges[0].node.vip_block.node.id",
+        }
+    }
+
+
+def test_the_grant_binds_the_application_by_the_id_the_create_returned(template: dict[str, Any]) -> None:
+    by_id = {operation["id"]: operation for operation in _operations(template)}
+    assert by_id["create_grant"]["input"]["variables"]["application"] == {
+        "fromStep": "create_app",
+        "path": "data.ServiceFabricAppCreate.object.id",
+    }
+    assert by_id["await_app"]["input"]["node"] == by_id["create_grant"]["input"]["variables"]["application"]
 
 
 def test_both_groups_exist(template_text: str) -> None:
@@ -296,3 +462,9 @@ def test_the_catalog_directory_reaches_the_image() -> None:
         "backstage/packages/backend/Dockerfile does not COPY the catalog directory, so "
         "app-config.docker.yaml would point at a path that does not exist in the image"
     )
+
+
+def test_the_sequence_action_is_registered_in_the_portal_backend() -> None:
+    """A template naming an action the backend does not register fails at run time, in the portal."""
+    actions = (REPO / "backstage/plugins/infrahub-backend/src/actions.ts").read_text(encoding="utf-8")
+    assert "id: 'infrahub:sequence'" in actions

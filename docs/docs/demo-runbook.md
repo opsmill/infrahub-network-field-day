@@ -115,7 +115,7 @@ The rest of this page explains each step.
 
 | Step | What the presenter does | Expected | Idle wait and what to say |
 | --- | --- | --- | --- |
-| Request | In the branch desktop's portal, signed in as `alice@otternet.lab`, submit **Exposed application, with access** with the application **Who am I** | The run ends at a **Review the proposed change** link after 70 to 85 s | 70 to 85 s: read the step list as it runs (the catalogue entry is read twice, the VIP block is awaited, the fabric is regenerated) |
+| Request | In the branch desktop's portal, signed in as `alice@otternet.lab`, submit **Exposed application, with access** with the application **Who am I** | The run ends at a **Review the proposed change** link after 70 to 85 s | 70 to 85 s: the task page shows four steps. Open the log of the second one, **Build the application, its access and the fabric**, and read its numbered lines as they appear (the catalogue entry is read twice, the VIP block is awaited, the fabric is regenerated). See [act one](#act-one-ask-for-an-application) |
 | Review | Open the proposed change | 24 validators, all green, after a further 60 to 80 s. One line `seq <n> permit <vip block>` on `leaf-otternet-pod1-3-1` | 60 to 80 s while the validators run: show the diff, the firewall rule and OTTERNET / Services at **Requested** |
 | Merge | Merge in Infrahub | The merge call takes 15 to 22 s | none |
 | Cluster | `kubectl get fabricapp otter-shop` | `READY True` about 100 s after the merge; the Service has an external IP after about 40 s | |
@@ -367,8 +367,20 @@ list, because they are not requestable. The entry for **Who am I** is chart
 working exposure block: a LoadBalancer Service with the `otternet.lab/advertise:
 "true"` label the service selector names.
 
-The run takes **70 to 85 seconds**, most of it two waits. What to say while it
-runs, step by step, because the step list is on screen:
+The run takes **70 to 85 seconds**, most of it two waits. The task page lists
+four steps:
+
+1. **Look up the application**, which resolves the picked entry to its Infrahub id.
+2. **Build the application, its access and the fabric**, which is the long one.
+   It is a single step on the page that runs eleven stages in a fixed order and
+   writes one numbered log line for each (`3/11 Create the application`, then
+   `3/11 Create the application: done in 1.2s`). Click the step to open its log
+   and the presenter can read each stage as it happens. A failure names the
+   stage and gives Infrahub's own error.
+3. **Open the proposed change**, which runs only if step 2 finished.
+4. **Refresh the catalogue**, so the new services are listed when the run ends.
+
+What to say while step 2 runs, stage by stage, with the log open:
 
 - It looks the chosen entry up in Infrahub and **reads it again** with the
   conditions the picker used, requestable and active, so a stale form cannot get

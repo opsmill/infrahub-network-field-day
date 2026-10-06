@@ -518,12 +518,10 @@ def act_one(reference: str) -> None:
     ):
         return
     steps = result["steps"]
-    TIMINGS.append(
-        (
-            "act one: of that, the AVD pass",
-            steps["run_avd_hostvars"]["seconds"] + steps["run_avd_structured_config"]["seconds"],
-        )
-    )
+    # The portal shows four steps and runs the Infrahub operations inside one, `build`
+    # (an `infrahub:sequence`), so the AVD pass no longer has a step of its own. What can
+    # be timed is the whole build: the branch, both creates, both waits and the AVD pass.
+    TIMINGS.append(("act one: of that, building the application, the grant and the fabric", steps["build"]["seconds"]))
 
     grant = gql(
         "{ ServiceAppAccess { edges { node { name { value } status { value } requester { value } } } } }", branch=branch

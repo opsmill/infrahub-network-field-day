@@ -41,7 +41,9 @@ REMOVED_FIELDS = (
     "values_file_content",
 )
 KEPT_FIELDS = ("app_name", "description", "namespace_name", "cluster", "vrf", "owner")
-EDGE = "steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node"
+# `read_definition` is an operation inside the `infrahub:sequence` step, so a value taken from it is a
+# `fromStep` reference rather than a `steps.<id>.output` expression.
+EDGE = "data.ServiceApplicationDefinition.edges[0].node"
 
 
 @pytest.fixture(scope="module")
@@ -63,7 +65,18 @@ def _properties(template: dict[str, Any]) -> dict[str, Any]:
 
 
 def _steps(template: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {step["id"]: step for step in template["spec"]["steps"]}
+    """Every operation by id, in order, with the ones inside `infrahub:sequence` expanded in place."""
+    operations: dict[str, dict[str, Any]] = {}
+    for step in template["spec"]["steps"]:
+        if step["action"] == "infrahub:sequence":
+            operations.update({inner["id"]: inner for inner in step["input"]["steps"]})
+        else:
+            operations[step["id"]] = step
+    return operations
+
+
+def _from(step: str, path: str) -> dict[str, str]:
+    return {"fromStep": step, "path": path}
 
 
 def test_the_form_no_longer_asks_for_anything_about_the_chart(template: dict[str, Any]) -> None:
@@ -156,10 +169,10 @@ def test_the_create_takes_its_chart_from_the_entry_not_the_form(template: dict[s
     create = _steps(template)["create_app"]["input"]
     variables = create["variables"]
     for field in ("chart_repository", "chart_name", "chart_version"):
-        assert variables[field].startswith("${{ " + EDGE), field
-    assert variables["vip_block_size"].startswith("${{ " + EDGE)
-    assert variables["service_selector"].startswith("${{ " + EDGE)
-    assert variables["definition"] == "${{ " + EDGE + ".id }}"
+        assert variables[field] == _from("read_definition", f"{EDGE}.{field}.value"), field
+    assert variables["vip_block_size"] == _from("read_definition", f"{EDGE}.default_vip_block_size.value")
+    assert variables["service_selector"] == _from("read_definition", f"{EDGE}.default_service_selector.value")
+    assert variables["definition"] == _from("read_definition", f"{EDGE}.id")
     assert "parameters.chart" not in str(variables)
     assert "advertised_services" not in create.get("relatedNodeLists", [])
 

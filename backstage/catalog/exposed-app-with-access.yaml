@@ -202,6 +202,21 @@ spec:
           pattern: '^[a-z0-9][a-z0-9-]*$'
 
   steps:
+    # THE TASK PAGE SHOWS FOUR STEPS, AND THE FOURTEEN THINGS THEY DO ARE KEPT.
+    # Backstage lists one line per step and cannot group them, so the eleven
+    # Infrahub operations that must run in a fixed order are ONE step,
+    # `infrahub:sequence`. It runs them in the order written, writes one log line
+    # per operation ("3/11 Create the application", then how long it took), and
+    # stops at the first failure naming that operation and Infrahub's own error.
+    # Nothing is skipped or reordered: the order below is the order that ran
+    # when each was its own step.
+    #
+    # A value that comes from an EARLIER operation of the sequence is written
+    # `{ fromStep: <id>, path: <dot path into its result> }`: the scaffolder
+    # renders a whole step's input before the step runs, so a `${{ steps.x }}`
+    # expression could not name an operation inside the sequence. Values from the
+    # form or the signed-in user keep the ordinary expression.
+
     # ------------------------------------------------------- the catalogue entry
     - id: fetch_definition
       name: Look up the application
@@ -209,349 +224,358 @@ spec:
       input:
         entityRef: ${{ parameters.catalogue_entry }}
 
-    # ------------------------------------------------------------------ branch
-    - id: branch
-      name: Create the branch
-      action: infrahub:graphql:execute
+    # ------------------------------------------- the branch, the build, the fabric
+    - id: build
+      name: Build the application, its access and the fabric (the log shows each stage)
+      action: infrahub:sequence
       input:
-        # No `branch` input: the branch does not exist yet, so this runs on main.
-        query: |
-          mutation ($name: String!) {
-            BranchCreate(data: { name: $name, sync_with_git: false }) {
-              ok
-            }
-          }
-        variables:
-          name: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-
-    # ---------------------------------------------------- the entry, read again
-    # THE CONTROL BEHIND THE PICKER. The picker filters in the browser; this reads
-    # the entry from Infrahub with the same two conditions, requestable AND active.
-    #
-    # A scaffolder step can only fail on a GraphQL error, never on a value, so the
-    # refusal is made the way `assert_vip` makes its own: when no entry matches,
-    # `edges[0]` is empty, every expression below resolves to nothing, the
-    # REQUIRED variables of `create_app` are not provided, and Infrahub rejects
-    # the mutation. The run stops there, before an application exists.
-    #
-    # The entry's chart fields, block size and selector are read here and sent in
-    # the create. The advertised services are NOT: the scaffolder cannot template
-    # a list out of a relationship read, so `generate-fabric-app` fills them from
-    # the entry on the branch, when the request left them empty.
-    - id: read_definition
-      name: Read the application's catalogue entry
-      action: infrahub:graphql:execute
-      input:
+        # The branch every operation runs on unless it names another. The first
+        # operation names `main`: the branch does not exist yet.
         branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        query: |
-          query ($id: ID!) {
-            ServiceApplicationDefinition(ids: [$id], requestable__value: true, status__value: "active") {
-              edges {
-                node {
-                  id
-                  chart_repository {
-                    value
-                  }
-                  chart_name {
-                    value
-                  }
-                  chart_version {
-                    value
-                  }
-                  default_vip_block_size {
-                    value
-                  }
-                  default_service_selector {
-                    value
+        steps:
+          # -------------------------------------------------------------- branch
+          - id: branch
+            name: Create the branch
+            action: infrahub:graphql:execute
+            input:
+              branch: main
+              query: |
+                mutation ($name: String!) {
+                  BranchCreate(data: { name: $name, sync_with_git: false }) {
+                    ok
                   }
                 }
-              }
-            }
-          }
-        variables:
-          id: ${{ steps.fetch_definition.output.entity.metadata.annotations["infrahub.opsmill.com/id"] }}
+              variables:
+                name: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
 
-    # ------------------------------------------------------------- application
-    - id: create_app
-      name: Create the application
-      action: infrahub:graphql:execute
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        # `exposed` is pinned true rather than asked. An application that is not
-        # exposed never gets a VIP block, and a grant to an application with no
-        # block is exactly the failure this template exists to prevent. Somebody
-        # who wants a cluster-internal application wants the generated
-        # single-kind template, not this one.
-        #
-        # `status` is deliberately absent so the schema's own default
-        # (`provisioning`) applies -- sending any literal hardcodes another
-        # schema's vocabulary into this one.
-        query: |
-          mutation (
-            $infrahub_context_account: String!
-            $name: String!
-            $description: String!
-            $namespace_name: String!
-            $chart_repository: String!
-            $chart_name: String!
-            $chart_version: String!
-            $vip_block_size: BigInt!
-            $exposed: Boolean!
-            $service_selector: GenericScalar!
-            $definition: String!
-            $cluster: String!
-            $vrf: String!
-            $owner: String!
-          ) {
-            ServiceFabricAppCreate(
-              context: { account: { id: $infrahub_context_account } }
-              data: {
-                name: { value: $name }
-                description: { value: $description }
-                namespace_name: { value: $namespace_name }
-                chart_repository: { value: $chart_repository }
-                chart_name: { value: $chart_name }
-                chart_version: { value: $chart_version }
-                vip_block_size: { value: $vip_block_size }
-                exposed: { value: $exposed }
-                service_selector: { value: $service_selector }
-                definition: { id: $definition }
-                cluster: { hfid: [$cluster] }
-                vrf: { hfid: [$vrf] }
-                owner: { hfid: [$owner] }
-                member_of_groups: [{ hfid: ["service_fabric_apps"] }]
-              }
-            ) {
-              ok
-              object {
-                id
-              }
-            }
-          }
-        variables:
-          infrahub_context_account: ${{ user.entity.metadata.name }}
-          name: ${{ parameters.app_name }}
-          description: ${{ parameters.description }}
-          namespace_name: ${{ parameters.namespace_name }}
-          # From the entry, never from the form. Mandatory in the schema, so they
-          # are sent here; `generate-fabric-app` pins them again from the same
-          # entry, and `definition_pinned` is what stops it doing so twice.
-          chart_repository: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.chart_repository.value }}
-          chart_name: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.chart_name.value }}
-          chart_version: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.chart_version.value }}
-          vip_block_size: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.default_vip_block_size.value }}
-          exposed: true
-          service_selector: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.default_service_selector.value }}
-          definition: ${{ steps.read_definition.output.data.ServiceApplicationDefinition.edges[0].node.id }}
-          cluster: ${{ parameters.cluster }}
-          vrf: ${{ parameters.vrf }}
-          owner: ${{ parameters.owner }}
-
-    # ------------------------------------------------------------- the barrier
-    - id: await_app
-      name: Wait for the VIP block to be allocated
-      action: infrahub:generators:await
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        node: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
-
-    - id: read_app
-      name: Read the allocated block
-      action: infrahub:graphql:execute
-      input:
-        # The branch matters on a read too: without it this queries main, where
-        # the application does not exist, and the assertion below would fail for
-        # the wrong reason.
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        query: |
-          query ($id: ID!) {
-            ServiceFabricApp(ids: [$id]) {
-              edges {
-                node {
-                  vip_block {
-                    node {
-                      id
-                      prefix {
-                        value
+          # ---------------------------------------------- the entry, read again
+          # THE CONTROL BEHIND THE PICKER. The picker filters in the browser; this
+          # reads the entry from Infrahub with the same two conditions, requestable
+          # AND active.
+          #
+          # A step can only fail on a GraphQL error, never on a value, so the
+          # refusal is made the way `assert_vip` makes its own: when no entry
+          # matches, `edges[0]` is empty, every reference below finds nothing, the
+          # REQUIRED variables of `create_app` are not provided, and Infrahub
+          # rejects the mutation. The run stops there, before an application exists.
+          #
+          # The entry's chart fields, block size and selector are read here and
+          # sent in the create. The advertised services are NOT: a list cannot be
+          # templated out of a relationship read, so `generate-fabric-app` fills
+          # them from the entry on the branch, when the request left them empty.
+          - id: read_definition
+            name: Read the application's catalogue entry
+            action: infrahub:graphql:execute
+            input:
+              query: |
+                query ($id: ID!) {
+                  ServiceApplicationDefinition(ids: [$id], requestable__value: true, status__value: "active") {
+                    edges {
+                      node {
+                        id
+                        chart_repository {
+                          value
+                        }
+                        chart_name {
+                          value
+                        }
+                        chart_version {
+                          value
+                        }
+                        default_vip_block_size {
+                          value
+                        }
+                        default_service_selector {
+                          value
+                        }
                       }
                     }
                   }
                 }
-              }
-            }
-          }
-        variables:
-          id: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
+              variables:
+                id: ${{ steps.fetch_definition.output.entity.metadata.annotations["infrahub.opsmill.com/id"] }}
 
-    - id: assert_vip
-      name: Prove the block exists before granting access to it
-      action: infrahub:graphql:execute
-      # THIS STEP EXISTS BECAUSE THE WAIT CAN SUCCEED HAVING WAITED FOR NOTHING.
-      # `infrahub:generators:await` stamps its quiet period the first time it
-      # sees no active task, and an empty task list is empty at t=0 -- so a run
-      # whose generator has not yet enqueued returns {waited: true, tasks: 0}.
-      #
-      # A scaffolder step can only fail on a GraphQL error, never on a value, so
-      # the assertion is made with a REQUIRED variable: when `vip_block` is null
-      # the expression below resolves to nothing, `$vip` is not provided, and
-      # Infrahub rejects the query. The run stops here, before a grant is
-      # created against an application that has no block for it to permit.
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        query: |
-          query ($vip: ID!) {
-            IpamPrefix(ids: [$vip]) {
-              count
-            }
-          }
-        variables:
-          vip: ${{ steps.read_app.output.data.ServiceFabricApp.edges[0].node.vip_block.node.id }}
-
-    # ------------------------------------------------------------------- grant
-    - id: create_grant
-      name: Create the access grant
-      action: infrahub:graphql:execute
-      # EVERY INPUT THE GENERATOR READS IS HERE. `generate-app-access` fires on
-      # `created`, so a source or a justification set by a later update step
-      # arrives after the run that needed it -- the grant would be stamped
-      # `error` and never retried.
-      #
-      # `application` binds by the id the create returned rather than by name:
-      # exact, and it cannot be confused by a name that resolves to something
-      # else on this branch.
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        query: |
-          mutation (
-            $infrahub_context_account: String!
-            $name: String!
-            $requester: String!
-            $justification: String!
-            $application: String!
-            $source_site: String!
-            $owner: String!
-          ) {
-            ServiceAppAccessCreate(
-              context: { account: { id: $infrahub_context_account } }
-              data: {
-                name: { value: $name }
-                requester: { value: $requester }
-                justification: { value: $justification }
-                application: { id: $application }
-                source_site: { hfid: [$source_site] }
-                owner: { hfid: [$owner] }
-                member_of_groups: [{ hfid: ["service_app_accesses"] }]
-              }
-            ) {
-              ok
-              object {
-                id
-              }
-            }
-          }
-        variables:
-          infrahub_context_account: ${{ user.entity.metadata.name }}
-          name: ${{ parameters.app_name + "-access" }}
-          # Who asked, from the Backstage session rather than typed: anyone
-          # could type anyone.
-          requester: ${{ user.entity.spec.profile.email if user.entity.spec.profile.email else user.ref }}
-          justification: ${{ parameters.justification if parameters.justification else "Requested with the application." }}
-          application: ${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}
-          source_site: ${{ parameters.source_site }}
-          owner: ${{ parameters.owner }}
-
-    - id: await_grant
-      name: Wait for the firewall objects
-      action: infrahub:generators:await
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        node: ${{ steps.create_grant.output.data.ServiceAppAccessCreate.object.id }}
-
-    # --------------------------------------------------------------- the fabric
-    # THE GRANT CHANGES THE FABRIC, AND NOTHING ELSE REGENERATES IT.
-    # `generate-app-access` writes a `permit <vip>/32` into the border leaf's
-    # `avd_custom_hostvars`, so the branch carries fabric intent. But
-    # the event rule `trigger-avd-hostvar-generator-update-custom-hostvars` also
-    # runs `generate-avd-device-hostvar` on a branch, but asynchronously, so
-    # without these steps the proposed change can open showing a changed JSON
-    # blob and no configuration -- a reviewer approving a consequence they
-    # cannot see.
-    #
-    # `infrahub:generators:await` cannot do this: it resolves definitions from
-    # the node's OWN groups, and a service object is not in `avd_devices`.
-    # Pointing it at the fabric instead would be worse than useless -- the
-    # `fabrics` group is also targeted by `generate-pod` and `generate-rack`,
-    # which are destructive against a fabric that already has cabling.
-    - id: lookup_avd
-      name: Find the AVD generators
-      action: infrahub:graphql:execute
-      # Definition ids are generated per instance, so nothing may be hardcoded.
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        query: |
-          query {
-            hostvar: CoreGeneratorDefinition(name__value: "generate-avd-device-hostvar") {
-              edges {
-                node {
-                  id
+          # ---------------------------------------------------------- application
+          - id: create_app
+            name: Create the application
+            action: infrahub:graphql:execute
+            # `exposed` is pinned true rather than asked. An application that is
+            # not exposed never gets a VIP block, and a grant to an application
+            # with no block is exactly the failure this template exists to
+            # prevent. Somebody who wants a cluster-internal application wants the
+            # generated single-kind template, not this one.
+            #
+            # `status` is deliberately absent so the schema's own default
+            # (`provisioning`) applies -- sending any literal hardcodes another
+            # schema's vocabulary into this one.
+            input:
+              query: |
+                mutation (
+                  $infrahub_context_account: String!
+                  $name: String!
+                  $description: String!
+                  $namespace_name: String!
+                  $chart_repository: String!
+                  $chart_name: String!
+                  $chart_version: String!
+                  $vip_block_size: BigInt!
+                  $exposed: Boolean!
+                  $service_selector: GenericScalar!
+                  $definition: String!
+                  $cluster: String!
+                  $vrf: String!
+                  $owner: String!
+                ) {
+                  ServiceFabricAppCreate(
+                    context: { account: { id: $infrahub_context_account } }
+                    data: {
+                      name: { value: $name }
+                      description: { value: $description }
+                      namespace_name: { value: $namespace_name }
+                      chart_repository: { value: $chart_repository }
+                      chart_name: { value: $chart_name }
+                      chart_version: { value: $chart_version }
+                      vip_block_size: { value: $vip_block_size }
+                      exposed: { value: $exposed }
+                      service_selector: { value: $service_selector }
+                      definition: { id: $definition }
+                      cluster: { hfid: [$cluster] }
+                      vrf: { hfid: [$vrf] }
+                      owner: { hfid: [$owner] }
+                      member_of_groups: [{ hfid: ["service_fabric_apps"] }]
+                    }
+                  ) {
+                    ok
+                    object {
+                      id
+                    }
+                  }
                 }
-              }
-            }
-            structured: CoreGeneratorDefinition(name__value: "generate-avd-device-structured-config") {
-              edges {
-                node {
-                  id
+              variables:
+                infrahub_context_account: ${{ user.entity.metadata.name }}
+                name: ${{ parameters.app_name }}
+                description: ${{ parameters.description }}
+                namespace_name: ${{ parameters.namespace_name }}
+                # From the entry, never from the form. Mandatory in the schema, so
+                # they are sent here; `generate-fabric-app` pins them again from
+                # the same entry, and `definition_pinned` is what stops it doing
+                # so twice.
+                chart_repository: { fromStep: read_definition, path: "data.ServiceApplicationDefinition.edges[0].node.chart_repository.value" }
+                chart_name: { fromStep: read_definition, path: "data.ServiceApplicationDefinition.edges[0].node.chart_name.value" }
+                chart_version: { fromStep: read_definition, path: "data.ServiceApplicationDefinition.edges[0].node.chart_version.value" }
+                vip_block_size: { fromStep: read_definition, path: "data.ServiceApplicationDefinition.edges[0].node.default_vip_block_size.value" }
+                exposed: true
+                service_selector: { fromStep: read_definition, path: "data.ServiceApplicationDefinition.edges[0].node.default_service_selector.value" }
+                definition: { fromStep: read_definition, path: "data.ServiceApplicationDefinition.edges[0].node.id" }
+                cluster: ${{ parameters.cluster }}
+                vrf: ${{ parameters.vrf }}
+                owner: ${{ parameters.owner }}
+
+          # ---------------------------------------------------------- the barrier
+          - id: await_app
+            name: Wait for the VIP block to be allocated
+            action: infrahub:generators:await
+            input:
+              node: { fromStep: create_app, path: "data.ServiceFabricAppCreate.object.id" }
+
+          - id: read_app
+            name: Read the allocated block
+            action: infrahub:graphql:execute
+            # The branch matters on a read too: without it this queries main,
+            # where the application does not exist, and the assertion below would
+            # fail for the wrong reason. The sequence's branch supplies it.
+            input:
+              query: |
+                query ($id: ID!) {
+                  ServiceFabricApp(ids: [$id]) {
+                    edges {
+                      node {
+                        vip_block {
+                          node {
+                            id
+                            prefix {
+                              value
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
-              }
-            }
-          }
+              variables:
+                id: { fromStep: create_app, path: "data.ServiceFabricAppCreate.object.id" }
 
-    - id: run_avd_hostvars
-      name: Regenerate the host vars for every switch
-      action: infrahub:graphql:execute
-      # `nodes` OMITTED runs the definition across its whole target group --
-      # all seven switches -- rather than one node. `wait_until_completion`
-      # blocks until those runs finish: measured at 15s for this fabric, well
-      # inside the client's 60s ceiling.
-      #
-      # `$id: String!` is required on purpose: if the lookup found nothing the
-      # variable is absent, Infrahub refuses the query and the run stops here
-      # rather than opening a proposed change over a fabric nobody regenerated.
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        query: |
-          mutation ($id: String!) {
-            CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
-              ok
-            }
-          }
-        variables:
-          id: ${{ steps.lookup_avd.output.data.hostvar.edges[0].node.id }}
+          - id: assert_vip
+            name: Prove the block exists before granting access to it
+            action: infrahub:graphql:execute
+            # THIS STEP EXISTS BECAUSE THE WAIT CAN SUCCEED HAVING WAITED FOR
+            # NOTHING. `infrahub:generators:await` stamps its quiet period the
+            # first time it sees no active task, and an empty task list is empty at
+            # t=0 -- so a run whose generator has not yet enqueued returns
+            # {waited: true, tasks: 0}.
+            #
+            # A step can only fail on a GraphQL error, never on a value, so the
+            # assertion is made with a REQUIRED variable: when `vip_block` is null
+            # the reference below finds nothing, `$vip` is not provided, and
+            # Infrahub rejects the query. The run stops here, before a grant is
+            # created against an application that has no block for it to permit.
+            input:
+              query: |
+                query ($vip: ID!) {
+                  IpamPrefix(ids: [$vip]) {
+                    count
+                  }
+                }
+              variables:
+                vip: { fromStep: read_app, path: "data.ServiceFabricApp.edges[0].node.vip_block.node.id" }
 
-    - id: run_avd_structured_config
-      name: Regenerate the structured configs
-      action: infrahub:graphql:execute
-      # Explicit and blocking, although the hostvar pass also cascades into this
-      # one: the hostvar generator flips `avd_hostvars_ready`, triggers.yml
-      # fires this generator, and THAT run is not covered by the wait above --
-      # measured still running when the hostvar call returned. Running it
-      # explicitly afterwards is what makes "finished" true rather than likely.
-      #
-      # It targets `fabrics` rather than `avd_devices`, and it reads the STORED
-      # hostvar files, which is why it must run after the pass above and not
-      # beside it.
-      input:
-        branch: ${{ "implement_" + parameters.app_name + "_" + parameters.request_reference }}
-        query: |
-          mutation ($id: String!) {
-            CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
-              ok
-            }
-          }
-        variables:
-          id: ${{ steps.lookup_avd.output.data.structured.edges[0].node.id }}
+          # ---------------------------------------------------------------- grant
+          - id: create_grant
+            name: Create the access grant
+            action: infrahub:graphql:execute
+            # EVERY INPUT THE GENERATOR READS IS HERE. `generate-app-access` fires
+            # on `created`, so a source or a justification set by a later update
+            # step arrives after the run that needed it -- the grant would be
+            # stamped `error` and never retried.
+            #
+            # `application` binds by the id the create returned rather than by
+            # name: exact, and it cannot be confused by a name that resolves to
+            # something else on this branch.
+            input:
+              query: |
+                mutation (
+                  $infrahub_context_account: String!
+                  $name: String!
+                  $requester: String!
+                  $justification: String!
+                  $application: String!
+                  $source_site: String!
+                  $owner: String!
+                ) {
+                  ServiceAppAccessCreate(
+                    context: { account: { id: $infrahub_context_account } }
+                    data: {
+                      name: { value: $name }
+                      requester: { value: $requester }
+                      justification: { value: $justification }
+                      application: { id: $application }
+                      source_site: { hfid: [$source_site] }
+                      owner: { hfid: [$owner] }
+                      member_of_groups: [{ hfid: ["service_app_accesses"] }]
+                    }
+                  ) {
+                    ok
+                    object {
+                      id
+                    }
+                  }
+                }
+              variables:
+                infrahub_context_account: ${{ user.entity.metadata.name }}
+                name: ${{ parameters.app_name + "-access" }}
+                # Who asked, from the Backstage session rather than typed: anyone
+                # could type anyone.
+                requester: ${{ user.entity.spec.profile.email if user.entity.spec.profile.email else user.ref }}
+                justification: ${{ parameters.justification if parameters.justification else "Requested with the application." }}
+                application: { fromStep: create_app, path: "data.ServiceFabricAppCreate.object.id" }
+                source_site: ${{ parameters.source_site }}
+                owner: ${{ parameters.owner }}
 
-    # --------------------------------------------------------- proposed change
+          - id: await_grant
+            name: Wait for the firewall objects
+            action: infrahub:generators:await
+            input:
+              node: { fromStep: create_grant, path: "data.ServiceAppAccessCreate.object.id" }
+
+          # ------------------------------------------------------------- the fabric
+          # THE GRANT CHANGES THE FABRIC, AND NOTHING ELSE REGENERATES IT.
+          # `generate-app-access` writes a `permit <vip>/32` into the border
+          # leaf's `avd_custom_hostvars`, so the branch carries fabric intent. But
+          # the event rule `trigger-avd-hostvar-generator-update-custom-hostvars`
+          # also runs `generate-avd-device-hostvar` on a branch, but
+          # asynchronously, so without these steps the proposed change can open
+          # showing a changed JSON blob and no configuration -- a reviewer
+          # approving a consequence they cannot see.
+          #
+          # `infrahub:generators:await` cannot do this: it resolves definitions
+          # from the node's OWN groups, and a service object is not in
+          # `avd_devices`. Pointing it at the fabric instead would be worse than
+          # useless -- the `fabrics` group is also targeted by `generate-pod` and
+          # `generate-rack`, which are destructive against a fabric that already
+          # has cabling.
+          - id: lookup_avd
+            name: Find the AVD generators
+            action: infrahub:graphql:execute
+            # Definition ids are generated per instance, so nothing may be
+            # hardcoded.
+            input:
+              query: |
+                query {
+                  hostvar: CoreGeneratorDefinition(name__value: "generate-avd-device-hostvar") {
+                    edges {
+                      node {
+                        id
+                      }
+                    }
+                  }
+                  structured: CoreGeneratorDefinition(name__value: "generate-avd-device-structured-config") {
+                    edges {
+                      node {
+                        id
+                      }
+                    }
+                  }
+                }
+
+          - id: run_avd_hostvars
+            name: Regenerate the host vars for every switch
+            action: infrahub:graphql:execute
+            # `nodes` OMITTED runs the definition across its whole target group --
+            # all seven switches -- rather than one node. `wait_until_completion`
+            # blocks until those runs finish: measured at 15s for this fabric, well
+            # inside the client's 60s ceiling.
+            #
+            # `$id: String!` is required on purpose: if the lookup found nothing
+            # the variable is absent, Infrahub refuses the query and the run stops
+            # here rather than opening a proposed change over a fabric nobody
+            # regenerated.
+            input:
+              query: |
+                mutation ($id: String!) {
+                  CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
+                    ok
+                  }
+                }
+              variables:
+                id: { fromStep: lookup_avd, path: "data.hostvar.edges[0].node.id" }
+
+          - id: run_avd_structured_config
+            name: Regenerate the structured configs
+            action: infrahub:graphql:execute
+            # Explicit and blocking, although the hostvar pass also cascades into
+            # this one: the hostvar generator flips `avd_hostvars_ready`,
+            # triggers.yml fires this generator, and THAT run is not covered by the
+            # wait above -- measured still running when the hostvar call returned.
+            # Running it explicitly afterwards is what makes "finished" true rather
+            # than likely.
+            #
+            # It targets `fabrics` rather than `avd_devices`, and it reads the
+            # STORED hostvar files, which is why it must run after the pass above
+            # and not beside it.
+            input:
+              query: |
+                mutation ($id: String!) {
+                  CoreGeneratorDefinitionRun(data: { id: $id }, wait_until_completion: true) {
+                    ok
+                  }
+                }
+              variables:
+                id: { fromStep: lookup_avd, path: "data.structured.edges[0].node.id" }
+
+    # ---------------------------------------------------------- proposed change
+    # OPENED ONLY AFTER THE SEQUENCE ABOVE: a failed operation fails `build`, the
+    # scaffolder skips every step after it, and no proposed change exists. The
+    # fabric is regenerated first so the change's own checks render current data.
     - id: proposed_change
       name: Open the proposed change
       action: infrahub:graphql:execute
@@ -593,8 +617,8 @@ spec:
   output:
     links:
       - title: Review the proposed change
-        url: ${{ steps.create_app.output.address }}/proposed-changes/${{ steps.proposed_change.output.data.CoreProposedChangeCreate.object.id }}
+        url: ${{ steps.build.output.address }}/proposed-changes/${{ steps.proposed_change.output.data.CoreProposedChangeCreate.object.id }}
       - title: The application in Infrahub
-        url: ${{ steps.create_app.output.address }}/objects/ServiceFabricApp/${{ steps.create_app.output.data.ServiceFabricAppCreate.object.id }}?branch=${{ ("implement_" + parameters.app_name + "_" + parameters.request_reference) | urlencode }}
+        url: ${{ steps.build.output.address }}/objects/ServiceFabricApp/${{ steps.build.output.results.create_app.data.ServiceFabricAppCreate.object.id }}?branch=${{ ("implement_" + parameters.app_name + "_" + parameters.request_reference) | urlencode }}
       - title: The access grant in Infrahub
-        url: ${{ steps.create_app.output.address }}/objects/ServiceAppAccess/${{ steps.create_grant.output.data.ServiceAppAccessCreate.object.id }}?branch=${{ ("implement_" + parameters.app_name + "_" + parameters.request_reference) | urlencode }}
+        url: ${{ steps.build.output.address }}/objects/ServiceAppAccess/${{ steps.build.output.results.create_grant.data.ServiceAppAccessCreate.object.id }}?branch=${{ ("implement_" + parameters.app_name + "_" + parameters.request_reference) | urlencode }}
