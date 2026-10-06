@@ -80,6 +80,61 @@ password is used only by the script. An existing token that still authenticates 
 `tests/unit/test_mcp_service_contract.py` pins the mode, the absence of a server-side
 credential, and the single `.mcp.json` entry that sends alice's token.
 
+## The network-admin account
+
+A person who signs in through Dex holds `Requester Access`: view, write `Service` kinds on a branch, open a proposed change.
+`admin` is a Super Administrator. A network engineer who changes devices, interfaces, links, addresses or locations on a branch, and
+merges the proposed change, needs something between the two. `scripts/provision_network_admin.py` (run by `uv run invoke network-admin`
+and by the bootstrap, see [bootstrap](./bootstrap.md#the-local-network-admin-account)) creates it.
+
+**Status of the measurements: not yet measured.** The permission list below was derived from the measurements already made for
+`Requester Access` and `mcp-agent` on Infrahub 1.10.6 (above). The account itself has not been signed in to a running Infrahub: the
+live test was not run, because a running stack that did not belong to this change was found (see the pull request). Every row in the
+table in this section that says "expected" is a prediction, not a measurement.
+
+- **Account:** `network-admin`, label `Network Admin`, type `User`, a local password, no Dex. Password in `.env` as
+  `INFRAHUB_NETWORK_ADMIN_PASSWORD`, generated on the first run and never printed. Sign in to the Infrahub UI (`http://localhost:8000`)
+  with the username `network-admin` and that password. No API token is created.
+- **Group:** `Network Admins`. The account is in no other group: not `Super Administrators`, not `Infrahub Users`.
+- **Role:** `Network Admin Access`, attached to `Network Admins` only. `uv run python scripts/provision_network_admin.py --check`
+  fails if any of this changes.
+
+The role holds six permissions:
+
+| Permission | Decision | What it allows |
+| --- | --- | --- |
+| `view` on every namespace and kind | everywhere | read all data |
+| `any` on every namespace and kind | branches other than the default branch | create, edit and delete network data (devices, interfaces, links, IP addresses, locations, pools, security) on a branch |
+| `object:Core:ProposedChange:create` | the default branch | create a proposed change, which Infrahub stores on `main` |
+| `edit_default_branch` (global) | everywhere | admit a proposed change to the default branch at all |
+| `merge_proposed_change` (global) | everywhere | documents who is meant to merge a proposed change |
+| `review_proposed_change` (global) | everywhere | approve or reject a proposed change |
+
+Not granted: `manage_schema`, `manage_repositories`, `manage_accounts`, `manage_permissions`, `super_admin`, `merge_branch`, and any
+object write on `main` outside the proposed-change merge. `tests/unit/test_network_admin_contract.py` pins the list and the absence.
+
+### What is expected, and what is known
+
+| Action as `network-admin` | Expected | Source |
+| --- | --- | --- |
+| Sign in with username and password | Allowed | not measured |
+| Create a branch | Allowed | measured for a user with only `Requester Access` |
+| Edit a non-service kind on a branch | Allowed | follows from `any` with decision 4; `mcp-agent` has the same grant; not measured for this account |
+| Open a proposed change | Allowed | measured with the same two permissions in `Requester Access` |
+| Merge a proposed change | Allowed | measured for accounts that did not hold `merge_proposed_change`; not measured for this account |
+| Write a node on `main` directly | Refused | measured for `alice` and `mcp-agent` with decision 4 |
+| Load a schema, change a repository | Refused | read from the role definition; not measured |
+| Create or change accounts, groups, roles or permissions | **Not known** | see below |
+
+- **`merge_proposed_change` does not stop anyone else from merging.** On Infrahub 1.10.6 `CoreProposedChangeMerge` does not check it (measured
+  above: `alice` merged without it). The permission documents who is meant to merge. An account that can open a proposed change can also merge it.
+- **Infrahub does not prevent `network-admin` from approving and merging a proposed change it opened itself.** No rule that separates the author from
+  the approver was found, and none was tested. A second person reviewing the change is a convention.
+- **Accounts, groups, roles and permissions on a branch are not known.** `any` with decision 4 covers every kind, including `CoreAccount`,
+  `CoreAccountGroup`, `CoreAccountRole` and the permission kinds. Whether Infrahub stores those kinds per branch or for all branches
+  at once, and so whether a write on a branch takes effect without a merge, was not measured. If it does, the role is wider than intended and the
+  `any` grant must name namespaces instead of `*`. This must be measured before the pull request is merged.
+
 ## Connecting Claude Code to the server
 
 `.mcp.json` registers `infrahub-lab` over HTTP and sends alice's token

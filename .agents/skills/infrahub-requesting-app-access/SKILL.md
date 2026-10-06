@@ -193,7 +193,9 @@ is missing, report it. Do not call the request ready.
 
 Give the requester the proposed change link and say what it contains. `mcp-agent` cannot write to
 `main`, and the agent must not merge its own proposed change. A human reviews and merges. Merging is
-the approval.
+the approval. The human who merges signs in to the Infrahub UI as the local account `network-admin`
+(its password is in `.env` as `INFRAHUB_NETWORK_ADMIN_PASSWORD`; never read, print or use it as the agent).
+That account holds `merge_proposed_change` and `review_proposed_change`; no agent identity does.
 
 ### 8. Verify reachability after the merge
 

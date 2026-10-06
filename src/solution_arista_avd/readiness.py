@@ -4,7 +4,7 @@
 answers a different question: after `invoke bootstrap`, does everything a demonstration
 relies on exist and work? Each check names one thing a presenter would otherwise find
 out on stage: the application catalogue, the event rules, the MCP server and the two
-identities it serves, the Requester Access role, the repository mode, the portal's
+identities it serves, the Requester Access role, the network-admin account, the repository mode, the portal's
 picker.
 
 Structure follows `doctor.py`:
@@ -44,6 +44,9 @@ MCP_TOKEN_USERS = ("alice",)
 MCP_SERVER_URL = "http://127.0.0.1:8001/mcp"
 MCP_HEALTH_URL = "http://127.0.0.1:8001/health"
 MCP_AGENT = "mcp-agent"
+# The local account for the network team: not Dex, not a Super Administrator.
+NETWORK_ADMIN = "network-admin"
+NETWORK_ADMIN_PASSWORD_VAR = "INFRAHUB_NETWORK_ADMIN_PASSWORD"  # noqa: S105 -- the variable's name, not a password
 # The one server in .mcp.json. Claude Code acts as alice and as no other identity.
 MCP_SERVER_NAME = "infrahub-lab"
 DEFAULT_BRANCH_DEMO = "demo-main"
@@ -561,6 +564,19 @@ def probe_requester_role(env: Environment) -> Result:
     )
 
 
+def probe_network_admin(env: Environment) -> Result:
+    # The script's `--check` covers: the account exists, it is in `Network Admins` only and not in
+    # `Super Administrators` or `Infrahub Users`, the role holds exactly the defined permissions, and the
+    # password in `.env` signs in.
+    return _script_check(
+        env,
+        "network-admin signs in and holds only Network Admin Access",
+        "provision_network_admin.py",
+        [],
+        "uv run invoke network-admin",
+    )
+
+
 def probe_portal_accounts(env: Environment) -> Result:
     return _script_check(
         env, "every portal user has an Infrahub account", "provision_portal_accounts.py", [], "uv run invoke tooling"
@@ -795,6 +811,7 @@ CHECKS: tuple[tuple[str, Callable[[Environment], Result]], ...] = (
     ("mcp-agent role", probe_agent_role),
     ("mcp-agent token", probe_agent_identity),
     ("Requester Access role", probe_requester_role),
+    ("network-admin account", probe_network_admin),
     ("portal accounts", probe_portal_accounts),
     *((f"{u} MCP token", lambda env, u=u: probe_user_identity(env, u)) for u in MCP_TOKEN_USERS),
     ("alice proposed change", probe_alice_proposed_change),
@@ -859,6 +876,9 @@ def human_steps(root: Path) -> list[str]:
         f"Start Claude Code from a shell that has loaded {env_file}: `cd {envfile.main_checkout(root)} && set -a; source .env; set +a; claude`.",
         f"That file holds {', '.join(variables)}; .mcp.json sends it as the Bearer header, so Claude Code acts as alice. Do not print or commit it.",
         "Approve the infrahub-lab server the first time Claude Code asks.",
+        f"To edit network data and merge a proposed change, sign in to the Infrahub UI as `{NETWORK_ADMIN}` "
+        f"with the password in {env_file} (variable {NETWORK_ADMIN_PASSWORD_VAR}; do not print or commit it). "
+        "This is a local account, not a Dex sign-in, and it is not a Super Administrator.",
     ]
 
 

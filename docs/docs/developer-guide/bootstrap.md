@@ -104,6 +104,16 @@ every request, ingested no catalogue entry, and its picker was empty. The readin
 print the names without the values, and read `.env` instead. `invoke ready` warns when the shell it runs in holds such
 a variable, because a Claude Code started from that shell would send the old token: open a new shell after a bootstrap.
 
+### The local `network-admin` account
+
+`network-admin` runs after `mcp-tokens`, and `uv run invoke network-admin` runs it alone. It needs only the loaded stack,
+because it is a local Infrahub account: it does not use Dex, the MCP server or a token. It creates the account
+`network-admin` (label `Network Admin`, type `User`), the group `Network Admins` and the role `Network Admin Access`, and puts the
+generated password into the main checkout's `.env` as `INFRAHUB_NETWORK_ADMIN_PASSWORD`. Nothing prints the password. A password that
+still signs in is kept, so a re-run changes nothing, and after `--fresh` the same password is used to create the account again.
+No API token is minted for it: a person signs in to the UI with the username and the password. What it can and cannot do is in
+[the network-admin account](./mcp-server.md#the-network-admin-account).
+
 ### What a finished bootstrap checks
 
 The last step is `invoke ready`, which runs by itself at the end of bootstrap and can be run at any time.
@@ -119,6 +129,7 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | MCP server | The container runs and `/health` reports `token-passthrough` |
 | `mcp-agent` | The account and its role exist; a tool call with `INFRAHUB_MCP_TOKEN` (used by the demo rehearsal, not by Claude Code) returns `AccountProfile` `mcp-agent` |
 | Requester Access | `Infrahub Users` holds only `Requester Access` (view, write service objects on a branch, open a proposed change); the two built-in roles are detached |
+| `network-admin` | The account exists, is only in `Network Admins` (not `Super Administrators`, not `Infrahub Users`), the role holds exactly the six permissions defined, the role is attached to no other group, and the password in `.env` signs in |
 | alice cannot write to main | A scratch tag created on `main` with her token is refused |
 | Portal accounts | Every Dex user has an Infrahub account |
 | alice | A tool call with `INFRAHUB_MCP_TOKEN_ALICE` returns `alice`, and she opens a proposed change on a throw-away branch that the check deletes |

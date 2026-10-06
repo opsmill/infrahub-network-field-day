@@ -131,7 +131,7 @@ sourced `.env` and ask it to give the branch office access to Grafana (`otternet
 | The agent creates the grant on `mcp/session-*` and opens the proposed change | `propose_changes` returns in under a second | none |
 | Border leaf diff | present about 40 s after `propose_changes` (36 to 42 s in four runs) | 40 s: the grant's generator, then the AVD generators, run on the branch |
 | The agent re-runs the checks (`check_type: ALL`) | The proposed change reaches **24** validators, all green, about 56 s after the re-run. At the first 9 validators it must not be merged: see [the MCP server](./developer-guide/mcp-server.md#requesting-application-access-through-the-mcp-server) | 56 s: say why a change that opened early is judged again |
-| A person merges, never the agent | merge 15 to 20 s | none |
+| A person merges, never the agent: sign in to the Infrahub UI as `network-admin` (password in `.env` as `INFRAHUB_NETWORK_ADMIN_PASSWORD`) | merge 15 to 20 s | none |
 | Grafana | answers the branch desktop 57 to 86 s after the merge (`http://10.112.240.81/` redirects to the Dex sign-in); the reconciler confirms both devices about 134 s after the merge | about 134 s: Deployment state dashboard |
 
 **Act three: the builder branch** ([act six](#act-six-the-builder-branch)):
@@ -170,7 +170,7 @@ uv run invoke ready
 ```
 
 `invoke bootstrap` ends with the same checks. They cover the application catalogue, the event rules, the
-menus, the MCP server and the tokens of `mcp-agent` and `alice`, the Requester Access role, the read-write
+menus, the MCP server and the tokens of `mcp-agent` and `alice`, the Requester Access role, the `network-admin` account, the read-write
 repository with `demo-main` equal to `main`, the portal's picker and `.mcp.json`; the
 [bootstrap page](./developer-guide/bootstrap.md#what-a-finished-bootstrap-checks) lists each one. It exits 1 on a
 failure and prints what is left for you to do. A `WARN` about a leftover `mcp/session-*` branch or an old

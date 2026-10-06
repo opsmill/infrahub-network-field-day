@@ -102,8 +102,8 @@ def upsert_env(path: Path, name: str, value: str, comment: str) -> None:
 
 
 # The credentials this project generates into `.env`: the account passwords and the API tokens of
-# the MCP agent and its users, the portal, and the exporter.
-GENERATED_CREDENTIAL = re.compile(r"^INFRAHUB_(MCP|PORTAL|EXPORTER)_(TOKEN|PASSWORD)(_[A-Z0-9_]+)?$")
+# the MCP agent and its users, the portal, the exporter, and the network-admin account.
+GENERATED_CREDENTIAL = re.compile(r"^INFRAHUB_(MCP|PORTAL|EXPORTER|NETWORK_ADMIN)_(TOKEN|PASSWORD)(_[A-Z0-9_]+)?$")
 
 
 def stale_credentials(environ: Mapping[str, str], path: Path) -> list[str]:
