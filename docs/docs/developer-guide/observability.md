@@ -383,8 +383,13 @@ Written to `.env` by the provisioning steps; none is committed.
 | --- | --- | --- |
 | `INFRAHUB_EXPORTER_PASSWORD`, `INFRAHUB_EXPORTER_TOKEN` | `provision_metrics_exporter.py` | `infrahub-exporter`, `service-lifecycle-exporter` |
 | `OTTERNET_LIFECYCLE_POLL` | you, optionally | `service-lifecycle-exporter`, seconds between polls (15) |
-| `GRAFANA_ADMIN_PASSWORD` | `invoke cluster` | Secret `grafana-admin`, for operators only |
+| `GRAFANA_ADMIN_PASSWORD` | `invoke cluster`, `invoke observability-secrets` | Secret `grafana-admin`, for operators only |
 | `OTTERNET_EOS_USERNAME`, `OTTERNET_EOS_PASSWORD` | you, optionally | Secret `telemetry-credentials` (gNMI), defaulting to the reconciler's |
+
+The Secrets `grafana-admin` and `grafana-oidc` (`otternet-metrics`) and `telemetry-credentials` (`otternet-telemetry`) are created
+by `invoke cluster` after Vidra has delivered the namespaces, and by `uv run invoke observability-secrets` on their own.
+Without them a pod stays in `CreateContainerConfigError`. `invoke ready` checks the namespaces, the Secret names and key names (never values) and the
+Grafana pod; see [the observability Secrets](./bootstrap.md#the-observability-secrets-and-why-a-missing-namespace-stops-the-bootstrap).
 
 ## Design decisions and measured pitfalls
 

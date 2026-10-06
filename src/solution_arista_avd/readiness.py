@@ -25,6 +25,7 @@ import re
 import subprocess  # noqa: S404 - fixed-argv calls, never a shell string
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -35,7 +36,6 @@ from solution_arista_avd.doctor import Environment, Result, Status, Unavailable,
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
 # Accounts that get an MCP API token of their own, so a client can act as that person.
 # Dex also has `bob`, who exists to be a user with no access; nothing registers him with
@@ -49,6 +49,22 @@ NETWORK_ADMIN = "network-admin"
 NETWORK_ADMIN_PASSWORD_VAR = "INFRAHUB_NETWORK_ADMIN_PASSWORD"  # noqa: S105 -- the variable's name, not a password
 # The one server in .mcp.json. Claude Code acts as alice and as no other identity.
 MCP_SERVER_NAME = "infrahub-lab"
+# The observability namespaces Vidra's delivery creates, and the Secrets that `invoke cluster` puts in them.
+# Only key names are ever read from the cluster; a Secret's values are never fetched or printed.
+OBSERVABILITY_NAMESPACES = ("otternet-metrics", "otternet-telemetry")
+OBSERVABILITY_SECRETS: dict[str, dict[str, tuple[str, ...]]] = {
+    "otternet-metrics": {
+        "grafana-admin": ("admin-user", "admin-password"),
+        "grafana-oidc": ("client-secret",),
+    },
+    "otternet-telemetry": {"telemetry-credentials": ("GNMI_USERNAME", "GNMI_PASSWORD")},
+}
+SECRETS_FIX = "uv run invoke observability-secrets"
+# How long `invoke cluster` waits for each namespace. Measured namespaces appear within minutes of the
+# delivery starting; the wait is twice the 300 s that `_wait_for_syncs` allows for the claims.
+NAMESPACE_WAIT_SECONDS = 600
+GRAFANA_SELECTOR = "app.kubernetes.io/name=grafana"
+STUCK_CONTAINER_REASONS = ("CreateContainerConfigError",)
 DEFAULT_BRANCH_DEMO = "demo-main"
 EXPECTED_TASK_WORKERS = 2
 # A merge takes about 20 to 100 seconds. A proposed change still in `merging` after this many minutes belongs to a
@@ -393,6 +409,70 @@ def decide_alice_main_write(written: bool, detail: str) -> Result:
 
 
 # --------------------------------------------------------------------------- probes
+
+
+def namespace_wait_error(missing: list[str], waited: int) -> str:
+    """The message that stops `invoke cluster` when an observability namespace never appeared."""
+    names = ", ".join(missing)
+    return (
+        f"The namespace(s) {names} did not appear after waiting {waited} s each, so their Secrets were not created "
+        "and Grafana or Telegraf cannot start (their pods stay in CreateContainerConfigError).\n"
+        "Vidra creates these namespaces by delivering the FabricApp claims from Infrahub. What to check:\n"
+        "  kubectl get vidraresource -A\n"
+        "  kubectl get fabricapp\n"
+        "  kubectl -n vidra-system logs deploy/vidra-vidra-operator-controller-manager --tail=100\n"
+        "Why delivery is delayed is not known: one bootstrap created otternet-metrics 4.5 hours late, with no cause found.\n"
+        f"Once the namespace exists, run: {SECRETS_FIX}"
+    )
+
+
+def decide_observability_namespaces(found: set[str]) -> Result:
+    missing = [n for n in OBSERVABILITY_NAMESPACES if n not in found]
+    name = "observability namespaces"
+    if missing:
+        return Result(
+            name,
+            Status.FAIL,
+            f"missing: {', '.join(missing)} (Vidra has not delivered them; check `kubectl get vidraresource -A`)",
+            f"once they exist: {SECRETS_FIX}",
+        )
+    return Result(name, Status.PASS, ", ".join(OBSERVABILITY_NAMESPACES))
+
+
+def decide_observability_secrets(found: dict[str, dict[str, set[str]]]) -> Result:
+    """`found` maps namespace to Secret name to the key names it holds. Values are never passed in."""
+    name = "observability Secrets"
+    problems = []
+    for namespace, secrets in OBSERVABILITY_SECRETS.items():
+        for secret, keys in secrets.items():
+            held = found.get(namespace, {}).get(secret)
+            if held is None:
+                problems.append(f"{namespace}/{secret} does not exist")
+                continue
+            absent = [k for k in keys if k not in held]
+            if absent:
+                problems.append(f"{namespace}/{secret} lacks key(s) {', '.join(absent)}")
+    if problems:
+        return Result(name, Status.FAIL, "; ".join(problems), SECRETS_FIX)
+    count = sum(len(v) for v in OBSERVABILITY_SECRETS.values())
+    return Result(name, Status.PASS, f"{count} Secrets exist with their keys (values not read)")
+
+
+def decide_grafana_pod(pods: list[tuple[str, str, list[str]]]) -> Result:
+    """`pods` is (name, phase, waiting reasons of its containers and init containers)."""
+    name = "Grafana pod"
+    if not pods:
+        return Result(name, Status.WARN, "no Grafana pod in otternet-metrics yet (still being delivered?)", SECRETS_FIX)
+    stuck = [(pod, reasons) for pod, _phase, reasons in pods if any(r in STUCK_CONTAINER_REASONS for r in reasons)]
+    if stuck:
+        pod, reasons = stuck[0]
+        return Result(
+            name,
+            Status.FAIL,
+            f"{pod} is stuck in {', '.join(sorted(set(reasons) & set(STUCK_CONTAINER_REASONS)))}: a Secret it references is missing",
+            SECRETS_FIX,
+        )
+    return Result(name, Status.PASS, ", ".join(f"{pod} {phase}" for pod, phase, _ in pods))
 
 
 def _api_token() -> str:
@@ -802,6 +882,66 @@ def probe_mcp_config(env: Environment) -> Result:
     return decide_mcp_config(config, set(_env_values(env.root)), MCP_TOKEN_USERS)
 
 
+def _kubeconfig(root: Path) -> Path:
+    """The lab's kubeconfig: KUBECONFIG if set, else the one under the lab directory in the main checkout."""
+    given = os.environ.get("KUBECONFIG")
+    if given:
+        return Path(given)
+    lab = os.environ.get("OTTERNET_LAB_DIR")
+    base = Path(lab) if lab else envfile.main_checkout(root) / "lab"
+    return base / "k8s/.kubeconfig/kubeconfig.yaml"
+
+
+def _kubectl(env: Environment, *args: str) -> str:
+    """Run a read-only kubectl against the lab; a missing kubeconfig or an unreachable cluster is Unavailable."""
+    kubeconfig = _kubeconfig(env.root)
+    if not kubeconfig.is_file():
+        msg = f"no kubeconfig at {kubeconfig} (the cluster is not up, or set KUBECONFIG)"
+        raise Unavailable(msg)
+    proc = _run(["kubectl", "--kubeconfig", str(kubeconfig), "--request-timeout=20s", *args], timeout=60)
+    if proc.returncode != 0:
+        msg = f"kubectl could not read the cluster: {proc.stderr.strip()[:200]}"
+        raise Unavailable(msg)
+    return proc.stdout
+
+
+def probe_observability_namespaces(env: Environment) -> Result:
+    out = _kubectl(env, "get", "namespace", "-o", 'go-template={{range .items}}{{.metadata.name}}{{"\\n"}}{{end}}')
+    return decide_observability_namespaces(set(out.split()))
+
+
+def probe_observability_secrets(env: Environment) -> Result:
+    """Secret names and key names only: the template prints keys, so no value leaves kubectl."""
+    template = 'go-template={{range .items}}{{.metadata.name}}={{range $k, $v := .data}}{{$k}},{{end}}{{"\\n"}}{{end}}'
+    found: dict[str, dict[str, set[str]]] = {}
+    for namespace in OBSERVABILITY_SECRETS:
+        out = _kubectl(env, "-n", namespace, "get", "secret", "-o", template)
+        rows: dict[str, set[str]] = {}
+        for line in out.splitlines():
+            secret, _, keys = line.partition("=")
+            if secret:
+                rows[secret] = {k for k in keys.split(",") if k}
+        found[namespace] = rows
+    return decide_observability_secrets(found)
+
+
+def probe_grafana_pod(env: Environment) -> Result:
+    template = (
+        "go-template={{range .items}}{{.metadata.name}} {{.status.phase}} "
+        "{{range .status.containerStatuses}}{{if .state.waiting}}{{.state.waiting.reason}},{{end}}{{end}}"
+        "{{range .status.initContainerStatuses}}{{if .state.waiting}}{{.state.waiting.reason}},{{end}}{{end}}"
+        '{{"\\n"}}{{end}}'
+    )
+    out = _kubectl(env, "-n", "otternet-metrics", "get", "pod", "-l", GRAFANA_SELECTOR, "-o", template)
+    pods = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            reasons = [x for x in (parts[2].split(",") if len(parts) > 2 else []) if x]
+            pods.append((parts[0], parts[1], reasons))
+    return decide_grafana_pod(pods)
+
+
 CHECKS: tuple[tuple[str, Callable[[Environment], Result]], ...] = (
     ("application catalogue", probe_catalogue),
     ("triggers.yml objects", probe_triggers),
@@ -821,6 +961,9 @@ CHECKS: tuple[tuple[str, Callable[[Environment], Result]], ...] = (
     ("stuck merges", probe_stuck_merges),
     ("stage branch", probe_stage_branch),
     ("portal picker", probe_picker),
+    ("observability namespaces", probe_observability_namespaces),
+    ("observability Secrets", probe_observability_secrets),
+    ("Grafana pod", probe_grafana_pod),
     (".mcp.json", probe_mcp_config),
     ("shell environment", probe_shell_environment),
     ("claude mcp list", probe_claude_mcp_list),

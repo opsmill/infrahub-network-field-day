@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -428,3 +429,144 @@ def test_bootstrap_builds_the_project_image_before_the_stack_starts() -> None:
 def test_demo_release_refuses_without_the_api_token_before_it_touches_anything() -> None:
     body = _body("demo_release")
     assert _first(body, 'os.environ.get("INFRAHUB_API_TOKEN")') < _first(body, "dr.stage_branch(")
+
+
+# --------------------------------------------------------------------------- observability namespaces and Secrets
+
+_ALL_SECRETS = {
+    "otternet-metrics": {"grafana-admin": {"admin-user", "admin-password"}, "grafana-oidc": {"client-secret"}},
+    "otternet-telemetry": {"telemetry-credentials": {"GNMI_USERNAME", "GNMI_PASSWORD"}},
+}
+
+
+def test_the_namespace_check_passes_with_both_and_fails_naming_each_missing_one() -> None:
+    assert r.decide_observability_namespaces({"otternet-metrics", "otternet-telemetry", "x"}).status is Status.PASS
+    failed = r.decide_observability_namespaces({"otternet-telemetry"})
+    assert failed.status is Status.FAIL
+    assert "otternet-metrics" in failed.detail
+    assert "otternet-telemetry" not in failed.detail
+    assert "uv run invoke observability-secrets" in failed.fix
+
+
+def test_the_secrets_check_passes_with_every_secret_and_key() -> None:
+    assert r.decide_observability_secrets(_ALL_SECRETS).status is Status.PASS
+
+
+def test_the_secrets_check_fails_for_a_missing_secret_a_missing_key_and_a_missing_namespace() -> None:
+    no_admin = {**_ALL_SECRETS, "otternet-metrics": {"grafana-oidc": {"client-secret"}}}
+    failed = r.decide_observability_secrets(no_admin)
+    assert failed.status is Status.FAIL
+    assert "otternet-metrics/grafana-admin does not exist" in failed.detail
+    assert failed.fix == "uv run invoke observability-secrets"
+
+    no_key = {**_ALL_SECRETS, "otternet-telemetry": {"telemetry-credentials": {"GNMI_USERNAME"}}}
+    assert "lacks key(s) GNMI_PASSWORD" in r.decide_observability_secrets(no_key).detail
+
+    nothing = r.decide_observability_secrets({})
+    assert nothing.status is Status.FAIL
+    assert nothing.detail.count("does not exist") == 3
+
+
+def test_the_grafana_pod_check_fails_on_create_container_config_error_and_names_the_fix() -> None:
+    stuck = r.decide_grafana_pod([("grafana-abc", "Pending", ["CreateContainerConfigError"])])
+    assert stuck.status is Status.FAIL
+    assert "grafana-abc" in stuck.detail
+    assert "CreateContainerConfigError" in stuck.detail
+    assert stuck.fix == "uv run invoke observability-secrets"
+    assert r.decide_grafana_pod([("grafana-abc", "Running", [])]).status is Status.PASS
+    assert r.decide_grafana_pod([("grafana-abc", "Pending", ["ContainerCreating"])]).status is Status.PASS
+    assert r.decide_grafana_pod([]).status is Status.WARN
+
+
+def test_the_new_checks_are_registered_and_a_missing_kubeconfig_skips_them(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    names = [name for name, _ in r.CHECKS]
+    for name in ("observability namespaces", "observability Secrets", "Grafana pod"):
+        assert name in names
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "absent.yaml"))
+    results = r.run_checks(
+        tmp_path, tuple((n, p) for n, p in r.CHECKS if n in ("observability namespaces", "Grafana pod"))
+    )
+    assert [x.status for x in results] == [Status.SKIP, Status.SKIP]
+    assert "no kubeconfig" in results[0].detail
+
+
+def test_no_probe_reads_a_secret_value() -> None:
+    source = (REPO / "src/solution_arista_avd/readiness.py").read_text(encoding="utf-8")
+    probe = source.split("def probe_observability_secrets", 1)[1].split("def probe_grafana_pod", 1)[0]
+    assert "{{$v}}" not in probe
+    assert "-o json" not in probe
+    assert "base64" not in probe
+
+
+def test_the_namespace_error_names_the_namespace_the_wait_the_checks_and_the_fix() -> None:
+    message = r.namespace_wait_error(["otternet-metrics"], 600)
+    assert "otternet-metrics" in message
+    assert "600 s" in message
+    for text in ("kubectl get vidraresource", "kubectl get fabricapp", "logs", "uv run invoke observability-secrets"):
+        assert text in message
+    assert "not known" in message
+
+
+@dataclass
+class _FakeResult:
+    ok: bool
+
+
+class _FakeCtx:
+    """Stands in for invoke's Context: records commands and answers `get ns` from a set of namespaces."""
+
+    def __init__(self, namespaces: set[str]) -> None:
+        self.namespaces = namespaces
+        self.commands: list[str] = []
+
+    def run(self, command: str, **_: object) -> _FakeResult:
+        self.commands.append(command)
+        if " get ns " in command:
+            return _FakeResult(command.split(" get ns ")[1].split(maxsplit=1)[0] in self.namespaces)
+        return _FakeResult(True)
+
+
+def _load_tasks():  # noqa: ANN202
+    import sys
+
+    sys.path.insert(0, str(REPO))
+    try:
+        return _module("tasks.py")
+    finally:
+        sys.path.remove(str(REPO))
+
+
+def test_the_secrets_step_exits_1_naming_the_namespace_when_one_never_appears(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    import pytest
+    from invoke import Exit
+
+    tasks = _load_tasks()
+    monkeypatch.setattr(tasks, "_ensure_env_value", lambda *_: "not-a-real-password")
+    monkeypatch.setattr(tasks, "sleep", lambda _: None)
+    ctx = _FakeCtx({"otternet-telemetry"})
+    with pytest.raises(Exit) as raised:
+        tasks._observability_secrets(ctx, tmp_path / "kubeconfig", 1)
+    assert raised.value.code == 1
+    assert "otternet-metrics" in str(raised.value.message)
+    assert "uv run invoke observability-secrets" in str(raised.value.message)
+    applied = [c for c in ctx.commands if " apply -f " in c]
+    assert len(applied) == 1  # telemetry-credentials was still applied; the metrics Secrets were not
+    assert "not-a-real-password" not in " ".join(ctx.commands)
+
+
+def test_the_secrets_step_applies_all_three_and_returns_when_both_namespaces_exist(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    tasks = _load_tasks()
+    monkeypatch.setattr(tasks, "_ensure_env_value", lambda *_: "not-a-real-password")
+    ctx = _FakeCtx({"otternet-metrics", "otternet-telemetry"})
+    tasks._observability_secrets(ctx, tmp_path / "kubeconfig", 1)
+    assert len([c for c in ctx.commands if " apply -f " in c]) == 3
+    assert "not-a-real-password" not in " ".join(ctx.commands)
+
+
+def test_the_cluster_task_runs_the_secrets_step_before_waiting_and_the_standalone_task_runs_it_alone() -> None:
+    cluster = _body("cluster")
+    assert _first(cluster, "_observability_secrets(") < _first(cluster, "_wait_for_observability(")
+    alone = _body("observability_secrets")
+    assert "_observability_secrets(" in alone
+    for other in ("install-cilium", "install_vidra", "install-crossplane"):
+        assert other not in alone

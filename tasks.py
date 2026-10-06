@@ -2675,7 +2675,7 @@ def _ensure_env_value(name: str, comment: str) -> str:
     return value
 
 
-def _wait_for_namespace(ctx: Context, kubeconfig: Path, namespace: str, timeout: int = 300) -> bool:
+def _wait_for_namespace(ctx: Context, kubeconfig: Path, namespace: str, timeout: int = 600) -> bool:
     kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -2712,16 +2712,26 @@ def _apply_secret(ctx: Context, kubeconfig: Path, namespace: str, name: str, dat
         )
 
 
-def _observability_secrets(ctx: Context, kubeconfig: Path) -> None:
+def _observability_secrets(ctx: Context, kubeconfig: Path, wait: int | None = None) -> None:
     """The three Secrets the observability applications reference by name.
 
     None of these values is in the graph or in an artifact: the rendered values
     name the Secrets and nothing more. They can only be created once Vidra's
     delivery has made the namespaces, and until then the pods wait in
     `CreateContainerConfigError` -- which heals by itself the moment this runs.
+
+    **A namespace that never appears stops this with exit 1**, after the
+    Secrets for any namespace that did appear have been applied. It used to print
+    a warning and carry on, and a bootstrap then ended with Grafana stuck for
+    hours and `invoke ready` saying nothing. `uv run invoke observability-secrets`
+    runs this step alone once the namespace exists.
     """
+    from solution_arista_avd import readiness
+
+    waited = readiness.NAMESPACE_WAIT_SECONDS if wait is None else wait
     print("\n - Creating the observability Secrets (credentials never pass through Infrahub)")
-    if _wait_for_namespace(ctx, kubeconfig, "otternet-metrics"):
+    missing: list[str] = []
+    if _wait_for_namespace(ctx, kubeconfig, "otternet-metrics", waited):
         _apply_secret(ctx, kubeconfig, "otternet-metrics", "grafana-oidc", {"client-secret": GRAFANA_DEX_CLIENT_SECRET})
         admin_password = _ensure_env_value(
             "GRAFANA_ADMIN_PASSWORD", "Grafana's break-glass admin, for operators only (people sign in through Dex)."
@@ -2735,9 +2745,9 @@ def _observability_secrets(ctx: Context, kubeconfig: Path) -> None:
         )
         print("   otternet-metrics: grafana-oidc, grafana-admin")
     else:
-        print("   WARNING: namespace otternet-metrics never appeared; Grafana will wait for its Secrets")
+        missing.append("otternet-metrics")
 
-    if _wait_for_namespace(ctx, kubeconfig, "otternet-telemetry"):
+    if _wait_for_namespace(ctx, kubeconfig, "otternet-telemetry", waited):
         # The same local account the reconciler pushes EOS configuration as --
         # and the SR Linux routers' login too, rendered from the same hash.
         _apply_secret(
@@ -2752,7 +2762,33 @@ def _observability_secrets(ctx: Context, kubeconfig: Path) -> None:
         )
         print("   otternet-telemetry: telemetry-credentials")
     else:
-        print("   WARNING: namespace otternet-telemetry never appeared; Telegraf will wait for its Secret")
+        missing.append("otternet-telemetry")
+
+    if missing:
+        raise Exit(message="\nERROR: " + readiness.namespace_wait_error(missing, waited), code=1)
+
+
+@task(
+    help={
+        "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
+        "wait": "Seconds to wait for each namespace to exist. Defaults to 600.",
+    }
+)
+def observability_secrets(ctx: Context, lab_dir: str = "", wait: int = 600) -> None:
+    """
+    Create the Secrets Grafana and Telegraf need, on the current cluster, and nothing else.
+
+    Runs only the secrets step of `invoke cluster`: `grafana-admin` and `grafana-oidc`
+    in `otternet-metrics`, and `telemetry-credentials` in `otternet-telemetry`. It does not
+    touch Cilium, Vidra or Crossplane. Use it when a Grafana pod sits in
+    `CreateContainerConfigError`, which means the Secrets did not exist, or after
+    `invoke cluster` stopped because a namespace had not appeared.
+
+    Idempotent: each Secret is applied, so a second run changes nothing. The Grafana admin
+    password is read from `.env` (`GRAFANA_ADMIN_PASSWORD`) or generated once and kept there.
+    No value is printed. Exits 1 if a namespace is still absent after `--wait` seconds.
+    """
+    _observability_secrets(ctx, _lab_kubeconfig(lab_dir), wait)
 
 
 def _wait_for_observability(ctx: Context, kubeconfig: Path, timeout: int = 900) -> None:
@@ -3168,7 +3204,7 @@ def ready(ctx: Context) -> None:  # noqa: ARG001
 
     The catalogue, the event rules, the menus, the MCP server and the tokens of `mcp-agent` and
     `alice`, the Requester Access role, the read-write repository and `demo-main`, the portal's
-    picker, and `.mcp.json`. It ends with what a person still has to do. Read-only.
+    picker, the observability namespaces, Secrets and Grafana pod, and `.mcp.json`. It ends with what a person still has to do. Read-only.
     """
     from solution_arista_avd import readiness
 

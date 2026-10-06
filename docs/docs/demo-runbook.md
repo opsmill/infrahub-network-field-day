@@ -106,7 +106,7 @@ The rest of this page explains each step.
 
 **Before the audience arrives** (about ten minutes; it changes nothing):
 
-1. `uv run invoke ready` must end `19 PASS, 0 WARN, 0 FAIL, 0 SKIP`. A `WARN` about the staged branch means:
+1. `uv run invoke ready` must end `24 PASS, 0 WARN, 0 FAIL, 0 SKIP`. A `WARN` about the staged branch means:
    `uv run invoke demo-stage --force`.
 2. `uv run infrahubctl branch list` shows `main` and nothing else.
 3. Open the screens in [Screens to have open](#screens-to-have-open).
@@ -157,6 +157,7 @@ sourced `.env` and ask it to give the branch office access to Grafana (`otternet
 | `demo-release` waits a long time at `waiting for every task worker to pull the commit` | A worker pulls a pushed branch 75 to 464 s after the push; restarting a worker made it 400 s once | Wait. Do not merge before `Ready` |
 | A request fails half way in the portal | `BranchCreate` is not idempotent | Use another request reference. See [Recovery](#recovery) |
 | `demo-restore` prints `FAIL  the Services dashboard reads otternet-demo as healthy` and `trying again in 45 s` | Cause not investigated. Seen in two restores in the seventh run; the next preflight passed each time | Wait: it retries up to five times by itself. Act only if it is still failing after the fifth |
+| The Grafana pod is in `CreateContainerConfigError`, or `invoke ready` fails `observability Secrets` or `Grafana pod` | The Secrets `grafana-admin` and `grafana-oidc` (namespace `otternet-metrics`) or `telemetry-credentials` (`otternet-telemetry`) do not exist, because the namespace appeared after `invoke cluster` stopped waiting | `uv run invoke observability-secrets`; the pod starts by itself once the Secrets exist. If it reports a namespace missing, check `kubectl get vidraresource -A` and `kubectl get fabricapp` first |
 | Nothing moved on a device two minutes after a merge | The reconciler is waiting for artifacts to hold still | `uv run invoke reconcile --now` |
 
 ## Before anyone is watching
@@ -171,7 +172,7 @@ uv run invoke ready
 
 `invoke bootstrap` ends with the same checks. They cover the application catalogue, the event rules, the
 menus, the MCP server and the tokens of `mcp-agent` and `alice`, the Requester Access role, the `network-admin` account, the read-write
-repository with `demo-main` equal to `main`, the portal's picker and `.mcp.json`; the
+repository with `demo-main` equal to `main`, the portal's picker, the observability namespaces, Secrets and Grafana pod, and `.mcp.json`; the
 [bootstrap page](./developer-guide/bootstrap.md#what-a-finished-bootstrap-checks) lists each one. It exits 1 on a
 failure and prints what is left for you to do. A `WARN` about a leftover `mcp/session-*` branch or an old
 staged branch does not stop the demonstration, but the staged branch is the one the builder act releases, so
