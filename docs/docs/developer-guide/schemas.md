@@ -540,6 +540,11 @@ carries the pin itself (`definition_pinned: true`).
 The `chart_*` fields on the application stay mandatory — an existing contract test asserts it — so the
 portal reads the entry and sends them in the create.
 
+**`otternet-site` is a static web page.** Its chart is `bjw-s/app-template`, a generic chart that runs any image from values. The image is
+`nginxinc/nginx-unprivileged` (port 8080, published as 80), and the page is a ConfigMap in the entry's `default_values`, mounted over the nginx
+document root. Changing the page is a catalogue edit and needs no image build. A running application keeps the page it was pinned with.
+The chart is not in the transform's known-chart map, so its values set `externalTrafficPolicy: Local` themselves.
+
 **What was measured for each requestable entry (2026-10-05, fresh stack).** A request for each of `whoami`,
 `podinfo`, `grafana` and `argo-cd` went through the portal's **Exposed application, with access** template as
 `alice`, on its own branch, and was deleted without merging:

@@ -292,3 +292,4 @@ Corefile
 nameserver
 glibc
 resolver
+nginx

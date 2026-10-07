@@ -150,7 +150,7 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 
 | Check | What it asserts |
 | --- | --- |
-| Application catalogue | Seven entries; `whoami`, `podinfo`, `grafana` and `argo-cd` are requestable and the three `lab-*` entries are not |
+| Application catalogue | Nine entries; `whoami`, `podinfo`, `grafana`, `argo-cd` and `otternet-site` are requestable and the four `lab-*` entries are not |
 | `triggers.yml` objects | Every action and rule the file declares exists, including the group rules such as `add-app-access-to-its-generator-group` |
 | Menus | Every entry in `menus/` exists |
 | Seeded applications | `otternet-demo`, `otternet-metrics` and `otternet-telemetry` have a catalogue entry and are pinned |

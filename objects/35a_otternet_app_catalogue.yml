@@ -91,6 +91,94 @@ spec:
           additionalLabels:
             otternet.lab/advertise: "true"
 
+    # A static web page, served by nginx, for an application that only needs to be a
+    # website. The page is in the values, as a ConfigMap the chart mounts over nginx's
+    # document root, so changing the page is a catalogue edit and needs no image build.
+    # `bjw-s/app-template` is a generic chart: it runs any image from values. The image
+    # is the unprivileged nginx, which listens on 8080, so the Service publishes 80
+    # (`junos-http`) and targets 8080. This chart's Service takes labels under
+    # `service.<name>.labels`, and `externalTrafficPolicy` is set here because the chart
+    # is not in crossplane_fabric_app's known-chart map and an unknown chart must say
+    # `Local` itself.
+    - name: otternet-site
+      title: "OTTERNET web page"
+      description: "A static web page served by nginx, with two replicas"
+      status: active
+      requestable: true
+      chart_repository: https://bjw-s-labs.github.io/helm-charts
+      chart_name: app-template
+      chart_version: "5.2.1"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-http
+      default_values: |
+        controllers:
+          main:
+            replicas: 2
+            containers:
+              main:
+                image:
+                  repository: docker.io/nginxinc/nginx-unprivileged
+                  tag: 1.29-alpine
+
+        service:
+          main:
+            controller: main
+            type: LoadBalancer
+            externalTrafficPolicy: Local
+            labels:
+              otternet.lab/advertise: "true"
+            ports:
+              http:
+                port: 80
+                targetPort: 8080
+
+        configMaps:
+          site:
+            data:
+              index.html: |
+                <!doctype html>
+                <html lang="en">
+                <head>
+                  <meta charset="utf-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1">
+                  <title>Otter Shop</title>
+                  <style>
+                    body { font-family: system-ui, sans-serif; margin: 0; color: #1f2d3a; background: #f4f8fa; }
+                    header { background: #12475f; color: #fff; padding: 1.5rem 2rem; }
+                    header h1 { margin: 0; font-size: 1.8rem; }
+                    header p { margin: .3rem 0 0; opacity: .85; }
+                    main { max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
+                    .item { background: #fff; border: 1px solid #d5e1e8; border-radius: 6px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+                    .item h2 { margin: 0 0 .3rem; font-size: 1.1rem; }
+                    .item p { margin: 0; }
+                    footer { text-align: center; font-size: .85rem; color: #5a6b78; padding: 1.5rem; }
+                  </style>
+                </head>
+                <body>
+                  <header>
+                    <h1>Otter Shop</h1>
+                    <p>OTTERNET lab storefront</p>
+                  </header>
+                  <main>
+                    <div class="item"><h2>River stones</h2><p>Smooth, palm sized and good for cracking shells.</p></div>
+                    <div class="item"><h2>Kelp snack pack</h2><p>Ten strands, sealed against the current.</p></div>
+                    <div class="item"><h2>Holding paw</h2><p>A tether for two, so nobody drifts apart.</p></div>
+                  </main>
+                  <footer>Served by nginx in the OTTERNET lab cluster, reached through the branch firewall.</footer>
+                </body>
+                </html>
+
+        persistence:
+          site:
+            type: configMap
+            identifier: site
+            globalMounts:
+              - path: /usr/share/nginx/html
+                readOnly: true
+
     - name: grafana
       title: "Grafana"
       description: "Dashboards and visualisation, on its own with no data source configured"
