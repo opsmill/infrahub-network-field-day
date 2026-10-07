@@ -188,3 +188,45 @@ def test_the_trigger_rules_run_the_generator_and_name_no_forbidden_kind() -> Non
     for rule in rules:
         assert rule["node_kind"] == "ServiceFabricApp"
         assert not rule["node_kind"].startswith(("Deployment", "Monitoring"))
+
+
+def _pinned_address(values: Any) -> str | None:
+    """The first ``lbipam.cilium.io/ips`` anywhere in a values document."""
+    if isinstance(values, dict):
+        for key, value in values.items():
+            if key == "lbipam.cilium.io/ips":
+                return str(value)
+            found = _pinned_address(value)
+            if found:
+                return found
+    elif isinstance(values, list):
+        for item in values:
+            found = _pinned_address(item)
+            if found:
+                return found
+    return None
+
+
+def test_an_application_that_pins_an_address_other_than_its_first_has_that_name_seeded() -> None:
+    """The first-address rule would name an address nothing answers on.
+
+    Grafana pins .81 inside 10.112.240.80/28. Without a seeded name for that
+    address, generate-dns-record would create one at .80 -- and the zone would
+    send users to a VIP with no Service behind it. Every exposed seeded
+    application is held to this, so a new pin cannot slip past.
+    """
+    named = {
+        a["fqdn"]: a["address"] for a in _objects("objects/32_otternet_security.yml", "IpamIPAddress") if a.get("fqdn")
+    }
+    for app in _objects("objects/36_otternet_app_services.yml", "ServiceFabricApp"):
+        if not app.get("exposed"):
+            continue
+        values = yaml.safe_load((REPO / f"payloads/{app['name']}-values.yaml").read_text(encoding="utf-8"))
+        pinned = _pinned_address(values)
+        first = _first_address(app["vip_block"][0])
+        if pinned is None or pinned == first:
+            continue
+        assert named.get(f"{app['name']}.{ZONE}") == f"{pinned}/32", (
+            f"{app['name']} pins {pinned}, not the first address {first} of its block: "
+            f"seed an IpamIPAddress named {app['name']}.{ZONE} at the pinned address"
+        )
