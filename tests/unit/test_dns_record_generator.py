@@ -79,13 +79,18 @@ class _Client:
     def __init__(self, held: list[_Address]) -> None:
         self.held = held
         self.created: list[_Address] = []
+        # The SDK adds every node a run reads or saves to the generator group.
+        self.group_context = SimpleNamespace(related_node_ids=[])
 
     async def filters(self, kind: Any, **filters: Any) -> list[_Address]:
         name = getattr(kind, "__name__", kind)
         if name == "IpamIPAddress":
             if "fqdn__value" in filters:
-                return [a for a in self.held if a.fqdn.value == filters["fqdn__value"]]
-            return [a for a in self.held if a.address.value == filters["address__value"]]
+                found = [a for a in self.held if a.fqdn.value == filters["fqdn__value"]]
+            else:
+                found = [a for a in self.held if a.address.value == filters["address__value"]]
+            self.group_context.related_node_ids.extend(a.id for a in found)
+            return found
         return []  # CoreArtifact: none yet
 
     async def get(self, kind: str, **_filters: Any) -> Any:
@@ -96,6 +101,7 @@ class _Client:
         node = _Address(data["address"], data["fqdn"], data["description"])
         self.created.append(node)
         self.held.append(node)
+        self.group_context.related_node_ids.append(node.id)
         return node
 
     async def _post(self, url: str, payload: dict[str, Any]) -> Any:
@@ -222,6 +228,23 @@ def test_two_racing_runs_that_both_created_the_address_leave_one() -> None:
     _run([second, first], _data())
     survivors = [a for a in (first, second) if not a.deleted]
     assert [a.id for a in survivors] == [min(first.id, second.id)]
+
+
+def test_a_deleted_duplicate_is_not_left_in_the_generator_group() -> None:
+    first = _Address("10.112.240.16/32", f"otter-shop.{ZONE}", f"{CREATED_MARK} otter-shop")
+    second = _Address("10.112.240.16/32", f"otter-shop.{ZONE}", f"{CREATED_MARK} otter-shop")
+    client = _run([second, first], _data())
+    deleted = [a.id for a in (first, second) if a.deleted]
+    assert deleted
+    assert not set(deleted) & set(client.group_context.related_node_ids)
+    assert min(first.id, second.id) in client.group_context.related_node_ids
+
+
+def test_a_withdrawn_address_is_not_left_in_the_generator_group() -> None:
+    mine = _Address("10.112.240.16/32", f"otter-shop.{ZONE}", f"{CREATED_MARK} otter-shop")
+    client = _run([mine], _data(status="decommissioning"))
+    assert mine.deleted
+    assert mine.id not in client.group_context.related_node_ids
 
 
 def test_a_duplicate_is_never_deleted_unless_this_generator_created_it() -> None:
