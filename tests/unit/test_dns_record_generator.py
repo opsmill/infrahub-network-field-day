@@ -54,7 +54,11 @@ class _Attr:
 
 
 class _Address:
+    _next_id = 0
+
     def __init__(self, address: str, fqdn: str | None = None, description: str | None = None) -> None:
+        _Address._next_id += 1
+        self.id = f"id-{_Address._next_id:04d}"
         self.address = _Attr(address)
         self.fqdn = _Attr(fqdn)
         self.description = _Attr(description)
@@ -87,6 +91,7 @@ class _Client:
         return SimpleNamespace(id="def-1")
 
     async def create(self, _kind: Any, **data: Any) -> _Address:
+        self.create_args = data
         node = _Address(data["address"], data["fqdn"], data["description"])
         self.created.append(node)
         self.held.append(node)
@@ -197,3 +202,23 @@ def test_two_resolvers_are_refused() -> None:
     data["resolver"]["edges"].append({"node": {"id": "r2", "name": {"value": "other"}, "dns_zone": {"value": "x.lab"}}})
     with pytest.raises(ValueError, match="one resolver"):
         _run([], data)
+
+
+def test_the_create_names_the_namespace_so_a_racing_upsert_finds_the_first() -> None:
+    client = _run([], _data())
+    assert client.create_args["ip_namespace"] == {"hfid": ["default"]}
+
+
+def test_two_racing_runs_that_both_created_the_address_leave_one() -> None:
+    first = _Address("10.112.240.16/32", f"otter-shop.{ZONE}", f"{CREATED_MARK} otter-shop")
+    second = _Address("10.112.240.16/32", f"otter-shop.{ZONE}", f"{CREATED_MARK} otter-shop")
+    _run([second, first], _data())
+    survivors = [a for a in (first, second) if not a.deleted]
+    assert [a.id for a in survivors] == [min(first.id, second.id)]
+
+
+def test_a_duplicate_is_never_deleted_unless_this_generator_created_it() -> None:
+    seeded = _Address("10.112.240.17/32", f"otter-shop.{ZONE}", "hand seeded")
+    created = _Address("10.112.240.16/32", f"otter-shop.{ZONE}", f"{CREATED_MARK} otter-shop")
+    _run([seeded, created], _data())
+    assert not seeded.deleted

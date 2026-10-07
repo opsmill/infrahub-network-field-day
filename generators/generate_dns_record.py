@@ -8,7 +8,7 @@ because the artifact's target is the resolver and not the application: without
 that the proposed change would show the new name in the data and not in the
 configuration (the reason ``generate-monitoring-collector`` exists too).
 
-FOUR THINGS THAT LOOK ARBITRARY AND ARE NOT.
+FIVE THINGS THAT LOOK ARBITRARY AND ARE NOT.
 
 * **The address is the FIRST address of the VIP block.** A Cilium
   ``CiliumLoadBalancerIPPool`` is created per application from its block, and
@@ -27,6 +27,15 @@ FOUR THINGS THAT LOOK ARBITRARY AND ARE NOT.
   description starts with ``DNS name for``, and withdrawal deletes only an
   address carrying that mark. An address somebody else created -- one a firewall
   address-book entry points at -- loses its ``fqdn`` and is otherwise untouched.
+* **Two runs can race, and the address is the same one.** The created event and
+  the block's arrival both fire this generator within milliseconds, and each
+  looked for the name before either had written it. Both created
+  ``10.112.240.16/32``, and the branch could not merge: the unique
+  (address, namespace) constraint holds at merge, not at write. So the create
+  names the namespace, which lets the second upsert find the first by its
+  human-friendly id, and every run ends by removing any duplicate holder of the
+  name and keeping the lowest id. Every racing run applies the same rule, so they
+  agree on the survivor.
 * **No trigger rule may name a Deployment* or Monitoring* kind**, and this one
   names neither. It fires on an application's creation and on the fields that
   decide whether it has a name (status, exposed, vip_block).
@@ -46,6 +55,8 @@ from .artifact_render import request_artifact_render
 from .generate_dns_record_query import GenerateDnsRecordQuery
 
 ZONE_ARTIFACT = "DNS Zone Configuration"
+# The IPAM namespace every address in this lab lives in.
+DEFAULT_NAMESPACE = "default"
 # What marks an address this generator created, and so may delete.
 CREATED_MARK = "DNS name for"
 # The two statuses that mean "take it away", as in generate-fabric-app.
@@ -94,6 +105,7 @@ class DnsRecordGenerator(InfrahubGenerator):
 
         if has_name(status=_value(app.status), exposed=bool(_value(app.exposed)), prefix=prefix, label=name):
             await self._ensure(fqdn, str(prefix))
+            await self._keep_one(fqdn)
         else:
             await self._withdraw(fqdn)
         await self._rerender(resolver.id, str(_value(resolver.name)))
@@ -118,9 +130,29 @@ class DnsRecordGenerator(InfrahubGenerator):
             address=address,
             description=f"{CREATED_MARK} {fqdn.split('.', 1)[0]}",
             fqdn=fqdn,
+            ip_namespace={"hfid": [DEFAULT_NAMESPACE]},
         )
         await node.save(allow_upsert=True)
         self.logger.info("Created %s with the name %s", address, fqdn)
+
+    async def _keep_one(self, fqdn: str) -> None:
+        """Remove every holder of ``fqdn`` this generator created except the lowest id.
+
+        Only an address carrying the creation mark is ever deleted, so a hand-made
+        or seeded holder is never touched. Racing runs sort the same way, so they
+        agree on which one survives; one that finds its target already gone has
+        nothing left to do.
+        """
+        holders = sorted(await self._holders(fqdn), key=lambda node: str(node.id))
+        for extra in holders[1:]:
+            if not str(_value(extra.description) or "").startswith(CREATED_MARK):
+                continue
+            try:
+                await extra.delete()
+            except Exception as exc:  # noqa: BLE001 - a racing run deleted it first
+                self.logger.info("Duplicate %s was already gone (%s)", _value(extra.address), exc)
+            else:
+                self.logger.info("Removed the duplicate %s for %s", _value(extra.address), fqdn)
 
     async def _withdraw(self, fqdn: str) -> None:
         for node in await self._holders(fqdn):
