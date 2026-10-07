@@ -295,6 +295,24 @@ nodes:
         default_value: false
         description: "True when the generator allocated the VIP block, and may withdraw it"
         order_weight: 936
+      # THE DNS ZONE THIS APPLICATION SERVES (specs/037-lab-dns-service).
+      #
+      # Set on the one application that IS the lab's resolver, and on no other.
+      # `generate-dns-record` reads it to name every other exposed application
+      # `<name>.<zone>`, and `dns_zone_config` renders it into the resolver's
+      # Corefile and zone file. A zone on the resolver rather than a kind of its
+      # own: no case found needs one (specs/037-lab-dns-service/data-model.md).
+      #
+      # OPTIONAL, NEVER MANDATORY: Infrahub refuses to make an attribute
+      # mandatory against existing data, and nearly every application is not a
+      # resolver.
+      - name: dns_zone
+        kind: Text
+        label: DNS Zone
+        optional: true
+        regex: ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$
+        description: "The DNS zone this application answers for, such as int.otternet.lab. Set on the resolver only"
+        order_weight: 1700
     relationships:
       - name: cluster
         peer: ClusterKubernetes

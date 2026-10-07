@@ -34,3 +34,17 @@ log "{{ interface }} -> {{ address }}, default via {{ gateway }} (internet custo
 ip route replace 10.0.0.0/8 via {{ gateway }} dev {{ interface }}
 log "{{ interface }} -> {{ address }}, 10.0.0.0/8 via {{ gateway }}"
 {% endif %}
+{% if dns_server %}
+
+# Names. The lab's resolver goes FIRST for every query: it answers {{ dns_zone }}
+# and REFUSES any other name, and glibc moves on to the next nameserver on a
+# refusal, so everything else resolves exactly as it did. Written in place (the
+# file is a bind mount, so it cannot be replaced) and only once, so a re-run of
+# this script does not stack the line.
+if ! grep -q '^nameserver {{ dns_server }}$' /etc/resolv.conf; then
+    { echo "nameserver {{ dns_server }}"; cat /etc/resolv.conf; } > /tmp/resolv.conf.new
+    cat /tmp/resolv.conf.new > /etc/resolv.conf
+    rm -f /tmp/resolv.conf.new
+fi
+log "names in {{ dns_zone }} -> {{ dns_server }}"
+{% endif %}

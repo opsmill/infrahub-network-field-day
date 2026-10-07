@@ -2484,6 +2484,10 @@ INFRAHUB_ONLY_RESOURCES = (
     ("fabricapp", "otternet-metrics"),
     ("fabricapp", "otternet-telemetry"),
     ("configmap", "telegraf-intent -n otternet-telemetry"),
+    # The lab's resolver and its zone (specs/037-lab-dns-service): CoreDNS as an
+    # application, and the ConfigMap rendered from the names Infrahub holds.
+    ("fabricapp", "otternet-dns"),
+    ("configmap", "lab-dns -n otternet-dns"),
 )
 
 # Every resource the cluster should hold once delivery has converged.
@@ -2799,10 +2803,11 @@ def _wait_for_observability(ctx: Context, kubeconfig: Path, timeout: int = 900) 
     whether Grafana is answering.
     """
     kube = f"kubectl --kubeconfig {shlex.quote(str(kubeconfig))}"
-    print(" - Waiting for Grafana and Telegraf (kube-prometheus-stack takes several minutes)")
+    print(" - Waiting for Grafana, Telegraf and the resolver (kube-prometheus-stack takes several minutes)")
     for namespace, selector in (
         ("otternet-metrics", "app.kubernetes.io/name=grafana"),
         ("otternet-telemetry", "app.kubernetes.io/name=telegraf"),
+        ("otternet-dns", "app.kubernetes.io/name=coredns"),
     ):
         deadline = time.time() + timeout
         ready = False

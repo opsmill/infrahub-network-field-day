@@ -51,11 +51,14 @@ exposed `ServiceFabricApp` and the `ServiceAppAccess` that opens the way to it.
 
 **The application is picked from the catalogue, not described.** The form asks
 for **one entry from the application catalogue**, such as Who am I, plus what is
-yours: a name, a namespace, an owner, a cluster, a VRF, a source site, a
+yours: a name, an owner, a source site, a
 justification and a reference. It does not ask for a chart repository, chart name,
 chart version, ports, block size, selector or values. Those are the platform
 team's decision and live on the entry in Infrahub (`ServiceApplicationDefinition`).
-The portal cannot override the chart or its values.
+The portal cannot override the chart or its values. Once the proposed change merges, the application can also be
+reached by name, `<name>.int.otternet.lab`, from the branch machine; see [the DNS service](./developer-guide/dns-service.md). The template also fixes the
+cluster (`otternet`) and the VRF (`K8S_PROD`); the requester is not asked for either. The namespace is optional; when left blank
+it is the application name.
 
 The picker offers only entries that are **requestable and active**; the lab's own
 infrastructure applications are not requestable and never appear. The template

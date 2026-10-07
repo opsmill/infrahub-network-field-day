@@ -50,6 +50,7 @@ PAYLOADS: dict[str, tuple[str, str, str]] = {
     "otternet-demo": ("otternet-demo-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
     "otternet-metrics": ("otternet-metrics-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
     "otternet-telemetry": ("otternet-telemetry-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
+    "otternet-dns": ("otternet-dns-values.yaml", "ServiceFabricAppValuesFile", "values_file"),
 }
 
 
@@ -73,6 +74,7 @@ DEFINITION_PAYLOADS: dict[str, str] = {
     "lab-whoami": "otternet-demo",
     "lab-metrics": "otternet-metrics",
     "lab-telemetry": "otternet-telemetry",
+    "lab-dns": "otternet-dns",
 }
 
 

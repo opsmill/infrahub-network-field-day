@@ -185,3 +185,22 @@ spec:
       chart_name: telegraf
       chart_version: "1.8.77"
       default_vip_block_size: 28
+
+    # THE LAB'S RESOLVER (specs/037-lab-dns-service). Not requestable: nobody
+    # asks for a DNS server, the lab has one. Its `default_values` come from
+    # payloads/otternet-dns-values.yaml, the same file the application's own
+    # attachment comes from, by scripts/seed_app_payloads.py.
+    - name: lab-dns
+      title: "OTTERNET resolver"
+      description: "CoreDNS: the lab's resolver, configured entirely from the names Infrahub holds"
+      status: active
+      requestable: false
+      chart_repository: https://coredns.github.io/helm
+      chart_name: coredns
+      chart_version: "1.48.2"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-dns-udp
+        - junos-dns-tcp

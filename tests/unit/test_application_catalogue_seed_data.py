@@ -32,6 +32,7 @@ SEEDED = {
     "otternet-demo": "lab-whoami",
     "otternet-metrics": "lab-metrics",
     "otternet-telemetry": "lab-telemetry",
+    "otternet-dns": "lab-dns",
 }
 
 
@@ -244,7 +245,7 @@ def test_seeding_the_entries_is_idempotent() -> None:
             return nodes.setdefault(name__value, _Node(name__value, None))
 
     first = asyncio.run(module.seed_definitions(_Client(), "main"))
-    assert first == 3
+    assert first == len(SEEDED)
     assert sorted(saves) == sorted(SEEDED.values())
 
     saves.clear()

@@ -260,6 +260,12 @@ spec:
   data:
     - address: 10.112.240.33/32
       description: "The self-service access portal VIP"
+    # The lab resolver (specs/037-lab-dns-service). Named in the zone it serves, which
+    # a seed has to carry itself: no event rule fires on main, so generate-dns-record
+    # never runs for it.
+    - address: 10.112.240.96/32
+      description: "The lab resolver VIP"
+      fqdn: otternet-dns.int.otternet.lab
 
 ---
 apiVersion: infrahub.app/v1
@@ -278,6 +284,10 @@ spec:
       book_index: 40
       description: "The only DC service the branch may reach before requesting access"
       ip_address: ["10.112.240.33/32", "default"]
+    - name: dns-resolver
+      book_index: 45
+      description: "The lab resolver, which the branch may ask for names"
+      ip_address: ["10.112.240.96/32", "default"]
 
 ---
 # The one literal address in the book. `any` is not an allocated network, so it
@@ -326,6 +336,8 @@ spec:
       protocol: 6
     - name: icmp
       protocol: 1
+    - name: udp
+      protocol: 17
 
 ---
 apiVersion: infrahub.app/v1
@@ -345,6 +357,16 @@ spec:
       description: "ICMP echo"
       port: 0
       ip_protocol: icmp
+    # Junos built-ins, so `junos-` prefixed and NOT declared in the artifact's
+    # `applications` stanza: the device already knows them.
+    - name: junos-dns-udp
+      description: "DNS over UDP"
+      port: 53
+      ip_protocol: udp
+    - name: junos-dns-tcp
+      description: "DNS over TCP"
+      port: 53
+      ip_protocol: tcp
     # The tooling network's services. NOT `junos-` prefixed, because they are
     # not Junos built-ins -- which is precisely why the artifact renders an
     # `applications` stanza declaring them. A rule naming an undeclared
@@ -585,6 +607,33 @@ spec:
             ip_protocol: tcp
           - name: junos-https
             port: 443
+            ip_protocol: tcp
+    # NAMES, BEFORE ANY ACCESS REQUEST (specs/037-lab-dns-service). A branch user
+    # needs the resolver to find an application by name, and the grant that opens
+    # the application cannot also be what lets them ask where it is. Standing, like
+    # the access portal above, and for the same reason: it is what a request
+    # starts from.
+    - name: branch-to-dns
+      index: 25
+      action: permit
+      log: true
+      log_session_close: true
+      managed_by_service: false
+      policy: otternet-perimeter
+      source_zone: branch
+      destination_zone: k8s-prod
+      source_address:
+        - branch-users
+      destination_address:
+        - dns-resolver
+      destination_services:
+        kind: SecurityService
+        data:
+          - name: junos-dns-udp
+            port: 53
+            ip_protocol: udp
+          - name: junos-dns-tcp
+            port: 53
             ip_protocol: tcp
     # ---- branch -> tooling ---------------------------------------
     # REACHING THE REQUEST PORTAL IS ITSELF A FIREWALL DECISION, which is the

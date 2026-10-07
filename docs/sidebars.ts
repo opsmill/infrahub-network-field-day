@@ -38,6 +38,7 @@ const sidebars: SidebarsConfig = {
         'developer-guide/checks',
         'developer-guide/vidra-delivery',
         'developer-guide/observability',
+        'developer-guide/dns-service',
         'developer-guide/deployment-reconciler',
         'developer-guide/generator-transform-inventory',
         'developer-guide/service-triggers',

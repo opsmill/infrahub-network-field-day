@@ -1,0 +1,39 @@
+# dns_zone_config's query (specs/037-lab-dns-service).
+#
+# THREE THINGS, because the artifact's target is the resolver and not what it
+# serves: the resolver itself (its zone, its namespace), every address that
+# carries a name (`fqdn` set), and every application, so a record whose
+# application has been withdrawn is dropped even if its address has not been
+# cleared yet. `fqdn__isnull: false` is what keeps this from reading the fabric's
+# hundreds of addresses.
+query DnsZoneConfigQuery($name: String!) {
+  target: ServiceFabricApp(name__value: $name) {
+    edges {
+      node {
+        id
+        name { value }
+        dns_zone { value }
+        namespace_name { value }
+      }
+    }
+  }
+  records: IpamIPAddress(fqdn__isnull: false) {
+    edges {
+      node {
+        id
+        address { value }
+        fqdn { value }
+      }
+    }
+  }
+  apps: ServiceFabricApp {
+    edges {
+      node {
+        id
+        name { value }
+        status { value }
+        exposed { value }
+      }
+    }
+  }
+}

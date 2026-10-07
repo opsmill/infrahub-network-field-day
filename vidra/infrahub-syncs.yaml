@@ -63,3 +63,27 @@ spec:
     server: "https://kubernetes.default.svc"
     namespace: "otternet-telemetry"
     reconcileOnEvents: false
+
+---
+# The lab resolver's Corefile and zone (specs/037-lab-dns-service): a ConfigMap
+# rendered from the names Infrahub holds -- one per exposed, live application --
+# delivered into the resolver's namespace, where CoreDNS mounts it as `lab-dns`.
+# A merge that adds or withdraws an application moves this artifact, and the
+# resolver's `file` plugin reloads the zone once the kubelet has projected the
+# updated ConfigMap, about a minute later.
+#
+# Applied only once `otternet-dns` exists: the ConfigMap names that namespace, and
+# the namespace is composed by the application's own FabricApp.
+apiVersion: infrahub.operators.com/v1alpha1
+kind: InfrahubSync
+metadata:
+  name: dns-zone-config
+spec:
+  source:
+    infrahubAPIURL: "http://172.20.41.1:8000"
+    targetBranch: "main"
+    artefactName: "DNS Zone Configuration"
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: "otternet-dns"
+    reconcileOnEvents: false

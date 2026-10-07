@@ -115,6 +115,7 @@ exclude = [
     "transforms/srl_config_query.py",
     "transforms/junos_config_query.py",
     "transforms/telemetry_collector_config_query.py",
+    "transforms/dns_zone_config_query.py",
 ]
 
 

@@ -214,3 +214,64 @@ spec:
 
       member_of_groups:
         - service_fabric_apps
+
+    # ---- The lab's resolver (specs/037-lab-dns-service) ---------------------
+    #
+    # CoreDNS, answering for `dns_zone` and nothing else. Its Corefile and zone
+    # are the `DNS Zone Configuration` artifact, delivered by Vidra's fourth
+    # sync, so which names exist is decided in Infrahub and reviewed in a
+    # proposed change. It is also named in its own zone (`otternet-dns`), by the
+    # same rule as every other application: its zone's NS record needs a name.
+    #
+    # THE ADDRESS IS PINNED (payloads/otternet-dns-values.yaml), because the
+    # branch machine's resolver setting and the firewall's `branch-to-dns` rule
+    # both name 10.112.240.96 and neither can wait for the allocator. The block
+    # is declared in objects/29_*, which is what makes OTTERNET-VIP-Pool skip it.
+    - name: otternet-dns
+      description: "CoreDNS: the lab's resolver for int.otternet.lab, configured from Infrahub"
+      status: active
+      owner: branch
+      cluster: otternet
+      namespace_name: otternet-dns
+      vrf: K8S_PROD
+
+      chart_repository: https://coredns.github.io/helm
+      chart_name: coredns
+      chart_version: "1.48.2"
+
+      definition: lab-dns
+      definition_pinned: true
+
+      dns_zone: int.otternet.lab
+
+      exposed: true
+      vip_block: ["10.112.240.96/28", "default"]
+      service_selector:
+        - "otternet.lab/advertise=true"
+
+      # Only the branch LAN may ask, on 53 over both protocols -- the same
+      # three gates every exposed application has: the route, the firewall rule
+      # (`branch-to-dns`) and this. The pod gate is what stops another site that
+      # reaches the VIP from being answered.
+      policy_default_deny: true
+      policy_allow_dns: false
+      policy_allow_intra_namespace: true
+      policy_allow_egress_api_server: false
+      policy_allow_egress_internet: false
+      allowed_source_prefixes:
+        - ["10.70.0.0/24", "default"]
+      policy_allow_ports:
+        - port: "53"
+          protocol: UDP
+        - port: "53"
+          protocol: TCP
+      workload_selector:
+        - "app.kubernetes.io/name=coredns"
+
+      advertised_services:
+        - junos-dns-udp
+        - junos-dns-tcp
+
+      member_of_groups:
+        - service_fabric_apps
+        - dns_resolvers

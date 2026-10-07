@@ -53,6 +53,13 @@ spec:
       role: vip_pool
       status: active
       description: "VIP block for the otternet-metrics application (Grafana)"
+    # The lab resolver's block (specs/037-lab-dns-service), declared for the same
+    # reason as Grafana's: the branch machine and the firewall name its first
+    # address, 10.112.240.96, before any generator could have chosen one.
+    - prefix: 10.112.240.96/28
+      role: vip_pool
+      status: active
+      description: "VIP block for the otternet-dns application (the lab resolver)"
 
     # ---- the classic application tier ------------------------------------
     - prefix: 10.210.0.0/24

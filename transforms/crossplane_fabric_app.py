@@ -349,6 +349,7 @@ _LB_SERVICE_VALUES_PATH: dict[str, tuple[str, ...]] = {
     "grafana": ("service",),
     "podinfo": ("service",),
     "argo-cd": ("server", "service"),
+    "coredns": ("service",),
 }
 
 _TRAFFIC_POLICY = "externalTrafficPolicy"

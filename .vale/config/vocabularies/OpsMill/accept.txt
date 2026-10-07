@@ -288,3 +288,7 @@ worktrees
 peering('s)?
 another's
 requestable
+Corefile
+nameserver
+glibc
+resolver
