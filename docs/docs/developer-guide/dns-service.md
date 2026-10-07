@@ -42,9 +42,14 @@ Specification, plan and tasks: `specs/037-lab-dns-service/`.
 - **The name points at the first address of the VIP block.** Measured on the lab: `otternet-demo`'s block `10.112.240.0/28` gave its
   Service `10.112.240.0`, and `otter-shop`'s `10.112.240.16/28` gave `10.112.240.16`. Cilium creates one `CiliumLoadBalancerIPPool` for each
   application from its block, and an application's first LoadBalancer Service takes the first free address.
-- **That rule does not cover an application that pins another address or has several Services.** `otternet-metrics` pins Grafana to
-  `10.112.240.81` with `lbipam.cilium.io/ips`, so it has no name from this generator. Seed an address with the `fqdn` instead. The
-  generator never moves a name that already has an address.
+- **An application that pins another address sets `dns_address`.** `otternet-metrics` pins Grafana to `10.112.240.81` with
+  `lbipam.cilium.io/ips`, so its `dns_address` is `10.112.240.81` and its name follows that address instead of the first one. The
+  generator refuses an address outside the VIP block. Changing `dns_address` moves the name: the generator removes the name from the
+  old address (deleting that address only if it created it) and puts it on the new one. Without `dns_address`, a name that already has
+  an address is never moved. `tests/unit/test_dns_service_contract.py` fails when a seeded application pins an address and does not set
+  `dns_address` to it.
+- **The branch machine waits one second, not five, when the resolver is down.** The init script adds `options timeout:1 attempts:1`
+  to `/etc/resolv.conf`, so a lookup that the resolver does not answer falls through to the container's nameserver after one second.
 - **The resolver own address is pinned** the same way (`10.112.240.96`), because the branch machine's setting, the firewall rule and
   the zone's NS record all name it before a generator could choose one. `tests/unit/test_dns_service_contract.py` holds the five places
   that write the address equal.

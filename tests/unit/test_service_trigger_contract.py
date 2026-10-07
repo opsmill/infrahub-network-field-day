@@ -68,7 +68,7 @@ WATCHED: dict[str, dict[str, set[str]]] = {
         # is the point: the name can only be written once the block exists. It
         # cannot loop, because this generator writes an IpamIPAddress and never
         # the application (WRITE_BACKS below holds that).
-        "generate-dns-record": {"status", "exposed", "vip_block"},
+        "generate-dns-record": {"status", "exposed", "vip_block", "dns_address"},
     },
     "ServiceTenantOnboarding": {"generate-tenant-onboarding": {"status", "description", "organization", "fabric"}},
     "ServiceServerPlacement": {

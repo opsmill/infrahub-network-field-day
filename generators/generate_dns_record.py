@@ -16,9 +16,9 @@ FIVE THINGS THAT LOOK ARBITRARY AND ARE NOT.
   it. Measured on the lab: otternet-demo's block 10.112.240.0/28 gave
   10.112.240.0, and otter-shop's 10.112.240.16/28 gave 10.112.240.16. An
   application that pins another address (``lbipam.cilium.io/ips``, as Grafana
-  does) or has several Services is NOT covered: seed its address with an
-  ``fqdn`` instead, and this generator leaves a name that already has an address
-  alone.
+  does) sets ``dns_address`` to it, inside the block, and the name follows that
+  instead; the generator refuses an address outside the block. An application
+  with several Services names one of them the same way.
 * **A name that already has an address is never moved.** The first thing it
   looks for is any address holding this exact name; if one exists the run ends
   there. That is what makes it idempotent, and what lets a hand-seeded record
@@ -73,6 +73,22 @@ def first_address(prefix: str) -> str:
     return f"{ipaddress.ip_network(prefix, strict=False).network_address}/32"
 
 
+def name_address(prefix: str, dns_address: str | None) -> str:
+    """The address a name points at: ``dns_address`` when set, else the first of the block.
+
+    An address outside the block is refused, because the firewall rule, the
+    pod policy and the Service all follow the block and a name outside it
+    resolves to somewhere nothing answers.
+    """
+    if not dns_address:
+        return first_address(prefix)
+    address = ipaddress.ip_address(dns_address)
+    if address not in ipaddress.ip_network(prefix, strict=False):
+        msg = f"dns_address {dns_address} is outside the VIP block {prefix}"
+        raise ValueError(msg)
+    return f"{address}/32"
+
+
 def has_name(*, status: str | None, exposed: bool, prefix: str | None, label: str) -> bool:
     """Whether an application should have a name: live, exposed, with a block and a valid label."""
     return bool(exposed and prefix and status not in WITHDRAWN_STATUSES and _LABEL.match(label))
@@ -104,7 +120,8 @@ class DnsRecordGenerator(InfrahubGenerator):
         prefix = _value(block.prefix) if block is not None else None
 
         if has_name(status=_value(app.status), exposed=bool(_value(app.exposed)), prefix=prefix, label=name):
-            await self._ensure(fqdn, str(prefix))
+            address = name_address(str(prefix), _value(app.dns_address))
+            await self._ensure(fqdn, address, moves=bool(_value(app.dns_address)))
             await self._keep_one(fqdn)
         else:
             await self._withdraw(fqdn)
@@ -113,11 +130,18 @@ class DnsRecordGenerator(InfrahubGenerator):
     async def _holders(self, fqdn: str) -> list[IpamIPAddress]:
         return list(await self.client.filters(IpamIPAddress, fqdn__value=fqdn))
 
-    async def _ensure(self, fqdn: str, prefix: str) -> None:
-        if await self._holders(fqdn):
+    async def _ensure(self, fqdn: str, address: str, *, moves: bool = False) -> None:
+        holders = await self._holders(fqdn)
+        if holders and not moves:
             self.logger.info("%s already has an address; leaving it", fqdn)
             return
-        address = first_address(prefix)
+        if holders:
+            if any(str(_value(node.address)) == address for node in holders):
+                self.logger.info("%s already points at %s", fqdn, address)
+                return
+            # The application now names its address, and the name is elsewhere:
+            # take it off the old one, which is deleted only if this created it.
+            await self._withdraw(fqdn)
         existing = await self.client.filters(IpamIPAddress, address__value=address)
         if existing:
             node = existing[0]

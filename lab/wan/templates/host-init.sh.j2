@@ -46,5 +46,11 @@ if ! grep -q '^nameserver {{ dns_server }}$' /etc/resolv.conf; then
     cat /tmp/resolv.conf.new > /etc/resolv.conf
     rm -f /tmp/resolv.conf.new
 fi
+# One second and one try per server, so a resolver that is down costs a lookup
+# one second before the next nameserver answers, not glibc's default of five
+# seconds and two tries.
+if ! grep -q '^options timeout:1 attempts:1$' /etc/resolv.conf; then
+    echo "options timeout:1 attempts:1" >> /etc/resolv.conf
+fi
 log "names in {{ dns_zone }} -> {{ dns_server }}"
 {% endif %}

@@ -351,6 +351,7 @@ class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
     chart_version: String
     communities: ListAttributeOptional
     definition_pinned: Boolean
+    dns_address: StringOptional
     dns_zone: StringOptional
     exposed: Boolean
     namespace_name: String

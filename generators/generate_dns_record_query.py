@@ -23,6 +23,7 @@ class GenerateDnsRecordQueryTargetEdgesNode(BaseModel):
     name: Optional["GenerateDnsRecordQueryTargetEdgesNodeName"]
     status: Optional["GenerateDnsRecordQueryTargetEdgesNodeStatus"]
     exposed: Optional["GenerateDnsRecordQueryTargetEdgesNodeExposed"]
+    dns_address: Optional["GenerateDnsRecordQueryTargetEdgesNodeDnsAddress"]
     vip_block: "GenerateDnsRecordQueryTargetEdgesNodeVipBlock"
 
 
@@ -36,6 +37,10 @@ class GenerateDnsRecordQueryTargetEdgesNodeStatus(BaseModel):
 
 class GenerateDnsRecordQueryTargetEdgesNodeExposed(BaseModel):
     value: Optional[bool]
+
+
+class GenerateDnsRecordQueryTargetEdgesNodeDnsAddress(BaseModel):
+    value: Optional[str]
 
 
 class GenerateDnsRecordQueryTargetEdgesNodeVipBlock(BaseModel):

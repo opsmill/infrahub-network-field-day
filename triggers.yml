@@ -565,6 +565,17 @@ spec:
           - attribute_name: exposed
             value_match: any
 
+    - name: trigger-dns-record-generator-update-dns-address
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-dns-record-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: dns_address
+            value_match: any
+
     - name: trigger-dns-record-generator-update-vip-block
       branch_scope: "other_branches"
       node_kind: ServiceFabricApp

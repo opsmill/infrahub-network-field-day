@@ -11,6 +11,7 @@ query GenerateDnsRecordQuery($name: String!) {
         name { value }
         status { value }
         exposed { value }
+        dns_address { value }
         vip_block {
           node {
             id

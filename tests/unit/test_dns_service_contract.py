@@ -184,7 +184,7 @@ def test_the_trigger_rules_run_the_generator_and_name_no_forbidden_kind() -> Non
         for d in (doc["spec"]["data"] if doc["spec"]["kind"] == "CoreNodeTriggerRule" else [])
         if d.get("action") == "run-dns-record-generator"
     ]
-    assert len(rules) == 4
+    assert len(rules) == 5
     for rule in rules:
         assert rule["node_kind"] == "ServiceFabricApp"
         assert not rule["node_kind"].startswith(("Deployment", "Monitoring"))
@@ -226,6 +226,9 @@ def test_an_application_that_pins_an_address_other_than_its_first_has_that_name_
         first = _first_address(app["vip_block"][0])
         if pinned is None or pinned == first:
             continue
+        assert app.get("dns_address") == pinned, (
+            f"{app['name']} pins {pinned}, not the first address {first} of its block: set dns_address on it"
+        )
         assert named.get(f"{app['name']}.{ZONE}") == f"{pinned}/32", (
             f"{app['name']} pins {pinned}, not the first address {first} of its block: "
             f"seed an IpamIPAddress named {app['name']}.{ZONE} at the pinned address"

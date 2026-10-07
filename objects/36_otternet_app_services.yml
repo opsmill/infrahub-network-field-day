@@ -127,6 +127,8 @@ spec:
 
       exposed: true
       vip_block: ["10.112.240.80/28", "default"]
+      # Grafana's Service pins .81, not the first address of the block.
+      dns_address: 10.112.240.81
       service_selector:
         - "otternet.lab/advertise=true"
 

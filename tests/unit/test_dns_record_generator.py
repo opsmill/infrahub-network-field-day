@@ -20,6 +20,7 @@ from generators.generate_dns_record import (
     DnsRecordGenerator,
     first_address,
     has_name,
+    name_address,
 )
 
 ZONE = "int.otternet.lab"
@@ -102,7 +103,12 @@ class _Client:
 
 
 def _data(
-    *, status: str = "active", exposed: bool = True, prefix: str | None = "10.112.240.16/28", zone: str | None = ZONE
+    *,
+    status: str = "active",
+    exposed: bool = True,
+    prefix: str | None = "10.112.240.16/28",
+    zone: str | None = ZONE,
+    dns_address: str | None = None,
 ) -> dict[str, Any]:
     def v(x: Any) -> dict[str, Any]:
         return {"value": x}
@@ -118,6 +124,7 @@ def _data(
                         "name": v("otter-shop"),
                         "status": v(status),
                         "exposed": v(exposed),
+                        "dns_address": v(dns_address),
                         "vip_block": block,
                     }
                 }
@@ -221,4 +228,33 @@ def test_a_duplicate_is_never_deleted_unless_this_generator_created_it() -> None
     seeded = _Address("10.112.240.17/32", f"otter-shop.{ZONE}", "hand seeded")
     created = _Address("10.112.240.16/32", f"otter-shop.{ZONE}", f"{CREATED_MARK} otter-shop")
     _run([seeded, created], _data())
+    assert not seeded.deleted
+
+
+def test_a_named_address_inside_the_block_replaces_the_first_address() -> None:
+    assert name_address("10.112.240.80/28", "10.112.240.81") == "10.112.240.81/32"
+    assert name_address("10.112.240.80/28", None) == "10.112.240.80/32"
+
+
+def test_a_named_address_outside_the_block_is_refused() -> None:
+    with pytest.raises(ValueError, match="outside the VIP block"):
+        name_address("10.112.240.80/28", "10.112.240.200")
+
+
+def test_an_application_with_a_dns_address_is_named_at_it() -> None:
+    client = _run([], _data(dns_address="10.112.240.18"))
+    assert [a.address.value for a in client.created] == ["10.112.240.18/32"]
+
+
+def test_changing_the_dns_address_moves_the_name_and_removes_the_address_it_created() -> None:
+    old = _Address("10.112.240.16/32", f"otter-shop.{ZONE}", f"{CREATED_MARK} otter-shop")
+    client = _run([old], _data(dns_address="10.112.240.18"))
+    assert old.deleted
+    assert [a.address.value for a in client.created] == ["10.112.240.18/32"]
+
+
+def test_a_seeded_name_already_at_the_dns_address_is_left_alone() -> None:
+    seeded = _Address("10.112.240.18/32", f"otter-shop.{ZONE}", "hand seeded")
+    client = _run([seeded], _data(dns_address="10.112.240.18"))
+    assert client.created == []
     assert not seeded.deleted
