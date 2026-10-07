@@ -102,7 +102,7 @@ spec:
     # `Local` itself.
     - name: otternet-site
       title: "OTTERNET web page"
-      description: "A static web page served by nginx, with two replicas"
+      description: "A static web page served by nginx, showing the network path to it, with two replicas"
       status: active
       requestable: true
       chart_repository: https://bjw-s-labs.github.io/helm-charts
@@ -150,24 +150,68 @@ spec:
                     header { background: #12475f; color: #fff; padding: 1.5rem 2rem; }
                     header h1 { margin: 0; font-size: 1.8rem; }
                     header p { margin: .3rem 0 0; opacity: .85; }
-                    main { max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
-                    .item { background: #fff; border: 1px solid #d5e1e8; border-radius: 6px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
-                    .item h2 { margin: 0 0 .3rem; font-size: 1.1rem; }
-                    .item p { margin: 0; }
+                    main { max-width: 56rem; margin: 2rem auto; padding: 0 1rem; }
+                    h2 { font-size: 1.15rem; margin: 2rem 0 .6rem; }
+                    .card { background: #fff; border: 1px solid #d5e1e8; border-radius: 6px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+                    .path { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+                    .hop { background: #e3f0f6; border: 1px solid #9cc3d5; border-radius: 4px; padding: .35rem .6rem;
+                      font-family: ui-monospace, monospace; font-size: .85rem; }
+                    .hop.fw { background: #fde9d9; border-color: #e0a77a; }
+                    .arrow { color: #5a6b78; }
+                    table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+                    th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid #e3ebf0; }
+                    th { color: #5a6b78; font-weight: 600; }
+                    code { font-family: ui-monospace, monospace; background: #eef3f6; padding: .05rem .3rem; border-radius: 3px; }
+                    ol { margin: .3rem 0 0 1.2rem; padding: 0; }
                     footer { text-align: center; font-size: .85rem; color: #5a6b78; padding: 1.5rem; }
                   </style>
                 </head>
                 <body>
                   <header>
                     <h1>Otter Shop</h1>
-                    <p>OTTERNET lab storefront</p>
+                    <p>An OTTERNET web service, and the network path that carried you to it</p>
                   </header>
                   <main>
-                    <div class="item"><h2>River stones</h2><p>Smooth, palm sized and good for cracking shells.</p></div>
-                    <div class="item"><h2>Kelp snack pack</h2><p>Ten strands, sealed against the current.</p></div>
-                    <div class="item"><h2>Holding paw</h2><p>A tether for two, so nobody drifts apart.</p></div>
+                    <h2>The path from the branch office</h2>
+                    <div class="card">
+                      <div class="path">
+                        <span class="hop">branch-desktop</span><span class="arrow">&rarr;</span>
+                        <span class="hop">branch-rtr</span><span class="arrow">&rarr;</span>
+                        <span class="hop">border-leaf1</span><span class="arrow">&rarr;</span>
+                        <span class="hop fw">fw1 (zone branch to zone k8s-prod)</span><span class="arrow">&rarr;</span>
+                        <span class="hop">border-leaf1</span><span class="arrow">&rarr;</span>
+                        <span class="hop">spines</span><span class="arrow">&rarr;</span>
+                        <span class="hop">k8s-leaf</span><span class="arrow">&rarr;</span>
+                        <span class="hop">Kubernetes node</span><span class="arrow">&rarr;</span>
+                        <span class="hop">this pod</span>
+                      </div>
+                    </div>
+
+                    <h2>Three gates decide whether you reached this page</h2>
+                    <div class="card">
+                      <ol>
+                        <li><strong>The route.</strong> The cluster advertises this application's virtual IP address to
+                          the fabric over BGP, from the nodes that run its pods.</li>
+                        <li><strong>The firewall.</strong> A rule on <code>fw1</code> permits your source network to
+                          reach the virtual IP address on TCP port 80.</li>
+                        <li><strong>The pod policy.</strong> A Cilium network policy admits only the source prefixes
+                          the application was granted.</li>
+                      </ol>
+                    </div>
+
+                    <h2>Networks in the lab</h2>
+                    <div class="card">
+                      <table>
+                        <tr><th>Network</th><th>Prefix</th></tr>
+                        <tr><td>Kubernetes pods</td><td><code>10.111.0.0/16</code></td></tr>
+                        <tr><td>Kubernetes services</td><td><code>10.112.0.0/16</code></td></tr>
+                        <tr><td>LoadBalancer virtual IP addresses</td><td><code>10.112.240.0/24</code></td></tr>
+                        <tr><td>Names, resolved from the Infrahub zone</td><td><code>&lt;application&gt;.int.otternet.lab</code></td></tr>
+                      </table>
+                    </div>
                   </main>
-                  <footer>Served by nginx in the OTTERNET lab cluster, reached through the branch firewall.</footer>
+                  <footer>Served by nginx in the OTTERNET lab cluster. Its address, route, firewall rule and DNS name
+                    are all declared in Infrahub.</footer>
                 </body>
                 </html>
 
