@@ -379,9 +379,9 @@ def test_every_exposed_seeded_application_keeps_the_client_address() -> None:
     from transforms.crossplane_fabric_app import apply_local_traffic
 
     exposed = [app for app in _data("ServiceFabricApp") if app.get("exposed")]
-    assert {app["name"] for app in exposed} == {"otternet-demo", "otternet-metrics"}
+    assert {app["name"] for app in exposed} == {"otternet-demo", "otternet-metrics", "otternet-dns"}
 
-    service_path = {"whoami": ("service",), "kube-prometheus-stack": ("grafana", "service")}
+    service_path = {"whoami": ("service",), "kube-prometheus-stack": ("grafana", "service"), "coredns": ("service",)}
     for app in exposed:
         values = yaml.safe_load((PAYLOAD_DIR / f"{app['name']}-values.yaml").read_text(encoding="utf-8"))
         rendered = apply_local_traffic(exposed=True, chart=app["chart_name"], values=values, name=app["name"])
@@ -389,7 +389,9 @@ def test_every_exposed_seeded_application_keeps_the_client_address() -> None:
             service = tree
             for key in service_path[app["chart_name"]]:
                 service = service[key]
-            assert service["type"] == "LoadBalancer", f"{app['name']} {label}"
+            # CoreDNS's chart keeps the type beside `service` (`serviceType`), not in it.
+            service_type = tree["serviceType"] if app["chart_name"] == "coredns" else service["type"]
+            assert service_type == "LoadBalancer", f"{app['name']} {label}"
             assert service["externalTrafficPolicy"] == "Local", f"{app['name']} {label}"
         # The payload already says it, so enforcing it changes nothing -- which
         # is what keeps the rendered manifest a one-line diff for the demo and

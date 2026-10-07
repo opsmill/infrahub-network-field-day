@@ -41,9 +41,9 @@ def _module(path: str):  # noqa: ANN202
 # --------------------------------------------------------------------------- what the repository declares
 
 
-def test_the_catalogue_declares_seven_entries_and_four_requestable() -> None:
+def test_the_catalogue_declares_eight_entries_and_four_requestable() -> None:
     entries = r.expected_catalogue(REPO)
-    assert len(entries) == 7
+    assert len(entries) == 8
     assert {n for n, requestable in entries.items() if requestable} == {"whoami", "podinfo", "grafana", "argo-cd"}
     assert not any(n.startswith("lab-") and requestable for n, requestable in entries.items())
 
@@ -55,8 +55,8 @@ def test_triggers_yml_declares_the_group_rules() -> None:
     assert declared["CoreNodeTriggerRule"]
 
 
-def test_the_seeded_applications_are_the_three_the_lab_models() -> None:
-    assert r.expected_seeded_apps(REPO) == {"otternet-demo", "otternet-metrics", "otternet-telemetry"}
+def test_the_seeded_applications_are_the_four_the_lab_models() -> None:
+    assert r.expected_seeded_apps(REPO) == {"otternet-demo", "otternet-metrics", "otternet-telemetry", "otternet-dns"}
 
 
 # --------------------------------------------------------------------------- decisions

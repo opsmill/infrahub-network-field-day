@@ -35,37 +35,53 @@ ROOT = Path(__file__).resolve().parents[2]
 # The fields each generator reads from its target and acts on. Fields its query
 # selects but whose value cannot change the output are deliberately absent: a
 # segment's `tenant`/`fabric` and a placement's `tenant` appear only in logs.
-WATCHED: dict[str, set[str]] = {
+# Keyed by kind and then by the generator the rules run: a kind may have more
+# than one (specs/037-lab-dns-service adds `generate-dns-record` beside
+# `generate-fabric-app`), and each is held to its own inputs and its own writes.
+WATCHED: dict[str, dict[str, set[str]]] = {
     "ServiceAppAccess": {
-        "status",
-        "ports",
-        "application",
-        "destination_vip",
-        "source_site",
-        "source_zone",
-        "source_address",
+        "generate-app-access": {
+            "status",
+            "ports",
+            "application",
+            "destination_vip",
+            "source_site",
+            "source_zone",
+            "source_address",
+        },
     },
     "ServiceNetworkSegment": {
-        "status",
-        "description",
-        "vlan_id",
-        "prefix_length",
-        "vrf",
-        "avd_tags",
-        "subnet_pool",
-        "vlan_pool",
+        "generate-network-segment": {
+            "status",
+            "description",
+            "vlan_id",
+            "prefix_length",
+            "vrf",
+            "avd_tags",
+            "subnet_pool",
+            "vlan_pool",
+        },
     },
-    "ServiceFabricApp": {"status", "exposed", "vip_block_size", "cluster"},
-    "ServiceTenantOnboarding": {"status", "description", "organization", "fabric"},
-    "ServiceServerPlacement": {"status", "description", "hostname", "server_role", "rack", "template"},
-    "ServiceFabricPeering": {"status", "cluster"},
+    "ServiceFabricApp": {
+        "generate-fabric-app": {"status", "exposed", "vip_block_size", "cluster"},
+        # `vip_block` is an input HERE and an output of generate-fabric-app, which
+        # is the point: the name can only be written once the block exists. It
+        # cannot loop, because this generator writes an IpamIPAddress and never
+        # the application (WRITE_BACKS below holds that).
+        "generate-dns-record": {"status", "exposed", "vip_block", "dns_address"},
+    },
+    "ServiceTenantOnboarding": {"generate-tenant-onboarding": {"status", "description", "organization", "fabric"}},
+    "ServiceServerPlacement": {
+        "generate-server-placement": {"status", "description", "hostname", "server_role", "rack", "template"},
+    },
+    "ServiceFabricPeering": {"generate-fabric-peering": {"status", "cluster"}},
 }
 
 # What each generator WRITES onto its own target, besides `status`. Watching
 # any of these turns a run into its own trigger.
-WRITE_BACKS: dict[str, set[str]] = {
-    "ServiceAppAccess": {"granted_rules", "granted_source_prefixes"},
-    "ServiceNetworkSegment": {"subnet", "vlan", "svi"},
+WRITE_BACKS: dict[str, dict[str, set[str]]] = {
+    "ServiceAppAccess": {"generate-app-access": {"granted_rules", "granted_source_prefixes"}},
+    "ServiceNetworkSegment": {"generate-network-segment": {"subnet", "vlan", "svi"}},
     # `allowed_source_prefixes` is written by generate-app-access, not by this
     # kind's generator -- watching it would run generate-fabric-app per grant.
     #
@@ -73,11 +89,17 @@ WRITE_BACKS: dict[str, set[str]] = {
     # (specs/035-application-catalogue), and `definition` is deliberately NOT
     # watched either: re-pointing an application at another catalogue entry is
     # an upgrade, which is its own reviewed change and not an automatic rebuild.
-    "ServiceFabricApp": {"vip_block", "vip_block_managed", "allowed_source_prefixes", "definition_pinned"},
-    "ServiceTenantOnboarding": {"evpn_tenant", "mac_vrf_vni_base"},
-    "ServiceServerPlacement": {"server"},
-    "ServiceFabricPeering": {"peerings"},
+    "ServiceFabricApp": {
+        "generate-fabric-app": {"vip_block", "vip_block_managed", "allowed_source_prefixes", "definition_pinned"},
+        # Writes `fqdn` on an IpamIPAddress and nothing on the application.
+        "generate-dns-record": set(),
+    },
+    "ServiceTenantOnboarding": {"generate-tenant-onboarding": {"evpn_tenant", "mac_vrf_vni_base"}},
+    "ServiceServerPlacement": {"generate-server-placement": {"server"}},
+    "ServiceFabricPeering": {"generate-fabric-peering": {"peerings"}},
 }
+
+PAIRS = [(kind, generator) for kind in sorted(WATCHED) for generator in sorted(WATCHED[kind])]
 
 
 def _documents(relative: str) -> list[dict[str, Any]]:
@@ -107,8 +129,14 @@ def _matched_field(rule: dict[str, Any]) -> str:
     return match.get("attribute_name") or match["relationship_name"]
 
 
-def _updated_rules(kind: str) -> list[dict[str, Any]]:
-    return [r for r in _rules() if r["node_kind"] == kind and r["mutation_action"] == "updated"]
+def _updated_rules(kind: str, generator: str | None = None) -> list[dict[str, Any]]:
+    return [
+        r
+        for r in _rules()
+        if r["node_kind"] == kind
+        and r["mutation_action"] == "updated"
+        and (generator is None or _actions().get(r["action"]) == generator)
+    ]
 
 
 def _schema_fields(kind: str) -> set[str]:
@@ -147,21 +175,28 @@ def _query_target_fields(generator: str) -> set[str]:
     return {s.name.value for s in node.selection_set.selections if isinstance(s, FieldNode)}
 
 
-@pytest.mark.parametrize("kind", sorted(WATCHED))
-def test_each_service_kind_watches_exactly_its_inputs(kind: str) -> None:
-    assert {_matched_field(r) for r in _updated_rules(kind)} == WATCHED[kind]
+@pytest.mark.parametrize(("kind", "generator"), PAIRS)
+def test_each_generator_watches_exactly_its_inputs(kind: str, generator: str) -> None:
+    assert {_matched_field(r) for r in _updated_rules(kind, generator)} == WATCHED[kind][generator]
 
 
 @pytest.mark.parametrize("kind", sorted(WATCHED))
-def test_status_is_watched_because_it_is_how_a_service_is_withdrawn(kind: str) -> None:
+def test_every_rule_of_a_kind_runs_a_generator_this_file_knows(kind: str) -> None:
+    """A new generator on a kind has to be added to the tables above, not slipped in."""
+    generators = {_actions()[r["action"]] for r in _rules() if r["node_kind"] == kind and r["action"] in _actions()}
+    assert generators == set(WATCHED[kind])
+
+
+@pytest.mark.parametrize(("kind", "generator"), PAIRS)
+def test_status_is_watched_because_it_is_how_a_service_is_withdrawn(kind: str, generator: str) -> None:
     """The reason these rules exist: `decommissioning` set by hand must fire."""
-    assert "status" in {_matched_field(r) for r in _updated_rules(kind)}
+    assert "status" in {_matched_field(r) for r in _updated_rules(kind, generator)}
 
 
-@pytest.mark.parametrize("kind", sorted(WATCHED))
-def test_no_rule_watches_what_its_generator_writes_back(kind: str) -> None:
-    watched = {_matched_field(r) for r in _updated_rules(kind)}
-    assert watched & WRITE_BACKS[kind] == set(), f"{kind} watches its own output, which loops"
+@pytest.mark.parametrize(("kind", "generator"), PAIRS)
+def test_no_rule_watches_what_its_generator_writes_back(kind: str, generator: str) -> None:
+    watched = {_matched_field(r) for r in _updated_rules(kind, generator)}
+    assert watched & WRITE_BACKS[kind][generator] == set(), f"{generator} watches its own output, which loops"
 
 
 @pytest.mark.parametrize("kind", sorted(WATCHED))
@@ -172,17 +207,11 @@ def test_every_updated_rule_is_scoped_to_one_field_on_a_branch(kind: str) -> Non
         assert len(rule.get("matches", {}).get("data", [])) == 1, f"{rule['name']} is unscoped"
 
 
-@pytest.mark.parametrize("kind", sorted(WATCHED))
-def test_watched_fields_exist_and_are_read_by_the_generator(kind: str) -> None:
-    rules = _updated_rules(kind) + [r for r in _rules() if r["node_kind"] == kind and r["mutation_action"] == "created"]
-    # A rule whose action is not a generator (the group membership rule) reads no field.
-    generators = {_actions()[r["action"]] for r in rules if r["action"] in _actions()}
-    assert len(generators) == 1, f"{kind}'s rules run more than one generator: {generators}"
-    (generator,) = generators
-
+@pytest.mark.parametrize(("kind", "generator"), PAIRS)
+def test_watched_fields_exist_and_are_read_by_the_generator(kind: str, generator: str) -> None:
     read = _query_target_fields(generator)
     schema = _schema_fields(kind)
-    for field in WATCHED[kind]:
+    for field in WATCHED[kind][generator]:
         assert field in schema, f"{kind} has no field {field!r}"
         assert field in read, f"{generator}'s query never selects {field!r}, so watching it rebuilds nothing"
 

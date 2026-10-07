@@ -319,8 +319,8 @@ toolbar carries four bookmarks in the order the demo uses them:
 | --- | --- | --- |
 | **Service Portal** | `https://10.90.0.11:32001/` | answers |
 | **Proposed changes** | `http://10.90.0.1:8000/proposed-changes`, Infrahub signed in with Dex | answers |
-| **Demo app (locked)** | `http://10.112.240.0/`, `otternet-demo` | times out |
-| **Grafana (locked)** | `http://10.112.240.81/`, `otternet-metrics` | times out |
+| **Demo app (locked)** | `http://otternet-demo.int.otternet.lab/` (`10.112.240.0`) | times out |
+| **Grafana (locked)** | `http://otternet-metrics.int.otternet.lab/` (`10.112.240.81`) | times out |
 
 `(locked)` means the address answers only after a grant, and `make -C lab verify` holds
 each bookmark to its label from inside the desktop. The portal's certificate is

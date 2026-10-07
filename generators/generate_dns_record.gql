@@ -1,0 +1,33 @@
+# generate-dns-record's query (specs/037-lab-dns-service).
+#
+# The application, and the one application that is the resolver (the only one
+# with a `dns_zone`). The generator needs the zone from the second to name the
+# first, and the resolver's id to ask for its artifact to be re-rendered.
+query GenerateDnsRecordQuery($name: String!) {
+  target: ServiceFabricApp(name__value: $name) {
+    edges {
+      node {
+        id
+        name { value }
+        status { value }
+        exposed { value }
+        dns_address { value }
+        vip_block {
+          node {
+            id
+            prefix { value }
+          }
+        }
+      }
+    }
+  }
+  resolver: ServiceFabricApp(dns_zone__isnull: false) {
+    edges {
+      node {
+        id
+        name { value }
+        dns_zone { value }
+      }
+    }
+  }
+}

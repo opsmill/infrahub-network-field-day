@@ -106,6 +106,15 @@ queries:
   - name: generate_monitoring_collector
     file_path: "./generators/generate_monitoring_collector.gql"
 
+  # Specs/037: the resolver's whole configuration, and the generator that names
+  # each exposed application in its zone.
+  - name: dns_zone_config
+    file_path: "./transforms/dns_zone_config.gql"
+  - name: generate_dns_record
+    file_path: "./generators/generate_dns_record.gql"
+  - name: dns_zone_check
+    file_path: "./checks/dns_zone_check.gql"
+
   # Service-layer generator: derives a cluster's fabric BGP sessions
   - name: generate_fabric_peering
     file_path: "./generators/generate_fabric_peering.gql"
@@ -273,6 +282,26 @@ generator_definitions:
     class_name: FabricAppGenerator
     convert_query_response: false
 
+  # Names an exposed application in the lab's DNS zone: `<name>.<zone>` on its
+  # VIP address, removed when it is withdrawn. Asks for the resolver's
+  # `DNS Zone Configuration` to be re-rendered on its own branch, because that
+  # artifact's target is the resolver and not the application.
+  #
+  # Event rules, the proposed-change pipeline and after-merge all run it, so a
+  # reviewer sees the record in the artifact difference and a merge made by any
+  # route still ends with the name in place. No rule here names a Deployment* or
+  # Monitoring* kind.
+  - name: generate-dns-record
+    file_path: "./generators/generate_dns_record.py"
+    query: generate_dns_record
+    targets: service_fabric_apps
+    parameters:
+      name: name__value
+    class_name: DnsRecordGenerator
+    convert_query_response: false
+    execute_in_proposed_change: true
+    execute_after_merge: true
+
   # Puts a tenant on a fabric. The VNI base is DERIVED rather than pooled: every
   # tenant's L2VLAN VNIs are allocated upward from its base, and a CoreNumberPool
   # hands out consecutive integers -- so pooling it would give two tenants
@@ -390,6 +419,11 @@ check_definitions:
   - name: allocation-consistency
     file_path: "./checks/allocation_consistency_check.py"
     class_name: AllocationConsistencyCheck
+  # Also global: "two applications are resolvers" and "a name points outside its
+  # application's block" are statements about the whole graph (specs/037).
+  - name: dns-zone-consistency
+    file_path: "./checks/dns_zone_check.py"
+    class_name: DnsZoneConsistencyCheck
 
 python_transforms:
   - name: computed_interface_description
@@ -432,6 +466,9 @@ python_transforms:
   - name: telemetry_collector_config
     class_name: TelemetryCollectorConfig
     file_path: "./transforms/telemetry_collector_config.py"
+  - name: dns_zone_config
+    class_name: DnsZoneConfig
+    file_path: "./transforms/dns_zone_config.py"
 
 artifact_definitions:
   - name: "cabling_plan"
@@ -543,3 +580,16 @@ artifact_definitions:
     content_type: "application/yaml"
     targets: "monitoring_collectors"
     transformation: "telemetry_collector_config"
+
+  # Specs/037. The lab resolver's Corefile and zone file, as ONE ConfigMap that
+  # Vidra delivers into the resolver's namespace. `application/yaml` and a single
+  # document, as the telemetry ConfigMap is. The target is the RESOLVER, so a new
+  # application does not change it -- which is why generate-dns-record asks for
+  # this to be re-rendered.
+  - name: "dns_zone_config"
+    artifact_name: "DNS Zone Configuration"
+    parameters:
+      name: "name__value"
+    content_type: "application/yaml"
+    targets: "dns_resolvers"
+    transformation: "dns_zone_config"

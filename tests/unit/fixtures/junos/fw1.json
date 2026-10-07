@@ -826,6 +826,27 @@
       },
       {
         "node": {
+          "__typename": "SecurityIPAMIPAddress",
+          "name": {
+            "value": "dns-resolver"
+          },
+          "description": {
+            "value": "The lab resolver, which the branch may ask for names"
+          },
+          "book_index": {
+            "value": 45
+          },
+          "ip_address": {
+            "node": {
+              "address": {
+                "value": "10.112.240.96/32"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
           "__typename": "SecurityPrefix",
           "name": {
             "value": "any"
@@ -976,6 +997,14 @@
         "node": {
           "__typename": "SecurityIPProtocol",
           "name": {
+            "value": "udp"
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "SecurityIPProtocol",
+          "name": {
             "value": "icmp"
           }
         }
@@ -996,6 +1025,48 @@
             "node": {
               "name": {
                 "value": "tcp"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "SecurityService",
+          "name": {
+            "value": "junos-dns-tcp"
+          },
+          "description": {
+            "value": "DNS over TCP"
+          },
+          "port": {
+            "value": 53
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "tcp"
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
+          "__typename": "SecurityService",
+          "name": {
+            "value": "junos-dns-udp"
+          },
+          "description": {
+            "value": "DNS over UDP"
+          },
+          "port": {
+            "value": 53
+          },
+          "ip_protocol": {
+            "node": {
+              "name": {
+                "value": "udp"
               }
             }
           }
@@ -1600,6 +1671,84 @@
                         "node": {
                           "__typename": "SecurityService",
                           "display_label": "junos-https"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "node": {
+                  "name": {
+                    "value": "branch-to-dns"
+                  },
+                  "index": {
+                    "value": 25
+                  },
+                  "action": {
+                    "value": "permit"
+                  },
+                  "log": {
+                    "value": true
+                  },
+                  "log_session_close": {
+                    "value": true
+                  },
+                  "source_zone": {
+                    "node": {
+                      "name": {
+                        "value": "branch"
+                      }
+                    }
+                  },
+                  "destination_zone": {
+                    "node": {
+                      "name": {
+                        "value": "k8s-prod"
+                      }
+                    }
+                  },
+                  "source_address": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityIPAMIPPrefix",
+                          "display_label": "branch-users"
+                        }
+                      }
+                    ]
+                  },
+                  "destination_address": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityIPAMIPAddress",
+                          "display_label": "dns-resolver"
+                        }
+                      }
+                    ]
+                  },
+                  "source_groups": {
+                    "edges": []
+                  },
+                  "destination_groups": {
+                    "edges": []
+                  },
+                  "source_services": {
+                    "edges": []
+                  },
+                  "destination_services": {
+                    "edges": [
+                      {
+                        "node": {
+                          "__typename": "SecurityService",
+                          "display_label": "junos-dns-tcp"
+                        }
+                      },
+                      {
+                        "node": {
+                          "__typename": "SecurityService",
+                          "display_label": "junos-dns-udp"
                         }
                       }
                     ]

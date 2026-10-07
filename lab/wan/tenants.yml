@@ -280,6 +280,15 @@ branch:
       interface: eth1
       address: 10.70.0.20/24
       gateway: 10.70.0.1
+      # The lab's resolver (specs/037-lab-dns-service), asked FIRST for every name:
+      # it answers the zone and REFUSES everything else, so the container's own
+      # resolver still answers the rest. This address is also the pinned VIP of
+      # `otternet-dns` in Infrahub and the firewall's `dns-resolver` entry --
+      # three copies, held equal by tests/unit/test_dns_service_contract.py,
+      # because this file is rendered without Infrahub.
+      dns:
+        server: 10.112.240.96
+        zone: int.otternet.lab
     # guacd, which is the half of Guacamole that actually speaks VNC. It sits on
     # the branch LAN so the remote-desktop session crosses the site network
     # rather than the lab's management bridge; the web front end it serves does

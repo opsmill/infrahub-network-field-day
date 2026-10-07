@@ -1,0 +1,56 @@
+---
+# Helm values for otternet-dns: CoreDNS, the lab's resolver, configured entirely
+# from Infrahub (specs/037-lab-dns-service).
+#
+# THE CHART'S OWN CONFIGURATION IS NOT USED. `deployment.skipConfig` stops the
+# chart rendering its ConfigMap, and the pod mounts the ConfigMap named after the
+# release instead: `lab-dns`, which is the rendered `DNS Zone Configuration`
+# artifact (a Corefile and the zone file), delivered by Vidra's fourth sync. Every
+# name in the zone came from an application in Infrahub, so what the resolver
+# answers is changed in a proposed change -- never here.
+#
+# `zoneFiles` is here only for its `filename`: the chart lists each one as a key
+# of the mounted ConfigMap, so the zone file has to be named here as well as in
+# the artifact. Its contents are never used (skipConfig), and the name must match
+# `<dns_zone>.db`, which tests/unit/test_dns_values_contract.py holds.
+#
+# The Service is a LoadBalancer on the address the model gives the resolver:
+# `lbipam.cilium.io/ips` PINS it, because the branch machine and the firewall rule
+# both name that address and neither can wait for the allocator to choose. The
+# `otternet.lab/advertise` label is what puts the Service in the application's
+# CiliumLoadBalancerIPPool and gets its address advertised to the fabric.
+
+fullnameOverride: lab-dns
+replicaCount: 1
+
+# Not the cluster's DNS: k3s already runs CoreDNS as kube-dns, and a second one
+# claiming the cluster-service label and priority class would fight it.
+isClusterService: false
+
+serviceType: LoadBalancer
+service:
+  # Local keeps the client's own address, so the pod gate that admits only the
+  # branch LAN can see who is asking.
+  externalTrafficPolicy: Local
+  annotations:
+    lbipam.cilium.io/ips: "10.112.240.96"
+
+customLabels:
+  otternet.lab/advertise: "true"
+
+# Only for the Service's ports: UDP and TCP on 53 from one Service.
+servers:
+  - zones:
+      - zone: .
+        use_tcp: true
+    port: 53
+    plugins:
+      - name: errors
+
+deployment:
+  skipConfig: true
+
+zoneFiles:
+  - filename: int.otternet.lab.db
+    domain: int.otternet.lab
+    contents: ""

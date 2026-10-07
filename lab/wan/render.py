@@ -152,6 +152,8 @@ def render_host(e: Environment, host: dict, mtu: int, default_route: bool = Fals
             gateway=host["gateway"],
             mtu=mtu,
             default_route=default_route,
+            dns_server=(host.get("dns") or {}).get("server"),
+            dns_zone=(host.get("dns") or {}).get("zone"),
         ),
         executable=True,
     )

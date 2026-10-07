@@ -41,7 +41,12 @@ Current generator definitions are registered in `.infrahub.yml`:
 `generate-avd-device-hostvar`, `generate-avd-device-structured-config`,
 `generate-fabric-peering`, `generate-app-access`, `generate-network-segment`,
 `generate-fabric-app`, `generate-tenant-onboarding`, `generate-server-placement`,
-and `generate-monitoring-collector`.
+`generate-monitoring-collector`, and `generate-dns-record`.
+
+`generate-dns-record` puts `<name>.<zone>` on an exposed, live application's VIP address and asks for the
+`DNS Zone Configuration` artifact to be rendered again for the resolver. It runs on four trigger rules, in the proposed-change pipeline and after a merge.
+It creates an address only when none exists, and deletes only an address whose description starts with `DNS name for`. Read
+[the DNS service](./dns-service.md) before changing it.
 
 No `backfill-structured-config` exists any more. It read each switch's structured
 config back into `Routing*`, `IpamPrefix` and interface MTU objects that nothing
@@ -271,7 +276,11 @@ to know before changing it:
 Current Python transforms are: `computed_interface_description`, `cabling_plan`,
 `avd_eos_config`, `avd_fabric_doc`, `avd_device_doc`, `avd_anta_catalog`,
 `containerlab_topology`, `cv_workspace_submission_webhook_payload`, `crossplane_fabric_peering`,
-`crossplane_fabric_app`, `srl_config`, `junos_config`, and `telemetry_collector_config`.
+`crossplane_fabric_app`, `srl_config`, `junos_config`, `telemetry_collector_config`, and `dns_zone_config`.
+
+`dns_zone_config` renders the Corefile and the zone file of the lab resolver as one ConfigMap (`DNS Zone Configuration`, target group
+`dns_resolvers`). It raises on an empty zone, on two addresses for one name, and on a resolver with no name of its own. See
+[the DNS service](./dns-service.md).
 
 `srl_config` renders the WAN's SR Linux configuration — the two ISP provider-edge routers, the
 internet router, the two customer edges and the branch router — as one `text/plain` artifact per
@@ -415,8 +424,9 @@ targeting the `junos_firewalls` group. Four things to know:
 Check definitions are `fabric-pool-validation` (`checks/fabric_pool_check.py`);
 `peering-consistency` (`checks/peering_consistency_check.py`); `zone-advertisement`
 (`checks/zone_advertisement_check.py`); `wan-service-consistency`
-(`checks/wan_service_check.py`); and `allocation-consistency`
-(`checks/allocation_consistency_check.py`). The first is targeted on `fabrics`; the other four
+(`checks/wan_service_check.py`); `allocation-consistency`
+(`checks/allocation_consistency_check.py`); and `dns-zone-consistency`
+(`checks/dns_zone_check.py`). The first is targeted on `fabrics`; the other five
 are **global** — they have no `targets`, because their rules are statements about the whole
 graph rather than about one fabric.
 

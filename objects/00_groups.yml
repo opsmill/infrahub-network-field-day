@@ -30,6 +30,9 @@ spec:
     # Cycle 034. The target group of the `Telemetry Collector Configuration`
     # artifact, and of generate-monitoring-collector, which keeps it fresh.
     - name: monitoring_collectors
+    # Specs/037. The target of the `DNS Zone Configuration` artifact: the one
+    # application that is the lab's resolver.
+    - name: dns_resolvers
     # The k3s nodes, so a monitoring profile can name them the way it names the
     # other three device families. Nothing generates from this group.
     - name: kubernetes_nodes

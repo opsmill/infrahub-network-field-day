@@ -473,8 +473,6 @@ def act_one_values(app: str, reference: str) -> dict[str, Any]:
         "app_name": app,
         "description": "A rehearsal of the demo; never merged",
         "namespace_name": app,
-        "cluster": "otternet",
-        "vrf": "K8S_PROD",
         "owner": "acme",
         "catalogue_entry": ACT_ONE_ENTITY,
         "source_site": "branch-office",

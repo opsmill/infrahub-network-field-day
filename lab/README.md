@@ -361,8 +361,8 @@ connection, **OTTERNET branch office desktop**):
   what each bookmark is.
 - **Firefox's toolbar, in demo order**: *Service Portal*; *Proposed changes*
   (`http://10.90.0.1:8000/proposed-changes`, where `alice` reads her request, signed
-  in with Dex); *Demo app (locked)* (`otternet-demo`, `10.112.240.0`); and
-  *Grafana (locked)* (`10.112.240.81`, which signs in through Dex once granted).
+  in with Dex); *Demo app (locked)* (`otternet-demo.int.otternet.lab`, `10.112.240.0`); and
+  *Grafana (locked)* (`otternet-metrics.int.otternet.lab`, `10.112.240.81`, which signs in through Dex once granted).
   **`(locked)` is a contract, not decoration.** It means "answers only after a
   grant", and `make verify` reads the bookmarks out of the running desktop and
   holds each one to its label: an unlabelled bookmark must answer, and a locked

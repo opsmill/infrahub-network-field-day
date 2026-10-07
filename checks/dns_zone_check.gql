@@ -1,0 +1,30 @@
+# dns_zone_check's query (specs/037-lab-dns-service): every application, with its
+# block and its zone, and every address that carries a name.
+query DnsZoneCheckQuery {
+  ServiceFabricApp {
+    edges {
+      node {
+        id
+        name { value }
+        status { value }
+        exposed { value }
+        dns_zone { value }
+        vip_block {
+          node {
+            id
+            prefix { value }
+          }
+        }
+      }
+    }
+  }
+  IpamIPAddress(fqdn__isnull: false) {
+    edges {
+      node {
+        id
+        address { value }
+        fqdn { value }
+      }
+    }
+  }
+}

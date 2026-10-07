@@ -32,6 +32,9 @@ spec:
       generator: generate-server-placement
     - name: run-fabric-peering-generator
       generator: generate-fabric-peering
+    # Names an application in the lab's DNS zone (specs/037-lab-dns-service).
+    - name: run-dns-record-generator
+      generator: generate-dns-record
 
 ---
 # A grant made by any client is built, not only one made by the portal.
@@ -526,6 +529,62 @@ spec:
         kind: CoreNodeTriggerRelationshipMatch
         data:
           - relationship_name: cluster
+            modification_type: updated
+
+    # The lab's DNS names (specs/037-lab-dns-service). An application has a name
+    # when it is exposed, live and has a VIP block, so those are the inputs
+    # watched: creation, status, exposed and -- because generate-fabric-app
+    # allocates it after creation -- the block itself. The generator writes an
+    # IpamIPAddress and never the application, so none of this can loop.
+    # Nothing here names a Deployment* or Monitoring* kind.
+    - name: trigger-dns-record-generator-created
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "created"
+      action: run-dns-record-generator
+
+    - name: trigger-dns-record-generator-update-status
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-dns-record-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: status
+            value_match: any
+
+    - name: trigger-dns-record-generator-update-exposed
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-dns-record-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: exposed
+            value_match: any
+
+    - name: trigger-dns-record-generator-update-dns-address
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-dns-record-generator
+      matches:
+        kind: CoreNodeTriggerAttributeMatch
+        data:
+          - attribute_name: dns_address
+            value_match: any
+
+    - name: trigger-dns-record-generator-update-vip-block
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "updated"
+      action: run-dns-record-generator
+      matches:
+        kind: CoreNodeTriggerRelationshipMatch
+        data:
+          - relationship_name: vip_block
             modification_type: updated
 
     # ServiceTenantOnboarding. `mac_vrf_vni_base` is read AND written -- the
