@@ -146,13 +146,14 @@ def render_corefile(zone: str) -> str:
     the zone (glibc treats REFUSED as a reason to try the next server; it treats
     NXDOMAIN as the final answer).
 
-    BOTH BLOCKS SET THE RECURSION-AVAILABLE FLAG. BIND's ``nslookup`` and ``dig``
-    discard a reply that lacks it ("Got recursion not available ... trying next
-    server") and then report NXDOMAIN from the next nameserver, so a name this
-    resolver answers looked missing. glibc ignores the flag, which is why
-    ``getent`` worked while ``nslookup`` did not. The flag is a statement that
-    the client may ask, and this resolver answers a recursive query with its
-    zone or a refusal.
+    ONLY THE ZONE BLOCK SETS THE RECURSION-AVAILABLE FLAG. BIND's ``nslookup``
+    and ``dig`` discard a reply that lacks it ("Got recursion not available ...
+    trying next server") and then report NXDOMAIN from the next nameserver, so a
+    name this resolver answers looked missing. glibc ignores the flag, which is
+    why ``getent`` worked while ``nslookup`` did not. The refusing block leaves
+    the flag off on purpose: with it set, ``nslookup example.com`` stops at the
+    REFUSED and never tries the next nameserver, and without it BIND's tools move
+    on exactly as glibc does.
     """
     return (
         f"{zone}:53 {{\n"
@@ -162,6 +163,7 @@ def render_corefile(zone: str) -> str:
         "    header {\n"
         "        response set ra\n"
         "    }\n"
+        "    reload 10s\n"
         "    errors\n"
         "    health {\n"
         "        lameduck 5s\n"
@@ -170,9 +172,6 @@ def render_corefile(zone: str) -> str:
         "    prometheus 0.0.0.0:9153\n"
         "}\n"
         ".:53 {\n"
-        "    header {\n"
-        "        response set ra\n"
-        "    }\n"
         "    errors\n"
         "    template ANY ANY {\n"
         "        rcode REFUSED\n"

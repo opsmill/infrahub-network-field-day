@@ -179,6 +179,12 @@ def test_a_resolver_with_no_namespace_is_refused() -> None:
         _render(_data(namespace=None))
 
 
-def test_both_blocks_set_the_recursion_available_flag_so_nslookup_keeps_the_answer() -> None:
-    corefile = render_corefile(ZONE)
-    assert corefile.count("response set ra") == 2
+def test_only_the_zone_block_sets_the_recursion_available_flag() -> None:
+    zone_block, refusing_block = render_corefile(ZONE).split(".:53 {")
+    assert "response set ra" in zone_block
+    assert "response set ra" not in refusing_block
+
+
+def test_the_corefile_reloads_itself_so_a_change_needs_no_restart() -> None:
+    zone_block = render_corefile(ZONE).split(".:53 {")[0]
+    assert "\n    reload 10s\n    errors" in zone_block
