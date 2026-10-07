@@ -145,11 +145,22 @@ def render_corefile(zone: str) -> str:
     resolver beside its usual one moves on to the usual one for a name outside
     the zone (glibc treats REFUSED as a reason to try the next server; it treats
     NXDOMAIN as the final answer).
+
+    BOTH BLOCKS SET THE RECURSION-AVAILABLE FLAG. BIND's ``nslookup`` and ``dig``
+    discard a reply that lacks it ("Got recursion not available ... trying next
+    server") and then report NXDOMAIN from the next nameserver, so a name this
+    resolver answers looked missing. glibc ignores the flag, which is why
+    ``getent`` worked while ``nslookup`` did not. The flag is a statement that
+    the client may ask, and this resolver answers a recursive query with its
+    zone or a refusal.
     """
     return (
         f"{zone}:53 {{\n"
         f"    file /etc/coredns/{zone}.db {{\n"
         "        reload 10s\n"
+        "    }\n"
+        "    header {\n"
+        "        response set ra\n"
         "    }\n"
         "    errors\n"
         "    health {\n"
@@ -159,6 +170,9 @@ def render_corefile(zone: str) -> str:
         "    prometheus 0.0.0.0:9153\n"
         "}\n"
         ".:53 {\n"
+        "    header {\n"
+        "        response set ra\n"
+        "    }\n"
         "    errors\n"
         "    template ANY ANY {\n"
         "        rcode REFUSED\n"

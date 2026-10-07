@@ -53,6 +53,9 @@ Specification, plan and tasks: `specs/037-lab-dns-service/`.
 - **The resolver own address is pinned** the same way (`10.112.240.96`), because the branch machine's setting, the firewall rule and
   the zone's NS record all name it before a generator could choose one. `tests/unit/test_dns_service_contract.py` holds the five places
   that write the address equal.
+- **Both Corefile blocks set the recursion-available flag** (`header { response set ra }`). BIND's `nslookup` and `dig` discard a reply without it
+  ("Got recursion not available ... trying next server") and then report `NXDOMAIN` from the next nameserver, so a name the resolver
+  answers looked missing. `getent` and glibc ignore the flag, which is why the first test with `getent` passed.
 - **The resolver refuses every name outside the zone** (`rcode REFUSED`). The glibc resolver moves on to the next nameserver on a refusal
   and treats `NXDOMAIN` as final, so the branch machine keeps resolving everything else through the container's own nameserver.
 - **The services are the Junos built-ins `junos-dns-udp` and `junos-dns-tcp`.** Services with a `junos-` prefix are not declared in the

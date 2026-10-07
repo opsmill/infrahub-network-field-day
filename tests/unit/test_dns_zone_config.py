@@ -177,3 +177,8 @@ def test_an_application_with_no_dns_zone_is_not_a_resolver() -> None:
 def test_a_resolver_with_no_namespace_is_refused() -> None:
     with pytest.raises(DnsZoneConfigError, match="namespace_name"):
         _render(_data(namespace=None))
+
+
+def test_both_blocks_set_the_recursion_available_flag_so_nslookup_keeps_the_answer() -> None:
+    corefile = render_corefile(ZONE)
+    assert corefile.count("response set ra") == 2
