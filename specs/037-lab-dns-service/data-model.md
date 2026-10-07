@@ -7,7 +7,7 @@
 | `ServiceFabricApp` | New optional attribute `dns_zone` (Text, hostname pattern). Set only on the resolver application. | Decision 3: the zone is stored on the resolver application. Optional, because making an attribute mandatory against existing data is refused. |
 | `IpamIPAddress` | No change. The existing optional `fqdn` is filled. | Decision 3. |
 | `SecurityIPProtocol` objects | New object `udp`, protocol 17. | DNS needs UDP ([research.md](./research.md#r-5)). |
-| `SecurityService` objects | New `dns-udp` and `dns-tcp`, port 53. | The seeded rule names them. |
+| `SecurityService` objects | New `junos-dns-udp` and `junos-dns-tcp`, port 53 (Junos built-ins). | The seeded rule names them. |
 | Address book | New entry for the resolver's VIP. | The seeded rule's destination. |
 | `SecurityPolicyRule` | New `branch-to-dns`, `branch` to `k8s-prod`, not managed by a service. | Access in the bootstrapped version. |
 

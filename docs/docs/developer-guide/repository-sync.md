@@ -80,3 +80,43 @@ list of names or regexes tried with `re.fullmatch`. Things to know:
   Integration tests are unaffected: they build their own Infrahub and repository.
 
 The builder demo registers a repository on the Git remote instead, in read-only or read-write mode, so its filter and credentials differ from the defaults here. See [Builder demo](../demo-builder.md).
+
+## When no repository sync runs, and a branch deleted in Infrahub is the cause
+
+Measured on 2026-10-07, on a read-write demo stack, while bringing a change in with `invoke demo-advance`. The
+import waited 30 minutes and never started, and the worker logs showed no synchronization at all. There were two
+causes, found one after the other.
+
+**A worker that dies holds its concurrency slot for good.** The task manager gives the `git_repositories_sync` and
+`clean-up-deadlocks` deployments one slot each. When the task workers were recreated at 01:08, the runs that held
+those slots never finished. Every scheduled run after that waited for a slot that nobody would release, so the repository
+sync stopped, and 133 runs queued behind it. Marking the old runs as crashed does not release the slots. Check them,
+then release them:
+
+```bash
+# Each limit is 1; an active_slots of 1 with nothing running means a dead holder
+curl -s -X POST http://localhost:4200/api/v2/concurrency_limits/filter -H 'Content-Type: application/json' -d '{}'
+curl -s -X PATCH http://localhost:4200/api/v2/concurrency_limits/<id> -H 'Content-Type: application/json' -d '{"active_slots": 0}'
+```
+
+Runs left in `Pending` or `Submitting` since the same moment also have to be marked crashed through
+`POST /api/flow_runs/<id>/set_state`, or they block the schedule. Restarting the task workers alone changed nothing.
+
+**One branch deleted in Infrahub makes every later sync fail.** Deleting an Infrahub branch leaves its worktree and local
+branch in each task worker's clone. The sync then asks Infrahub for that branch's GraphQL endpoint, gets
+`URLNotFoundError: .../graphql/demo/baseline-advance-3 not found`, and stops before it reaches the branches that matter. It fails
+every minute, so nothing is imported. Remove the stale worktree and the local branch from each worker, and the remote branch:
+
+```bash
+for w in 1 2; do docker exec infrahub-task-worker-$w sh -c '
+  R=/opt/infrahub/git/<repository id>/main
+  git -C $R worktree remove --force <path of the stale worktree>
+  git -C $R branch -D demo/baseline-advance-3'; done
+git push origin --delete demo/baseline-advance-3
+```
+
+`git -C <clone> worktree list` shows which worktree belongs to which branch. This is the same trap as the rule in the
+[builder demo](../demo-builder.md#rules-that-each-cost-a-failed-run) against reusing a branch name, with a worse effect:
+a name that is reused starts on an old commit, and a name that is deleted stops the whole sync. Do not delete a
+`demo/` branch from Infrahub by hand. `invoke demo-advance` deletes the branch it creates after the merge, and a run that
+fails leaves one behind that has to be removed in the way above.

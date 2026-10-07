@@ -46,3 +46,30 @@ Each finding comes from a file in this repository. Where the files do not say, t
 - **Finding**: a withdrawn application is `decommissioning` or `decommissioned`, and every write-back must be guarded so the rules terminate ([AGENTS.md](../../AGENTS.md)).
 - **Decision**: the generator sets `fqdn` only on an address it created in the application's block, and clears and deletes only what it created. [CLAUDE RECOMMENDED – based on `vip_block_managed`, the same guard for the same reason] This needs a way to know it created the address. The plan uses the `fqdn` value itself: an address whose `fqdn` ends with the zone belongs to DNS. No new managed flag is added.
 - **Trigger rule**: the application is a `Service*` kind, not a `Deployment*` or `Monitoring*` kind, so a rule on it is allowed.
+
+## Results measured on the running lab {#results}
+
+Measured on 2026-10-07 after `invoke bootstrap --fresh --demo` and `invoke demo-advance`.
+
+- **R-3 (which address the Service receives): the first address of the block, for one Service per application.**
+  `otternet-demo` (block `10.112.240.0/28`) gave `10.112.240.0`, and a requested application with the block `10.112.240.16/28` gave
+  `10.112.240.16`, which the zone also named. An application that pins another address does not follow the rule: Grafana pins
+  `10.112.240.81` inside `10.112.240.80/28`, so its name is seeded with that address, and a contract test holds every exposed
+  seeded application to this. Pinning with `lbipam.cilium.io/ips` works on the lab's Cilium 1.18.6, and the resolver uses it.
+- **R-2 (the chart): CoreDNS chart 1.48.2 works as planned.** `deployment.skipConfig: true` makes the chart mount a ConfigMap named
+  for the release (`fullnameOverride: lab-dns`), and `zoneFiles` is needed only for its `filename`. One Service carries UDP and TCP
+  on port 53. The pod ran and the ConfigMap arrived through the new `dns-zone-config` sync.
+- **R-1 (the firewall): the seeded `branch-to-dns` rule works.** The reconciler converged with `differed=0` on `fw1`, and
+  `branch-desktop` queried the resolver straight after bootstrap with no request made. The services are the Junos built-ins
+  `junos-dns-udp` and `junos-dns-tcp`, so `junos.conf` gained only an address-book entry and a policy, and no application declarations.
+- **Timings, request to name:** the name was written on the request's branch 20 seconds after the application was requested.
+  After the merge the record reached the resolver's ConfigMap in 15 to 75 seconds, and the name resolved from `branch-desktop` 10 to
+  30 seconds after that. A withdrawal took 60 to 75 seconds to leave the ConfigMap and 70 seconds more to stop resolving.
+- **Two generator runs raced and made a branch unmergeable.** The created event and the arrival of the block each fired
+  `generate-dns-record`, and both created the same address. The unique constraint holds at merge, not at write, so the merge failed.
+  Found only by requesting an application and merging it. Fixed by naming the namespace in the create and by removing duplicates the
+  generator created; see [the generator](../../generators/generate_dns_record.py).
+- **Not done: the integration suite** (`uv run invoke test --integration`), which starts a separate Infrahub stack in Docker. The
+  end-to-end request, merge, resolve, withdraw and resolve again cycle was run by hand against the live lab instead, twice, and
+  passed both times (the first run after a fix for the race, the second from a clean start).
+- **Platform stall, unrelated to this feature:** see [repository sync](../../docs/docs/developer-guide/repository-sync.md).
