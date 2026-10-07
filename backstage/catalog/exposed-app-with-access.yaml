@@ -57,9 +57,6 @@ spec:
       required:
         - app_name
         - description
-        - namespace_name
-        - cluster
-        - vrf
         - owner
         - catalogue_entry
       properties:
@@ -81,43 +78,7 @@ spec:
           type: string
           # Called namespace_name because `namespace` is a schema-level key in
           # Infrahub.
-          description: The Kubernetes namespace the application is installed into.
-        cluster:
-          title: Cluster
-          type: string
-          default: otternet
-          # ENUMERATED RATHER THAN TYPED. These five fields are hfids, resolved by
-          # Infrahub at mutation time, and a wrong one fails AFTER BranchCreate has
-          # succeeded -- a red run, no hint of the right value, and an orphan branch
-          # to clean up. The sets are small and stable, so the form can carry them.
-          # They are not EntityPickers because these kinds are not ingested into the
-          # Backstage catalogue; if they ever are, swap these for ui:field pickers.
-          #
-          # The VIP pool is resolved THROUGH the cluster: only its own `vip_pools`
-          # supernets are permitted by the leaves' inbound route policy, so a
-          # block from anywhere else is advertised and refused.
-          enum:
-            - otternet
-          description: The Kubernetes cluster to run the application on.
-        vrf:
-          title: VRF
-          type: string
-          default: K8S_PROD
-          # Only VRFs that exactly one SecurityZone hands off to. CUST_ACME and
-          # CUST_GLOBEX are deliberately absent: no zone names them, so the grant's
-          # destination zone could not be derived and the generator would refuse.
-          enum:
-            - K8S_PROD
-            - APP_PROD
-            - TENANT_ACME
-            - TENANT_GLOBEX
-            - WAN
-            - BRANCH
-          #
-          # The VRF also decides the grant's destination zone, which is derived by
-          # matching it against `SecurityZone.vrf`. Exactly one zone must match, or
-          # the grant's generator refuses the request as ambiguous.
-          description: The network the application is reachable in.
+          description: The Kubernetes namespace the application is installed into. Leave blank to use the application name.
         owner:
           title: Owning organisation
           type: string
@@ -355,7 +316,9 @@ spec:
                 infrahub_context_account: ${{ user.entity.metadata.name }}
                 name: ${{ parameters.app_name }}
                 description: ${{ parameters.description }}
-                namespace_name: ${{ parameters.namespace_name }}
+                # Optional on the form. Blank means the application name, which is
+                # already a valid, unique namespace name. The schema keeps it mandatory.
+                namespace_name: ${{ parameters.namespace_name if parameters.namespace_name else parameters.app_name }}
                 # From the entry, never from the form. Mandatory in the schema, so
                 # they are sent here; `generate-fabric-app` pins them again from
                 # the same entry, and `definition_pinned` is what stops it doing
@@ -367,8 +330,13 @@ spec:
                 exposed: true
                 service_selector: { fromStep: read_definition, path: "data.ServiceApplicationDefinition.edges[0].node.default_service_selector.value" }
                 definition: { fromStep: read_definition, path: "data.ServiceApplicationDefinition.edges[0].node.id" }
-                cluster: ${{ parameters.cluster }}
-                vrf: ${{ parameters.vrf }}
+                # FIXED BY THE TEMPLATE, NOT ASKED. The lab has one cluster, and the
+                # VRF is the one application VIPs live in (the one SecurityZone,
+                # K8S_PROD's, hands off to it). A requester cannot change either.
+                # The cluster's `vip_pools` decide which supernets the leaves permit,
+                # so a wrong value here would advertise a block the fabric refuses.
+                cluster: otternet
+                vrf: K8S_PROD
                 owner: ${{ parameters.owner }}
 
           # ---------------------------------------------------------- the barrier

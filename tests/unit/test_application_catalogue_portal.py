@@ -40,7 +40,7 @@ REMOVED_FIELDS = (
     "vip_block_size",
     "values_file_content",
 )
-KEPT_FIELDS = ("app_name", "description", "namespace_name", "cluster", "vrf", "owner")
+KEPT_FIELDS = ("app_name", "description", "namespace_name", "owner")
 # `read_definition` is an operation inside the `infrahub:sequence` step, so a value taken from it is a
 # `fromStep` reference rather than a `steps.<id>.output` expression.
 EDGE = "data.ServiceApplicationDefinition.edges[0].node"
@@ -91,16 +91,15 @@ def test_the_form_keeps_what_is_the_requesters(template: dict[str, Any]) -> None
     properties = _properties(template)
     for field in (*KEPT_FIELDS, "source_site", "justification", "request_reference"):
         assert field in properties, field
-    assert properties["cluster"]["default"] == "otternet"
-    assert properties["vrf"]["default"] == "K8S_PROD"
+    assert "cluster" not in properties and "vrf" not in properties
     assert properties["owner"]["default"] == "acme"
     assert properties["source_site"]["default"] == "branch-office"
 
 
-def test_the_form_asks_for_ten_things_none_of_them_about_charts(template: dict[str, Any]) -> None:
-    """SC-001: app name, description, namespace, cluster, VRF, owner, the picker,
+def test_the_form_asks_for_eight_things_none_of_them_about_charts(template: dict[str, Any]) -> None:
+    """SC-001: app name, description, namespace, owner, the picker,
     source site, justification, request reference."""
-    assert len(_properties(template)) == 10
+    assert len(_properties(template)) == 8
 
 
 def test_there_is_one_picker_and_it_is_required(template: dict[str, Any]) -> None:
