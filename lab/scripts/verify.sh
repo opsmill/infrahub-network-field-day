@@ -844,11 +844,22 @@ if running branch-desktop; then
                     || bad "$what" "answered ${code:-nothing} from the desktop, and nothing in its label says it needs a grant -- fix the path, label it (locked), or remove it"
                 continue
             fi
-            if [[ -n "$lb_vips" ]] && ! grep -qxF "$host" <<<"$lb_vips"; then
-                bad "$what" "$host is not the address of any LoadBalancer Service in the cluster -- the bookmark names a stale VIP (kubectl get svc -A | grep LoadBalancer)"
+            # A bookmark may name the VIP by its DNS name; resolve it on the desktop,
+            # which is also what a click does, so a name the zone lacks fails here.
+            if [[ "$host" =~ ^[0-9.]+$ ]]; then
+                vip="$host"
+            else
+                vip=$(docker exec clab-otternet-branch-desktop getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1{print $1}')
+                if [[ -z "$vip" ]]; then
+                    bad "$what" "$host does not resolve from the desktop -- the application has no name in the lab's DNS zone yet (see docs/docs/developer-guide/dns-service.md)"
+                    continue
+                fi
+            fi
+            if [[ -n "$lb_vips" ]] && ! grep -qxF "$vip" <<<"$lb_vips"; then
+                bad "$what" "$host ($vip) is not the address of any LoadBalancer Service in the cluster -- the bookmark names a stale VIP (kubectl get svc -A | grep LoadBalancer)"
                 continue
             fi
-            fw="unknown"; [[ -n "$fw_ready" ]] && fw=$(fw_permits branch 10.70.0.20 "$host" "$port")
+            fw="unknown"; [[ -n "$fw_ready" ]] && fw=$(fw_permits branch 10.70.0.20 "$vip" "$port")
             if [[ -z "$answered" ]]; then
                 ok "$what: locked, as labelled -- no answer without a grant (firewall: $fw)"
             elif [[ "$fw" == permit* || "$fw" == "unknown" ]]; then

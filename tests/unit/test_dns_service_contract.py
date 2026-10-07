@@ -233,3 +233,27 @@ def test_an_application_that_pins_an_address_other_than_its_first_has_that_name_
             f"{app['name']} pins {pinned}, not the first address {first} of its block: "
             f"seed an IpamIPAddress named {app['name']}.{ZONE} at the pinned address"
         )
+
+
+def test_every_bookmark_to_an_application_uses_its_dns_name() -> None:
+    """A bookmark to a VIP in the DC range names the application, not the address."""
+    import json
+    from urllib.parse import urlsplit
+
+    policies = json.loads((REPO / "lab/configs/branch/desktop/firefox-policies.json").read_text(encoding="utf-8"))
+    seeded = {a["fqdn"] for a in _objects("objects/32_otternet_security.yml", "IpamIPAddress") if a.get("fqdn")}
+    for bookmark in policies["policies"]["Bookmarks"]:
+        host = urlsplit(bookmark["URL"]).hostname or ""
+        assert not host.startswith("10.112.240."), (
+            f"{bookmark['Title']} names a VIP ({host}); use the application's DNS name"
+        )
+        if host.endswith(f".{ZONE}"):
+            assert host in seeded, f"{bookmark['Title']} names {host}, which no seeded IpamIPAddress carries"
+
+
+def test_every_seeded_exposed_application_has_its_name_seeded() -> None:
+    """A fresh bootstrap runs no generator, so a seeded application's name must be seeded too."""
+    named = {a["fqdn"] for a in _objects("objects/32_otternet_security.yml", "IpamIPAddress") if a.get("fqdn")}
+    for app in _objects("objects/36_otternet_app_services.yml", "ServiceFabricApp"):
+        if app.get("exposed"):
+            assert f"{app['name']}.{ZONE}" in named, f"{app['name']} is exposed and has no seeded name"

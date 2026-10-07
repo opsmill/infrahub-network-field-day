@@ -266,6 +266,11 @@ spec:
     - address: 10.112.240.96/32
       description: "The lab resolver VIP"
       fqdn: otternet-dns.int.otternet.lab
+    # The demo application, at the first address of its block. Seeded for the same
+    # reason: a fresh bootstrap runs no generator, and the desktop's bookmark names it.
+    - address: 10.112.240.0/32
+      description: "The demo application's VIP"
+      fqdn: otternet-demo.int.otternet.lab
     # Grafana's pinned address, NOT the first of its block (10.112.240.80/28): Dex's
     # redirect URI names .81, so its Service pins it with lbipam.cilium.io/ips. The
     # first-address rule would have named .80, where nothing answers, so the name is
