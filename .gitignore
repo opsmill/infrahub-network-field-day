@@ -283,3 +283,6 @@ secrets.yml
 kubeconfig
 kubeconfig-*
 *.kubeconfig
+
+# Local preview of the static sites
+sites/_build/

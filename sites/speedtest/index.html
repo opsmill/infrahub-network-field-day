@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET throughput test</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET throughput test</h1>
+    <p>Time a download across the whole path</p>
+    <nav><a href="index.html" class="here">Test</a></nav>
+  </header>
+  <main>
+
+    <div class="card">
+      <p>The button downloads a 20 MB file from this server and times it. The result is the throughput of the full path from your machine to the pod, including the firewall.</p>
+      <p><button id="go">Start download</button></p>
+      <table>
+        <tr><th>Size</th><td id="size">-</td></tr>
+        <tr><th>Time</th><td id="time">-</td></tr>
+        <tr><th>Throughput</th><td id="rate">-</td></tr>
+      </table>
+    </div>
+    <div class="note">A single run on one connection. Compare runs from the same machine, before and after a change.</div>
+    <script>
+      const button = document.getElementById("go");
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        const start = performance.now();
+        try {
+          const response = await fetch("testfile.bin?" + start, { cache: "no-store" });
+          const bytes = (await response.arrayBuffer()).byteLength;
+          const seconds = (performance.now() - start) / 1000;
+          document.getElementById("size").textContent = (bytes / 1048576).toFixed(1) + " MB";
+          document.getElementById("time").textContent = seconds.toFixed(2) + " s";
+          document.getElementById("rate").textContent = ((bytes * 8) / seconds / 1e6).toFixed(1) + " Mbit/s";
+        } catch (error) {
+          document.getElementById("rate").textContent = "failed: " + error;
+        }
+        button.disabled = false;
+      });
+    </script>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

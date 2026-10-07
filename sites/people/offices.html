@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET people</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET people</h1>
+    <p>Sites and who is there</p>
+    <nav><a href="index.html">Employee tree</a><a href="offices.html" class="here">Offices</a><a href="contacts.html">Contacts and escalation</a></nav>
+  </header>
+  <main>
+<div class="note">The names, roles and contact details on this page are invented for the lab. No source describes OTTERNET as a company.</div>
+    <div class="card"><table>
+      <tr><th>Site</th><th>Network</th><th>Teams</th></tr>
+      <tr><td>Branch office</td><td><code>10.70.0.0/24</code>, behind <code>branch-rtr</code> (AS 65030)</td><td>Customer Support, and the people who request applications</td></tr>
+      <tr><td>Data centre</td><td>Fabric AS 65100, VIP range <code>10.112.240.0/24</code></td><td>Network Engineering, Security, Platform</td></tr>
+      <tr><td>Provider edge</td><td><code>isp-pe1</code> and <code>isp-pe2</code>, AS 65500</td><td>Network Engineering (WAN)</td></tr>
+    </table></div>
+    <p>The network column is from the lab's README. The teams column is invented.</p>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

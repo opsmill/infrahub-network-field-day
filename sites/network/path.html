@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET network</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET network</h1>
+    <p>The route from the branch to a data centre application</p>
+    <nav><a href="index.html">Address plan</a><a href="path.html" class="here">Path diagram</a><a href="firewall.html">Firewall policy</a></nav>
+  </header>
+  <main>
+
+    <div class="card"><div class="path">
+      <span class="hop">branch-desktop<br>10.70.0.20</span><span class="arrow">&rarr;</span>
+      <span class="hop">branch-rtr<br>AS 65030</span><span class="arrow">&rarr;</span>
+      <span class="hop">border-leaf1<br>Et15</span><span class="arrow">&rarr;</span>
+      <span class="hop fw">fw1<br>zone branch &rarr; zone k8s-prod</span><span class="arrow">&rarr;</span>
+      <span class="hop">border-leaf1<br>Et10</span><span class="arrow">&rarr;</span>
+      <span class="hop">spine1 or spine2</span><span class="arrow">&rarr;</span>
+      <span class="hop">k8s-leaf1 or k8s-leaf2</span><span class="arrow">&rarr;</span>
+      <span class="hop">Kubernetes node</span><span class="arrow">&rarr;</span>
+      <span class="hop">pod</span>
+    </div></div>
+    <h2>The firewall handoffs</h2>
+    <div class="card"><table>
+      <tr><th>Interface</th><th>Network</th><th>Zone</th></tr>
+      <tr><td>ge-0/0/0</td><td><code>10.250.110.0/30</code></td><td>k8s-prod</td></tr>
+      <tr><td>ge-0/0/1</td><td><code>10.250.210.0/30</code></td><td>app-prod</td></tr>
+      <tr><td>ge-0/0/2</td><td><code>10.250.150.0/30</code></td><td>wan</td></tr>
+      <tr><td>ge-0/0/3</td><td><code>10.250.170.0/30</code></td><td>branch</td></tr>
+      <tr><td>ge-0/0/4</td><td><code>10.250.10.0/30</code></td><td>acme-cloud</td></tr>
+      <tr><td>ge-0/0/5</td><td><code>10.250.20.0/30</code></td><td>globex-cloud</td></tr>
+    </table></div>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

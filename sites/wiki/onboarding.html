@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET wiki</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET wiki</h1>
+    <p>A checklist for a new engineer</p>
+    <nav><a href="index.html">Home</a><a href="request.html">Request an application</a><a href="services.html">Services</a><a href="network.html">How the network is built</a><a href="onboarding.html" class="here">Onboarding</a><a href="glossary.html">Glossary</a><a href="changelog.html">Changelog</a><a href="incidents.html">Incidents</a><a href="brand.html">Brand</a></nav>
+  </header>
+  <main>
+<div class="note">The names, roles and contact details on this page are invented for the lab. No source describes OTTERNET as a company.</div>
+    <div class="card"><ol>
+      <li>Sign in to Infrahub as your own user, not as an administrator.</li>
+      <li>Open the lab's demo runbook and read the section on the three gates: route, firewall, pod policy.</li>
+      <li>Request <strong>OTTERNET wiki</strong> from the portal and watch the proposed change build.</li>
+      <li>Find the new application's name in the address plan page of the network site.</li>
+      <li>Resolve that name from the branch machine with <code>nslookup</code>.</li>
+      <li>Withdraw the application and confirm the name stops resolving.</li>
+    </ol></div>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

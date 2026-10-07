@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Globex</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>Globex</h1>
+    <p>Tenant on VRF CUST_GLOBEX</p>
+    <nav><a href="index.html">Directory</a><a href="acme.html">Acme</a><a href="globex.html" class="here">Globex</a></nav>
+  </header>
+  <main>
+
+    <div class="card"><table>
+      <tr><th>Item</th><th>Value</th></tr>
+      <tr><td>Autonomous system</td><td>65020</td></tr>
+      <tr><td>Site hq</td><td><code>10.60.20.0/24</code>, eBGP with <code>isp-pe1</code></td></tr>
+      <tr><td>Cloud instances</td><td>VRF <code>TENANT_GLOBEX</code>, <code>10.220.20.0/24</code>, handoff <code>10.250.20.0/30</code> to the firewall</td></tr>
+      <tr><td>Internet access</td><td>Not bought. The tenant's VRF has no default route.</td></tr>
+    </table></div>
+    <p>Acme's routes are not in Globex's VRF, so a host here cannot reach an Acme address.</p>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

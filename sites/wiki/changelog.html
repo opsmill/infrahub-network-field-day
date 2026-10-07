@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET wiki</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET wiki</h1>
+    <p>From the repository's history</p>
+    <nav><a href="index.html">Home</a><a href="request.html">Request an application</a><a href="services.html">Services</a><a href="network.html">How the network is built</a><a href="onboarding.html">Onboarding</a><a href="glossary.html">Glossary</a><a href="changelog.html" class="here">Changelog</a><a href="incidents.html">Incidents</a><a href="brand.html">Brand</a></nav>
+  </header>
+  <main>
+
+    <div class="card"><table>
+      <tr><th>Date</th><th>Change</th></tr>
+      <tr><td>2026-10-07</td><td>A shop page, <code>otternet-shop</code>, and a wiki, <code>otternet-wiki</code>, can be requested from the catalogue.</td></tr>
+      <tr><td>2026-10-07</td><td>The lab has a DNS resolver. Each exposed application gets <code>&lt;name&gt;.int.otternet.lab</code>, and the branch machine's bookmarks use the names.</td></tr>
+      <tr><td>2026-10-07</td><td>The portal form asks for eight things, not ten: cluster and VRF are fixed, and the namespace is optional.</td></tr>
+      <tr><td>2026-10-06</td><td>A local <code>network-admin</code> account edits network data on a branch and merges a proposed change.</td></tr>
+      <tr><td>2026-10-06</td><td>The portal shows four steps on the application request page.</td></tr>
+      <tr><td>2026-10-05</td><td>Catalogue entries can allow egress to the Kubernetes API server. Argo CD uses it.</td></tr>
+      <tr><td>2026-10-04</td><td>Podinfo, Grafana and Argo CD became requestable applications.</td></tr>
+      <tr><td>2026-10-04</td><td>Infrahub Users hold only Requester Access, so <code>alice</code> cannot write to <code>main</code>.</td></tr>
+    </table></div>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET wiki</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET wiki</h1>
+    <p>The four parts of the lab</p>
+    <nav><a href="index.html">Home</a><a href="request.html">Request an application</a><a href="services.html">Services</a><a href="network.html" class="here">How the network is built</a><a href="onboarding.html">Onboarding</a><a href="glossary.html">Glossary</a><a href="changelog.html">Changelog</a><a href="incidents.html">Incidents</a><a href="brand.html">Brand</a></nav>
+  </header>
+  <main>
+
+    <div class="grid">
+      <div class="card"><h3>The data centre fabric</h3><p>Arista switches in a spine and leaf design. The two spines are <code>spine1</code> and <code>spine2</code>, and the leaves include <code>k8s-leaf1</code>, <code>k8s-leaf2</code>, <code>app-leaf1</code>, <code>app-leaf2</code> and <code>border-leaf1</code>. The fabric runs BGP with EVPN.</p></div>
+      <div class="card"><h3>The firewall</h3><p><code>fw1</code> is a Junos firewall. Every path between two networks crosses it, in a zone pair such as <code>branch</code> to <code>k8s-prod</code>.</p></div>
+      <div class="card"><h3>The WAN</h3><p>Two provider edge routers, <code>isp-pe1</code> and <code>isp-pe2</code>, run SR Linux in AS 65500. Each tenant gets one VRF on them.</p></div>
+      <div class="card"><h3>The Kubernetes cluster</h3><p>Cilium advertises each application's virtual IP address to the fabric over BGP. Applications run in this cluster.</p></div>
+    </div>
+    <h2>Where the intent lives</h2>
+    <div class="card"><p>Infrahub holds the intended state. Generators build the technical objects from a request, transforms render the configurations, and a reconciler compares each device with its rendered configuration and pushes any difference.</p></div>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

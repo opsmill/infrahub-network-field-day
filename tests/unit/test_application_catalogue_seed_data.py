@@ -60,13 +60,22 @@ def _seed_script() -> Any:
     return module
 
 
-REQUESTABLE = {"whoami", "podinfo", "grafana", "argo-cd"}
+REQUESTABLE = {"whoami", "podinfo", "grafana", "argo-cd", "otternet-shop", "otternet-wiki"}
 
 # Where each requestable chart keeps its LoadBalancer Service's values, and the key under
 # which the Service takes the label the selector matches on.
-SERVICE_PATH = {"whoami": "service", "podinfo": "service", "grafana": "service", "argo-cd": "server.service"}
+SERVICE_PATH = {
+    "whoami": "service",
+    "podinfo": "service",
+    "grafana": "service",
+    "argo-cd": "server.service",
+    "otternet-shop": "service.main",
+    "otternet-wiki": "service.main",
+}
 LABEL_KEY = {"whoami": "commonLabels", "podinfo": "service.additionalLabels", "grafana": "service.labels"}
 LABEL_KEY["argo-cd"] = "server.service.labels"
+LABEL_KEY["otternet-shop"] = "service.main.labels"
+LABEL_KEY["otternet-wiki"] = "service.main.labels"
 
 
 def test_the_catalogue_has_the_requestable_entries_and_one_per_seeded_application() -> None:

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET wiki</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET wiki</h1>
+    <p>How a person at the branch gets an application</p>
+    <nav><a href="index.html">Home</a><a href="request.html" class="here">Request an application</a><a href="services.html">Services</a><a href="network.html">How the network is built</a><a href="onboarding.html">Onboarding</a><a href="glossary.html">Glossary</a><a href="changelog.html">Changelog</a><a href="incidents.html">Incidents</a><a href="brand.html">Brand</a></nav>
+  </header>
+  <main>
+
+    <h2>The steps</h2>
+    <div class="card"><ol>
+      <li>Open the <strong>Service Portal</strong> from the Firefox toolbar and sign in with Dex.</li>
+      <li>Choose <strong>Exposed application, with access</strong>.</li>
+      <li>Pick an application from the list, give it a name, and submit. The namespace is optional and defaults to the application name.</li>
+      <li>The portal opens a branch in Infrahub and a proposed change. Generators add the address block, the firewall rule and the DNS name on that branch.</li>
+      <li>Someone with merge rights reviews the proposed change and merges it.</li>
+      <li>After the merge the application is deployed. Its name, <code>&lt;name&gt;.int.otternet.lab</code>, resolves from the branch machine about a minute or two later.</li>
+    </ol></div>
+    <h2>If it does not answer</h2>
+    <div class="card"><ul>
+      <li>The proposed change has not merged yet. Check <strong>Proposed changes</strong> in the toolbar.</li>
+      <li>The name does not resolve yet. The record reaches the resolver 15 to 75 seconds after the merge, then up to 30 seconds more to resolve.</li>
+      <li>The page times out but the name resolves. No access grant exists for your network, so the firewall drops the request.</li>
+    </ul></div>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

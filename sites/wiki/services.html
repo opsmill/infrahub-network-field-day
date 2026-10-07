@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET wiki</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET wiki</h1>
+    <p>What OTTERNET offers</p>
+    <nav><a href="index.html">Home</a><a href="request.html">Request an application</a><a href="services.html" class="here">Services</a><a href="network.html">How the network is built</a><a href="onboarding.html">Onboarding</a><a href="glossary.html">Glossary</a><a href="changelog.html">Changelog</a><a href="incidents.html">Incidents</a><a href="brand.html">Brand</a></nav>
+  </header>
+  <main>
+
+    <div class="card"><table>
+      <tr><th>Service</th><th>What the customer gets</th><th>Who asks for it</th></tr>
+      <tr><td>Exposed application</td><td>A web application in the data centre, with an address block, a firewall rule and a DNS name</td><td>A branch user, in the portal</td></tr>
+      <tr><td>Tenant network</td><td>A subnet and a VLAN in the tenant's own VRF</td><td>A tenant administrator</td></tr>
+      <tr><td>L3VPN between sites</td><td>Sites of one tenant reach each other and no other tenant</td><td>The tenant, through the WAN team</td></tr>
+      <tr><td>Internet access</td><td>A default route and outbound reachability, bought per tenant</td><td>The tenant</td></tr>
+      <tr><td>Cloud connection</td><td>An isolated VRF of cloud instances, joined to the firewall by one handoff</td><td>The tenant</td></tr>
+    </table></div>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>
