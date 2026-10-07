@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET wiki</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET wiki</h1>
+    <p>The lab's terms</p>
+    <nav><a href="index.html">Home</a><a href="request.html">Request an application</a><a href="services.html">Services</a><a href="network.html">How the network is built</a><a href="onboarding.html">Onboarding</a><a href="glossary.html" class="here">Glossary</a><a href="changelog.html">Changelog</a><a href="incidents.html">Incidents</a><a href="brand.html">Brand</a></nav>
+  </header>
+  <main>
+
+    <div class="card"><table>
+      <tr><th>Term</th><th>Meaning</th></tr>
+      <tr><td>Application</td><td>A Helm chart plus values, deployed in the cluster.</td></tr>
+      <tr><td>Artifact</td><td>A file Infrahub renders from its data, such as a device configuration or the DNS zone.</td></tr>
+      <tr><td>Branch</td><td>An isolated copy of the Infrahub data where a change is made and reviewed before it merges.</td></tr>
+      <tr><td>Generator</td><td>Code that reads a request and writes the technical objects it needs.</td></tr>
+      <tr><td>Grant</td><td>A permission for a source network to reach an application. It becomes a firewall rule and a pod policy.</td></tr>
+      <tr><td>Proposed change</td><td>The review of a branch before it merges into <code>main</code>.</td></tr>
+      <tr><td>Tenant</td><td>The unit of isolation. A tenant has one VRF on the provider edge and may have several sites.</td></tr>
+      <tr><td>Virtual IP address (VIP)</td><td>The address of a LoadBalancer Service, advertised to the fabric over BGP.</td></tr>
+      <tr><td>VRF</td><td>A separate routing table. Two VRFs do not see each other's routes.</td></tr>
+      <tr><td>Zone</td><td>A group of firewall interfaces. Policies apply between a pair of zones.</td></tr>
+    </table></div>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

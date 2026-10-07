@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET customers</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET customers</h1>
+    <p>The tenants OTTERNET serves</p>
+    <nav><a href="index.html" class="here">Directory</a><a href="acme.html">Acme</a><a href="globex.html">Globex</a></nav>
+  </header>
+  <main>
+
+    <div class="card"><table>
+      <tr><th>Tenant</th><th>VRF</th><th>AS</th><th>Sites</th><th>Internet</th></tr>
+      <tr><td><a href="acme.html">Acme</a></td><td><code>CUST_ACME</code></td><td>65010</td><td>hq (BGP), dr (static)</td><td>Yes</td></tr>
+      <tr><td><a href="globex.html">Globex</a></td><td><code>CUST_GLOBEX</code></td><td>65020</td><td>hq (BGP)</td><td>No</td></tr>
+      <tr><td>Branch office</td><td>the fabric's own</td><td>65030</td><td>one LAN, <code>10.70.0.0/24</code></td><td>Not in the tenant model</td></tr>
+    </table></div>
+    <p>Two sites of one tenant reach each other. Two tenants do not.</p>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

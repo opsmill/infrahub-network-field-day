@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET network</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET network</h1>
+    <p>Zone pairs and the policies named in the baseline</p>
+    <nav><a href="index.html">Address plan</a><a href="path.html">Path diagram</a><a href="firewall.html" class="here">Firewall policy</a></nav>
+  </header>
+  <main>
+
+    <div class="note">Written by hand from the baseline <code>junos.conf</code>. Grants add policies in the pair they belong to, so the live list is longer than this page.</div>
+    <div class="card"><table>
+      <tr><th>From zone</th><th>To zone</th><th>Policies in the baseline</th></tr>
+      <tr><td>app-prod</td><td>k8s-prod</td><td><code>deny-spoofed-infra</code>, <code>app-to-k8s-services</code>, <code>app-to-k8s-icmp</code></td></tr>
+      <tr><td>k8s-prod</td><td>app-prod</td><td><code>deny-spoofed-infra</code>, <code>k8s-to-app</code></td></tr>
+      <tr><td>wan</td><td>k8s-prod</td><td><code>deny-spoofed-infra</code>, <code>wan-to-k8s-services</code></td></tr>
+      <tr><td>branch</td><td>k8s-prod</td><td><code>deny-spoofed-infra</code>, <code>branch-to-access-portal</code>, <code>branch-to-dns</code> (UDP and TCP 53), <code>branch-to-k8s-icmp</code></td></tr>
+      <tr><td>branch</td><td>tooling</td><td>See the baseline</td></tr>
+    </table></div>
+    <p>A grant for an application appears in the <code>branch</code> to <code>k8s-prod</code> pair, before the default policy is consulted.</p>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

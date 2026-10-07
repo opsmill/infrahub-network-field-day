@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET wiki</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET wiki</h1>
+    <p>What went wrong, and what fixed it</p>
+    <nav><a href="index.html">Home</a><a href="request.html">Request an application</a><a href="services.html">Services</a><a href="network.html">How the network is built</a><a href="onboarding.html">Onboarding</a><a href="glossary.html">Glossary</a><a href="changelog.html">Changelog</a><a href="incidents.html" class="here">Incidents</a><a href="brand.html">Brand</a></nav>
+  </header>
+  <main>
+
+    <div class="card"><h3>2026-10-07: repository sync stalled for about 90 minutes</h3>
+      <p><strong>Cause:</strong> a dead task worker still held the concurrency slot for the repository-sync flow.</p>
+      <p><strong>Fix:</strong> the stuck workflow runs were marked crashed, two concurrency slots were released, both task workers were restarted, and stale branch copies were removed from the workers.</p></div>
+    <div class="card"><h3>2026-10-07: two DNS generator runs created the same address</h3>
+      <p><strong>Cause:</strong> the application's creation and the arrival of its address block each started the generator, and both created the same address. The unique constraint holds at merge, not at write, so the branch could not merge.</p>
+      <p><strong>Fix:</strong> the generator names the namespace when it creates the address, and every run removes duplicates and keeps the lowest id.</p></div>
+    <div class="card"><h3>2026-10-07: nslookup reported a name missing that the resolver answered</h3>
+      <p><strong>Cause:</strong> the resolver did not set the recursion-available flag, and <code>nslookup</code> discards a reply without it.</p>
+      <p><strong>Fix:</strong> the zone block sets the flag.</p></div>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTTERNET network</title>
+  <link rel="stylesheet" href="otternet.css">
+</head>
+<body>
+  <header>
+    <h1>OTTERNET network</h1>
+    <p>Prefixes, VRFs and AS numbers, written by hand from the lab's README</p>
+    <nav><a href="index.html" class="here">Address plan</a><a href="path.html">Path diagram</a><a href="firewall.html">Firewall policy</a></nav>
+  </header>
+  <main>
+
+    <div class="card"><table>
+      <tr><th>Plane</th><th>Addressing</th></tr>
+      <tr><td>Management</td><td><code>172.20.41.0/24</code></td></tr>
+      <tr><td>Loopback0 (router IDs)</td><td><code>10.41.0.0/24</code></td></tr>
+      <tr><td>VTEP Loopback1</td><td><code>10.41.1.0/24</code></td></tr>
+      <tr><td>Spine to leaf point to point</td><td><code>10.41.255.0/24</code></td></tr>
+      <tr><td>Kubernetes nodes</td><td><code>10.110.0.0/24</code>, gateway <code>.1</code></td></tr>
+      <tr><td>Kubernetes pods</td><td><code>10.111.0.0/16</code></td></tr>
+      <tr><td>Kubernetes services</td><td><code>10.112.0.0/16</code></td></tr>
+      <tr><td>LoadBalancer virtual IP addresses</td><td><code>10.112.240.0/24</code></td></tr>
+      <tr><td>Application hosts</td><td><code>10.210.0.0/24</code></td></tr>
+      <tr><td>Tenant site LANs</td><td><code>10.60.&lt;n&gt;.0/24</code></td></tr>
+      <tr><td>Tenant cloud subnets</td><td><code>10.220.&lt;tenant id&gt;.0/24</code></td></tr>
+      <tr><td>Branch LAN</td><td><code>10.70.0.0/24</code>, gateway <code>.1</code></td></tr>
+      <tr><td>The internet (lab)</td><td>AS 64500, <code>198.51.100.0/24</code></td></tr>
+    </table></div>
+    <h2>Autonomous systems</h2>
+    <div class="card"><table>
+      <tr><th>AS</th><th>Who</th></tr>
+      <tr><td>65100</td><td>Data centre fabric (spines)</td></tr>
+      <tr><td>65101, 65102, 65103</td><td>Leaf pairs and the border leaf</td></tr>
+      <tr><td>65500</td><td>Provider edge (OTTERNET WAN)</td></tr>
+      <tr><td>65010, 65020</td><td>Acme and Globex</td></tr>
+      <tr><td>65030</td><td>Branch router</td></tr>
+      <tr><td>64500</td><td>The lab's internet</td></tr>
+    </table></div>
+    <h2>Virtual IP address blocks</h2>
+    <div class="card"><table>
+      <tr><th>Block</th><th>Application</th><th>DNS name</th></tr>
+      <tr><td><code>10.112.240.0/28</code></td><td>otternet-demo</td><td><code>otternet-demo.int.otternet.lab</code></td></tr>
+      <tr><td><code>10.112.240.80/28</code></td><td>otternet-metrics (Grafana at <code>.81</code>)</td><td><code>otternet-metrics.int.otternet.lab</code></td></tr>
+      <tr><td><code>10.112.240.96/28</code></td><td>otternet-dns (resolver)</td><td><code>otternet-dns.int.otternet.lab</code></td></tr>
+    </table></div>
+    <p>Blocks given to other applications are allocated at request time and are not listed here.</p>
+  </main>
+  <footer>OTTERNET lab. Served by nginx in the lab cluster.</footer>
+</body>
+</html>
