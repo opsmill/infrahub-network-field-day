@@ -127,6 +127,17 @@ class DnsRecordGenerator(InfrahubGenerator):
             await self._withdraw(fqdn)
         await self._rerender(resolver.id, str(_value(resolver.name)))
 
+    def _forget(self, node: IpamIPAddress) -> None:
+        """Drop a deleted address from the generator group's members.
+
+        The SDK adds every node this run saves or reads to the group, and writes
+        the group last. A member that was deleted in between does not exist, so
+        ``CoreGeneratorGroupUpsert`` fails with ``Unable to find the node`` and the
+        whole run is marked failed, after the data was already written.
+        """
+        context = self.client.group_context
+        context.related_node_ids[:] = [node_id for node_id in context.related_node_ids if node_id != node.id]
+
     async def _holders(self, fqdn: str) -> list[IpamIPAddress]:
         return list(await self.client.filters(IpamIPAddress, fqdn__value=fqdn))
 
@@ -175,7 +186,9 @@ class DnsRecordGenerator(InfrahubGenerator):
                 await extra.delete()
             except Exception as exc:  # noqa: BLE001 - a racing run deleted it first
                 self.logger.info("Duplicate %s was already gone (%s)", _value(extra.address), exc)
+                self._forget(extra)
             else:
+                self._forget(extra)
                 self.logger.info("Removed the duplicate %s for %s", _value(extra.address), fqdn)
 
     async def _withdraw(self, fqdn: str) -> None:
@@ -187,6 +200,7 @@ class DnsRecordGenerator(InfrahubGenerator):
                 except Exception as exc:  # noqa: BLE001 - still referenced: fall back to clearing the name
                     self.logger.warning("Could not delete %s (%s); clearing its name instead", node.address.value, exc)
                 else:
+                    self._forget(node)
                     self.logger.info("Removed the address %s created for %s", node.address.value, fqdn)
                     continue
             node.fqdn.value = None
