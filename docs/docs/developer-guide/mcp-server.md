@@ -16,7 +16,7 @@ checks the account and token that `.mcp.json` uses (see [bootstrap](./bootstrap.
 
 ## Claude Code acts as alice only
 
-`.mcp.json` has one server, `infrahub-lab`, and it sends alice's API token
+`.mcp.json` has one server, `otternet-infrahub`, and it sends alice's API token
 (`INFRAHUB_MCP_TOKEN_ALICE`). It has no `mcp-agent` entry and no second entry, so every tool
 call from Claude Code in this repository is recorded as `alice`. The `mcp-agent` account, its role
 and its token (`INFRAHUB_MCP_TOKEN`) are still provisioned: `scripts/demo_rehearsal.py` act five
@@ -92,14 +92,14 @@ and by the bootstrap, see [bootstrap](./bootstrap.md#the-local-network-admin-acc
 live test was not run, because a running stack that did not belong to this change was found (see the pull request). Every row in the
 table in this section that says "expected" is a prediction, not a measurement.
 
-- **Account:** `network-admin`, label `Network Admin`, type `User`, a local password, no Dex. Password in `.env` as
+- **Account:** `alex`, label `Alex`, type `User`, a local password, no Dex. Password in `.env` as
   `INFRAHUB_NETWORK_ADMIN_PASSWORD`, generated on the first run and never printed. Sign in to the Infrahub UI (`http://localhost:8000`)
-  with the username `network-admin` and that password. No API token is created.
+  with the username `alex` and that password. No API token is created.
 - **Group:** `Network Admins`. The account is in no other group: not `Super Administrators`, not `Infrahub Users`.
 - **Role:** `Network Admin Access`, attached to `Network Admins` only. `uv run python scripts/provision_network_admin.py --check`
   fails if any of this changes.
 
-The role holds six permissions:
+The role holds seven permissions:
 
 | Permission | Decision | What it allows |
 | --- | --- | --- |
@@ -107,15 +107,16 @@ The role holds six permissions:
 | `any` on every namespace and kind | branches other than the default branch | create, edit and delete network data (devices, interfaces, links, IP addresses, locations, pools, security) on a branch |
 | `object:Core:ProposedChange:create` | the default branch | create a proposed change, which Infrahub stores on `main` |
 | `edit_default_branch` (global) | everywhere | admit a proposed change to the default branch at all |
+| `merge_branch` (global) | everywhere | merge a branch directly |
 | `merge_proposed_change` (global) | everywhere | documents who is meant to merge a proposed change |
 | `review_proposed_change` (global) | everywhere | approve or reject a proposed change |
 
-Not granted: `manage_schema`, `manage_repositories`, `manage_accounts`, `manage_permissions`, `super_admin`, `merge_branch`, and any
+Not granted: `manage_schema`, `manage_repositories`, `manage_accounts`, `manage_permissions`, `super_admin`, and any
 object write on `main` outside the proposed-change merge. `tests/unit/test_network_admin_contract.py` pins the list and the absence.
 
 ### What is expected, and what is known
 
-| Action as `network-admin` | Expected | Source |
+| Action as `alex` | Expected | Source |
 | --- | --- | --- |
 | Sign in with username and password | Allowed | not measured |
 | Create a branch | Allowed | measured for a user with only `Requester Access` |
@@ -128,7 +129,7 @@ object write on `main` outside the proposed-change merge. `tests/unit/test_netwo
 
 - **`merge_proposed_change` does not stop anyone else from merging.** On Infrahub 1.10.6 `CoreProposedChangeMerge` does not check it (measured
   above: `alice` merged without it). The permission documents who is meant to merge. An account that can open a proposed change can also merge it.
-- **Infrahub does not prevent `network-admin` from approving and merging a proposed change it opened itself.** No rule that separates the author from
+- **Infrahub does not prevent `alex` from approving and merging a proposed change it opened itself.** No rule that separates the author from
   the approver was found, and none was tested. A second person reviewing the change is a convention.
 - **Accounts, groups, roles and permissions on a branch are not known.** `any` with decision 4 covers every kind, including `CoreAccount`,
   `CoreAccountGroup`, `CoreAccountRole` and the permission kinds. Whether Infrahub stores those kinds per branch or for all branches
@@ -137,13 +138,13 @@ object write on `main` outside the proposed-change merge. `tests/unit/test_netwo
 
 ## Connecting Claude Code to the server
 
-`.mcp.json` registers `infrahub-lab` over HTTP and sends alice's token
+`.mcp.json` registers `otternet-infrahub` over HTTP and sends alice's token
 from the environment:
 
 ```json
 {
   "mcpServers": {
-    "infrahub-lab": {
+    "otternet-infrahub": {
       "type": "http",
       "url": "http://127.0.0.1:8001/mcp",
       "headers": { "Authorization": "Bearer ${INFRAHUB_MCP_TOKEN_ALICE}" }
@@ -223,9 +224,9 @@ without minting. `uv run invoke mcp-tokens` runs it for every user the bootstrap
 the portal accounts exist, and bootstrap runs that task after `tooling`. The Dex sign-in needs the Dex address (`OTTERNET_DEX_ADDRESS`, default
 `http://10.90.0.11:32556`) to be reachable from where the script runs.
 
-`.mcp.json` registers the one server, `infrahub-lab`, with the header
+`.mcp.json` registers the one server, `otternet-infrahub`, with the header
 `Authorization: Bearer ${INFRAHUB_MCP_TOKEN_ALICE}`, so tools in Claude Code act as `alice`. Before
-this change `.mcp.json` also had a `mcp-agent` entry and an `infrahub-lab-alice` entry; both are gone.
+this change `.mcp.json` also had a `mcp-agent` entry and an `otternet-infrahub-alice` entry; both are gone.
 Source the
 `.env` in the shell that starts `claude`, as described above, and restart Claude Code after the first
 run so it reads the variable.

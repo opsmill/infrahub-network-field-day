@@ -85,8 +85,8 @@ def _user_token_provisioner() -> ModuleType:
 def test_mcp_json_has_one_server_and_it_authenticates_as_alice() -> None:
     text = (REPO / ".mcp.json").read_text(encoding="utf-8")
     servers = json.loads(text)["mcpServers"]
-    assert list(servers) == ["infrahub-lab"], "Claude Code may act as alice only: one entry, no mcp-agent entry"
-    server = servers["infrahub-lab"]
+    assert list(servers) == ["otternet-infrahub"], "Claude Code may act as alice only: one entry, no mcp-agent entry"
+    server = servers["otternet-infrahub"]
     assert server["type"] == "http"
     assert server["url"] == "http://127.0.0.1:8001/mcp"
     assert server["headers"] == {"Authorization": "Bearer ${INFRAHUB_MCP_TOKEN_ALICE}"}

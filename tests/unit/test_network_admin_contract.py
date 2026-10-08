@@ -32,8 +32,8 @@ def _provisioner() -> ModuleType:
 
 def test_names() -> None:
     module = _provisioner()
-    assert module.ACCOUNT == "network-admin"
-    assert module.LABEL == "Network Admin"
+    assert module.ACCOUNT == "alex"
+    assert module.LABEL == "Alex"
     assert module.GROUP == "Network Admins"
     assert module.ROLE == "Network Admin Access"
     assert module.PASSWORD_VAR == "INFRAHUB_NETWORK_ADMIN_PASSWORD"  # noqa: S105
@@ -48,10 +48,11 @@ def test_the_role_holds_exactly_these_permissions() -> None:
     ]
     assert module.GLOBAL_PERMISSIONS == [
         {"action": "edit_default_branch", "decision": 6},
+        {"action": "merge_branch", "decision": 6},
         {"action": "merge_proposed_change", "decision": 6},
         {"action": "review_proposed_change", "decision": 6},
     ]
-    assert len(module.expected_permissions()) == 6
+    assert len(module.expected_permissions()) == 7
 
 
 def test_every_write_on_an_object_is_limited_to_branches_other_than_the_default() -> None:
@@ -74,7 +75,7 @@ def test_no_schema_repository_account_permission_or_super_admin_action_is_grante
         assert action in module.FORBIDDEN_ACTIONS
         assert action not in granted
     assert not granted & set(module.FORBIDDEN_ACTIONS)
-    assert {"merge_proposed_change", "review_proposed_change", "edit_default_branch"} <= granted
+    assert {"merge_branch", "merge_proposed_change", "review_proposed_change", "edit_default_branch"} <= granted
 
 
 def test_the_account_is_never_a_super_administrator_or_a_dex_user() -> None:

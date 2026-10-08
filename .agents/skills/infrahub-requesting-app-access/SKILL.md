@@ -193,7 +193,7 @@ is missing, report it. Do not call the request ready.
 
 Give the requester the proposed change link and say what it contains. `mcp-agent` cannot write to
 `main`, and the agent must not merge its own proposed change. A human reviews and merges. Merging is
-the approval. The human who merges signs in to the Infrahub UI as the local account `network-admin`
+the approval. The human who merges signs in to the Infrahub UI as the local account `alex`
 (its password is in `.env` as `INFRAHUB_NETWORK_ADMIN_PASSWORD`; never read, print or use it as the agent).
 That account holds `merge_proposed_change` and `review_proposed_change`; no agent identity does.
 
@@ -235,7 +235,7 @@ or a `ServiceAppAccess` on `main`.
 
 ## Acting as alice
 
-Every tool call from Claude Code here acts as `alice`: `.mcp.json` has one server, `infrahub-lab`, and it sends her API token
+Every tool call from Claude Code here acts as `alice`: `.mcp.json` has one server, `otternet-infrahub`, and it sends her API token
 (`INFRAHUB_MCP_TOKEN_ALICE`, minted by `scripts/provision_mcp_user_token.py --user alice`). Measured on
 Infrahub 1.10.6: the grant's attributes then show `updated_by: alice`, and `requester` stays a separate
 free-text value. Her group `Infrahub Users` holds one role, `Requester Access`, set by
