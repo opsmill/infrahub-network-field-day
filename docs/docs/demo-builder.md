@@ -6,24 +6,30 @@ audience: user
 
 # Builder demo
 
-The builder demonstration adds a capability, the internet-access service for a WAN customer, and
-takes it through an Infrahub proposed change. The work is prepared beforehand and released on
+The builder demonstration adds a capability, the internet-access product for a WAN customer, and
+takes it through two Infrahub proposed changes. The work is prepared beforehand and released on
 cue, so the time spent generating it is skipped and the review is the live part. Say so on
 stage: the branch is prepared output, not a live agent run.
 
-The whole cycle, from release to reset, was run on a fresh stack with the final code and every check passed. The release and merge half was repeated three times. In the runbook this is [act six](./demo-runbook.md#act-six-the-builder-branch), and `uv run invoke demo-run` runs it with a PASS or FAIL line for every check.
+The demonstration has two parts, and a person merges both in the Infrahub UI, signed in as `alex`:
+
+1. **The capability.** A prepared branch adds the `ServiceInternetAccess` kind, the router templates that read it, a check and a menu entry. It contains no service, so merging it changes no router and gives nobody internet access.
+2. **The request.** Acme asks for internet access: one `ServiceInternetAccess` node named `acme-internet`, loaded onto its own branch from `demo/requests/acme-internet.yml` and opened as a second proposed change. Merging it puts `statement 30` on `isp-pe1`. Globex has no node, and that absence keeps it off the internet.
+
+The 2026-10-05 measurements below are from the earlier single-merge version of this demonstration, where the capability branch also carried `acme-internet`. The two-part version, including `demo-request-internet` and `demo-internet-evidence`, has no measurements in this page yet. In the runbook this is [act six](./demo-runbook.md#act-six-the-builder-branch), and `uv run invoke demo-run` runs it with a PASS or FAIL line for every check.
 
 ## What the audience sees
 
 | Step | What happens | Measured |
 | --- | --- | --- |
-| `invoke demo-release` | A branch arrives in Infrahub with its code, schema and data, and a proposed change opens. It says `Ready` only once every validator has finished and passed | 2 to 4 minutes on earlier runs; 414, 287, 384 and 289 seconds in four runs on 2026-10-05. The command prints the time of each phase |
-| Review in the Infrahub UI | 29 validators in the 2026-10-05 run (32 in an earlier run), every artifact check and every rule check, all run with the branch's own code. The diff is the new schema node and fields, the menu entry, `acme-internet` and the three queries that name the new kind | passes |
-| Merge in the Infrahub UI | The merge also merges git and pushes it to `demo-main` | 50 seconds |
-| After the merge | The `isp-pe1` artifact carries `statement 30` | 15 seconds |
-| The router | The reconciler pushes it | within a minute |
-| The outcome | Acme's site gets HTTP 200 from the internet host. Globex's still gets nothing | |
-| `invoke demo-reset` | Everything back to the baseline, ready to go again | 320 seconds on an earlier run, 488 seconds inside `demo-run` on 2026-10-05 |
+| `invoke demo-release` | A branch arrives in Infrahub with its code and schema, and a proposed change opens. It says `Ready` only once every validator has finished and passed | 2 to 4 minutes on earlier runs; 414, 287, 384 and 289 seconds in four runs on 2026-10-05. The command prints the time of each phase |
+| Review in the Infrahub UI | 29 validators in the 2026-10-05 run (32 in an earlier run), every artifact check and every rule check, all run with the branch's own code. The diff is the new schema node and fields, the menu entry and the three queries that name the new kind. In the 2026-10-05 run it also held `acme-internet`; the staged branch now leaves it out | passes |
+| Merge of the capability in the Infrahub UI | The merge also merges git and pushes it to `demo-main`. No router changes and nobody has internet | 50 seconds on 2026-10-05 |
+| `invoke demo-request-internet` | Loads `acme-internet` onto its own branch, opens a second proposed change and says `Ready` once every validator has passed | not measured |
+| Merge of the request in the Infrahub UI | The `isp-pe1` artifact then carries `statement 30` | not measured; 15 seconds from merge to artifact in the single-merge version |
+| The router | The reconciler pushes it | within a minute in the single-merge version |
+| The outcome | Acme's site gets HTTP 200 from the internet host. Globex's still gets nothing. `invoke demo-internet-evidence --phase request` shows the five signals that agree | |
+| `invoke demo-reset` | Everything back to the baseline, ready to go again. It also deletes the request branches | 320 seconds on an earlier run, 488 seconds inside `demo-run` on 2026-10-05 |
 
 The release time is Infrahub's, not the command's. The task workers pull a pushed branch 75 to 256 s
 after the push, whatever the repository's git-sync schedule is. The longest measured was 464 s, in a `demo-advance` run on 2026-10-05 that came straight after two task workers had been killed and started again. The builder release right after it took 104 s for the same phase, and the cause of the 464 s was not found. Measured on 2026-10-05, the same phase took 136 s and 233 s in two releases on a stack from a fresh bootstrap, and 400 s in a `demo-advance` run that came straight after `uv run invoke restart --component task-worker`. In the task worker logs a `git fetch` takes 0.4 to 0.7 s and runs on both workers every minute, so the repository's git settings do not explain the wait. The wait is the time until each worker next logs `Starting the synchronization` followed by `New commit detected`: only that run takes a new branch into the worker's clone, and it runs on a minute boundary but not every minute. Over 70 minutes one worker's synchronization runs were 1 to 10 minutes apart (one gap of 10 minutes, 11:05:59 to 11:16:00, on a stack that had not been restarted), so a release waits for the slower of the two workers' next run. In the 400 s run the first worker's run came 5.5 minutes after the push and the second worker's one minute later. The restart is therefore not the cause by itself: long gaps also happened without one, and one restart was measured. What decides which worker runs a synchronization was not found in this repository, and `INFRAHUB_GIT_SYNC_INTERVAL` is 10 in the container. [CLAUDE RECOMMENDED – based on these gaps] Plan for up to 8 minutes for this phase, and do not restart a task worker in the minutes before a release. A shorter schedule was tried and does not
@@ -77,7 +83,13 @@ This builds `stage/internet-access` on your machine: `main` with the capability 
 and the data as well as the code. `main` declares neither, so nothing else loads them. It is a prepared
 implementation, the revert of the commit that removed the capability, and you should say so when you show it.
 
-To show a real Spec Kit build instead, cherry-pick that branch's commits onto today's `main`:
+The staged branch leaves out the service. It carries the kind, the router templates, the check and the menu entry, and no `acme-internet`, so merging it changes no router. The request for acme is the second part of the demonstration (see [Request internet access for acme](#request-internet-access-for-acme)). To ship the service in the branch as well, which is how the 2026-10-05 measurements were taken, add `--with-service`:
+
+```bash
+uv run invoke demo-stage --with-service
+```
+
+To show a real Spec Kit build instead, cherry-pick that branch's commits onto today's `main`. The branch `speckit/internet-access` was deleted from the remote on 2026-10-08 and exists only as a local branch on the machine that built it, so push it to a branch of your own or recreate it before using this on another machine:
 
 ```bash
 uv run invoke demo-stage --implementation speckit/internet-access --name internet-access-speckit
@@ -127,8 +139,41 @@ The release number is chosen for you: `demo-release` takes the next one that no 
 branch or worker clone has used, and `demo-reset` removes the latest one in use. Pass `--run <n>` to name
 one yourself.
 
-Review the proposed change in the Infrahub UI and merge it there. Then check the router and the two
-sites. The merge moved the code, so nothing else is needed.
+Review the proposed change in the Infrahub UI and merge it there, signed in as `alex`. The merge moves the code and the schema. It adds no service, so check that nothing changed: `uv run invoke demo-internet-evidence --phase capability` expects that nobody has internet.
+
+## Request internet access for acme
+
+```bash
+uv run invoke demo-request-internet
+```
+
+This is the second part, and it needs the capability merged first: it stops with a message if `ServiceInternetAccess` does not exist on `main`, or if `main` already holds internet access, in which case run `uv run invoke demo-reset`. It then:
+
+1. Creates the Infrahub branch `implement_acme-internet_<reference>`. The reference comes from the clock unless `--reference` names one. This branch has no Sync with Git, so nothing is pushed to the remote and no task worker has to pull a commit.
+2. Loads `demo/requests/acme-internet.yml` onto it. The file is outside `objects/`, so `invoke load` never loads it.
+3. Opens the proposed change, runs every check once more and waits until every validator has finished and passed. Then it prints `Ready: <link>`.
+
+Open the link, review the one new node, and merge it in the Infrahub UI as `alex`. The command never merges on stage; `--merge` exists for rehearsals only. About 90 seconds later run:
+
+```bash
+uv run invoke demo-internet-evidence --phase request
+```
+
+## Show the evidence that a tenant has internet
+
+```bash
+uv run invoke demo-internet-evidence                   # summary table, then the raw output of every command
+uv run invoke demo-internet-evidence --expect acme     # exit non-zero unless only acme has internet
+uv run invoke demo-internet-evidence --summary-only    # leave out the raw output
+```
+
+For acme and globex it reads five signals: the tenant's routing policy on `isp-pe1` (`statement 30` importing a default route), the tenant's VRF on `isp-pe1`, the customer router's default route, the route back to the tenant's site network on `internet-rtr`, and a `curl` from the tenant's host to the internet host. A tenant is consistent when all five agree, so a router that changed but does not forward is reported. The command reads the lab only and changes nothing. `--phase` sets the expectation:
+
+| Phase | When to run it | Expectation |
+| --- | --- | --- |
+| `before` | Before the capability merges | Nobody has internet |
+| `capability` | After the capability merges | Nobody has internet |
+| `request` | After the request merges | Only acme has internet |
 
 ## Rehearse again
 
@@ -137,7 +182,7 @@ uv run invoke demo-reset               # removes the latest release; --run <n> n
 uv run invoke demo-release             # takes the next unused release number
 ```
 
-`demo-reset` works whether or not the merge happened, and it can be run again if it was interrupted.
+`demo-reset` works whether or not the merge happened, and it can be run again if it was interrupted. It first deletes every request branch (`implement_acme-internet_*`), because those name the kind being removed.
 It decides what to undo from the data and from git, so a half-done reset is finished, not skipped.
 
 After a merge, the capability is on `demo-main`, and the reset takes it back out through Infrahub, not
@@ -188,7 +233,7 @@ branch is cut from `main`.
 ## Run the whole demonstration, and restore the lab
 
 ```bash
-uv run invoke demo-run                  # acts one and two through the portal, then this branch, then its reset
+uv run invoke demo-run                  # acts one and two through the portal, then this branch and the request, then the reset
 uv run invoke demo-run --acts builder   # only this branch
 uv run invoke demo-restore              # the whole lab back to the baseline
 ```

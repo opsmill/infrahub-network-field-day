@@ -32,7 +32,7 @@ them where the difference matters.
 | [Three](#act-three-revoke-it) | Access withdrawn through the same workflow | Yes |
 | [Four](#act-four-the-review-step-bites) | A check catching a mistake nothing else would notice | A branch only, never merged |
 | [Five](#act-five-the-agent-through-the-mcp-server) | An agent working through the MCP server, on a branch | A branch only |
-| [Six](#act-six-the-builder-branch) | A prepared capability released with one command, reviewed and merged as a proposed change, then taken back out | Yes: a merge, then a reset |
+| [Six](#act-six-the-builder-branch) | A prepared capability released with one command and merged as a proposed change, then acme's request for internet access as a second proposed change, then taken back out | Yes: two merges, then a reset |
 
 The three-act demonstration is acts one, two and six: an application with access, access to
 Grafana, and the builder branch. Acts three to five are extras for a longer slot or for questions.
@@ -140,8 +140,10 @@ sourced `.env` and ask it to give the branch office access to Grafana (`otternet
 2. On stage: `uv run invoke demo-release`. It prints `Ready: <proposed change link>` after 269 to 519 s
    (import on every worker 136 to 343 s, validators 90 to 161 s). **This is the longest idle wait.** Tell the story
    of the capability and of why a branch is the unit of review while the phase lines scroll.
-3. Review the proposed change (all validators green), merge it (43 to 50 s), then run the two `curl` commands
-   in act six: acme answers `200` 83 s after the merge, globex does not.
+3. Review the proposed change (all validators green) and merge it as `alex` (43 to 50 s on 2026-10-05). No router changes.
+   Then run `uv run invoke demo-request-internet`, review the one new node and merge that second proposed change.
+   Run `uv run invoke demo-internet-evidence --phase request`: only acme has internet. In the single-merge
+   version measured on 2026-10-05, acme answered `200` 83 s after the merge. The two-part timing is not measured.
 4. Off stage: `uv run invoke demo-restore` (460 to 611 s) then `make -C lab verify` (121 passed). `demo-restore`
    includes the builder reset (293 to 518 s), so it also takes the capability out.
 
@@ -171,7 +173,7 @@ uv run invoke ready
 ```
 
 `invoke bootstrap` ends with the same checks. They cover the application catalogue, the event rules, the
-menus, the MCP server and the tokens of `mcp-agent` and `alice`, the Requester Access role, the `network-admin` account, the read-write
+menus, the MCP server and the tokens of `mcp-agent` and `alice`, the Requester Access role, the `alex` account (a local account that edits network data on a branch and merges a proposed change, including the update permission on proposed changes), the read-write
 repository with `demo-main` equal to `main`, the portal's picker, the observability namespaces, Secrets and Grafana pod, and `.mcp.json`; the
 [bootstrap page](./developer-guide/bootstrap.md#what-a-finished-bootstrap-checks) lists each one. It exits 1 on a
 failure and prints what is left for you to do. A `WARN` about a leftover `mcp/session-*` branch or an old
@@ -824,40 +826,48 @@ a proposed change, and that merging is where the human decides.
 
 This act adds a capability instead of a service. The capability is the internet-access product for a WAN customer.
 It is built beforehand and released on cue. The audience sees the work arrive in Infrahub as a branch,
-reviews it as a proposed change, and watches one merge put it on a router. Say that the branch is
-prepared output, not a live agent run. The setup, the rules that each cost a failed run, and the
+reviews it as a proposed change, merges it, and sees that no router changes. Then acme asks for internet access
+as a second proposed change, and the second merge puts it on a router. A person merges both, signed in as
+`alex`. Say that the capability branch is prepared output, not a live agent run. The setup, the rules that each cost a failed run, and the
 measurements are in [Builder demo](./demo-builder.md); the order is this:
 
 ```bash
-uv run invoke demo-stage      # once, or after main moved: builds the local branch stage/internet-access
-uv run invoke demo-release    # the one command: branch, import, validators, proposed change
+uv run invoke demo-stage            # once, or after main moved: builds the local branch stage/internet-access, without the service
+uv run invoke demo-internet-evidence --phase before        # nobody has internet
+uv run invoke demo-release          # branch, import, validators, proposed change for the capability
 ```
 
 1. **Release.** `demo-release` creates the Infrahub branch, copies the staged code onto it, waits until
    every task worker has pulled it, opens the proposed change, and says `Ready` only when every
-   validator has finished and passed. It took **269 to 519 seconds** in the runs measured on 2026-10-05, 519 s in the last (import on every worker 343 s, validators 161 s; 41 validators once the demonstration's application and grant were on `main`). The command prints how long each phase took. The workers pull a pushed branch 75 to 464 s after the push, whatever the repository's git-sync
+   validator has finished and passed. The staged branch carries no service. The times in this item are from 2026-10-05, when it did; it took **269 to 519 seconds** in the runs measured on 2026-10-05, 519 s in the last (import on every worker 343 s, validators 161 s; 41 validators once the demonstration's application and grant were on `main`). The command prints how long each phase took. The workers pull a pushed branch 75 to 464 s after the push, whatever the repository's git-sync
    schedule is (changing the schedule was tried and does not speed it up). Fill the time with the
    story: what the capability is, and why a branch is the unit of review.
 2. **Review.** Open the proposed change from the link the command prints. The diff is one schema node, its
-   two attributes and two relationships, a menu entry, the object `acme-internet` and the three
-   queries that name the new kind. All validators are green.
-3. **Merge** through the proposed change (about 50 s). The merge also merges git and pushes
-   `demo-main`; the upstream `main` is never written.
-4. **The outcome.** The `isp-pe1` artifact carries `statement 30` within a minute, the reconciler
-   pushes the router, and from the customer hosts:
+   two attributes and two relationships, a menu entry and the three queries that name the new kind. It holds
+   no `acme-internet`. All validators are green.
+3. **Merge the capability** in the Infrahub UI as `alex` (about 50 s on 2026-10-05). The merge also merges git and
+   pushes `demo-main`; the upstream `main` is never written. No router changes. Show it:
+   `uv run invoke demo-internet-evidence --phase capability` expects that nobody has internet.
+4. **Request.** `uv run invoke demo-request-internet` loads `acme-internet` onto its own branch (no git sync, nothing
+   pushed), opens a second proposed change and prints `Ready: <link>` once every validator has passed. Review the one
+   new node and merge it in the Infrahub UI as `alex`. The command never merges on stage. The timing of this part has
+   not been measured.
+5. **The outcome.** About 90 seconds after the request merges, run
+   `uv run invoke demo-internet-evidence --phase request`. The `isp-pe1` artifact carries `statement 30`, the
+   reconciler pushes the router, and only acme has internet. From the customer hosts:
 
    ```bash
    docker exec clab-otternet-cust-acme-host curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://198.51.100.10/     # 200
    docker exec clab-otternet-cust-globex-host curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://198.51.100.10/   # 000
    ```
 
-5. **Take it back out.** `uv run invoke demo-reset` (about 5 minutes) returns the code, the data, and the
+6. **Take it back out.** `uv run invoke demo-reset` (about 5 minutes; it also deletes the request branch) returns the code, the data, and the
    schema to the baseline through an Infrahub merge. Do it off stage.
 
 ## Run it all, and put it back
 
 ```bash
-uv run invoke demo-run                       # acts one, two and the builder, with every merge; the request
+uv run invoke demo-run                       # acts one, two and the builder (both parts), with every merge; the request
                                              # reference comes from the clock, so a second run never reuses one
 uv run invoke demo-run --acts builder        # a subset: one, two, builder
 uv run invoke demo-run --no-builder-reset    # leave the capability merged, for the next act
@@ -914,7 +924,7 @@ about 25 minutes.
 | Portal request **Exposed application, with access**, merged through `demo-run` | request 95 s, 24 validators green, merge 22 s |
 | Act one, merge to the application answering HTTP 200 / to the reconciler confirming | about 73 s / about 149 s |
 | Builder: `demo-release`, start to `Ready` | 269 to 519 s across the measured runs (29 to 41 validators); the workers' pull of the branch is 75 to 464 s of it, the validators 90 to 161 s |
-| Builder: merge to `statement 30` on `isp-pe1` | see [Builder demo](./demo-builder.md) |
+| Builder: merge of the request to `statement 30` on `isp-pe1` | see [Builder demo](./demo-builder.md) |
 | `uv run invoke reconcile --now` to the cycle starting | under a second; the cycle itself about 11 s, or about 25 s when it pushes |
 
 Measured on this lab: a granted VIP answered `HTTP 200` from the branch desktop,
