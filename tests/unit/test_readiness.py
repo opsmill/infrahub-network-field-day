@@ -428,6 +428,14 @@ def test_every_task_that_renders_a_credential_ignores_a_stale_shell_first() -> N
     )
 
 
+def test_tooling_ignores_a_stale_shell_again_after_the_portal_token_is_minted() -> None:
+    """The first guard runs while `.env` still holds the old stack's tokens, so a stale shell matches it."""
+    body = _body("tooling")
+    mint = _first(body, 'ctx.run("python scripts/provision_portal_account.py"')
+    deploy = _first(body, 'ctx.run("scripts/deploy_tooling.sh"')
+    assert mint < body.index("_use_dotenv_credentials()", mint) < deploy
+
+
 def test_bootstrap_builds_the_project_image_before_the_stack_starts() -> None:
     body = _body("bootstrap")
     assert _first(body, "build(ctx)") < _first(body, "start(ctx)")
