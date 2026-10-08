@@ -451,6 +451,33 @@ def _recreate_remote_demo_main(ctx: Context) -> None:
         ctx.run(f"git push --quiet origin FETCH_HEAD:refs/heads/{shlex.quote(branch)}", pty=True)
 
 
+def _delete_demo_branches_everywhere(ctx: Context) -> None:
+    """Delete every `demo/*` branch on the remote and in the local clone.
+
+    Only for a stack that is about to be built from nothing (`bootstrap --fresh`). The new stack imports
+    `demo/.*` from the remote, so a branch an earlier demonstration left there would come back as an open
+    Infrahub branch. Safe here and only here: the stack that pulled those branches has just been destroyed.
+    """
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        remote = ctx.run("git ls-remote --heads origin 'refs/heads/demo/*'", hide=True, warn=True)
+        remote_names = [
+            line.split("\t", 1)[1].removeprefix("refs/heads/")
+            for line in (remote.stdout.splitlines() if remote else [])
+            if "\t" in line
+        ]
+        if remote_names:
+            print(f" - Deleting {remote_names} on the remote")
+            ctx.run(f"git push --quiet origin --delete {' '.join(map(shlex.quote, remote_names))}", pty=True)
+        local = ctx.run("git for-each-ref --format='%(refname:short)' 'refs/heads/demo/*'", hide=True, warn=True)
+        local_names = local.stdout.split() if local else []
+        for name in local_names:
+            # warn: root-owned files under .git (Docker) refuse the delete; say so and carry on.
+            result = ctx.run(f"git branch -D {shlex.quote(name)}", warn=True)
+            if result is not None and result.failed:
+                print(f" - Could not delete local '{name}'; if .git is root-owned run: sudo chown -R $USER:$USER .git")
+        ctx.run("git fetch --quiet --prune origin", warn=True)
+
+
 def _preflight_repository_mode(ctx: Context) -> bool:
     """Refuse a read-write bootstrap that cannot work, BEFORE anything is destroyed. Return whether it is read-write."""
     from solution_arista_avd import readiness
@@ -3371,6 +3398,8 @@ def bootstrap(
             # The new stack must not start from the demo-main an earlier stack left behind.
             print("\n=== Recreating demo-main on the remote ===")
             _recreate_remote_demo_main(ctx)
+            print("\n=== Deleting demo/* branches on the remote and locally ===")
+            _delete_demo_branches_everywhere(ctx)
 
     # The reconciler runs the image's installed copy of the package, not the bind mount, and
     # `destroy` keeps images. Without this a bootstrap after a pull ran an old reconciler;

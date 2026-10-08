@@ -70,6 +70,10 @@ uv run invoke bootstrap --fresh
   `NFD_GITHUB_TOKEN`: without `INFRAHUB_API_TOKEN` the stack was destroyed and rebuilt for five minutes, and then the step
   that uploads application payloads stopped with `INFRAHUB_API_TOKEN is not set`. The check now refuses at the start. Bootstrap also stops if a dry-run push with the token is refused. These used
   to be found out after the teardown.
+- **`--fresh` deletes every `demo/*` branch.** After `demo-main` is recreated, bootstrap deletes each `demo/*`
+  branch on the remote and in the local clone. The new stack imports `demo/.*` from the remote, so a branch
+  an earlier demonstration left there would return as an open Infrahub branch. If root-owned files under
+  `.git` refuse a local delete, bootstrap prints the `chown` command and continues.
 - **`--fresh` recreates `demo-main`.** After the stack and the lab are destroyed, bootstrap deletes
   `demo-main` on the remote and creates it again at the tip of `main`. Before this, an existing
   `demo-main` was kept, so a new stack registered the tree that earlier demonstrations had left, which
