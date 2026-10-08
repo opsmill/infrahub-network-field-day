@@ -12,9 +12,11 @@ Acts, in the order the runbook shows them:
            branch desktop
   two      the portal request for access to Grafana as `alice`, the merge, Grafana answering the
            branch desktop and `alice` signing in through Dex
-  builder  `invoke demo-stage` has built the staged branch; `invoke demo-release`, every validator
-           green, the merge through the CoreProposedChangeMerge mutation, `statement 30` on isp-pe1,
-           acme answered by the internet host and globex not, then `invoke demo-reset`
+  builder  `invoke demo-stage` has built the staged branch (the capability, without the service);
+           `invoke demo-release`, every validator green, the merge through the CoreProposedChangeMerge
+           mutation, and no router changed. Then `invoke demo-request-internet --merge` (on stage a
+           person merges it): `statement 30` on isp-pe1, acme answered by the internet host and
+           globex not, then `invoke demo-reset`
 
 IT CHANGES THE LAB. The acts leave an application, two grants and the builder capability merged
 (unless the builder's reset runs); `--restore` runs `invoke demo-restore` afterwards, which returns
@@ -262,7 +264,7 @@ def capture_builder_diff(branch: str, path: str) -> None:
         )
 
 
-def act_builder(name: str, reset: bool, capture: str = "") -> None:
+def act_builder(name: str, reset: bool, capture: str = "", reference: str = "") -> None:
     dr.stage(f"THE BUILDER BRANCH: release stage/{name}, review it, merge it" + (", take it out" if reset else ""))
     started = time.monotonic()
     upstream = remote_tip("main")
@@ -301,16 +303,32 @@ def act_builder(name: str, reset: bool, capture: str = "") -> None:
     dr.check(bool(moved), "the merge moved demo-main on the remote")
     dr.check(remote_tip("main") == upstream, "upstream main is untouched", upstream[:10])
     merged_at = time.monotonic()
+
+    # Part 1 is merged and nothing asked for the service, so no router may have changed.
+    time.sleep(
+        60
+    )  # the artifact re-renders about 15 s after a merge; look after that, and once the reconciler has had a cycle
+    dr.check(STATEMENT_30 not in isp_artifact_text(), "part 1 merged: the isp-pe1 artifact has no statement 30")
+    dr.check(not router_has_statement_30(), "part 1 merged: isp-pe1 runs no statement 30")
+    dr.check(customer_http("acme") != "200", "part 1 merged: acme still has no internet", customer_http("acme"))
+
+    # Part 2: acme asks. On stage a person merges this; the rehearsal merges it with --merge.
+    with dr.timed("builder: demo-request-internet, start to merged"):
+        status, output = invoke("demo-request-internet", "--merge", "--reference", reference)
+    dr.check(status == 0 and "Merged." in output, "the request for acme's internet access passed its checks and merged")
+    merged_at = time.monotonic()
     got = dr.wait_until(lambda: STATEMENT_30 in isp_artifact_text(), timeout=240, interval=5)
-    dr.TIMINGS.append(("builder: merge until the artifact carries statement 30", time.monotonic() - merged_at))
+    dr.TIMINGS.append(("builder: request merge until the artifact carries statement 30", time.monotonic() - merged_at))
     dr.check(bool(got), "the isp-pe1 artifact carries statement 30")
     got = dr.wait_until(router_has_statement_30, timeout=420, interval=10)
-    dr.TIMINGS.append(("builder: merge until isp-pe1 runs statement 30", time.monotonic() - merged_at))
+    dr.TIMINGS.append(("builder: request merge until isp-pe1 runs statement 30", time.monotonic() - merged_at))
     dr.check(bool(got), "isp-pe1 runs statement 30")
     got = dr.wait_until(lambda: customer_http("acme") == "200", timeout=120, interval=5)
-    dr.TIMINGS.append(("builder: merge until acme gets HTTP 200", time.monotonic() - merged_at))
+    dr.TIMINGS.append(("builder: request merge until acme gets HTTP 200", time.monotonic() - merged_at))
     dr.check(bool(got), "acme gets HTTP 200 from the internet host", customer_http("acme"))
     dr.check(customer_http("globex") != "200", "globex does not", customer_http("globex"))
+    status, _ = invoke("demo-internet-evidence", "--phase", "request", "--summary-only")
+    dr.check(status == 0, "demo-internet-evidence agrees: acme has internet, globex does not", f"exit {status}")
 
     if reset:
         with dr.timed("builder: demo-reset"):
@@ -359,7 +377,7 @@ def main() -> int:
     table: dict[str, Callable[[], None]] = {
         "one": lambda: act_one(args.reference),
         "two": lambda: act_two(args.reference),
-        "builder": lambda: act_builder(args.name, not args.no_builder_reset, args.capture),
+        "builder": lambda: act_builder(args.name, not args.no_builder_reset, args.capture, args.reference),
     }
     for act in chosen:
         try:

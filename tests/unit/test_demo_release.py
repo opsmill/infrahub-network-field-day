@@ -220,6 +220,14 @@ def test_require_capability_off_still_waits_for_the_commit_and_the_queue() -> No
     assert dr.decide_settled(**{**_SETTLED, "active_tasks": 2}, require_capability=False)[0] is False
 
 
+def test_a_capability_without_the_service_settles_with_no_objects() -> None:
+    """The staged branch can hold the kind and no node: waiting for a node would never end."""
+    no_node = {**_SETTLED, "object_count": 0}
+    assert dr.decide_settled(**no_node) == (False, "the objects to load")
+    assert dr.decide_settled(**no_node, require_objects=False) == (True, "")
+    assert dr.decide_settled(**{**no_node, "kind_present": False}, require_objects=False)[0] is False
+
+
 def test_a_branch_is_not_settled_until_every_worker_has_pulled_the_commit() -> None:
     """The race behind a reset that merged the data and left the code: a merge reads the worker's
     local branch, which a periodic pull updates after the graph records the import."""
