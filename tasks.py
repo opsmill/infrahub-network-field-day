@@ -3274,6 +3274,11 @@ def tooling(ctx: Context) -> None:
     # kept, so a re-run does not rotate what a running portal holds.
     print(" - Provisioning the portal's own Infrahub account")
     ctx.run("python scripts/provision_portal_account.py", pty=True)
+    # AGAIN, because the call above ran while `.env` still held the previous stack's tokens, which
+    # a stale shell matches, so nothing was dropped. Provisioning has just written the new token to
+    # `.env`; without this the deploy inherits the shell's old `INFRAHUB_PORTAL_TOKEN`, renders it
+    # into the Secret, and the portal answers 401 to every request.
+    _use_dotenv_credentials()
     ctx.run("scripts/deploy_tooling.sh", pty=True)
 
     # EVERY PORTAL USER NEEDS AN INFRAHUB ACCOUNT BEFORE THEIR FIRST REQUEST.
