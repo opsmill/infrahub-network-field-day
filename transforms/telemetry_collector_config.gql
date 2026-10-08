@@ -148,6 +148,13 @@ query TelemetryCollectorConfigQuery($name: String!) {
         ... on ServiceL3vpn {
           circuits { edges { node { id } } }
         }
+        ... on ServiceInternetAccess {
+          peering {
+            node {
+              bgp_sessions { edges { node { peer_address { value } device { node { name { value } } } } } }
+            }
+          }
+        }
         ... on ServiceTenantCloud {
           vrf { node { name { value } } }
         }

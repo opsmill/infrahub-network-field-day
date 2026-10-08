@@ -335,6 +335,8 @@ infrahub:
       - kind: ServiceFabricPeering
         entity: Component
         groups: [service_fabric_peerings]
+      - kind: ServiceInternetAccess
+        entity: Component
     # The point of the generic form: a service kind added to Infrahub under
     # ServiceGeneric turns up on the next read, with its own form, with no
     # change to this file.

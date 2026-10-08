@@ -13,6 +13,9 @@ class SrlConfigQuery(BaseModel):
     service_tenant_cloud: "SrlConfigQueryServiceTenantCloud" = Field(
         alias="ServiceTenantCloud"
     )
+    service_internet_access: "SrlConfigQueryServiceInternetAccess" = Field(
+        alias="ServiceInternetAccess"
+    )
     network_local_user: "SrlConfigQueryNetworkLocalUser" = Field(
         alias="NetworkLocalUser"
     )
@@ -569,6 +572,50 @@ class SrlConfigQueryServiceTenantCloudEdgesNodePrefixNodePrefix(BaseModel):
     value: Optional[str]
 
 
+class SrlConfigQueryServiceInternetAccess(BaseModel):
+    edges: list["SrlConfigQueryServiceInternetAccessEdges"]
+
+
+class SrlConfigQueryServiceInternetAccessEdges(BaseModel):
+    node: Optional["SrlConfigQueryServiceInternetAccessEdgesNode"]
+
+
+class SrlConfigQueryServiceInternetAccessEdgesNode(BaseModel):
+    name: Optional["SrlConfigQueryServiceInternetAccessEdgesNodeName"]
+    status: Optional["SrlConfigQueryServiceInternetAccessEdgesNodeStatus"]
+    l_3_vpn: "SrlConfigQueryServiceInternetAccessEdgesNodeL3Vpn" = Field(alias="l3vpn")
+
+
+class SrlConfigQueryServiceInternetAccessEdgesNodeName(BaseModel):
+    value: Optional[str]
+
+
+class SrlConfigQueryServiceInternetAccessEdgesNodeStatus(BaseModel):
+    value: Optional[str]
+
+
+class SrlConfigQueryServiceInternetAccessEdgesNodeL3Vpn(BaseModel):
+    node: Optional["SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNode"]
+
+
+class SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNode(BaseModel):
+    tenant: "SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenant"
+
+
+class SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenant(BaseModel):
+    node: Optional["SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNode"]
+
+
+class SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNode(BaseModel):
+    name: Optional[
+        "SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNodeName"
+    ]
+
+
+class SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNodeName(BaseModel):
+    value: Optional[str]
+
+
 class SrlConfigQueryNetworkLocalUser(BaseModel):
     edges: list["SrlConfigQueryNetworkLocalUserEdges"]
 
@@ -845,6 +892,13 @@ SrlConfigQueryServiceTenantCloudEdgesNodeTenant.model_rebuild()
 SrlConfigQueryServiceTenantCloudEdgesNodeTenantNode.model_rebuild()
 SrlConfigQueryServiceTenantCloudEdgesNodePrefix.model_rebuild()
 SrlConfigQueryServiceTenantCloudEdgesNodePrefixNode.model_rebuild()
+SrlConfigQueryServiceInternetAccess.model_rebuild()
+SrlConfigQueryServiceInternetAccessEdges.model_rebuild()
+SrlConfigQueryServiceInternetAccessEdgesNode.model_rebuild()
+SrlConfigQueryServiceInternetAccessEdgesNodeL3Vpn.model_rebuild()
+SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNode.model_rebuild()
+SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenant.model_rebuild()
+SrlConfigQueryServiceInternetAccessEdgesNodeL3VpnNodeTenantNode.model_rebuild()
 SrlConfigQueryNetworkLocalUser.model_rebuild()
 SrlConfigQueryNetworkLocalUserEdges.model_rebuild()
 SrlConfigQueryNetworkLocalUserEdgesNode.model_rebuild()

@@ -133,6 +133,41 @@ query WanServiceCheckQuery {
   # render it onto a port?" -- asked in the proposed change, before a request
   # that cannot reach a router merges as a green no-op.
 
+  # Presence is the datum for internet access, and it only renders through a
+  # live L3VPN and an internet peering.
+  ServiceInternetAccess {
+    edges {
+      node {
+        id
+        name {
+          value
+        }
+        status {
+          value
+        }
+        l3vpn {
+          node {
+            id
+            name {
+              value
+            }
+            status {
+              value
+            }
+            tenant {
+              node {
+                id
+                name {
+                  value
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   # A tenant's attachments. srl_config finds a tenant's sites by the tenant,
   # not through the L3VPN's circuits, so this is what decides whether its VRF
   # has anything in it.

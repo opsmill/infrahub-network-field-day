@@ -167,7 +167,7 @@ everything else.
 | `ServiceServerPlacement` | its generator deletes the machine and its cabling |
 | `ServiceFabricApp` | its generator returns the VIP block, if it allocated it |
 | `ServiceFabricPeering` | its generator deletes the sessions **the service recorded** |
-| `ServiceL3vpn`, `ServiceTenantCloud` | `srl_config` renders them as though absent |
+| `ServiceL3vpn`, `ServiceTenantCloud`, `ServiceInternetAccess` | `srl_config` renders them as though absent |
 
 `decommissioning` withdraws rather than waiting, because the alternative is a window in which
 the intent is withdrawn and the router still carries the route — which is the window the state
@@ -291,7 +291,7 @@ the WAN reachability matrix. It replaced `frr_config`. Things to know before cha
 
 - It reads the **service** layer as well as the technical one. A provider edge's per-tenant
   import route-map is assembled from `ServiceL3vpn.dc_service_prefixes`,
-  `ServiceTenantCloud.prefix`. That is the
+  `ServiceTenantCloud.prefix` and whether a `ServiceInternetAccess` exists. That is the
   documented exception to "renderers read technical objects" — the provider edge's policy *is*
   the service intent.
 - **No tenant is named in it, and for a while two were — which made every other tenant a

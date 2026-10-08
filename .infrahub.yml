@@ -593,3 +593,50 @@ artifact_definitions:
     content_type: "application/yaml"
     targets: "dns_resolvers"
     transformation: "dns_zone_config"
+schemas:
+  - schemas/avd/avd.yml
+  - schemas/base/dcim.yml
+  - schemas/base/ipam.yml
+  - schemas/base/location.yml
+  - schemas/base/organization.yml
+  - schemas/catalogue/application_catalogue.yml
+  - schemas/circuit/circuit.yml
+  - schemas/circuit_extensions.yml
+  - schemas/cluster/cluster.yml
+  - schemas/cluster/kubernetes.yml
+  - schemas/compute/compute.yml
+  - schemas/compute_extensions.yml
+  - schemas/cv/cv.yml
+  - schemas/dci.yml
+  - schemas/dcim_extensions.yml
+  - schemas/deployment.yml
+  - schemas/device_design.yml
+  - schemas/evpn/evpn_gateway.yml
+  - schemas/evpn/evpn_services.yml
+  - schemas/generator.yml
+  - schemas/ipam_extensions.yml
+  - schemas/l3ls_extensions.yml
+  - schemas/lag/lag.yml
+  - schemas/location_extensions.yml
+  - schemas/logical_design.yml
+  - schemas/management.yml
+  - schemas/mlag/mlag.yml
+  - schemas/monitoring.yml
+  - schemas/objects/objects.yml
+  - schemas/routing/routing.yml
+  - schemas/routing/vrf_services.yml
+  - schemas/security/security.yml
+  - schemas/security_extensions.yml
+  - schemas/service/access_services.yml
+  - schemas/service/kubernetes_services.yml
+  - schemas/service/network_services.yml
+  - schemas/service/onboarding_services.yml
+  - schemas/service/service.yml
+  - schemas/service/wan_services.yml
+  - schemas/tenancy/tenancy.yml
+  - schemas/tenancy_extensions.yml
+  - schemas/vlan/vlan.yml
+  - schemas/vrf/vrf.yml
+  - schemas/wan/wan.yml
+objects:
+  - objects/37_otternet_wan_services.yml

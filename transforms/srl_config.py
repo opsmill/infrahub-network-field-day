@@ -28,10 +28,15 @@ is assembled from ordered intent rather than from device facts:
 
     RM-ACME-IMPORT statement 10   <- ServiceL3vpn.dc_service_prefixes
     RM-ACME-IMPORT statement 20   <- ServiceTenantCloud.prefix
+    RM-ACME-IMPORT statement 30   <- a ServiceInternetAccess EXISTS
+
+globex has no ``statement 30`` because globex bought no internet access. The
+difference between the two tenants is the presence of one object, and it shows
+up as three lines of routing policy on a real device.
 
 Cycle 010's assumption 6 says renderers read technical objects. The provider
 edge is the exception that layering was built for: its import policy *is* the
-service intent, which is why two service kinds are inputs here.
+service intent, which is why three service kinds are inputs here.
 
 WHAT FRR NEVER NEEDED: INTERFACES. Under FRR a boot script set every address
 and enslaved every customer port to its VRF, from ``tenants.yml``; the routing
@@ -375,7 +380,16 @@ class SrlConfig(InfrahubTransform):
                 )
             l3vpn[tenant] = edge.node
         cloud = {e.node.tenant.node.name.value: e.node for e in result.service_tenant_cloud.edges if cls._live(e.node)}
-        return {"l3vpn": l3vpn, "cloud": cloud}
+        # Presence is the datum. A tenant is in this set if it bought internet
+        # access, and that is the only place the fact lives -- so a
+        # decommissioned one has to be filtered out here rather than anywhere
+        # downstream, because downstream only ever sees the set.
+        internet = {
+            e.node.l_3_vpn.node.tenant.node.name.value
+            for e in result.service_internet_access.edges
+            if e.node.l_3_vpn and e.node.l_3_vpn.node and cls._live(e.node)
+        }
+        return {"l3vpn": l3vpn, "cloud": cloud, "internet": internet}
 
     def _isp(self, by_role: dict[str, Any], services: dict[str, Any], result: SrlConfigQuery) -> dict[str, Any]:
         edge, core = by_role.get("isp_edge"), by_role.get("isp_core")
@@ -524,6 +538,7 @@ class SrlConfig(InfrahubTransform):
                 {
                     "name": name,
                     "vrf": vpn.vrf.node.name.value,
+                    "internet": name in services["internet"],
                     "dc": {"subnet": services["cloud"][name].prefix.node.prefix.value},
                     "sites": [
                         self._site(site, addr_owner) for site in self._ordered_sites(sites_by_tenant.get(name, []))

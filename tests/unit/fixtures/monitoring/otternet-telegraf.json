@@ -2140,6 +2140,59 @@
       },
       {
         "node": {
+          "__typename": "ServiceInternetAccess",
+          "name": {
+            "value": "acme-internet"
+          },
+          "status": {
+            "value": "active"
+          },
+          "owner": {
+            "node": {
+              "__typename": "OrganizationProvider",
+              "display_label": "OTTERNET-ISP"
+            }
+          },
+          "peering": {
+            "node": {
+              "bgp_sessions": {
+                "edges": [
+                  {
+                    "node": {
+                      "peer_address": {
+                        "value": "10.52.0.1"
+                      },
+                      "device": {
+                        "node": {
+                          "name": {
+                            "value": "internet-rtr"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "node": {
+                      "peer_address": {
+                        "value": "10.52.0.2"
+                      },
+                      "device": {
+                        "node": {
+                          "name": {
+                            "value": "isp-pe2"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "node": {
           "__typename": "ServiceL3vpn",
           "name": {
             "value": "acme-l3vpn"

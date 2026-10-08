@@ -283,7 +283,13 @@ policy *is* the service intent:
 ```text
 RM-ACME-IMPORT statement 10   <- ServiceL3vpn.dc_service_prefixes
 RM-ACME-IMPORT statement 20   <- ServiceTenantCloud.prefix
+RM-ACME-IMPORT statement 30   <- a ServiceInternetAccess EXISTS
 ```
+
+globex has no `statement 30` because globex bought no internet access. Deleting acme's
+`ServiceInternetAccess` on a branch changes exactly six lines of `isp-pe1`: the comment and
+three lines of the statement, and the tenant header re-rendering from `internet: yes` to
+`internet: no`.
 
 **Any tenant renders, and none is named.** The transform once iterated a fixed
 `("acme", "globex")`, so an L3VPN requested for a third tenant was skipped without a word: the

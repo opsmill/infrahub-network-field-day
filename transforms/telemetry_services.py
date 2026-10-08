@@ -64,13 +64,14 @@ from typing import Any
 FABRIC_APP = "ServiceFabricApp"
 APP_ACCESS = "ServiceAppAccess"
 L3VPN = "ServiceL3vpn"
+INTERNET = "ServiceInternetAccess"
 TENANT_CLOUD = "ServiceTenantCloud"
 ONBOARDING = "ServiceTenantOnboarding"
 SEGMENT = "ServiceNetworkSegment"
 PLACEMENT = "ServiceServerPlacement"
 PEERING = "ServiceFabricPeering"
 SERVICE_GENERIC = "ServiceGeneric"
-SERVICE_KINDS = (FABRIC_APP, APP_ACCESS, L3VPN, TENANT_CLOUD, ONBOARDING, SEGMENT, PLACEMENT, PEERING)
+SERVICE_KINDS = (FABRIC_APP, APP_ACCESS, L3VPN, INTERNET, TENANT_CLOUD, ONBOARDING, SEGMENT, PLACEMENT, PEERING)
 
 # The same reading of `status` every renderer here applies: these are gone.
 WITHDRAWN = frozenset({"decommissioning", "decommissioned"})
@@ -91,6 +92,7 @@ SERVICE_DISPATCH: dict[str, dict[str, tuple[str, ...]]] = {
     "service-access": {APP_ACCESS: ("access",)},
     "service-routing": {
         L3VPN: ("bgp",),
+        INTERNET: ("bgp",),
         TENANT_CLOUD: ("bgp",),
         ONBOARDING: ("bgp",),
         SEGMENT: ("bgp", "svi"),
@@ -604,6 +606,12 @@ def _sessions(watch: ServiceWatch, ctx: Context) -> list[tuple[str, str, str]]:
     if kind == L3VPN:
         for circuit in edges(node, "circuits"):
             found += [(device, peer_address, "") for device, peer_address in ctx.site_sessions.get(circuit.id, [])]
+    elif kind == INTERNET:
+        peering = peer(node, "peering")
+        for session in edges(peering, "bgp_sessions") if peering is not None else []:
+            device = val(peer(session, "device"), "name")
+            if device and val(session, "peer_address"):
+                found.append((str(device), str(val(session, "peer_address")), ""))
     elif kind == TENANT_CLOUD:
         vrf = val(peer(node, "vrf"), "name")
         found = _vrf_sessions(ctx, {str(vrf)}, None) if vrf else []

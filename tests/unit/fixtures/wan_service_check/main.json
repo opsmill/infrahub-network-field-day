@@ -1435,6 +1435,40 @@
       }
     ]
   },
+  "ServiceInternetAccess": {
+    "edges": [
+      {
+        "node": {
+          "id": "18da994d-7d02-08e2-38bd-1187a3a096af",
+          "l3vpn": {
+            "node": {
+              "id": "18da994d-6b36-0bc6-38b5-11878853b3a6",
+              "name": {
+                "value": "acme-l3vpn"
+              },
+              "status": {
+                "value": "active"
+              },
+              "tenant": {
+                "node": {
+                  "id": "18da9947-ad39-c8d3-38b8-118746538965",
+                  "name": {
+                    "value": "acme"
+                  }
+                }
+              }
+            }
+          },
+          "name": {
+            "value": "acme-internet"
+          },
+          "status": {
+            "value": "active"
+          }
+        }
+      }
+    ]
+  },
   "ServiceL3vpn": {
     "edges": [
       {

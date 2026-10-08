@@ -55,8 +55,25 @@ set / routing-policy policy RM-INTERNET-IN statement 10 match prefix prefix-set 
 set / routing-policy policy RM-INTERNET-IN statement 10 action policy-result accept
 set / routing-policy policy RM-INTERNET-IN default-action policy-result reject
 #
+# Announce only the sites of tenants that actually bought internet access.
+# This is the outbound half of the product: the prefixes of globex are in the
+# table of this router and are deliberately not advertised, so nothing on the
+# internet has a route back to it even by accident.
+{% set ns2 = namespace(any=false) %}
+{% for t in tenants if t.internet %}
+{% for site in t.sites %}
+# {{ t.name }}/{{ site.name }}
+set / routing-policy prefix-set PL-INTERNET-OUT prefix {{ site.lan }} mask-length-range exact
+{% set ns2.any = true %}
+{% endfor %}
+{% endfor %}
+{% if ns2.any %}
+set / routing-policy policy RM-INTERNET-OUT statement 10 match prefix prefix-set PL-INTERNET-OUT
+set / routing-policy policy RM-INTERNET-OUT statement 10 action policy-result accept
+{% else %}
 # No tenant buys internet access, so nothing is announced: the policy is its
 # default action alone.
+{% endif %}
 set / routing-policy policy RM-INTERNET-OUT default-action policy-result reject
 {% endif %}
 #

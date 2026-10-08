@@ -1524,6 +1524,31 @@
       }
     ]
   },
+  "ServiceInternetAccess": {
+    "edges": [
+      {
+        "node": {
+          "l3vpn": {
+            "node": {
+              "tenant": {
+                "node": {
+                  "name": {
+                    "value": "acme"
+                  }
+                }
+              }
+            }
+          },
+          "name": {
+            "value": "acme-internet"
+          },
+          "status": {
+            "value": "active"
+          }
+        }
+      }
+    ]
+  },
   "ServiceL3vpn": {
     "edges": [
       {

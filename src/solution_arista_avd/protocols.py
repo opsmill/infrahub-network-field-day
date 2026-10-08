@@ -480,6 +480,13 @@ class MlagInterface(InterfaceLayer2, GenericInterfaceBundle):
     mlag_domain: RelationshipAttribute[GenericMlagDomain]
 
 
+class ServiceInternetAccess(ServiceGeneric, GeneratorTarget):
+    default_route_imported: Boolean
+    prefixes_announced: Boolean
+    l3vpn: RelationshipAttribute[ServiceL3vpn]
+    peering: RelationshipAttribute[WanInternetPeering]
+
+
 class WanInternetPeering(CoreNode):
     description: StringOptional
     name: String

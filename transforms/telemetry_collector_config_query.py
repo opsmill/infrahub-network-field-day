@@ -975,6 +975,7 @@ class TelemetryCollectorConfigQueryServiceGenericEdges(BaseModel):
                 "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceAppAccess",
                 "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricApp",
                 "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricPeering",
+                "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccess",
                 "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceL3vpn",
                 "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceNetworkSegment",
                 "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceServerPlacement",
@@ -1565,6 +1566,121 @@ class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricPeeringPe
 
 
 class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricPeeringPeeringsEdgesNodeSviNodeVrfNodeName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccess(
+    BaseModel
+):
+    typename__: Literal["ServiceInternetAccess"] = Field(alias="__typename")
+    name: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessName"
+    ]
+    status: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessStatus"
+    ]
+    owner: (
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessOwner"
+    )
+    peering: "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeering"
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessName(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessStatus(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessOwner(
+    BaseModel
+):
+    node: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessOwnerNode"
+    ]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessOwnerNode(
+    BaseModel
+):
+    typename__: Literal[
+        "OrganizationGeneric",
+        "OrganizationManufacturer",
+        "OrganizationProvider",
+        "OrganizationTenant",
+    ] = Field(alias="__typename")
+    display_label: Optional[str]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeering(
+    BaseModel
+):
+    node: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNode"
+    ]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNode(
+    BaseModel
+):
+    bgp_sessions: "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessions"
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessions(
+    BaseModel
+):
+    edges: list[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdges"
+    ]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdges(
+    BaseModel
+):
+    node: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNode"
+    ]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNode(
+    BaseModel
+):
+    peer_address: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodePeerAddress"
+    ]
+    device: "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodeDevice"
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodePeerAddress(
+    BaseModel
+):
+    value: Optional[str]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodeDevice(
+    BaseModel
+):
+    node: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodeDeviceNode"
+    ]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodeDeviceNode(
+    BaseModel
+):
+    name: Optional[
+        "TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodeDeviceNodeName"
+    ]
+
+
+class TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodeDeviceNodeName(
     BaseModel
 ):
     value: Optional[str]
@@ -2193,6 +2309,15 @@ TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricPeeringPeerings
 TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricPeeringPeeringsEdgesNodeSviNode.model_rebuild()
 TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricPeeringPeeringsEdgesNodeSviNodeVrf.model_rebuild()
 TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceFabricPeeringPeeringsEdgesNodeSviNodeVrfNode.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccess.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessOwner.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeering.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNode.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessions.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdges.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNode.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodeDevice.model_rebuild()
+TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceInternetAccessPeeringNodeBgpSessionsEdgesNodeDeviceNode.model_rebuild()
 TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceL3vpn.model_rebuild()
 TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceL3vpnOwner.model_rebuild()
 TelemetryCollectorConfigQueryServiceGenericEdgesNodeServiceL3vpnCircuits.model_rebuild()
