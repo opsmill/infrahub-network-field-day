@@ -587,7 +587,9 @@ def _workers_have_commit(repo_id: str, branch: str, expected: str) -> bool:
     return True
 
 
-def _branch_settled(branch: str, expected: str, require_capability: bool = True, repo_id: str = "") -> tuple[bool, str]:
+def _branch_settled(
+    branch: str, expected: str, require_capability: bool = True, repo_id: str = "", require_objects: bool = True
+) -> tuple[bool, str]:
     """Whether `branch` is fully imported (see `decide_settled`), and what it still waits for."""
     from solution_arista_avd import demo_release as dr
 
@@ -609,11 +611,17 @@ def _branch_settled(branch: str, expected: str, require_capability: bool = True,
         failed_tasks=_branch_tasks(branch, dr.FAILED_TASK_STATES),
         require_capability=require_capability,
         workers_synced=_workers_have_commit(repo_id, branch, expected) if repo_id else True,
+        require_objects=require_objects,
     )
 
 
 def _wait_until_settled(
-    branch: str, expected: str, timeout: int, require_capability: bool = True, repo_id: str = ""
+    branch: str,
+    expected: str,
+    timeout: int,
+    require_capability: bool = True,
+    repo_id: str = "",
+    require_objects: bool = True,
 ) -> None:
     """Block until the branch is fully imported, on two polls in a row.
 
@@ -623,7 +631,7 @@ def _wait_until_settled(
     deadline = time.monotonic() + timeout
     consecutive = 0
     while time.monotonic() < deadline:
-        settled, waiting = _branch_settled(branch, expected, require_capability, repo_id)
+        settled, waiting = _branch_settled(branch, expected, require_capability, repo_id, require_objects)
         if not settled and waiting.startswith("failed tasks"):
             raise Exit(f"The import of '{branch}' failed: {waiting}", code=1)
         consecutive = consecutive + 1 if settled else 0
@@ -792,6 +800,7 @@ def _apply_implementation(ctx: Context, baseline: str, implementation: str) -> s
         "implementation": "Build from this branch's commits instead of reverting the baseline (a Spec Kit branch)",
         "objects": f"Object file the capability adds (default {DEMO_OBJECTS})",
         "force": "Replace an existing stage branch. It must never have been pushed under a name Infrahub follows",
+        "with-service": "Also ship the service (acme-internet) in the branch. Default: leave it out, so a person requests it",
     }
 )
 def demo_stage(
@@ -801,8 +810,13 @@ def demo_stage(
     implementation: str = "",
     objects: str = DEMO_OBJECTS,
     force: bool = False,
+    with_service: bool = False,
 ) -> None:
     """Build stage/<name>: main with the capability put back, and the schema and object declared for import.
+
+    The service itself is left out unless `--with-service` is given. The branch then carries the kind, the
+    router templates, the check and the menu entry, and no `acme-internet`, so merging it changes no router.
+    The request is the second part: `invoke demo-request-internet`, merged by a person.
 
     By default the implementation is the baseline's revert, the one that was removed. With
     `--implementation <branch>` it is that branch's own commits, cherry-picked onto the current `main`
@@ -837,6 +851,10 @@ def demo_stage(
             try:
                 with ctx.cd(tree):
                     failure = _apply_implementation(ctx, baseline, implementation)
+                    if not failure and not with_service:
+                        # The revert puts the service object back with the capability. Return the object
+                        # file to main's version, so the service is requested later instead of shipped.
+                        ctx.run(f"git checkout main -- {shlex.quote(objects)}", hide=True)
                     if not failure:
                         files = [
                             f
@@ -848,7 +866,7 @@ def demo_stage(
                             dr.declare_schemas_and_objects(config.read_text(encoding="utf-8"), files, [objects]),
                             encoding="utf-8",
                         )
-                        ctx.run("git add .infrahub.yml", hide=True)
+                        ctx.run(f"git add .infrahub.yml {shlex.quote(objects)}", hide=True)
                         ctx.run(
                             "git -c user.name=demo-stage -c user.email=demo-stage@example.invalid commit --quiet "
                             "-m 'feat(stage): let the repository import carry the schema and the object'",
@@ -861,7 +879,10 @@ def demo_stage(
                 raise Exit(failure, code=1)
         tip = ctx.run(f"git rev-parse --short {shlex.quote(stage)}", hide=True).stdout.strip()
     source = f"{implementation}'s commits cherry-picked" if implementation else f"{baseline[:10]} reverted"
-    print(f"{stage} is at {tip}: main with {source}, and the import declarations added.")
+    service = (
+        "with the service" if with_service else "without the service (request it with invoke demo-request-internet)"
+    )
+    print(f"{stage} is at {tip}: main with {source}, {service}, and the import declarations added.")
 
 
 def _worker_branch_refs(repo_id: str) -> list[str]:
@@ -1069,7 +1090,14 @@ def demo_release(
         print(timer.mark("push the staged branch and set the ref"), flush=True)
 
     print(" - Waiting for the branch to be fully imported", flush=True)
-    _wait_until_settled(demo, expected, timeout, repo_id=repo["id"] if read_write else "")
+    # A staged branch built without the service holds the kind and no node, so there is no object to wait for.
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        ships_service = (
+            DEMO_KIND in ctx.run(f"git show {shlex.quote(stage)}:{DEMO_OBJECTS}", hide=True, warn=True).stdout
+        )
+    _wait_until_settled(
+        demo, expected, timeout, repo_id=repo["id"] if read_write else "", require_objects=ships_service
+    )
     print(timer.mark("Infrahub imports the branch on every worker"), flush=True)
 
     if not proposed_change:
@@ -1339,6 +1367,33 @@ def _take_capability_back_out(
 
 
 @task(
+    name="demo-internet-evidence",
+    help={
+        "expect": "Fail unless exactly this tenant has internet: none, acme or globex. Omit to only print",
+        "phase": "before, capability (part 1 merged) or request (part 2 merged by a person); sets the expectation",
+        "summary-only": "Print only the summary table, not the raw output of each command",
+    },
+)
+def demo_internet_evidence(ctx: Context, expect: str = "", phase: str = "", summary_only: bool = False) -> None:
+    """Show every piece of evidence that a tenant has, or lacks, internet access, in one run.
+
+    For acme and globex it reads the PE's import policy, the PE's VRF, the customer router, the route back
+    on `internet-rtr`, and a `curl` from the customer host to the internet host, then says whether they
+    agree. It prints a summary table, then the raw output of every command. Run it before the
+    capability merges, after it merges, and after the request merges; it reads the
+    lab only, so it changes nothing. See `scripts/internet_evidence.py`.
+    """
+    command = f"{sys.executable} scripts/internet_evidence.py"
+    if expect:
+        command += f" --expect {expect}"
+    if phase:
+        command += f" --phase {phase}"
+    if summary_only:
+        command += " --summary-only"
+    ctx.run(command, pty=True)
+
+
+@task(
     help={
         "name": f"Capability name (default {DEMO_NAME})",
         "run": "The release to remove. 0 (the default) is the latest one in use",
@@ -1359,6 +1414,8 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int =
 
     repo = _repository()
     _ensure_workers_on_default_branch(repo)
+    for request in sorted(b for b in (_branches() or {}) if b.startswith(f"{REQUEST_BRANCH}_")):
+        _delete_demo_branch(ctx, request)  # the second part's request branches; they name the kind being removed
     if run < 1:
         from solution_arista_avd import demo_restore as restore_module
 
@@ -1391,6 +1448,80 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int =
         _delete_demo_branch(ctx, leftover)  # an attempt that was interrupted or had nothing to undo
     _delete_demo_branch(ctx, demo)
     print(f"\nNext release: invoke demo-release --name {name}  (it takes the next unused number, {run + 1} or later)")
+
+
+REQUEST_FILE = "demo/requests/acme-internet.yml"
+REQUEST_BRANCH = "implement_acme-internet"
+
+
+@task(
+    name="demo-request-internet",
+    help={
+        "reference": "Request reference, used in the branch name (default: from the clock)",
+        "timeout": "Seconds to wait for the validators (default 600)",
+        "merge": "Merge the proposed change too. Rehearsals only: on stage a person merges it",
+    },
+)
+def demo_request_internet(ctx: Context, reference: str = "", timeout: int = 600, merge: bool = False) -> None:
+    """Part 2 of the builder demonstration: request internet access for acme, as a branch and a proposed change.
+
+    The capability has to be merged first (`demo-release`, then a merge). This loads `acme-internet` from
+    `demo/requests/acme-internet.yml` onto its own branch, opens the proposed change and waits until every
+    validator has passed. It then stops: the merge is made by a person in the Infrahub UI, as `alex`. The
+    branch has no git sync, so nothing is pushed to the remote and no task worker has to pull a commit.
+    """
+    from solution_arista_avd import demo_release as dr
+
+    if not os.environ.get("INFRAHUB_API_TOKEN"):
+        raise Exit(
+            "INFRAHUB_API_TOKEN is not set. Run `source ~/.zshrc`, or export the token infrahubctl uses.", code=1
+        )
+    if not _graphql(f'{{ __type(name: "{DEMO_KIND}") {{ name }} }}').get("__type"):
+        raise Exit(
+            f"{DEMO_KIND} does not exist on main. Release and merge the capability first (invoke demo-release).", code=1
+        )
+    existing = (_graphql(f"{{ {DEMO_KIND} {{ edges {{ node {{ name {{ value }} }} }} }} }}").get(DEMO_KIND) or {}).get(
+        "edges"
+    ) or []
+    if existing:
+        names = ", ".join(str(e["node"]["name"]["value"]) for e in existing)
+        raise Exit(
+            f"main already holds internet access ({names}). Run `invoke demo-reset` to take it back out.", code=1
+        )
+
+    branch = f"{REQUEST_BRANCH}_{reference or time.strftime('d%m%d-%H%M')}"
+    if branch in (_branches() or {}):
+        raise Exit(f"Infrahub already has '{branch}'. Use another --reference, or delete that branch.", code=1)
+    timer = dr.PhaseTimer()
+    print(f"\n=== Requesting internet access for acme on {branch} ===", flush=True)
+    ctx.run(f"infrahubctl branch create {shlex.quote(branch)}", pty=True)
+    ctx.run(f"infrahubctl object load {shlex.quote(REQUEST_FILE)} --branch {shlex.quote(branch)}", pty=True)
+    print(timer.mark("create the branch and load the request"), flush=True)
+    mutation = dr.proposed_change_mutation(
+        branch, "Request: internet access for acme", "Acme asks for internet access: one ServiceInternetAccess node."
+    )
+    pc_id = ((_graphql(mutation).get("CoreProposedChangeCreate") or {}).get("object") or {}).get("id")
+    if not pc_id:
+        raise Exit(
+            f"Branch '{branch}' holds the request, but the proposed change could not be opened. Open it in the UI.",
+            code=1,
+        )
+    # Creating one starts its validators at once; asking again makes them judge the final branch.
+    _graphql(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
+    print(" - Waiting for the proposed change's validators", flush=True)
+    _wait_for_validators(pc_id, timeout)
+    print(timer.mark("validators finish"), flush=True)
+    link = f"{INFRAHUB_ADDRESS}/proposed-changes/{pc_id}"
+    if merge:
+        print(" - Merging (rehearsal)", flush=True)
+        _graphql(f'mutation {{ CoreProposedChangeMerge(data: {{id: "{pc_id}"}}) {{ ok }} }}')
+        print(timer.summary())
+        print("\nMerged. Then: uv run invoke demo-internet-evidence --phase request")
+        return
+    print(f"\nReady: {link}")
+    print(timer.summary())
+    print("Review it, then merge it yourself in the Infrahub UI. Then, after about 90 seconds:")
+    print("  uv run invoke demo-internet-evidence --phase request")
 
 
 def _rehearsal() -> Any:

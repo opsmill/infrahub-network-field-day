@@ -1,0 +1,22 @@
+# The second half of the builder demonstration: acme asks for internet access.
+#
+# The capability branch adds the ServiceInternetAccess kind and the router templates that read it, and no
+# service. This file is the request: one node, loaded onto its own branch by `invoke demo-request-internet`,
+# reviewed as a proposed change and merged by a person. It is not under objects/, so `invoke load` never
+# loads it, and it cannot load until the capability is merged because the kind does not exist before then.
+#
+# The asymmetry is the point: globex has no node here, and the absence is what keeps it off the internet.
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: ServiceInternetAccess
+  data:
+    - name: acme-internet
+      description: "Internet access for the acme L3VPN"
+      status: active
+      owner: OTTERNET-ISP
+      l3vpn: acme-l3vpn
+      peering: isp-to-internet
+      default_route_imported: true
+      prefixes_announced: true

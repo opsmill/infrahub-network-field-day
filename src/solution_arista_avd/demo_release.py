@@ -239,6 +239,7 @@ def decide_settled(
     failed_tasks: list[str],
     require_capability: bool = True,
     workers_synced: bool = True,
+    require_objects: bool = True,
 ) -> tuple[bool, str]:
     """Whether a released branch is fully imported, and if not, what it is still waiting for.
 
@@ -263,7 +264,7 @@ def decide_settled(
         return False, f"the repository to be in-sync (it is {sync_status or 'unknown'})"
     if require_capability and not kind_present:
         return False, "the schema to load"
-    if require_capability and object_count < 1:
+    if require_capability and require_objects and object_count < 1:
         return False, "the objects to load"
     if not workers_synced:
         return False, "every task worker to pull the commit into its own clone"
