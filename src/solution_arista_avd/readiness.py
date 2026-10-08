@@ -45,10 +45,10 @@ MCP_SERVER_URL = "http://127.0.0.1:8001/mcp"
 MCP_HEALTH_URL = "http://127.0.0.1:8001/health"
 MCP_AGENT = "mcp-agent"
 # The local account for the network team: not Dex, not a Super Administrator.
-NETWORK_ADMIN = "network-admin"
+NETWORK_ADMIN = "alex"
 NETWORK_ADMIN_PASSWORD_VAR = "INFRAHUB_NETWORK_ADMIN_PASSWORD"  # noqa: S105 -- the variable's name, not a password
 # The one server in .mcp.json. Claude Code acts as alice and as no other identity.
-MCP_SERVER_NAME = "infrahub-lab"
+MCP_SERVER_NAME = "otternet-infrahub"
 # The observability namespaces Vidra's delivery creates, and the Secrets that `invoke cluster` puts in them.
 # Only key names are ever read from the cluster; a Secret's values are never fetched or printed.
 OBSERVABILITY_NAMESPACES = ("otternet-metrics", "otternet-telemetry")
@@ -209,7 +209,7 @@ def decide_script_check(label: str, returncode: int, output: str, fix: str) -> R
 
 
 def decide_mcp_config(config: dict[str, Any], env_names: set[str], users: tuple[str, ...]) -> Result:
-    """`.mcp.json` has exactly one server, `infrahub-lab`, sending alice's token, and `.env` has that variable."""
+    """`.mcp.json` has exactly one server, `otternet-infrahub`, sending alice's token, and `.env` has that variable."""
     name = ".mcp.json servers match the variables the scripts write"
     servers = config.get("mcpServers") or {}
     wanted = {MCP_SERVER_NAME: token_var(users[0])}
@@ -650,7 +650,7 @@ def probe_network_admin(env: Environment) -> Result:
     # password in `.env` signs in.
     return _script_check(
         env,
-        "network-admin signs in and holds only Network Admin Access",
+        "alex signs in and holds only Network Admin Access",
         "provision_network_admin.py",
         [],
         "uv run invoke network-admin",
@@ -1018,7 +1018,7 @@ def human_steps(root: Path) -> list[str]:
     return [
         f"Start Claude Code from a shell that has loaded {env_file}: `cd {envfile.main_checkout(root)} && set -a; source .env; set +a; claude`.",
         f"That file holds {', '.join(variables)}; .mcp.json sends it as the Bearer header, so Claude Code acts as alice. Do not print or commit it.",
-        "Approve the infrahub-lab server the first time Claude Code asks.",
+        "Approve the otternet-infrahub server the first time Claude Code asks.",
         f"To edit network data and merge a proposed change, sign in to the Infrahub UI as `{NETWORK_ADMIN}` "
         f"with the password in {env_file} (variable {NETWORK_ADMIN_PASSWORD_VAR}; do not print or commit it). "
         "This is a local account, not a Dex sign-in, and it is not a Super Administrator.",

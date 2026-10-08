@@ -5,10 +5,10 @@ WHY THIS EXISTS. A person who signs in through Dex lands in `Infrahub Users`, wh
 `Requester Access`, writes Service kinds on a branch and opens a proposed change. A network
 engineer who must change devices, interfaces, links, addresses or locations, and who must
 merge the proposed change, needs more. The built-in answer is the `admin` account, which is a
-Super Administrator. This script creates the middle: `network-admin`, an account with a local
+Super Administrator. This script creates the middle: `alex`, an account with a local
 password (no Dex), in one group, `Network Admins`, with one role, `Network Admin Access`.
 
-WHAT `network-admin` MAY DO (each line measured on Infrahub 1.10.6; see
+WHAT `alex` MAY DO (each line measured on Infrahub 1.10.6; see
 docs/docs/developer-guide/mcp-server.md, section "The network-admin account"):
 
 - view every kind, everywhere;
@@ -17,7 +17,7 @@ docs/docs/developer-guide/mcp-server.md, section "The network-admin account"):
 - create a proposed change, which is stored on the default branch
   (`object:Core:ProposedChange:create:allow_default`), and the global `edit_default_branch`,
   which admits the request to the default branch at all;
-- the global `merge_proposed_change` and `review_proposed_change`.
+- the global `merge_branch`, `merge_proposed_change` and `review_proposed_change`.
 
 WHAT IT MAY NOT DO: `manage_schema`, `manage_repositories`, `manage_accounts`,
 `manage_permissions`, `super_admin`, and any write on the default branch other than the
@@ -54,8 +54,8 @@ REPO = Path(__file__).resolve().parents[1]
 # The MAIN checkout's `.env`, not one beside this file: see `envfile.main_checkout`.
 ENV_FILE = envfile.env_file(REPO)
 
-ACCOUNT = "network-admin"
-LABEL = "Network Admin"
+ACCOUNT = "alex"
+LABEL = "Alex"
 GROUP = "Network Admins"
 ROLE = "Network Admin Access"
 PASSWORD_VAR = "INFRAHUB_NETWORK_ADMIN_PASSWORD"  # noqa: S105 -- the variable's name, not a password
@@ -69,6 +69,7 @@ OBJECT_PERMISSIONS = [
 ]
 GLOBAL_PERMISSIONS = [
     {"action": "edit_default_branch", "decision": 6},
+    {"action": "merge_branch", "decision": 6},
     {"action": "merge_proposed_change", "decision": 6},
     {"action": "review_proposed_change", "decision": 6},
 ]
@@ -79,7 +80,6 @@ FORBIDDEN_GROUPS = ("Super Administrators", "Infrahub Users")
 # Actions this role must never carry, whatever else changes. Pinned by
 # tests/unit/test_network_admin_contract.py.
 FORBIDDEN_ACTIONS = (
-    "merge_branch",
     "manage_schema",
     "manage_repositories",
     "manage_accounts",
@@ -210,7 +210,7 @@ def main() -> int:
                 ENV_FILE,
                 PASSWORD_VAR,
                 password,
-                "The network-admin account's password (local Infrahub account, not Dex); written by scripts/provision_network_admin.py.",
+                "The alex account's password (local Infrahub account, not Dex); written by scripts/provision_network_admin.py.",
             )
             print(f"Generated {PASSWORD_VAR} in {ENV_FILE}")
         provision(client, password)

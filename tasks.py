@@ -3336,6 +3336,32 @@ def _refresh_stage_branch(ctx: Context) -> None:
     demo_stage(ctx, force=True)
 
 
+DEMO_REPOSITORY_URL = "https://github.com/opsmill/infrahub-network-field-day.git"
+
+
+def _release_demo_branch(ctx: Context) -> bool:
+    """Stage the builder capability if it is not staged, then release it, so the demo branch is ready.
+
+    Returns False when the release failed, so the bootstrap can finish its readiness checks and then
+    report it; `uv run invoke demo-release` repeats it alone.
+    """
+    from solution_arista_avd import demo_release as dr
+
+    stage = dr.stage_branch(DEMO_NAME)
+    with ctx.cd(MAIN_DIRECTORY_PATH):
+        staged = ctx.run(f"git rev-parse --verify --quiet {shlex.quote(stage)}", hide=True, warn=True).ok
+    try:
+        if not staged:
+            print(f" - '{stage}' does not exist yet; building it")
+            demo_stage(ctx)
+        demo_release(ctx)
+    except Exit as exc:
+        print(f"\nThe demo branch was not released: {exc}")
+        print("   Fix the cause, then run `uv run invoke demo-release`.")
+        return False
+    return True
+
+
 # `bootstrap` takes a --cluster flag, which shadows the task of the same name
 # inside its body. Alias it here so the call site stays readable.
 _cluster_task = cluster
@@ -3347,10 +3373,22 @@ _cluster_task = cluster
         "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
         "cluster": "Also bring up Kubernetes: Cilium, Vidra, Crossplane and the handover.",
         "fresh": "Destroy the stack and the lab first, so the run starts from nothing.",
+        "release": "On a read-write stack, release the staged demo branch at the end, so it is ready (default true).",
+        "demo": (
+            "Build a read-write demo stack: sets INFRAHUB_REPOSITORY_MODE=readwrite and "
+            "INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='[\"demo/.*\"]' so Infrahub imports demo/* branches. "
+            "Needs NFD_GITHUB_TOKEN; INFRAHUB_REPOSITORY_URL defaults to the Network Field Day repository."
+        ),
     }
 )
 def bootstrap(
-    ctx: Context, branch: str = "build-fabric", lab_dir: str = "", cluster: bool = True, fresh: bool = False
+    ctx: Context,
+    branch: str = "build-fabric",
+    lab_dir: str = "",
+    cluster: bool = True,
+    fresh: bool = False,
+    demo: bool = False,
+    release: bool = True,
 ) -> None:
     """
     Bring the whole environment up, from nothing, in one command.
@@ -3384,6 +3422,12 @@ def bootstrap(
     inside `avd --topology` are destructive against a fabric that already has
     cabling, so a second bootstrap onto a populated instance wants `--fresh`.
     """
+    if demo:
+        # Explicit exports win; only what is unset is filled in. The compose files read the import
+        # setting when `start` runs, so it has to be in the environment before that.
+        os.environ.setdefault("INFRAHUB_REPOSITORY_URL", DEMO_REPOSITORY_URL)
+        os.environ["INFRAHUB_REPOSITORY_MODE"] = "readwrite"
+        os.environ.setdefault("INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES", '["demo/.*"]')
     # BEFORE ANYTHING IS DESTROYED: a read-write repository needs a token that can push and an
     # import setting for the demo branches, and both used to be found out after the teardown.
     readwrite = _preflight_repository_mode(ctx)
@@ -3471,8 +3515,12 @@ def bootstrap(
     print("\n=== Starting the deployment reconciler ===")
     ctx.run(f"{compose_cmd()} --profile reconcile up -d deployment-reconciler", pty=True, warn=True)
 
+    released = True
     if readwrite:
         _refresh_stage_branch(ctx)
+        if release:
+            print("\n=== Releasing the demo branch ===")
+            released = _release_demo_branch(ctx)
 
     print("\n=== Bootstrap complete ===")
     print("   The lab is running and every device matches Infrahub.")
@@ -3486,6 +3534,8 @@ def bootstrap(
     print(readiness.render_summary(results, compose_root()))
     if readiness.exit_code(results):
         raise Exit("Bootstrap finished, but a readiness check failed (listed above).", code=1)
+    if not released:
+        raise Exit("Bootstrap finished, but the demo branch was not released (see above).", code=1)
 
 
 def _wait_for_infrahub(timeout: int = 600) -> None:

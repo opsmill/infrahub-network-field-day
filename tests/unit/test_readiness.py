@@ -145,11 +145,11 @@ def test_the_variable_names_the_scripts_write_are_the_ones_mcp_json_reads() -> N
 
 
 def test_claude_mcp_list_needs_every_server_connected() -> None:
-    good = "infrahub-lab: http://127.0.0.1:8001/mcp (HTTP) - ✓ Connected\n"
-    assert r.decide_claude_mcp_list(good, ["infrahub-lab"]).status is Status.PASS
-    bad = "infrahub-lab: x (HTTP) - ✗ Failed to connect\n"
-    assert r.decide_claude_mcp_list(bad, ["infrahub-lab"]).status is Status.FAIL
-    assert "infrahub-lab is not listed" in r.decide_claude_mcp_list("", ["infrahub-lab"]).detail
+    good = "otternet-infrahub: http://127.0.0.1:8001/mcp (HTTP) - ✓ Connected\n"
+    assert r.decide_claude_mcp_list(good, ["otternet-infrahub"]).status is Status.PASS
+    bad = "otternet-infrahub: x (HTTP) - ✗ Failed to connect\n"
+    assert r.decide_claude_mcp_list(bad, ["otternet-infrahub"]).status is Status.FAIL
+    assert "otternet-infrahub is not listed" in r.decide_claude_mcp_list("", ["otternet-infrahub"]).detail
 
 
 READWRITE = {"kind": "CoreRepository", "default_branch": "demo-main", "sync_status": "in-sync"}
@@ -282,13 +282,13 @@ def test_the_summary_says_what_a_person_must_do_and_prints_no_token_value() -> N
     assert "set -a; source .env; set +a" in text
     assert "INFRAHUB_MCP_TOKEN_ALICE" in text
     assert "INFRAHUB_MCP_TOKEN," not in text
-    assert "infrahub-lab-alice" not in text
+    assert "otternet-infrahub-alice" not in text
     assert "1 PASS" in text
 
 
 def test_the_summary_names_the_network_admin_account_and_its_password_variable_but_no_value() -> None:
     text = r.render_summary([Result("a", Status.PASS, "ok")], REPO)
-    assert "network-admin" in text
+    assert "alex" in text
     assert "INFRAHUB_NETWORK_ADMIN_PASSWORD" in text
     assert "INFRAHUB_NETWORK_ADMIN_PASSWORD=" not in text
     assert "not a Dex sign-in" in text
@@ -436,6 +436,21 @@ def test_bootstrap_builds_the_project_image_before_the_stack_starts() -> None:
 def test_demo_release_refuses_without_the_api_token_before_it_touches_anything() -> None:
     body = _body("demo_release")
     assert _first(body, 'os.environ.get("INFRAHUB_API_TOKEN")') < _first(body, "dr.stage_branch(")
+
+
+def test_a_read_write_bootstrap_releases_the_demo_branch_after_refreshing_the_stage_branch() -> None:
+    body = _body("bootstrap")
+    assert "release: bool = True" in body
+    assert _first(body, "_refresh_stage_branch(ctx)") < _first(body, "_release_demo_branch(ctx)")
+    assert _first(body, "_release_demo_branch(ctx)") < _first(body, "Bootstrap complete")
+    assert "if release:" in body
+
+
+def test_the_release_step_stages_a_missing_branch_and_reports_a_failure_instead_of_raising() -> None:
+    body = _body("_release_demo_branch")
+    assert _first(body, "demo_stage(ctx)") < _first(body, "demo_release(ctx)")
+    assert "except Exit" in body
+    assert "return False" in body
 
 
 # --------------------------------------------------------------------------- observability namespaces and Secrets

@@ -65,6 +65,7 @@ export INFRAHUB_API_TOKEN=...        # the token infrahubctl uses; for a local s
 uv run invoke bootstrap --fresh
 ```
 
+- **A read-write bootstrap releases the demo branch at the end.** After the stack is up, bootstrap builds `stage/<name>` if it does not exist, then runs `uv run invoke demo-release`, so the `demo/*` branch and its proposed change are ready before anyone presents. It adds 2 to 8 minutes. `--no-release` skips it. If the release fails, bootstrap still runs the readiness checks, then exits with an error naming `uv run invoke demo-release` as the repeat.
 - **The settings are checked first.** Bootstrap stops before it destroys anything if `INFRAHUB_API_TOKEN`, the URL, the
   token or the import setting is missing. Measured from a shell that held only `HOME`, `PATH`, `USER` and
   `NFD_GITHUB_TOKEN`: without `INFRAHUB_API_TOKEN` the stack was destroyed and rebuilt for five minutes, and then the step
@@ -112,7 +113,7 @@ a variable, because a Claude Code started from that shell would send the old tok
 
 `network-admin` runs after `mcp-tokens`, and `uv run invoke network-admin` runs it alone. It needs only the loaded stack,
 because it is a local Infrahub account: it does not use Dex, the MCP server or a token. It creates the account
-`network-admin` (label `Network Admin`, type `User`), the group `Network Admins` and the role `Network Admin Access`, and puts the
+`alex` (label `Alex`, type `User`), the group `Network Admins` and the role `Network Admin Access`, and puts the
 generated password into the main checkout's `.env` as `INFRAHUB_NETWORK_ADMIN_PASSWORD`. Nothing prints the password. A password that
 still signs in is kept, so a re-run changes nothing, and after `--fresh` the same password is used to create the account again.
 No API token is minted for it: a person signs in to the UI with the username and the password. What it can and cannot do is in
@@ -161,7 +162,7 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | MCP server | The container runs and `/health` reports `token-passthrough` |
 | `mcp-agent` | The account and its role exist; a tool call with `INFRAHUB_MCP_TOKEN` (used by the demo rehearsal, not by Claude Code) returns `AccountProfile` `mcp-agent` |
 | Requester Access | `Infrahub Users` holds only `Requester Access` (view, write service objects on a branch, open a proposed change); the two built-in roles are detached |
-| `network-admin` | The account exists, is only in `Network Admins` (not `Super Administrators`, not `Infrahub Users`), the role holds exactly the six permissions defined, the role is attached to no other group, and the password in `.env` signs in |
+| `network-admin` | The account `alex` exists, is only in `Network Admins` (not `Super Administrators`, not `Infrahub Users`), the role holds exactly the seven permissions defined, the role is attached to no other group, and the password in `.env` signs in |
 | alice cannot write to main | A scratch tag created on `main` with her token is refused |
 | Portal accounts | Every Dex user has an Infrahub account |
 | alice | A tool call with `INFRAHUB_MCP_TOKEN_ALICE` returns `alice`, and she opens a proposed change on a throw-away branch that the check deletes |
@@ -172,8 +173,8 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | Observability namespaces | `otternet-metrics` and `otternet-telemetry` exist in the lab cluster |
 | Observability Secrets | `grafana-admin` (keys `admin-user`, `admin-password`) and `grafana-oidc` (key `client-secret`) exist in `otternet-metrics`, and `telemetry-credentials` (keys `GNMI_USERNAME`, `GNMI_PASSWORD`) exists in `otternet-telemetry`. The check lists key names only and never reads a value |
 | Grafana pod | No Grafana pod is in `CreateContainerConfigError`; a missing pod is a `WARN`. Every failure names `uv run invoke observability-secrets` |
-| `.mcp.json` | One server, `infrahub-lab`, sends `INFRAHUB_MCP_TOKEN_ALICE`; any other entry fails the check |
-| `claude mcp list` | `infrahub-lab` connects, from a process that has `.env` loaded |
+| `.mcp.json` | One server, `otternet-infrahub`, sends `INFRAHUB_MCP_TOKEN_ALICE`; any other entry fails the check |
+| `claude mcp list` | `otternet-infrahub` connects, from a process that has `.env` loaded |
 | Shell environment | Warns when this shell holds a generated credential that differs from `.env` |
 
 The three observability checks use the lab's `kubeconfig` file (`KUBECONFIG`, else `lab/k8s/.kubeconfig/kubeconfig.yaml` in the main checkout)
@@ -193,7 +194,7 @@ set -a; source .env; set +a
 claude
 ```
 
-and approve the `infrahub-lab` server the first time Claude Code asks. Claude Code then acts as alice. Claude
+and approve the `otternet-infrahub` server the first time Claude Code asks. Claude Code then acts as alice. Claude
 Code reads `.mcp.json` at start, so restart it after a bootstrap that mints new tokens.
 
 **The bootstrap ends by starting the reconciler LOOP**, not just by converging
