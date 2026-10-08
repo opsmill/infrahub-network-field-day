@@ -99,13 +99,14 @@ table in this section that says "expected" is a prediction, not a measurement.
 - **Role:** `Network Admin Access`, attached to `Network Admins` only. `uv run python scripts/provision_network_admin.py --check`
   fails if any of this changes.
 
-The role holds seven permissions:
+The role holds eight permissions:
 
 | Permission | Decision | What it allows |
 | --- | --- | --- |
 | `view` on every namespace and kind | everywhere | read all data |
 | `any` on every namespace and kind | branches other than the default branch | create, edit and delete network data (devices, interfaces, links, IP addresses, locations, pools, security) on a branch |
 | `object:Core:ProposedChange:create` | the default branch | create a proposed change, which Infrahub stores on `main` |
+| `object:Core:ProposedChange:update` | the default branch | merge, approve or close a proposed change: each sets a field on the proposed change, which lives on `main`. Measured: without it Infrahub refuses the merge with `You do not have one of the following permissions: object:Core:ProposedChange:update:allow_default` |
 | `edit_default_branch` (global) | everywhere | admit a proposed change to the default branch at all |
 | `merge_branch` (global) | everywhere | merge a branch directly |
 | `merge_proposed_change` (global) | everywhere | documents who is meant to merge a proposed change |

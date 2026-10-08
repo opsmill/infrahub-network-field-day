@@ -14,9 +14,11 @@ docs/docs/developer-guide/mcp-server.md, section "The network-admin account"):
 - view every kind, everywhere;
 - any action on every kind on a branch other than the default branch (decision 4), so network
   data can be edited on a branch;
-- create a proposed change, which is stored on the default branch
-  (`object:Core:ProposedChange:create:allow_default`), and the global `edit_default_branch`,
-  which admits the request to the default branch at all;
+- create and update a proposed change, which is stored on the default branch
+  (`object:Core:ProposedChange:create:allow_default` and `...:update:allow_default`; merging, approving
+  or closing a proposed change is an update, measured: without it the merge is refused with
+  "You do not have one of the following permissions: object:Core:ProposedChange:update:allow_default"),
+  and the global `edit_default_branch`, which admits the request to the default branch at all;
 - the global `merge_branch`, `merge_proposed_change` and `review_proposed_change`.
 
 WHAT IT MAY NOT DO: `manage_schema`, `manage_repositories`, `manage_accounts`,
@@ -66,6 +68,7 @@ OBJECT_PERMISSIONS = [
     {"namespace": "*", "name": "*", "action": "view", "decision": 6},
     {"namespace": "*", "name": "*", "action": "any", "decision": 4},
     {"namespace": "Core", "name": "ProposedChange", "action": "create", "decision": 2},
+    {"namespace": "Core", "name": "ProposedChange", "action": "update", "decision": 2},
 ]
 GLOBAL_PERMISSIONS = [
     {"action": "edit_default_branch", "decision": 6},
