@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Act one: request Who am I (one scene)</title>
+<style>
+:root{--bg:#0f172a;--panel:#1e293b;--line:#334155;--text:#e2e8f0;--mute:#94a3b8;--blue:#38bdf8;--green:#4ade80;--amber:#fbbf24;--red:#f87171}
+@media (prefers-color-scheme: light){:root{--bg:#f8fafc;--panel:#fff;--line:#cbd5e1;--text:#0f172a;--mute:#475569;--blue:#0369a1;--green:#15803d;--amber:#b45309;--red:#b91c1c}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,sans-serif}
+body{display:flex;flex-direction:column;padding:14px 18px;gap:12px}
+.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.clock{font:700 28px ui-monospace,Menlo,monospace;min-width:6.5em}
+.phases{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.ph{padding:3px 12px;border-radius:99px;border:1px solid var(--line);color:var(--mute);transition:.4s;font-size:13px}
+.ph.on{border-color:var(--blue);color:var(--blue);background:color-mix(in srgb,var(--blue) 14%,transparent)}
+.ph.past{color:var(--green);border-color:var(--green)}
+.stage{flex:1;display:grid;grid-template-columns:1.25fr 1.35fr 1fr 1fr;gap:12px;min-height:0}
+@media (max-width:1000px){.stage{grid-template-columns:1fr 1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;position:relative;transition:.4s;min-height:0}
+.panel.hot{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 25%,transparent)}
+.panel h2{margin:0;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--mute)}
+.item{opacity:0;transform:translateY(8px);transition:.5s;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:13px}
+.item.on{opacity:1;transform:none}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.mute{color:var(--mute)}.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}.info{color:var(--blue)}
+/* portal */
+.field{display:flex;justify-content:space-between;font-size:13px;border-bottom:1px solid var(--line);padding:2px 0}
+.locked{opacity:.5;border-style:dashed}
+.step{display:flex;gap:8px;align-items:center;font-size:13px}
+.dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);flex:none;transition:.3s}
+.step.run .dot{border-color:var(--blue);animation:p 1s infinite}
+.step.done .dot{background:var(--green);border-color:var(--green)}
+@keyframes p{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--blue) 30%,transparent)}}
+.log{font:11.5px/1.55 ui-monospace,Menlo,monospace;height:11.5em;overflow:hidden;border-top:1px solid var(--line);padding-top:6px}
+.log div{opacity:0;white-space:nowrap;transition:.3s}
+.log div.on{opacity:1}
+.log div.run::after{content:" ...";color:var(--blue)}
+.log div.done::after{content:" \2713";color:var(--green)}
+.log div.w{color:var(--amber)}
+/* branches */
+.lane{height:26px;position:relative;margin:2px 0}
+.lane::before{content:"";position:absolute;left:0;right:0;top:12px;border-top:3px solid var(--line)}
+.lane b{position:absolute;left:0;top:-3px;font-size:11px;color:var(--mute)}
+.lane .seg{position:absolute;left:35%;top:12px;height:3px;background:var(--blue);width:0;transition:width 1.2s}
+.lane.br .seg.on{width:55%}
+.lane.br::before{opacity:.25}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--blue)}
+.bar.good i{background:var(--green)}
+/* cluster / network */
+.dev{display:flex;justify-content:space-between;align-items:center;border:2px solid var(--green);border-radius:8px;padding:5px 9px;font-size:12px;transition:.4s}
+.dev.pend{border-color:var(--amber);color:var(--amber)}
+.dev .s::after{content:"in_sync"}
+.dev.pend .s::after{content:"pending"}
+.dots{display:flex;flex-wrap:wrap;gap:4px}
+.dots i{width:12px;height:12px;border-radius:3px;background:var(--green)}
+/* packets */
+.path{position:relative;height:30px;border-bottom:2px dashed var(--line);margin-top:6px}
+.fwx{position:absolute;left:50%;top:-4px;bottom:-2px;width:6px;background:var(--amber);border-radius:2px}
+.pk{position:absolute;top:6px;width:14px;height:14px;border-radius:50%;left:0;opacity:0}
+.pk.go{animation:g 2.2s forwards;background:var(--green)}
+.pk.no{animation:n 2.2s forwards;background:var(--red)}
+@keyframes g{0%{left:0;opacity:1}100%{left:calc(100% - 14px);opacity:1}}
+@keyframes n{0%{left:0;opacity:1}50%{left:calc(50% - 16px);opacity:1}70%{left:calc(50% - 16px);opacity:1}100%{left:calc(50% - 16px);opacity:0}}
+/* caption + controls */
+.cap{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--blue);border-radius:10px;padding:12px 16px;font-size:19px;min-height:3.4em;transition:.3s}
+.ctl{display:flex;gap:10px;align-items:center;color:var(--mute);font-size:13px}
+.ctl input[type=range]{flex:1}
+button,select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 12px;font:inherit;cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="top">
+ <div class="clock" id="clock">0:00</div>
+ <div class="phases" id="phases">
+  <span class="ph">1 Ask</span><span class="ph">2 Build on a branch</span><span class="ph">3 Review</span>
+  <span class="ph">4 Merge</span><span class="ph">5 Deliver</span><span class="ph">6 Prove</span>
+ </div>
+</div>
+
+<div class="stage">
+ <!-- portal -->
+ <div class="panel" id="p_portal">
+  <h2>Service portal (Alice)</h2>
+  <div class="item" id="form">
+   <div class="field"><span>Name</span><span class="mono">otter-shop</span></div>
+   <div class="field"><span>Application</span><span class="info">Who am I</span></div>
+   <div class="field"><span>Reference</span><span class="mono">demo1</span></div>
+  </div>
+  <div class="item locked" id="locked">
+   <div class="mute" style="font-size:12px">Decided by the platform team</div>
+   <div class="mono">whoami 6.0.0 / a /28 block / junos-http</div>
+  </div>
+  <div class="step" id="s1"><span class="dot"></span>Look up the application</div>
+  <div class="step" id="s2"><span class="dot"></span>Build the application, its access and the fabric</div>
+  <div class="step" id="s3"><span class="dot"></span>Open the proposed change</div>
+  <div class="step" id="s4"><span class="dot"></span>Refresh the catalogue</div>
+  <div class="log" id="log"></div>
+ </div>
+
+ <!-- infrahub -->
+ <div class="panel" id="p_ih">
+  <h2>Infrahub</h2>
+  <div class="lane"><b>main</b></div>
+  <div class="lane br" id="brlane"><b>implement_otter-shop_demo1</b><span class="seg" id="seg"></span></div>
+  <div class="item" id="i_app">Application <span class="mute">created as alice</span></div>
+  <div class="item" id="i_vip">VIP block <span class="mono">/28</span> allocated</div>
+  <div class="item" id="i_grant">Access grant <span class="mute">requester alice</span></div>
+  <div class="item" id="i_fw">Firewall rule <span class="mono">svc-otter-shop-access</span>, address-book entry, source <span class="mono">10.70.0.0/24</span></div>
+  <div class="item" id="i_leaf">Border leaf: <span class="mono ok">+ seq &lt;n&gt; permit &lt;vip block&gt;</span> <span class="mute">(six other switches unchanged)</span></div>
+  <div class="item" id="i_art">Artifacts: Junos for fw1, Crossplane FabricApp, telemetry checks</div>
+  <div class="item" id="i_pc">
+   Proposed change: <b id="vtxt">0</b> of 24 validators
+   <div class="bar" id="vbar"><i id="vfill"></i></div>
+  </div>
+  <div class="item" id="i_svc">Services: <b id="svcstat" class="warn">Requested</b></div>
+ </div>
+
+ <!-- cluster -->
+ <div class="panel" id="p_k8s">
+  <h2>Kubernetes cluster</h2>
+  <div class="item" id="k_vidra">Vidra delivers the merged application</div>
+  <div class="item" id="k_ip">Service external IP <span class="ok">assigned</span> <span class="mute">inside the block</span></div>
+  <div class="item" id="k_ready">FabricApp <span class="ok mono">READY True</span></div>
+ </div>
+
+ <!-- network -->
+ <div class="panel" id="p_net">
+  <h2>Network and branch desktop</h2>
+  <div class="item" id="n_rec">Deployment reconciler compares 14 devices</div>
+  <div class="dev item" id="d_leaf"><span class="mono">leaf-otternet-pod1-3-1</span><span class="s"></span></div>
+  <div class="dev item" id="d_fw"><span class="mono">fw1</span><span class="s"></span></div>
+  <div class="item" id="n_conf"><span class="ok">Confirmed:</span> <span class="mono">compared=14 differed=0</span></div>
+  <div class="item" id="n_pk1">Granted address
+   <div class="path"><span class="fwx"></span><span class="pk" id="pk1"></span></div>
+   <span class="ok mono" id="r1" style="opacity:0">whoami answers</span></div>
+  <div class="item" id="n_pk2">Address nobody granted (<span class="mono">10.112.240.0</span>)
+   <div class="path"><span class="fwx"></span><span class="pk" id="pk2"></span></div>
+   <span class="bad mono" id="r2" style="opacity:0">timeout, stopped at the firewall</span></div>
+ </div>
+</div>
+
+<div class="cap" id="cap"></div>
+
+<div class="ctl">
+ <button id="bplay">Pause</button><button id="brestart">Restart</button>
+ <input type="range" id="scrub" min="0" value="0" step="1">
+ <label>Speed <select id="speed"><option value="4">4x</option><option value="6" selected>6x</option><option value="10">10x</option></select></label>
+ <span>Space: play or pause. R: restart.</span>
+</div>
+<div class="ctl" style="font-size:12px">Clock shows the elapsed time of a real run. The totals come from the demo runbook (portal run 70 to 85 s, validators a further 60 to 80 s, merge call 15 to 22 s, then the merge-relative times). The timing of single stages inside those totals is illustrative.</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const MERGE=180, END=MERGE+156;
+const stageNames=[
+ "Create the branch","Read the application's catalogue entry","Create the application",
+ "Wait for the VIP block to be allocated","Read the allocated block",
+ "Prove the block exists before granting access to it","Create the access grant",
+ "Wait for the firewall objects","Find the AVD generators",
+ "Regenerate the host vars for every switch","Regenerate the structured configs"];
+const stageT=[[5,6],[7,9],[10,13],[14,24],[25,26],[27,28],[29,31],[32,43],[44,45],[46,56],[57,68]];
+const waits=new Set([3,7]);
+const log=$('log');
+stageNames.forEach((n,i)=>{const d=document.createElement('div');d.className=waits.has(i)?'w':'';d.id='L'+i;d.textContent=`${i+1}/11 ${n}`;log.appendChild(d)});
+
+const ev=[]; const at=(t,f)=>ev.push([t,f]); const on=id=>$(id).classList.add('on');
+const cls=(id,c)=>{const e=$(id);e.classList.remove('run','done');if(c)e.classList.add(c)};
+const cap=(t,hot)=>{$('cap').textContent=t;document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('hot',p.id===hot))};
+const phase=n=>[...$('phases').children].forEach((e,i)=>{e.className='ph'+(i+1<n?' past':i+1===n?' on':'')});
+
+at(0,()=>{phase(1);on('form');cap("Alice, at the branch office, picks Who am I and names her application. She does not say how it should be built.",'p_portal')});
+at(2,()=>{on('locked');cap("The chart, version, ports and address block were already decided by the platform team and stored in the application catalogue.",'p_portal')});
+at(3,()=>{cls('s1','run');cap("The portal looks up the picked catalogue entry in Infrahub.",'p_portal')});
+at(5,()=>{phase(2);cls('s1','done');cls('s2','run');on('seg');on('brlane');$('seg').classList.add('on');cap("Infrahub creates a branch for this request. Nothing on main changes.",'p_ih')});
+stageT.forEach(([a,b],i)=>{
+ at(a,()=>{$('L'+i).classList.add('on','run');
+  if(i===1)cap("The portal reads the catalogue entry again with the picker's conditions (requestable and active), so a stale form cannot get through.",'p_portal');
+  if(i===2){on('i_app');cap("The application is created on the branch as alice, so Infrahub attributes it to her and not to the portal's service account.",'p_ih')}
+  if(i===3)cap("Waiting for the VIP block. The grant needs it, and nothing else orders the two generators. A grant created too early is marked error and is not retried.",'p_ih');
+  if(i===6){on('i_grant');cap("Only now is the access grant created, with alice as requester.",'p_ih')}
+  if(i===7)cap("Waiting for the grant's generator to create the firewall rule, the address-book entry and the allowed source.",'p_ih');
+  if(i===9)cap("The fabric is regenerated for all seven switches, so the reviewer sees configuration and not a changed JSON attribute (21 to 25 s).",'p_ih');
+ });
+ at(b,()=>{$('L'+i).classList.remove('run');$('L'+i).classList.add('done');
+  if(i===3)on('i_vip');
+  if(i===7)on('i_fw');
+  if(i===10){on('i_leaf');on('i_art')}
+ });
+});
+at(69,()=>{cls('s2','done');cls('s3','run');on('i_pc');cap("The proposed change opens only after all eleven stages, so its checks render from current data.",'p_ih')});
+at(80,()=>{phase(3);cls('s3','done');cls('s4','done');on('i_svc');cap("The run ends at a link to the proposed change. One change holds the application, the access, the firewall rule, one border leaf line and the monitoring.",'p_ih')});
+at(90,()=>cap("Validators run: wan-service-consistency, zone-advertisement, allocation-consistency, peering-consistency, fabric-pool-validation and others. Monitoring for both services appears without anyone asking.",'p_ih'));
+at(150,()=>{cap("All 24 validators pass. A reviewer reads the single change. Merging is the approval: the grant has no second gate.",'p_ih')});
+at(MERGE-20,()=>{phase(4);cap("The reviewer merges. The merge call takes 15 to 22 seconds.",'p_ih')});
+at(MERGE,()=>{phase(5);$('svcstat').textContent='Merged';$('svcstat').className='ok';on('k_vidra');cap("Merged. Vidra delivers the application to the cluster.",'p_k8s')});
+at(MERGE+25,()=>{on('n_rec');cap("The reconciler waits for the new artifacts to render and hold still for two polls, then starts a cycle.",'p_net')});
+at(MERGE+40,()=>{on('k_ip');on('d_leaf');$('d_leaf').classList.add('pend');cap("About 40 s after the merge: the Service has an external IP, and the border leaf is pushed. It reads pending, not in sync.",'p_net')});
+at(MERGE+55,()=>{on('d_fw');$('d_fw').classList.add('pend');cap("About 55 s: the firewall is loaded with commit confirmed, so a push that cuts the reconciler off rolls itself back.",'p_net')});
+at(MERGE+72,()=>{phase(6);on('n_pk1');$('pk1').classList.add('go');$('r1').style.opacity=1;cap("About 70 s: the granted address answers the branch desktop.",'p_net')});
+at(MERGE+82,()=>{on('n_pk2');$('pk2').classList.add('go');$('pk2').className='pk no';$('r2').style.opacity=1;cap("The application nobody granted is running and healthy, and still unreachable. The firewall rule and the pod policy are the control, not an open path.",'p_net')});
+at(MERGE+100,()=>{on('k_ready');cap("About 100 s: the FabricApp is READY True.",'p_k8s')});
+at(MERGE+146,()=>{on('n_conf');$('d_leaf').classList.remove('pend');$('d_fw').classList.remove('pend');cap("About 146 s: a confirming cycle finds no difference. Green means the devices said they match, not that something was only sent.",'p_net')});
+at(END,()=>{$('svcstat').textContent='Deployed';$('svcstat').className='ok';cap("Services move to Deployed once every device has been confirmed. Total measured for act one: 321 to 342 seconds.",null)});
+
+const total=END+6;
+$('scrub').max=total;
+function reset(){
+ document.querySelectorAll('.on,.run,.done,.pend,.go,.no,.hot').forEach(e=>e.classList.remove('on','run','done','pend','go','no','hot'));
+ $('pk1').className='pk';$('pk2').className='pk';$('r1').style.opacity=0;$('r2').style.opacity=0;
+ $('svcstat').textContent='Requested';$('svcstat').className='warn';$('cap').textContent='';
+ [...$('phases').children].forEach(e=>e.className='ph');
+}
+ev.sort((x,y)=>x[0]-y[0]);
+let applied=0;
+function continuous(t){
+ const v=Math.max(0,Math.min(24,Math.round((t-80)/70*24)));
+ $('vtxt').textContent=v;$('vfill').style.width=(v/24*100)+'%';$('vbar').classList.toggle('good',v===24);
+ const m=Math.floor(t/60),s=Math.floor(t%60);$('clock').textContent=`${m}:${String(s).padStart(2,'0')}`;
+ $('scrub').value=t;
+}
+function seek(t0){ reset(); applied=0; advance(t0); }
+function advance(t0){
+ while(applied<ev.length&&ev[applied][0]<=t0){ev[applied][1]();applied++}
+ continuous(t0);
+}
+let t=0,playing=true,prev=null;
+function frame(ts){
+ if(playing){
+  if(prev!==null)t=Math.min(total,t+(ts-prev)/1000*(+$('speed').value));
+  if(t>=total){playing=false;$('bplay').textContent='Play again'}
+ }
+ prev=ts;
+ advance(t);
+ requestAnimationFrame(frame);
+}
+$('bplay').onclick=()=>{if(t>=total){t=0;seek(0)}playing=!playing;$('bplay').textContent=playing?'Pause':'Play'};
+$('brestart').onclick=()=>{t=0;seek(0);playing=true;$('bplay').textContent='Pause'};
+$('scrub').oninput=e=>{t=+e.target.value;seek(t)};
+document.addEventListener('keydown',e=>{
+ if(e.key===' '){e.preventDefault();$('bplay').click()}
+ if(e.key==='r'||e.key==='R')$('brestart').click();
+});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

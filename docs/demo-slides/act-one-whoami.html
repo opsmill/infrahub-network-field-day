@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Act one: request Who am I</title>
+<style>
+:root{--bg:#0f172a;--panel:#1e293b;--line:#334155;--text:#e2e8f0;--mute:#94a3b8;--blue:#38bdf8;--green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#c084fc}
+@media (prefers-color-scheme: light){:root{--bg:#f8fafc;--panel:#fff;--line:#cbd5e1;--text:#0f172a;--mute:#475569;--blue:#0369a1;--green:#15803d;--amber:#b45309;--red:#b91c1c;--purple:#7e22ce}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:18px/1.45 system-ui,sans-serif}
+.slide{display:none;min-height:100vh;padding:4vh 6vw 9vh;flex-direction:column}
+.slide.on{display:flex}
+h1{font-size:clamp(26px,4vw,44px);margin:0 0 .3em}
+.sub{color:var(--mute);margin:0 0 1.2em;max-width:60em}
+.hide{opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s}
+.show{opacity:1;transform:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8em 1em}
+.row{display:flex;gap:1em;flex-wrap:wrap}
+.row>*{flex:1 1 220px}
+code,.mono{font-family:ui-monospace,Menlo,monospace;font-size:.88em}
+.mute{color:var(--mute)}
+.tag{display:inline-block;padding:.05em .6em;border-radius:99px;border:1px solid var(--line);font-size:.8em;color:var(--mute)}
+.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}.info{color:var(--blue)}
+/* form */
+.field{display:flex;justify-content:space-between;gap:1em;padding:.45em 0;border-bottom:1px solid var(--line)}
+.typed{overflow:hidden;white-space:nowrap;width:0;border-right:2px solid var(--blue)}
+.show .typed{animation:type 1.2s steps(24) forwards}
+@keyframes type{to{width:var(--w,12ch);border-right-color:transparent}}
+.locked{opacity:.55;border-style:dashed}
+/* steps */
+.step{display:flex;align-items:center;gap:.8em}
+.dot{width:1.4em;height:1.4em;border-radius:50%;border:2px solid var(--line);flex:none;transition:.4s}
+.run .dot{border-color:var(--blue);animation:pulse 1s infinite}
+.done .dot{background:var(--green);border-color:var(--green)}
+@keyframes pulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--blue) 30%,transparent)}}
+/* log */
+.log{font-family:ui-monospace,Menlo,monospace;font-size:.85em;line-height:1.7}
+.log div{white-space:nowrap}
+.log .wait{color:var(--amber)}
+/* lanes */
+svg text{fill:var(--text);font:14px system-ui,sans-serif}
+svg .m{fill:var(--mute)}
+.draw{stroke-dasharray:600;stroke-dashoffset:600;transition:stroke-dashoffset 1.2s}
+.show.draw,.show .draw{stroke-dashoffset:0}
+.node{opacity:0;transform:translateY(-20px);transition:.5s}
+.node.show{opacity:1;transform:none}
+/* devices */
+.devs{display:grid;grid-template-columns:repeat(7,1fr);gap:.8em;margin-top:1em}
+.d{height:3.2em;border-radius:8px;background:var(--panel);border:2px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:.7em;transition:.5s;text-align:center}
+.d.pend{border-color:var(--amber);color:var(--amber)}
+.d.sync{border-color:var(--green)}
+/* bar */
+.bar{height:10px;background:var(--line);border-radius:5px;position:relative;margin:3em 0 5em}
+.fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--blue);border-radius:5px;transition:width 1s}
+.ev{position:absolute;top:-6px;transform:translateX(-50%);font-size:.7em;width:9em;text-align:center}
+.ev i{display:block;width:12px;height:12px;border-radius:50%;background:var(--panel);border:2px solid var(--blue);margin:0 auto .3em}
+.ev.show i{background:var(--blue)}
+.ev:nth-child(even){top:24px}
+.count{font-size:3em;font-weight:700}
+.pkt{position:absolute;left:0;width:18px;height:18px;border-radius:50%;opacity:0}
+.show .p1{background:var(--green);animation:go1 2.5s .3s forwards}
+.show .p2{background:var(--red);animation:go2 2.5s .3s forwards}
+@keyframes go1{0%{left:0;opacity:1}100%{left:calc(100% - 18px);opacity:1}}
+@keyframes go2{0%{left:0;opacity:1}45%{left:45%;opacity:1}60%{left:45%;opacity:1}100%{left:45%;opacity:0}}
+.lane{position:relative;height:40px;border-bottom:2px dashed var(--line);margin:.6em 0}
+.nav{position:fixed;bottom:0;left:0;right:0;padding:.6em 6vw;display:flex;justify-content:space-between;background:var(--bg);border-top:1px solid var(--line);font-size:.8em;color:var(--mute)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.typed{width:var(--w,12ch)!important}.draw{stroke-dashoffset:0}}
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="slide" data-steps="3">
+<h1>One request: Alice asks for an application</h1>
+<p class="sub">Alice, at the branch office, picks <b>Who am I</b> in the service portal. She states what she wants. She does not say how.</p>
+<div class="row">
+ <div class="card hide" data-s="1">
+  <b>She fills in</b>
+  <div class="field"><span>Application name</span><span class="typed mono" style="--w:9ch">otter-shop</span></div>
+  <div class="field"><span>Namespace</span><span class="typed mono" style="--w:9ch">otter-shop</span></div>
+  <div class="field"><span>Application</span><span class="info">Who am I</span></div>
+  <div class="field"><span>Request reference</span><span class="typed mono" style="--w:5ch">demo1</span></div>
+ </div>
+ <div class="card locked hide" data-s="2">
+  <b>The platform team already decided</b>
+  <div class="field"><span>Chart</span><span class="mono">whoami 6.0.0</span></div>
+  <div class="field"><span>Address block</span><span class="mono">/28</span></div>
+  <div class="field"><span>Service</span><span class="mono">junos-http</span></div>
+  <div class="field"><span>Exposure</span><span class="mono">LoadBalancer + label</span></div>
+ </div>
+</div>
+<p class="hide" data-s="3"><span class="tag">Application catalogue</span> Grafana, Prometheus and Telegraf are catalogue entries too, but they are not requestable, so the picker does not list them.</p>
+</section>
+
+<!-- 2 -->
+<section class="slide" data-steps="5">
+<h1>Four steps on the task page</h1>
+<p class="sub">Alice watches four steps. The run takes 70 to 85 seconds.</p>
+<div class="card" style="display:grid;gap:1em" id="four">
+ <div class="step" id="f1"><span class="dot"></span><span>1. Look up the application</span></div>
+ <div class="step" id="f2"><span class="dot"></span><span>2. Build the application, its access and the fabric <span class="tag">eleven stages, next slide</span></span></div>
+ <div class="step" id="f3"><span class="dot"></span><span>3. Open the proposed change</span></div>
+ <div class="step" id="f4"><span class="dot"></span><span>4. Refresh the catalogue</span></div>
+</div>
+<p class="info" id="t2" style="font-size:1.6em;font-weight:700">Running</p>
+</section>
+
+<!-- 3 -->
+<section class="slide" data-steps="11">
+<h1>Eleven stages inside step 2</h1>
+<p class="sub">Each stage writes a line to the log, then how long it took. A failure names the stage and shows Infrahub's own error.</p>
+<div class="card log" id="log">
+ <div class="hide" data-s="1">1/11 Create the branch <span class="mute">implement_otter-shop_demo1</span></div>
+ <div class="hide" data-s="2">2/11 Read the application's catalogue entry <span class="mute">requestable and active, checked again</span></div>
+ <div class="hide" data-s="3">3/11 Create the application <span class="mute">as alice</span></div>
+ <div class="hide wait" data-s="4">4/11 Wait for the VIP block to be allocated</div>
+ <div class="hide" data-s="5">5/11 Read the allocated block</div>
+ <div class="hide" data-s="6">6/11 Prove the block exists before granting access to it</div>
+ <div class="hide" data-s="7">7/11 Create the access grant <span class="mute">alice is the requester</span></div>
+ <div class="hide wait" data-s="8">8/11 Wait for the firewall objects</div>
+ <div class="hide" data-s="9">9/11 Find the AVD generators</div>
+ <div class="hide" data-s="10">10/11 Regenerate the host vars for every switch</div>
+ <div class="hide" data-s="11">11/11 Regenerate the structured configs <span class="mute">21 to 25 s for stages 10 and 11</span></div>
+</div>
+<p class="mute">Stages 4 to 6 exist because the grant needs the address block, and nothing else orders the two generators. A grant created too early is marked <span class="bad">error</span> and is not retried.</p>
+</section>
+
+<!-- 4 -->
+<section class="slide" data-steps="5">
+<h1>A branch, not main</h1>
+<p class="sub">Everything Alice requested is built on its own branch. Nothing on <code>main</code> changes until a reviewer merges.</p>
+<svg viewBox="0 0 900 260" width="100%">
+ <line x1="30" y1="60" x2="870" y2="60" stroke="#64748b" stroke-width="3"/>
+ <text x="30" y="40" class="m">main</text>
+ <path class="draw hide" data-s="1" d="M150 60 C190 60 190 190 240 190 L700 190 C750 190 750 60 790 60" fill="none" stroke="#38bdf8" stroke-width="3"/>
+ <text x="260" y="225" class="m">implement_otter-shop_demo1</text>
+ <g class="node" data-s="2"><rect x="250" y="150" width="130" height="32" rx="6" fill="#1e293b" stroke="#38bdf8"/><text x="262" y="171" style="fill:#e2e8f0">Application</text></g>
+ <g class="node" data-s="3"><rect x="390" y="150" width="130" height="32" rx="6" fill="#1e293b" stroke="#38bdf8"/><text x="402" y="171" style="fill:#e2e8f0">VIP block /28</text></g>
+ <g class="node" data-s="4"><rect x="530" y="150" width="120" height="32" rx="6" fill="#1e293b" stroke="#38bdf8"/><text x="542" y="171" style="fill:#e2e8f0">Access grant</text></g>
+ <g class="node" data-s="5"><rect x="400" y="100" width="190" height="32" rx="6" fill="#1e293b" stroke="#4ade80"/><text x="412" y="121" style="fill:#e2e8f0">Firewall rule + switch config</text></g>
+</svg>
+</section>
+
+<!-- 5 -->
+<section class="slide" data-steps="6">
+<h1>One proposed change</h1>
+<p class="sub">The reviewer reads a single change that holds every part of the request.</p>
+<div class="row">
+ <div class="card hide" data-s="1"><b>Service nodes</b><br>Application and access grant, with <code>alice@otternet.lab</code> as requester</div>
+ <div class="card hide" data-s="2"><b>Address allocation</b><br>A /28 block from the cluster's pool</div>
+ <div class="card hide" data-s="3"><b>Firewall</b><br><code>svc-otter-shop-access</code>: branch to k8s-prod, junos-http. Source <code>10.70.0.0/24</code></div>
+ <div class="card hide" data-s="4"><b>Border leaf</b><br><code class="ok">+ seq &lt;n&gt; permit &lt;vip block&gt;</code><br><span class="mute">The other six switches are unchanged.</span></div>
+ <div class="card hide" data-s="5"><b>Artifacts</b><br>Junos for fw1, Crossplane FabricApp, telemetry checks nobody asked for</div>
+</div>
+<p class="hide" data-s="6"><span class="count" id="val">0</span><span class="mute"> of 24 validators</span> <span class="ok" id="valok"></span></p>
+</section>
+
+<!-- 6 -->
+<section class="slide" data-steps="3">
+<h1>The reviewer merges</h1>
+<p class="sub">Merging is the approval. The grant has no second gate, because two gates can only disagree.</p>
+<div class="row" style="align-items:center">
+ <div class="card hide" data-s="1" style="text-align:center"><b>Merge</b><br><span class="tag">15 to 22 s</span></div>
+ <div class="card hide" data-s="2" style="text-align:center"><b class="warn">Services: Requested</b></div>
+ <div class="card hide" data-s="3" style="text-align:center"><b class="ok">Services: Merged</b><br><span class="mute">within a minute</span></div>
+</div>
+</section>
+
+<!-- 7 -->
+<section class="slide" data-steps="4">
+<h1>The application reaches the cluster</h1>
+<p class="sub">Time counts from the merge.</p>
+<div class="row">
+ <div class="card hide" data-s="1"><b>Vidra</b><br>Delivers the merged FabricApp to Kubernetes</div>
+ <div class="card hide" data-s="2"><b class="info">About 40 s</b><br>The Service has an external IP, inside the allocated block</div>
+ <div class="card hide" data-s="3"><b class="info">About 70 s</b><br>whoami answers the branch desktop</div>
+ <div class="card hide" data-s="4"><b class="ok">About 100 s</b><br><code>FabricApp READY True</code></div>
+</div>
+</section>
+
+<!-- 8 -->
+<section class="slide" data-steps="4">
+<h1>Two devices change, then are confirmed</h1>
+<p class="sub">Green means the device said it matches. It never means something was only sent.</p>
+<div class="devs" id="devs"></div>
+<p class="mute hide" data-s="1">Fourteen devices compared. Two differ: <code>fw1</code> and <code>leaf-otternet-pod1-3-1</code>.</p>
+<p class="warn hide" data-s="2">Pushed: both read <b>pending</b>. The border leaf changes about 40 s after the merge, the firewall about 55 s.</p>
+<p class="ok hide" data-s="3">Confirmation cycle: <code>compared=14 differed=0</code>, about 146 s after the merge.</p>
+<p class="mute hide" data-s="4">The firewall loads with <code>commit confirmed</code>. A push that cut the reconciler off rolls itself back.</p>
+</section>
+
+<!-- 9 -->
+<section class="slide" data-steps="3">
+<h1>The packet</h1>
+<p class="sub">From the branch desktop, the granted address answers. An application nobody granted does not.</p>
+<div class="hide" data-s="1">
+ <div class="mute">To the granted address</div>
+ <div class="lane"><span class="pkt p1"></span></div>
+ <div class="ok mono">whoami answers</div>
+</div>
+<div class="hide" data-s="2" style="margin-top:2em">
+ <div class="mute">To <code>10.112.240.0</code>, running and healthy, but not granted</div>
+ <div class="lane"><span class="pkt p2"></span></div>
+ <div class="bad mono">timeout: stopped at the firewall</div>
+</div>
+<p class="hide" data-s="3">The firewall rule and the pod policy are the control. The path is not open.</p>
+</section>
+
+<!-- 10 -->
+<section class="slide" data-steps="9">
+<h1>About five minutes, one reviewer</h1>
+<p class="sub">Measured for act one: 321 to 342 seconds.</p>
+<div class="bar">
+ <div class="fill" id="fill"></div>
+ <div class="ev hide" data-s="1" style="left:2%"><i></i>0 s<br>Alice submits</div>
+ <div class="ev hide" data-s="2" style="left:15%"><i></i>about 80 s<br>Review link</div>
+ <div class="ev hide" data-s="3" style="left:28%"><i></i>60 to 80 s later<br>24 validators green</div>
+ <div class="ev hide" data-s="4" style="left:40%"><i></i>15 to 22 s<br>Merge call</div>
+ <div class="ev hide" data-s="5" style="left:52%"><i></i>merge + 40 s<br>Service has IP, leaf changes</div>
+ <div class="ev hide" data-s="6" style="left:60%"><i></i>merge + 55 s<br>fw1 changes</div>
+ <div class="ev hide" data-s="7" style="left:70%"><i></i>merge + 70 s<br>whoami answers</div>
+ <div class="ev hide" data-s="8" style="left:82%"><i></i>merge + 100 s<br>FabricApp ready</div>
+ <div class="ev hide" data-s="9" style="left:96%"><i></i>merge + 146 s<br>Devices confirmed</div>
+</div>
+<p class="mute">Sources: demo runbook, act one and the presenter run sheet. Positions on the bar are not to scale. Times after the merge count from the merge.</p>
+</section>
+
+<div class="nav"><span id="pos"></span><span>Right arrow or click: next. Left arrow: back. P: play.</span></div>
+
+<script>
+const slides=[...document.querySelectorAll('.slide')];
+let si=0, st=0, timer=null;
+const devs=document.getElementById('devs');
+const all=['leaf-otternet-pod1-3-1','fw1'];
+for(let k=3;k<=14;k++)all.push('device '+k);
+all.forEach(n=>{const e=document.createElement('div');e.className='d';e.textContent=n;e.dataset.n=n;devs.appendChild(e)});
+
+function slideEffects(i,s){
+  const sl=slides[i];
+  sl.querySelectorAll('[data-s]').forEach(e=>{const on=+e.dataset.s<=s;e.classList.toggle('hide',!on);e.classList.toggle('show',on)});
+  if(i===1){
+    ['f1','f2','f3','f4'].forEach((id,k)=>{const e=document.getElementById(id);e.className='step'+(s>k+1?' done':s===k+1?' run':'')});
+    document.getElementById('t2').textContent=s>=5?'Done: 70 to 85 s in total':'Running: 70 to 85 s in total';
+  }
+  if(i===4){
+    const v=document.getElementById('val');
+    if(s>=6){v.textContent=24;document.getElementById('valok').textContent='all green'}
+    else{v.textContent=0;document.getElementById('valok').textContent=''}
+  }
+  if(i===7){
+    document.querySelectorAll('.d').forEach(d=>{
+      const two=d.dataset.n==='fw1'||d.dataset.n==='leaf-otternet-pod1-3-1';
+      d.className='d'+(two&&s===2?' pend':'')+(two&&s>=3?' sync':'');
+    });
+  }
+  if(i===9){document.getElementById('fill').style.width=(s/9*100)+'%'}
+}
+function render(){
+  slides.forEach((e,k)=>e.classList.toggle('on',k===si));
+  slideEffects(si,st);
+  document.getElementById('pos').textContent=`Slide ${si+1} of ${slides.length}`;
+}
+function max(i){return +slides[i].dataset.steps}
+function next(){ if(st<max(si)){st++} else if(si<slides.length-1){si++;st=0} render() }
+function prev(){ if(st>0){st--} else if(si>0){si--;st=max(si)} render() }
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();next()}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){prev()}
+  else if(e.key==='p'||e.key==='P'){ if(timer){clearInterval(timer);timer=null} else {timer=setInterval(()=>{ if(si===slides.length-1&&st===max(si)){clearInterval(timer);timer=null}else next()},1500)} }
+});
+document.addEventListener('click',e=>{ if(!e.target.closest('.nav')) next() });
+render();
+</script>
+</body>
+</html>

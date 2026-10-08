@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Act one: request an application (overview)</title>
+<style>
+:root{--bg:#0f172a;--panel:#1e293b;--line:#334155;--text:#e2e8f0;--mute:#94a3b8;--blue:#38bdf8;--green:#4ade80;--amber:#fbbf24;--red:#f87171}
+@media (prefers-color-scheme: light){:root{--bg:#f8fafc;--panel:#fff;--line:#cbd5e1;--text:#0f172a;--mute:#475569;--blue:#0369a1;--green:#15803d;--amber:#b45309;--red:#b91c1c}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:20px/1.45 system-ui,sans-serif}
+body{display:flex;flex-direction:column;padding:4vh 6vw 3vh;gap:3vh}
+.track{display:flex;align-items:center}
+.node{display:flex;flex-direction:column;align-items:center;gap:6px;flex:none;width:7em;text-align:center;font-size:15px;color:var(--mute);transition:.5s}
+.node i{width:26px;height:26px;border-radius:50%;border:3px solid var(--line);background:var(--bg);transition:.5s}
+.node.on{color:var(--text)}.node.on i{border-color:var(--blue);box-shadow:0 0 0 6px color-mix(in srgb,var(--blue) 25%,transparent)}
+.node.past i{background:var(--green);border-color:var(--green)}
+.seg{flex:1;height:4px;background:var(--line);position:relative;border-radius:2px;overflow:hidden}
+.seg b{position:absolute;inset:0 auto 0 0;width:0;background:var(--green);transition:width 1s}
+.seg.past b{width:100%}
+.scene{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:4vh 4vw;display:flex;flex-direction:column;gap:2.5vh;position:relative;overflow:hidden}
+.time{position:absolute;right:2vw;top:2vh;color:var(--mute);font-size:16px}
+h1{margin:0;font-size:clamp(28px,4.2vw,52px);line-height:1.15;transition:.5s}
+.lines{display:flex;flex-direction:column;gap:.5em;font-size:clamp(18px,2vw,26px);color:var(--mute)}
+.lines div,.vis>*{opacity:0;transform:translateY(12px);transition:.6s}
+.lines div.on,.vis>*.on{opacity:1;transform:none}
+.vis{margin-top:auto;display:flex;gap:2vw;align-items:flex-end;flex-wrap:wrap;min-height:20vh}
+.chip{border:2px solid var(--blue);border-radius:12px;padding:.7em 1.1em;font-size:clamp(16px,1.8vw,24px)}
+.chip.g{border-color:var(--green)}
+.big{font:700 clamp(48px,8vw,110px)/1 ui-monospace,Menlo,monospace}
+.box{border:2px dashed var(--blue);border-radius:16px;padding:1em;display:flex;gap:1em;flex-wrap:wrap}
+.main{border-top:6px solid var(--line);padding-top:.4em;color:var(--mute);width:100%;font-size:16px}
+.main.merged{border-color:var(--green);color:var(--green)}
+.btn{border:2px solid var(--green);color:var(--green);border-radius:99px;padding:.5em 1.6em;font-size:clamp(20px,2.4vw,32px)}
+.btn.press{background:var(--green);color:var(--bg);transform:scale(.95)}
+.pkt{position:relative;height:3em;width:min(36vw,520px);border-bottom:3px dashed var(--line)}
+.pkt .wall{position:absolute;left:55%;top:0;bottom:-3px;width:8px;background:var(--amber);border-radius:3px}
+.pkt .d{position:absolute;top:.8em;left:0;width:20px;height:20px;border-radius:50%}
+.pkt.yes .d{background:var(--green);animation:go 2.4s .4s forwards}
+.pkt.no .d{background:var(--red);animation:stop 2.4s .4s forwards}
+@keyframes go{to{left:calc(100% - 20px)}}
+@keyframes stop{0%{left:0}60%{left:calc(55% - 24px)}100%{left:calc(55% - 24px);opacity:.1}}
+.cap{font-size:15px;color:var(--mute);display:flex;gap:12px;align-items:center}
+button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 12px;font:inherit;font-size:14px;cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.01s!important}}
+</style>
+</head>
+<body>
+
+<div class="track" id="track"></div>
+
+<div class="scene">
+ <div class="time" id="time"></div>
+ <h1 id="h"></h1>
+ <div class="lines" id="lines"></div>
+ <div class="vis" id="vis"></div>
+</div>
+
+<div class="cap">
+ <button id="bp">Pause</button><button id="bb">Back</button><button id="bn">Next</button><button id="br">Restart</button>
+ <span>Plays by itself. Space: pause. Arrow keys: back and next. Timings are from the demo runbook.</span>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const chip=(t,c='')=>`<div class="chip ${c}">${t}</div>`;
+const beats=[
+ {n:'Ask',time:'0 s',h:'Alice asks for an application',
+  lines:['She is a user at the branch office.','She picks Who am I from the service portal and names it.','She does not choose the chart, ports or address block. The platform team already decided those.'],
+  vis:[chip('Application: Who am I'),chip('Name: otter-shop'),chip('Requested by: alice@otternet.lab')]},
+ {n:'Build',time:'0 to about 80 s',h:'Infrahub builds everything on a separate branch',
+  lines:['The application, its address block, the firewall rule and the network configuration are all created together.','Nothing on main changes yet.'],
+  vis:['<div class="box"><div class="chip">Application</div><div class="chip">Address block</div><div class="chip">Firewall rule</div><div class="chip">Network configuration</div></div>']},
+ {n:'Review',time:'about 80 to 160 s',h:'One change to review, checked automatically',
+  lines:['The reviewer sees every part of the request in a single proposed change.','Automatic checks run on it, and monitoring for the new services is added without anyone asking.'],
+  vis:['<div class="big"><span id="count">0</span><span class="mute" style="font-size:.3em"> of 24 checks passed</span></div>']},
+ {n:'Merge',time:'about 3 minutes',h:'A person approves by merging',
+  lines:['The merge is the approval. There is no second gate, because two gates can only disagree.'],
+  vis:['<div style="width:100%"><div class="btn" id="btn" style="display:inline-block">Merge</div><div class="main" id="main" style="margin-top:2em">main</div></div>']},
+ {n:'Deliver',time:'merge + 40 to 146 s',h:'The cluster and the network follow the merge',
+  lines:['The application is delivered to the Kubernetes cluster and gets an address.','The firewall and one border leaf switch are updated. The other six switches do not change.','Each change is confirmed before it counts as done.'],
+  vis:[chip('Application running','g'),chip('Firewall updated and confirmed','g'),chip('Border leaf updated and confirmed','g')]},
+ {n:'Prove',time:'merge + about 70 s',h:'The granted address answers. Any other does not.',
+  lines:['An application nobody granted is running and healthy, and the branch still cannot reach it.','The firewall rule is the control. The path is not open.'],
+  vis:['<div><div class="mute" style="font-size:16px">Granted address</div><div class="pkt yes"><span class="wall"></span><span class="d"></span></div><div class="ok" style="font-size:18px">Who am I answers</div></div>',
+       '<div><div class="mute" style="font-size:16px">Address nobody granted</div><div class="pkt no"><span class="wall"></span><span class="d"></span></div><div class="bad" style="font-size:18px">Timeout, stopped at the firewall</div></div>']}
+];
+const track=$('track');
+beats.forEach((b,i)=>{
+ if(i)track.insertAdjacentHTML('beforeend',`<div class="seg" id="g${i}"><b></b></div>`);
+ track.insertAdjacentHTML('beforeend',`<div class="node" id="n${i}"><i></i>${b.n}</div>`);
+});
+let cur=-1,timers=[],playing=true,count=null;
+const clear=()=>{timers.forEach(clearTimeout);timers=[];clearInterval(count)};
+const later=(f,ms)=>timers.push(setTimeout(f,ms));
+function show(i){
+ clear();cur=i;
+ const b=beats[i];
+ beats.forEach((_,k)=>{$('n'+k).className='node'+(k===i?' on':k<i?' past':'');if(k)$('g'+k).className='seg'+(k<=i?' past':'')});
+ $('h').textContent=b.h;$('time').textContent=b.time;
+ $('lines').innerHTML=b.lines.map(l=>`<div>${l}</div>`).join('');
+ $('vis').innerHTML=b.vis.join('');
+ const L=[...$('lines').children],V=[...$('vis').children];
+ L.forEach((e,k)=>later(()=>e.classList.add('on'),500+k*1100));
+ V.forEach((e,k)=>later(()=>e.classList.add('on'),500+(L.length+k)*1100*0.8));
+ if(i===2){later(()=>{let c=0;count=setInterval(()=>{c=Math.min(24,c+1);$('count').textContent=c;if(c===24)clearInterval(count)},110)},1500)}
+ if(i===3){later(()=>$('btn').classList.add('press'),2200);later(()=>{$('main').classList.add('merged');$('main').textContent='main now contains the request'},3000)}
+ const hold=Math.max(6500,(L.length+V.length)*1100+2500);
+ if(playing&&i<beats.length-1)later(()=>show(i+1),hold);
+}
+const go=i=>show(Math.max(0,Math.min(beats.length-1,i)));
+$('bp').onclick=()=>{playing=!playing;$('bp').textContent=playing?'Pause':'Play';if(playing&&cur<beats.length-1)show(cur)};
+$('bn').onclick=()=>go(cur+1);$('bb').onclick=()=>go(cur-1);$('br').onclick=()=>{playing=true;$('bp').textContent='Pause';show(0)};
+document.addEventListener('keydown',e=>{
+ if(e.key===' '){e.preventDefault();$('bp').click()}
+ if(e.key==='ArrowRight')go(cur+1);if(e.key==='ArrowLeft')go(cur-1);
+});
+show(0);
+</script>
+</body>
+</html>
