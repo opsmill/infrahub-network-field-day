@@ -95,6 +95,23 @@ One-paragraph summaries:
 
 ## Skills
 
+**Load the matching skill before you edit any file it covers.** Do this before the first edit, not after
+reading the docs and forming a plan. The skill holds rules that the docs and the existing code do not state,
+such as the key order in a schema file, the `watch:` block a Python transform needs, and loading a schema on
+a branch instead of `main`. When you finish, check the diff against the skill's rules.
+
+| You are changing | Load first |
+| --- | --- |
+| A file in `schemas/`, or an attribute or relationship on a node kind | `infrahub-managing-schemas` |
+| A file in `transforms/` or `transforms/templates/`, or an `artifact_definitions` entry | `infrahub-managing-transforms` |
+| A file in `generators/` | `infrahub-managing-generators` |
+| A file in `checks/` | `infrahub-managing-checks` |
+| A file in `objects/` | `infrahub-managing-objects` |
+| A file in `menus/` | `infrahub-managing-menus` |
+
+A change often touches more than one row, for example a new attribute that a transform reads. Load every
+skill that applies. State in your reply which skills you loaded, or that none applied.
+
 Local Infrahub skills live in `.claude/skills/`. If the Skill tool says `Unknown skill: infrahub-managing-*`
 (or any `infrahub-*` name), read `.claude/skills/<name>/SKILL.md` directly with the Read tool and follow it.
 
