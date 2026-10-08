@@ -45,6 +45,7 @@ def test_the_role_holds_exactly_these_permissions() -> None:
         {"namespace": "*", "name": "*", "action": "view", "decision": 6},
         {"namespace": "*", "name": "*", "action": "any", "decision": 4},
         {"namespace": "Core", "name": "ProposedChange", "action": "create", "decision": 2},
+        {"namespace": "Core", "name": "ProposedChange", "action": "update", "decision": 2},
     ]
     assert module.GLOBAL_PERMISSIONS == [
         {"action": "edit_default_branch", "decision": 6},
@@ -52,7 +53,7 @@ def test_the_role_holds_exactly_these_permissions() -> None:
         {"action": "merge_proposed_change", "decision": 6},
         {"action": "review_proposed_change", "decision": 6},
     ]
-    assert len(module.expected_permissions()) == 7
+    assert len(module.expected_permissions()) == 8
 
 
 def test_every_write_on_an_object_is_limited_to_branches_other_than_the_default() -> None:
@@ -62,6 +63,7 @@ def test_every_write_on_an_object_is_limited_to_branches_other_than_the_default(
     assert [(w["namespace"], w["name"], w["action"], w["decision"]) for w in writes] == [
         ("*", "*", "any", 4),
         ("Core", "ProposedChange", "create", 2),
+        ("Core", "ProposedChange", "update", 2),
     ]
     assert not [item for item in module.OBJECT_PERMISSIONS if item["decision"] == 6 and item["action"] != "view"]
 

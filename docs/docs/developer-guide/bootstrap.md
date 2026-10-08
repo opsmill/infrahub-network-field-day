@@ -162,7 +162,7 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | MCP server | The container runs and `/health` reports `token-passthrough` |
 | `mcp-agent` | The account and its role exist; a tool call with `INFRAHUB_MCP_TOKEN` (used by the demo rehearsal, not by Claude Code) returns `AccountProfile` `mcp-agent` |
 | Requester Access | `Infrahub Users` holds only `Requester Access` (view, write service objects on a branch, open a proposed change); the two built-in roles are detached |
-| `network-admin` | The account `alex` exists, is only in `Network Admins` (not `Super Administrators`, not `Infrahub Users`), the role holds exactly the seven permissions defined, the role is attached to no other group, and the password in `.env` signs in |
+| `network-admin` | The account `alex` exists, is only in `Network Admins` (not `Super Administrators`, not `Infrahub Users`), the role holds exactly the eight permissions defined, the role is attached to no other group, and the password in `.env` signs in |
 | alice cannot write to main | A scratch tag created on `main` with her token is refused |
 | Portal accounts | Every Dex user has an Infrahub account |
 | alice | A tool call with `INFRAHUB_MCP_TOKEN_ALICE` returns `alice`, and she opens a proposed change on a throw-away branch that the check deletes |
