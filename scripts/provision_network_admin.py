@@ -2,7 +2,7 @@
 """Give the network team a local Infrahub account that is neither Dex nor an administrator.
 
 WHY THIS EXISTS. A person who signs in through Dex lands in `Infrahub Users`, whose only role,
-`Requester Access`, writes Service kinds on a branch and opens a proposed change. A network
+`Requester Access`, writes any kind on a branch other than `main` and opens a proposed change. A network
 engineer who must change devices, interfaces, links, addresses or locations, and who must
 merge the proposed change, needs more. The built-in answer is the `admin` account, which is a
 Super Administrator. This script creates the middle: `alex`, an account with a local

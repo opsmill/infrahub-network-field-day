@@ -16,9 +16,12 @@ checks the account and token that `.mcp.json` uses (see [bootstrap](./bootstrap.
 
 ## Claude Code acts as alice only
 
-`.mcp.json` has one server, `otternet-infrahub`, and it sends alice's API token
-(`INFRAHUB_MCP_TOKEN_ALICE`). It has no `mcp-agent` entry and no second entry, so every tool
-call from Claude Code in this repository is recorded as `alice`. The `mcp-agent` account, its role
+`.mcp.json` has one Infrahub server, `otternet-infrahub`, and it sends alice's API token
+(`INFRAHUB_MCP_TOKEN_ALICE`). It has no `mcp-agent` entry and no second Infrahub entry, so every
+tool call from Claude Code to Infrahub in this repository is recorded as `alice`. The only other entry
+is `arista-eos`, which reads the switches and never talks to Infrahub; see
+[the Arista EOS MCP server](#the-arista-eos-mcp-server). `invoke ready` refuses any other entry, and
+refuses `arista-eos` if it names an Infrahub variable. The `mcp-agent` account, its role
 and its token (`INFRAHUB_MCP_TOKEN`) are still provisioned: `scripts/demo_rehearsal.py` act five
 calls the server as `mcp-agent` on purpose, to show what that role can and cannot do. Claude Code
 does not read that token.
@@ -33,8 +36,9 @@ the change, with scratch objects on scratch branches that were deleted afterward
 | --- | --- | --- |
 | View nodes of any kind | Allowed | Allowed |
 | Create a branch | Allowed | Allowed |
-| Write a `BuiltinTag` on her branch | Allowed | Refused: `object:Builtin:Tag:create:allow_other` |
+| Write a `BuiltinTag` on her branch | Allowed | Refused until 2026-10-19: `object:Builtin:Tag:create:allow_other`. Allowed since (see below) |
 | Write a `Service` kind on her branch | Not measured | Allowed (a `ServiceApplicationDefinition`) |
+| Write a `RoutingVrfBgpPeer` on her branch, and run the AVD generators there | Not measured | Allowed since 2026-10-19 (measured through the MCP server) |
 | Open a proposed change | Allowed | Allowed |
 | Write a `BuiltinTag` on `main` | Refused: `object:Builtin:Tag:create:allow_default` | Refused: the same permission |
 | Merge her own proposed change with `CoreProposedChangeMerge` | **Succeeded** (permission held) | **Succeeded** (permission not held) |
@@ -51,8 +55,17 @@ the change, with scratch objects on scratch branches that were deleted afterward
   which tells the agent never to merge. That is an instruction to the model, not a permission. A guarantee
   needs an Infrahub fix, or a proxy in front of the server that rejects the mutation; neither exists here.
 - **A write to `main` is refused.** Her only write permission on objects is decision 4 (branches other than
-  the default branch), restricted to the `Service` namespace. The one exception is the proposed change, which
-  is stored on `main`.
+  the default branch). The one exception is the proposed change, which is stored on `main`.
+- **On a branch she may write any kind, since 2026-10-19.** The role allowed only the `Service` namespace
+  until then. It was widened for the whole `Infrahub Users` group, which also holds `bob` and any account
+  that signs in through Dex, so that an agent acting as alice can correct routing data and run the AVD
+  generators on its branch: [act seven](../demo-runbook.md#act-seven-a-bgp-session-that-every-check-passed).
+  `backstage-portal` already held the same permission. Because merging is not blocked (above), a member
+  can now put a change to any kind on `main` by merging their own proposed change, not only a change to a
+  service. Measured on 2026-10-19 with alice's token through the MCP server: `node_upsert` on a
+  `RoutingVrfBgpPeer`, then `CoreGeneratorDefinitionRun` for `generate-avd-device-hostvar` and
+  `generate-avd-device-structured-config` (both `ok`), `propose_changes`, and `CoreProposedChangeRunCheck`;
+  22 validators passed, and the branch's EOS artifacts for both k8s leaves carried the new value.
 - **Other actions are no longer granted.** Review, `manage_schema` and `manage_repositories` came from the
   detached roles. Whether a given tool call would have used them was not measured; the absence of the grants
   is read from the role definitions, and a schema load or an approval by her token was not tried.
@@ -60,9 +73,8 @@ the change, with scratch objects on scratch branches that were deleted afterward
   change** because the lab held no `ServiceFabricApp` at the time (the demo creates it in act one). With a
   non-existent application the mutation passed the permission check and failed on the missing application,
   while a `BuiltinTag` write was refused for permission. Re-run act two to confirm it end to end.
-- **A write to any kind outside the `Service` namespace through alice's token is now
-  refused.** The portal is not affected: it writes with its own `backstage-portal` account and attributes the
-  write to the signed-in user through the mutation `context`.
+- **The portal is not affected by either change.** It writes with its own `backstage-portal` account and
+  attributes the write to the signed-in user through the mutation `context`.
 
 **Clients never act as `agent`.** The server runs in
 `INFRAHUB_MCP_AUTH_MODE=token-passthrough` and holds no Infrahub credential. Each
@@ -82,7 +94,7 @@ credential, and the single `.mcp.json` entry that sends alice's token.
 
 ## The network-admin account
 
-A person who signs in through Dex holds `Requester Access`: view, write `Service` kinds on a branch, open a proposed change.
+A person who signs in through Dex holds `Requester Access`: view, write any kind on a branch other than `main`, open a proposed change.
 `admin` is a Super Administrator. A network engineer who changes devices, interfaces, links, addresses or locations on a branch, and
 merges the proposed change, needs something between the two. `scripts/provision_network_admin.py` (run by `uv run invoke network-admin`
 and by the bootstrap, see [bootstrap](./bootstrap.md#the-local-network-admin-account)) creates it.
@@ -402,3 +414,31 @@ cannot change them and documents the way around each.
 How long the generators take on a given stack is not recorded here. Measured elsewhere in this
 documentation, a generator pass is 15 to 21 seconds, and artifacts settle in about a minute after a
 merge ([AGENTS.md](https://github.com/opsmill/infrahub-network-field-day/blob/main/AGENTS.md)).
+
+## The Arista EOS MCP server
+
+`arista-eos` in `.mcp.json` is Arista's [eos-mcp-server](https://github.com/aristanetworks/eos-mcp-server),
+pinned at `0.6.1-beta` (the only version on npm on 2026-10-19, published 2026-09-29). It is read-only:
+its tools list the inventory, check that devices answer, run `show` commands, read the log, collect
+device facts and read the running configuration. It reads the switches over eAPI on HTTPS and never
+talks to Infrahub. [Act seven](../demo-runbook.md#act-seven-a-bgp-session-that-every-check-passed) uses it.
+
+How it runs here:
+
+- **In a container.** It needs Node.js 24 or later, and this host has Node 22, so `.mcp.json` starts it
+  with `docker run -i --rm --network host node:24-alpine npx -y @aristanetworks/eos-mcp-server@0.6.1-beta`.
+  The first start downloads the package.
+- **Inventory.** `lab/eos-mcp/inventory.yml` names the seven switches by their Infrahub names, which are
+  also their EOS hostnames, so an agent can carry a name from one MCP server to the other. It is not
+  `lab/avd/inventory.yml`, whose short names (`k8s-leaf1`) exist in neither. The addresses are the
+  `mgmt-ipv4` values in `lab/otternet.clab.yml`. The groups are `SPINES`, `K8S_LEAFS`, `APP_LEAFS` and
+  `BORDER_LEAFS`, and a tool call can target a group.
+- **Password.** The inventory names the variable `EOS_MCP_PASSWORD`, and `.mcp.json` passes it from the
+  environment of the shell that starts `claude`. It is the lab's `admin` password today. Arista
+  recommends a read-only account, because agents have tried to make changes through other means
+  such as SSH. Switch accounts are Infrahub data (`NetworkLocalUser`, on the fabric's `local_users`),
+  and the role `network-operator` exists, so a read-only account is a proposed change. It is not made yet.
+
+Measured on 2026-10-19: `probe` reached 7 of 7 switches, and `eos_run_show` against `K8S_LEAFS` returned
+both leaves' output in one call. `eos_run_show` takes `command` or `commands` and `output_format`
+(`auto`, `json` or `text`); a `format` argument is refused as an unrecognised key.

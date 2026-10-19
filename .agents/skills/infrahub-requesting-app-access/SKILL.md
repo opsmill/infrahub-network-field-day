@@ -240,10 +240,9 @@ Every tool call from Claude Code here acts as `alice`: `.mcp.json` has one serve
 Infrahub 1.10.6: the grant's attributes then show `updated_by: alice`, and `requester` stays a separate
 free-text value. Her group `Infrahub Users` holds one role, `Requester Access`, set by
 `scripts/provision_requester_access.py` (run by `uv run invoke mcp`). The role allows: view of every kind,
-any action on `Service` kinds on a branch other than `main`, and creating a proposed change. It does not
-allow writing to `main`, other kinds on a branch, approving a change, loading a schema or managing
-repositories. If a write to a `Service` kind or `propose_changes` is refused naming a permission, run
-that script. Do not retry on `main`.
+any action on any kind on a branch other than `main`, and creating a proposed change. It does not
+allow writing to `main`, approving a change, loading a schema or managing repositories. If a write on
+the session branch or `propose_changes` is refused naming a permission, run that script. Do not retry on `main`.
 
 **Her token can still merge.** On Infrahub 1.10.6 `CoreProposedChangeMerge` succeeded with her token after
 `merge_proposed_change` was removed from her group, so no permission stops a merge. Never merge: a person
