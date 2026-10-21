@@ -47,8 +47,11 @@ MCP_AGENT = "mcp-agent"
 # The local account for the network team: not Dex, not a Super Administrator.
 NETWORK_ADMIN = "alex"
 NETWORK_ADMIN_PASSWORD_VAR = "INFRAHUB_NETWORK_ADMIN_PASSWORD"  # noqa: S105 -- the variable's name, not a password
-# The one server in .mcp.json. Claude Code acts as alice and as no other identity.
+# The one Infrahub server in .mcp.json. Claude Code acts in Infrahub as alice and as no other identity.
 MCP_SERVER_NAME = "otternet-infrahub"
+# The one other server: Arista's read-only EOS MCP server, which reads the switches over eAPI and
+# never talks to Infrahub, so it carries no Infrahub token. EOS_MCP_PASSWORD is the switch password.
+EOS_MCP_SERVER_NAME = "arista-eos"
 # The observability namespaces Vidra's delivery creates, and the Secrets that `invoke cluster` puts in them.
 # Only key names are ever read from the cluster; a Secret's values are never fetched or printed.
 OBSERVABILITY_NAMESPACES = ("otternet-metrics", "otternet-telemetry")
@@ -209,11 +212,18 @@ def decide_script_check(label: str, returncode: int, output: str, fix: str) -> R
 
 
 def decide_mcp_config(config: dict[str, Any], env_names: set[str], users: tuple[str, ...]) -> Result:
-    """`.mcp.json` has exactly one server, `otternet-infrahub`, sending alice's token, and `.env` has that variable."""
+    """`.mcp.json` has one Infrahub server, `otternet-infrahub`, sending alice's token, and `.env` has that variable.
+
+    The only other server allowed is `arista-eos`, and only while it names no Infrahub variable: an
+    entry there that sent an Infrahub token would be a second identity in Infrahub.
+    """
     name = ".mcp.json servers match the variables the scripts write"
     servers = config.get("mcpServers") or {}
     wanted = {MCP_SERVER_NAME: token_var(users[0])}
-    problems: list[str] = [f"unexpected server {extra!r}" for extra in sorted(set(servers) - set(wanted))]
+    allowed = {*wanted, EOS_MCP_SERVER_NAME}
+    problems: list[str] = [f"unexpected server {extra!r}" for extra in sorted(set(servers) - allowed)]
+    if EOS_MCP_SERVER_NAME in servers and "INFRAHUB" in json.dumps(servers[EOS_MCP_SERVER_NAME]):
+        problems.append(f"{EOS_MCP_SERVER_NAME} names an Infrahub variable; it reads switches only")
     for server, variable in wanted.items():
         entry = servers.get(server)
         if entry is None:

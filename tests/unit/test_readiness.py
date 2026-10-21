@@ -131,13 +131,18 @@ def test_mcp_config_matches_the_variables_in_env() -> None:
     refused = r.decide_mcp_config(extra, names, ("alice",))
     assert refused.status is Status.FAIL
     assert "unexpected server 'other'" in refused.detail
+    # The switch reader is allowed, but not once it sends anything to Infrahub.
+    leaky = {"mcpServers": {**config["mcpServers"], r.EOS_MCP_SERVER_NAME: {"env": {"T": "${INFRAHUB_API_TOKEN}"}}}}
+    assert "names an Infrahub variable" in r.decide_mcp_config(leaky, names, ("alice",)).detail
     assert r.decide_mcp_config({"mcpServers": {}}, names, ("alice",)).status is Status.FAIL
 
 
 def test_the_variable_names_the_scripts_write_are_the_ones_mcp_json_reads() -> None:
     user = _module("scripts/provision_mcp_user_token.py")
     config = json.loads((REPO / ".mcp.json").read_text(encoding="utf-8"))
-    headers = {name: entry["headers"]["Authorization"] for name, entry in config["mcpServers"].items()}
+    headers = {
+        name: entry["headers"]["Authorization"] for name, entry in config["mcpServers"].items() if "headers" in entry
+    }
     assert list(headers) == [r.MCP_SERVER_NAME]
     assert r.MCP_TOKEN_USERS == ("alice",)
     assert user.token_var("alice") == r.token_var("alice")
@@ -379,9 +384,9 @@ def test_doctor_runs_the_readiness_checks_too() -> None:
     assert "readiness.run_checks(" in _body("doctor")
 
 
-def test_mcp_json_has_one_server_for_the_one_token_user() -> None:
+def test_mcp_json_has_one_infrahub_server_for_the_one_token_user() -> None:
     config = json.loads((REPO / ".mcp.json").read_text(encoding="utf-8"))
-    assert list(config["mcpServers"]) == [r.MCP_SERVER_NAME]
+    assert list(config["mcpServers"]) == [r.MCP_SERVER_NAME, r.EOS_MCP_SERVER_NAME]
 
 
 def test_verify_bootstrap_runs_the_readiness_checks_and_the_act_smoke() -> None:
