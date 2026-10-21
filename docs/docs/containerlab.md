@@ -23,7 +23,7 @@ uv run invoke provision    # push every rendered artifact onto the devices
 
 The fabric boots **unconfigured on purpose**: cEOS nodes get no `startup-config`, only a management
 address, and `invoke provision` (or the reconciler) then makes each one match its Infrahub artifact.
-`uv run invoke bootstrap` runs both as part of building the whole environment.
+`uv run invoke bootstrap` runs `invoke lab`, then the reconciler in place of `invoke provision`, as part of building the whole environment. `uv run invoke bootstrap --no-lab` skips the lab.
 
 Two things `invoke lab` does before deploying, because ContainerLab refuses a topology with a missing
 bind path before starting any node:

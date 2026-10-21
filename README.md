@@ -53,7 +53,7 @@ The full pipeline, from a high-level fabric design to versioned, deployable conf
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
-- Python 3.11+
+- Python 3.11 to 3.13 (`.python-version` pins 3.12)
 - PyAVD >= 6.4.0, < 6.5.0 (bundled in the custom Docker image -- no separate install required)
 
 ## Quick Start
@@ -69,9 +69,15 @@ uv run invoke build
 # Start all services: Infrahub, Neo4j, PostgreSQL, Redis, RabbitMQ, Semaphore
 uv run invoke start
 
-# Load schemas, UI menu, seed data, register the repository, and load event triggers
+# Load schemas, UI menu, seed data, register the repository, load checks and event triggers,
+# and upload application payloads. infrahubctl needs a token: the local stack's admin token
+export INFRAHUB_API_TOKEN=06438eb2-8019-4776-878c-0941b1f1d1ec
 uv run invoke load
 ```
+
+To run all of that and generate the fabric in one command, without the ContainerLab lab, run
+`uv run invoke bootstrap --no-lab`. `uv run invoke bootstrap` builds the whole environment,
+including the lab; see [Bootstrapping the whole environment](docs/docs/developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
 
 Open the Infrahub UI at `http://localhost:8000`. The service portal runs in the tooling cluster, at `https://10.90.0.11:32001` from the branch desktop, once `uv run invoke tooling` (or `uv run invoke bootstrap`) has deployed it; see [The service portal](docs/docs/service-portal.md).
 
@@ -118,7 +124,7 @@ After `invoke load` completes and you run the generator chain on a fabric:
   - Server placement into a rack, cabled to its leaves
   - Tenant onboarding onto a fabric
   - Exposed applications and access grants
-- **Stack** — Docker Compose extending Infrahub 1.10.6 with PyAVD. Includes Infrahub UI, Semaphore (bundled Ansible runner for deployment), and Neo4j.
+- **Stack** — Docker Compose extending Infrahub 1.10.6 with PyAVD. Includes Infrahub UI, Semaphore (a bundled Ansible runner, which does not configure devices; see [Supported Capabilities](docs/docs/supported-capabilities.md)), and Neo4j.
 
 | File | What it does |
 |------|-------------|

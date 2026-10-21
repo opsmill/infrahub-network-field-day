@@ -600,7 +600,7 @@ each fails differently enough to be its own debugging session. See
 Deployed and validated on this host with ceOS 4.36.0.1F, Junos 22.3R1.11,
 SR Linux 26.7.2 and Cilium 1.18.6. On the lab as Infrahub drives it — built by
 `invoke bootstrap`, applications delivered by Vidra, the handover done —
-`make verify` reports **111 passed, 0 failed, 0 skipped**, covering the list
+`make verify` reports **121 passed, 0 failed, 0 skipped**, covering the list
 below. Each skip the script can still print names an optional component that is
 not deployed (a WAN customer site, the lab-only access broker, the tooling
 cluster); none is reachable on a full build. A lab deployed without Infrahub, or

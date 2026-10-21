@@ -55,6 +55,9 @@ export INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='["demo/.*"]'
 uv run invoke bootstrap --fresh
 ```
 
+`uv run invoke bootstrap --fresh --demo` sets the last three settings for you; only the two tokens
+need exporting.
+
 - **The token needs write access.** Infrahub pushes the branches it creates and the merges it makes.
   Bootstrap checks first, with a dry-run push, which has to authenticate for write, and stops with
   the message from git if it cannot. A fine-grained token needs **Contents: Read and write** on the repository,

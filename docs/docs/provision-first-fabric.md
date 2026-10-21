@@ -9,7 +9,7 @@ sidebar_position: 2
 
 Prerequisites: [Quick Start](./quick-start.md) complete — Infrahub is running at `http://localhost:8000`, and seed data (`OTTERNET_FABRIC`, its pod and three racks, the seven switches, device types, IP pools) is loaded.
 
-At this point the fabric design is loaded and the seven switches exist with their pinned identity, but they are **not cabled** and have no host_vars. The steps below generate the cabling, host_vars, and configurations for `OTTERNET_FABRIC`.
+At this point the fabric design is loaded and the seven switches exist with their pinned identity, but the spine-to-leaf and MLAG links are **not cabled** and the switches have no host_vars. The steps below generate the cabling, host_vars, and configurations for `OTTERNET_FABRIC`.
 
 ## The generator chain
 
@@ -28,7 +28,7 @@ flowchart TD
 |------|-----------|-----------------|
 | 1 | **generate-fabric** | Nothing for `OTTERNET_FABRIC`: it declares no device tier above its spines. The generator resolves the fabric's pools and signals the pod generator |
 | 2 | **generate-pod** | The two spines of `otternet-pod1`, reconciled by name, with their interfaces expanded from the spine template |
-| 3 | **generate-rack** | The leaves of `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`, their uplink cabling to the spines, and the MLAG peer links |
+| 3 | **generate-rack** | The leaves of `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`, and their uplink cabling to the spines. The MLAG peer links are loaded afterwards from `objects_post_topology/` (see Step 4) |
 | 4 | **generate-avd-device-hostvar** | Per-device PyAVD hostvars (stored in the graph as an `AvdHostvarFile`) |
 | 5 | **generate-avd-device-structured-config** | Per-device structured AVD config (stored as `AvdStructuredConfigFile`) |
 
@@ -42,7 +42,7 @@ You can also create a branch from the CLI:
 uv run infrahubctl branch create generate-otternet-fabric
 ```
 
-The CLI route needs credentials in your shell — either `source .envrc` first or set `INFRAHUB_USERNAME`/`INFRAHUB_PASSWORD` (or `INFRAHUB_API_TOKEN`). If you take the CLI route, also switch the UI's branch selector to the new branch — subsequent UI actions need to be scoped there.
+The CLI route needs credentials in your shell — export `INFRAHUB_API_TOKEN` (see [Quick Start](./quick-start.md#4-load-schemas-menus-objects-and-repository)) or set `INFRAHUB_USERNAME`/`INFRAHUB_PASSWORD`. If you take the CLI route, also switch the UI's branch selector to the new branch — subsequent UI actions need to be scoped there.
 
 ## Step 2 — Run the fabric generator
 
@@ -70,7 +70,8 @@ You don't need to manually trigger the pod and rack generators — they are chai
 via event triggers.
 
 :::note The AVD stage is not chained from the rack generator
-`generate-avd-device-hostvar` has no trigger rule at all. It runs when something
+No trigger rule runs `generate-avd-device-hostvar` after the rack generator. One rule
+runs it on a branch when a switch's `avd_custom_hostvars` changes. Otherwise it runs when something
 asks: `invoke avd`, a manual run from **Actions → Generator Definitions**, the
 portal's request templates, or a proposed change (it is
 `execute_in_proposed_change: true`, which is what makes a service request show
@@ -98,7 +99,14 @@ Once all tasks complete, open **Data Centre Fabric → Switches** in the menu. Y
 - `spine` — `spine-otternet-pod1-1` and `spine-otternet-pod1-2`
 - `leaf` — `leaf-otternet-pod1-1-1` and `-1-2` (`K8S_LEAFS`), `-2-1` and `-2-2` (`APP_LEAFS`), and `-3-1` (`BORDER_LEAFS`)
 
-Each switch keeps the BGP ASN, node ID, loopback and management address pinned in `objects/26_otternet_devices.yml`, and now has its uplink and MLAG peer interfaces cabled under **Data Centre Fabric → Connections**.
+Each switch keeps the BGP ASN, node ID, loopback and management address pinned in `objects/26_otternet_devices.yml`, and now has its uplink interfaces cabled under **Data Centre Fabric → Connections**.
+
+The MLAG peer links connect to ports the rack generator has just created, so they cannot be in
+`objects/`. Load them on the branch (`invoke avd --topology` does this for you):
+
+```bash
+uv run infrahubctl object load objects_post_topology/ --branch generate-otternet-fabric
+```
 
 ## Step 5 — Render the AVD artifacts
 

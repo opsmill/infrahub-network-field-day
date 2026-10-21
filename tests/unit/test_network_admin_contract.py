@@ -187,4 +187,7 @@ def test_invoke_network_admin_runs_the_script_and_bootstrap_calls_it() -> None:
     body = text.split("def network_admin(", 1)[1].split("@task", 1)[0]
     assert "provision_network_admin.py" in body
     assert "_use_dotenv_credentials()" in body
-    assert "network_admin(ctx)" in text.split("def bootstrap(", 1)[1].split("def _wait_for_infrahub", 1)[0]
+    bootstrap = text.split("def bootstrap(", 1)[1].split("def _bootstrap_infrahub_only", 1)[0]
+    infrahub_only = text.split("def _bootstrap_infrahub_only(", 1)[1].split("def _wait_for_infrahub", 1)[0]
+    assert "network_admin(ctx)" in bootstrap
+    assert "network_admin(ctx)" in infrahub_only

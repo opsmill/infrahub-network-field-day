@@ -96,25 +96,27 @@ flowchart LR
   - Place a server into a rack
   - Onboard a tenant onto a fabric
   - Expose an application and grant access to it
-- **Stack** — Docker Compose bundling everything needed to run locally: Infrahub with PyAVD, a bundled Ansible runner for device deployment, and Neo4j.
+- **Stack** — Docker Compose bundling everything needed to run locally: Infrahub with PyAVD, a bundled Ansible runner (Semaphore, which does not configure devices; see [Supported Capabilities](./supported-capabilities.md)), and Neo4j.
 
 ## Best practices
 
 - **Work on branches.** Create a named branch for each change set. The generator chain and service portal both operate on branches; proposed changes give you a diff before anything merges.
-- **Run `invoke load` in order.** The load sequence is ordered: schemas, then menu, then seed data, then repository registration, then triggers. Running steps out of order or skipping `uv sync` first is the most common cause of load failures.
+- **Run `invoke load` in order.** The load sequence is ordered: Semaphore setup, schemas, menu, seed data, repository registration and sync, check queries, triggers, then application payloads. Running steps out of order or skipping `uv sync` first is the most common cause of load failures.
 - **Re-run generators idempotently.** All generators use checksum-based change detection — re-running after a partial failure is safe and applies only what changed.
 - **Use the service portal for repeatable day-two operations.** The portal wraps generator calls and branch creation into guided workflows with validation. For one-off changes, the Infrahub UI and GraphQL API work directly; use the portal for provisioning workflows run by team members without API or CLI access.
 - **Scope to supported capabilities.** This reference design covers a defined set of AVD capabilities — uncommon or highly custom options may not be modeled. Review the [Supported Capabilities](./supported-capabilities.md) page before planning a deployment.
 
 ## Get started
 
-**Prerequisites:** Docker and Docker Compose · uv · Python 3.11+
+**Prerequisites:** Docker and Docker Compose · uv · Python 3.11 to 3.13
 
 1. Clone the repository and run `uv sync --all-packages` to install dependencies.
 2. Build the custom Infrahub image: `uv run invoke build` (one-time).
 3. Start the stack: `uv run invoke start`.
-4. Load schemas, seed data, and the repository: `uv run invoke load`.
+4. Export the local stack's token (see [Quick Start](./quick-start.md)), then load schemas, seed data, and the repository: `uv run invoke load`.
 5. Follow [Provision Your First Fabric](./provision-first-fabric.md) to generate a fabric and reach rendered EOS artifacts.
+
+`uv run invoke bootstrap --no-lab` runs steps 2 to 5 in one command, without the ContainerLab lab.
 
 ## Additional resources
 

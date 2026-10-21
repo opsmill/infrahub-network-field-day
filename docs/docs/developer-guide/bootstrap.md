@@ -39,22 +39,64 @@ never moves.
 ## Bootstrapping the whole environment
 
 ```bash
-uv run invoke bootstrap            # everything, in one command
-uv run invoke bootstrap --fresh    # ... destroying the stack and the lab first
+uv run invoke bootstrap                    # everything, in one command
+uv run invoke bootstrap --fresh            # ... destroying the stack and the lab first
+uv run invoke bootstrap --no-lab           # Infrahub only, no lab and no clusters
+uv run invoke bootstrap --fresh --no-lab   # ... destroying the stack first, never the lab
 ```
 
 That runs `build` → `start` → `load` → `avd` (on a branch, then merged) → `lab` →
-`reconcile --converge` → `tooling` → `mcp` → `mcp-tokens` → `metrics-exporter` → `cluster`, starts
-the reconciler loop, and ends with the readiness checks. Each step is still available on its own;
-`bootstrap` only removes the need to remember the order and the flags.
+`reconcile --converge` → `backstage-build` → `tooling` → `mcp` → `mcp-tokens` → `network-admin` →
+`metrics-exporter` → `cluster`, and starts the reconciler loop. On a read-write stack it then
+rebuilds a stale `stage/*` branch and releases the demo branch (unless `--no-release`). It ends with
+the readiness checks. Each step is still available on its own; `bootstrap` only removes the need to
+remember the order and the flags.
 
 Since cycle 033 it also builds the portal image and runs `tooling` before `cluster`, so a
 finished bootstrap has a branch user able to sign in and ask for something.
 
+The lab needs its images before the first run: the cEOS image, the vSRX image
+(`make -C lab fw-image`) and the branch desktop image (`make -C lab desktop-image`). `invoke lab`
+builds none of them. See the [lab prerequisites](https://github.com/opsmill/infrahub-network-field-day/blob/main/lab/README.md#prerequisites).
+
+| Flag | What it does |
+| --- | --- |
+| `--fresh` | Destroys the Infrahub stack and the lab first |
+| `--no-lab` | Brings up Infrahub only (see below) |
+| `--no-cluster` | Skips `cluster`: no Cilium, Vidra or Crossplane |
+| `--demo` | Builds a read-write demo stack: sets `INFRAHUB_REPOSITORY_MODE=readwrite` and `INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='["demo/.*"]'`, and defaults `INFRAHUB_REPOSITORY_URL` to the Network Field Day repository |
+| `--no-release` | On a read-write stack, does not release the demo branch at the end |
+| `--branch` | The branch the AVD chain runs on before the merge, `build-fabric` by default |
+| `--lab-dir` | The lab directory, `OTTERNET_LAB_DIR` by default, else `lab/` in the main checkout |
+
+### Infrahub without the lab
+
+`--no-lab` runs `build` → `start` → `load` → `avd` (on a branch, then merged) → `mcp` →
+`network-admin` → `metrics-exporter`, then the read-write demo release when the stack is read-write,
+then the readiness checks. The result is Infrahub at `http://localhost:8000` with the
+`OTTERNET_FABRIC` cabled and every artifact rendered, and no devices to push them to.
+
+It leaves out every step that needs the lab or the tooling cluster:
+
+- `lab`, `reconcile` and the reconciler loop, because there are no devices.
+- `backstage-build` and `tooling`, so there is no Dex and no portal.
+- `mcp-tokens`, because it signs `alice` in through Dex. The MCP server runs, but Claude Code has no
+  token to send until `mcp-tokens` runs.
+- `cluster`, because the workload cluster runs in the lab.
+
+The readiness checks for those steps fail, so a `--no-lab` run prints the readiness summary but
+does not exit 1 because of it. `--fresh --no-lab` destroys the Infrahub stack and leaves a running
+lab as it is.
+
+To add the lab later, run `uv run invoke bootstrap --fresh`. Without `--fresh`, the second run
+repeats `avd --topology` against a cabled fabric (see the warning about the topology generators above).
+
 ### A read-write bootstrap, and what it does for demo-main
 
 The demonstration runs against a read-write repository on `demo-main`
-([builder demo](../demo-builder.md)). Export these four settings, then bootstrap:
+([builder demo](../demo-builder.md)). Export these five settings, then bootstrap. `--demo` sets
+the mode and the import setting and defaults the URL, so `uv run invoke bootstrap --fresh --demo`
+needs only the two tokens:
 
 ```bash
 export INFRAHUB_REPOSITORY_URL=https://github.com/opsmill/infrahub-network-field-day.git
@@ -176,6 +218,7 @@ exits 1, if any check fails. `invoke doctor` runs the same checks after its own.
 | `.mcp.json` | One server, `otternet-infrahub`, sends `INFRAHUB_MCP_TOKEN_ALICE`; any other entry fails the check |
 | `claude mcp list` | `otternet-infrahub` connects, from a process that has `.env` loaded |
 | Shell environment | Warns when this shell holds a generated credential that differs from `.env` |
+| Stuck merges | Warns when a proposed change has been in state `merging` for 15 minutes or more |
 
 The three observability checks use the lab's `kubeconfig` file (`KUBECONFIG`, else `lab/k8s/.kubeconfig/kubeconfig.yaml` in the main checkout)
 and are reported as `SKIP` with the reason when it does not exist or the cluster does not answer, for example after `bootstrap --no-cluster`.
@@ -289,7 +332,7 @@ gave 67 checks with one red.
 ### Verifying a bootstrap
 
 ```bash
-scripts/verify_bootstrap.sh          # ~20 minutes, destroys and rebuilds everything
+scripts/verify_bootstrap.sh          # about 45 minutes (20 without the smoke), destroys and rebuilds everything
 SKIP_SMOKE=1 scripts/verify_bootstrap.sh   # without the act-level smoke
 ```
 

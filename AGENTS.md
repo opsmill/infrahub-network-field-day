@@ -141,7 +141,7 @@ Conventions:
 The harness blocks a foreground `sleep`. For anything slow:
 
 - Start it with `run_in_background`, then wait with the Monitor tool using an until-loop on a condition (a file, an HTTP status, a container state). Never `sleep`.
-- Typical durations: `invoke bootstrap` about 20 minutes; `scripts/verify_bootstrap.sh` about 20 minutes; a generator pass 15-21 seconds (hostvars about 15s, structured configs about 6s); artifact rendering settles in about a minute after a merge.
+- Typical durations: `invoke bootstrap` 20 to 27 minutes; `scripts/verify_bootstrap.sh` about 45 minutes (about 20 with `SKIP_SMOKE=1`); a generator pass 15-21 seconds (hostvars about 15s, structured configs about 6s); artifact rendering settles in about a minute after a merge.
 - Say what "done" looks like before waiting: the artifacts non-empty and checksums stable across samples, `invoke reconcile` reporting `differed=0`, the `VidraResource` count (not `syncState`), `sync_status: in-sync`.
 
 ## KUBECONFIG
