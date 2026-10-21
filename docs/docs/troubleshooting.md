@@ -62,7 +62,7 @@ uv run invoke load
 
 ### Cause
 
-Triggers connect the topology generators into a chain: `generate-fabric` → `generate-pod` → `generate-rack`. The AVD stage is not on that chain: `generate-avd-device-hostvar` runs when `invoke avd`, a proposed change or a manual run asks for it, and `generate-avd-device-structured-config` follows it through the `avd_hostvars_ready` trigger. If triggers didn't load — the last step of `invoke load` — the chain is broken.
+Triggers connect the topology generators into a chain: `generate-fabric` → `generate-pod` → `generate-rack`. The AVD stage is not on that chain: `generate-avd-device-hostvar` runs when `invoke avd`, a proposed change or a manual run asks for it, and `generate-avd-device-structured-config` follows it through the `avd_hostvars_ready` trigger. If triggers didn't load — the step of `invoke load` after the check queries — the chain is broken.
 
 ### Diagnose
 

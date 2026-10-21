@@ -13,7 +13,7 @@ The steps below take you from a fresh clone to a running Infrahub instance with 
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — the Python package manager this project uses.
-- Python 3.11 or newer.
+- Python 3.11 to 3.13. `.python-version` pins 3.12.
 
 Everything else is installed by `uv sync` inside the project.
 
@@ -74,6 +74,13 @@ All services should show `healthy` or `running`. Infrahub is ready once `http://
 
 ## 4. Load schemas, menus, objects, and repository
 
+Every step of the load runs `infrahubctl`, which needs credentials. For the local stack, export the
+admin token that `docker-compose.yml` sets as the `INFRAHUB_INITIAL_ADMIN_TOKEN` default:
+
+```bash
+export INFRAHUB_API_TOKEN=06438eb2-8019-4776-878c-0941b1f1d1ec
+```
+
 Once Infrahub is healthy, load everything in one command:
 
 ```bash
@@ -91,8 +98,7 @@ This runs, in order:
 7. Load event triggers and rules from `triggers.yml`.
 8. Upload application payloads from `payloads/` into their Infrahub attachments.
 
-Step 8 needs `INFRAHUB_API_TOKEN` exported, the same token `infrahubctl` uses. It exists
-because application payloads — Kubernetes manifests and Helm values — are stored as file
+Step 8 exists because application payloads — Kubernetes manifests and Helm values — are stored as file
 attachments rather than JSON attributes, and `infrahubctl object load` cannot upload file
 content. Skip it and an application loads with no workload, so its Crossplane artifact renders
 an empty `manifests` list.
@@ -105,8 +111,9 @@ Seed data loads in filename order, and the numeric prefixes encode that order: s
 (`00`–`05` — groups, manufacturers, device types, profiles), then the `OTTERNET_FABRIC` design
 (`20`–`28`): device types and templates, pools, management objects, the fabric and pod, tenants and
 VRFs, racks, the pinned switches, the VRF services, and the workload endpoints. The rest of the
-lab follows (`29`–`40`): off-fabric prefixes and devices, the firewall, the WAN, the Kubernetes
-cluster, the seeded services, and the monitoring profiles.
+lab follows (`29`–`41`): off-fabric prefixes and devices, the WAN addressing, the firewall and its
+static routes, the WAN, the Kubernetes cluster, the application catalogue, the seeded services and
+access grants, the site security, the monitoring profiles, and the firewall and WAN cabling.
 
 ## 5. Confirm everything loaded
 
@@ -122,7 +129,21 @@ If you don't see these, re-run `uv run invoke load` or see [Common Issues](./tro
 
 ## Next: provision a fabric
 
-The stack is up and the seven switches exist with their pinned identity, but nothing is cabled yet and no host_vars or configurations have been rendered — `invoke load` runs no generators. Follow [Provision Your First Fabric](./provision-first-fabric.md) next.
+The stack is up and the seven switches exist with their pinned identity, but the spine-to-leaf and MLAG links are not cabled yet and no host_vars or configurations have been rendered — `invoke load` runs no generators. Follow [Provision Your First Fabric](./provision-first-fabric.md) next.
+
+## Bring up Infrahub in one command
+
+Steps 2 to 4, and the fabric generation from [Provision Your First Fabric](./provision-first-fabric.md),
+also run as one command. With `--no-lab` it brings up Infrahub only, without the ContainerLab lab,
+the tooling cluster or Kubernetes:
+
+```bash
+uv run invoke bootstrap --no-lab
+```
+
+It ends with Infrahub at `http://localhost:8000`, the fabric cabled, and every artifact rendered.
+Without `--no-lab`, `uv run invoke bootstrap` also deploys the lab and configures every device from
+its artifact; see [Bootstrapping the whole environment](./developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
 
 ## Common commands
 
@@ -134,6 +155,8 @@ The stack is up and the seven switches exist with their pinned identity, but not
 | `uv run invoke restart` | Restart all services |
 | `uv run invoke restart --component=infrahub-server` | Restart a specific service |
 | `uv run invoke load` | Re-run the full load sequence |
+| `uv run invoke bootstrap --no-lab` | Build, start, load and generate the fabric, without the lab |
+| `uv run invoke bootstrap` | The whole environment, including the lab and both clusters |
 | `uv run invoke load-schema` | Reload schemas only |
 | `uv run invoke load-menu` | Reload UI menus only |
 | `uv run invoke init-semaphore` | Re-register the Semaphore project and templates (idempotent) |

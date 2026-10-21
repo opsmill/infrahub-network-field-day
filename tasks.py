@@ -3328,7 +3328,7 @@ def mcp(ctx: Context) -> None:
 @task(name="network-admin")
 def network_admin(ctx: Context) -> None:
     """
-    Create the local `network-admin` account: edits network data on a branch and merges a proposed change.
+    Create the local account `alex` (group `Network Admins`): edits network data on a branch and merges a proposed change.
 
     A person who signs in through Dex is limited to `Requester Access`; `admin` is a Super
     Administrator. `scripts/provision_network_admin.py` makes the account in between: a local
@@ -3508,7 +3508,11 @@ _cluster_task = cluster
         "branch": "Branch the AVD chain runs on before being merged. Created if absent.",
         "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
         "cluster": "Also bring up Kubernetes: Cilium, Vidra, Crossplane and the handover.",
-        "fresh": "Destroy the stack and the lab first, so the run starts from nothing.",
+        "fresh": "Destroy the stack and the lab (not with --no-lab) first, so the run starts from nothing.",
+        "no-lab": (
+            "Bring up Infrahub only: build, start, load, the AVD chain, the MCP server, the network-admin "
+            "account and the exporter. Skips the lab, the reconciler, the tooling cluster and Kubernetes."
+        ),
         "release": "On a read-write stack, release the staged demo branch at the end, so it is ready (default true).",
         "demo": (
             "Build a read-write demo stack: sets INFRAHUB_REPOSITORY_MODE=readwrite and "
@@ -3525,6 +3529,7 @@ def bootstrap(
     fresh: bool = False,
     demo: bool = False,
     release: bool = True,
+    no_lab: bool = False,
 ) -> None:
     """
     Bring the whole environment up, from nothing, in one command.
@@ -3532,18 +3537,22 @@ def bootstrap(
     Everything this project can automate, in the order the dependencies actually
     impose:
 
+        build      the project image
         start      the Infrahub stack
         load       schema, menus, seed data
         avd        the generation chain ON A BRANCH, merged to main, then deleted
         lab        the ContainerLab topology, management connectivity only
-        provision  every device configured from its rendered artifact
+        reconcile  every device configured from its rendered artifact (--converge)
+        backstage-build the portal image
         tooling    Dex and the Backstage portal, in the tooling cluster
         mcp        the Infrahub MCP server (token passthrough; Claude Code sends alice's token)
         mcp-tokens an MCP token for `alice`, after Dex and the portal accounts exist
-        network-admin the local `network-admin` account (edits network data, merges a proposed change)
+        network-admin the local account `alex` (edits network data, merges a proposed change)
         metrics    the Infrahub exporter, reading as `metrics-exporter`
         cluster    Cilium, Vidra, Crossplane, the resource handover, and the
                    observability Secrets Grafana and Telegraf wait for
+        reconciler the deployment reconciler loop, as a container
+        release    on a read-write stack, the staged demo branch (unless --no-release)
         ready      the readiness checks, and what a person still has to do
 
     **The chain runs on a branch and is merged here rather than by hand.** That
@@ -3557,6 +3566,13 @@ def bootstrap(
     safe to re-run, with one exception worth stating: the topology generators
     inside `avd --topology` are destructive against a fabric that already has
     cabling, so a second bootstrap onto a populated instance wants `--fresh`.
+
+    `--no-lab` stops at Infrahub: build, start, load, avd, mcp, network-admin and
+    metrics. It never touches the lab, so `--fresh --no-lab` destroys only the
+    stack. Every later step needs the lab or the tooling cluster: `reconcile`
+    pushes to the devices, `mcp-tokens` signs alice in through Dex, and `cluster`
+    runs in the lab. The readiness checks still run, but a failure does not fail
+    the run, because the checks for those steps cannot pass.
     """
     if demo:
         # Explicit exports win; only what is unset is filled in. The compose files read the import
@@ -3570,8 +3586,9 @@ def bootstrap(
     _use_dotenv_credentials()
 
     if fresh:
-        print("=== Destroying the lab ===")
-        lab(ctx, lab_dir=lab_dir, destroy=True)
+        if not no_lab:
+            print("=== Destroying the lab ===")
+            lab(ctx, lab_dir=lab_dir, destroy=True)
         print("\n=== Destroying the Infrahub stack ===")
         destroy(ctx)
         if readwrite:
@@ -3596,6 +3613,10 @@ def bootstrap(
 
     print(f"\n=== Running the AVD chain on '{branch}' and merging it ===")
     avd(ctx, branch=branch, topology=True, merge=True)
+
+    if no_lab:
+        _bootstrap_infrahub_only(ctx, readwrite=readwrite, release=release)
+        return
 
     print("\n=== Deploying the lab ===")
     lab(ctx, lab_dir=lab_dir)
@@ -3670,6 +3691,35 @@ def bootstrap(
     print(readiness.render_summary(results, compose_root()))
     if readiness.exit_code(results):
         raise Exit("Bootstrap finished, but a readiness check failed (listed above).", code=1)
+    if not released:
+        raise Exit("Bootstrap finished, but the demo branch was not released (see above).", code=1)
+
+
+def _bootstrap_infrahub_only(ctx: Context, readwrite: bool, release: bool) -> None:
+    """The steps of `bootstrap --no-lab` after the AVD chain: those that need neither the lab nor Dex."""
+    print("\n=== Starting the MCP server ===")
+    mcp(ctx)
+    print("\n=== Creating the network-admin account ===")
+    network_admin(ctx)
+    print("\n=== Starting the Infrahub exporter ===")
+    metrics_exporter(ctx)
+
+    released = True
+    if readwrite:
+        _refresh_stage_branch(ctx)
+        if release:
+            print("\n=== Releasing the demo branch ===")
+            released = _release_demo_branch(ctx)
+
+    print("\n=== Bootstrap complete (Infrahub only) ===")
+    print(f"   Infrahub is at {INFRAHUB_ADDRESS} with the fabric generated and its artifacts rendered.")
+    print("   Not started: the lab, the reconciler, the tooling cluster (Dex, portal), alice's MCP token, Kubernetes.")
+    print("   `uv run invoke bootstrap` without --no-lab adds them; its AVD step is destructive here, so add --fresh.")
+
+    print("\n=== Readiness (checks for the skipped steps are expected to fail) ===")
+    from solution_arista_avd import readiness
+
+    print(readiness.render_summary(readiness.run_checks(compose_root()), compose_root()))
     if not released:
         raise Exit("Bootstrap finished, but the demo branch was not released (see above).", code=1)
 
