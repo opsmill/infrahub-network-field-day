@@ -41,9 +41,9 @@ def _module(path: str):  # noqa: ANN202
 # --------------------------------------------------------------------------- what the repository declares
 
 
-def test_the_catalogue_declares_ten_entries_and_six_requestable() -> None:
+def test_the_catalogue_declares_eleven_entries_and_seven_requestable() -> None:
     entries = r.expected_catalogue(REPO)
-    assert len(entries) == 10
+    assert len(entries) == 11
     assert {n for n, requestable in entries.items() if requestable} == {
         "whoami",
         "podinfo",
@@ -51,6 +51,7 @@ def test_the_catalogue_declares_ten_entries_and_six_requestable() -> None:
         "argo-cd",
         "otternet-shop",
         "otternet-wiki",
+        "n8n",
     }
     assert not any(n.startswith("lab-") and requestable for n, requestable in entries.items())
 

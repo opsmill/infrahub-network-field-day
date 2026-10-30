@@ -638,6 +638,55 @@ spec:
             labels:
               otternet.lab/advertise: "true"
 
+    - name: n8n
+      title: "n8n"
+      description: "Workflow automation with a visual editor, connecting web services and APIs"
+      status: active
+      requestable: true
+      chart_repository: https://bjw-s-labs.github.io/helm-charts
+      chart_name: app-template
+      chart_version: "5.2.1"
+      default_vip_block_size: 28
+      default_service_selector:
+        - "otternet.lab/advertise=true"
+      default_advertised_services:
+        - junos-http
+      # n8n publishes no chart in a Helm repository, so this runs its image through the same
+      # generic chart as the static sites. n8n listens on 5678 and the firewall's `junos-http` is
+      # 80/tcp, so the Service publishes 80 and targets 5678. One replica, because the data is a
+      # SQLite file in /home/node/.n8n; that directory is an emptyDir, so workflows survive a
+      # container restart but not a new pod. N8N_SECURE_COOKIE is false because the lab serves
+      # the editor over plain HTTP, and n8n refuses a sign-in over HTTP otherwise.
+      default_values: |
+        controllers:
+          main:
+            replicas: 1
+            containers:
+              main:
+                image:
+                  repository: docker.io/n8nio/n8n
+                  tag: 2.45.7
+                env:
+                  N8N_PORT: "5678"
+                  N8N_SECURE_COOKIE: "false"
+                  N8N_DIAGNOSTICS_ENABLED: "false"
+        service:
+          main:
+            controller: main
+            type: LoadBalancer
+            externalTrafficPolicy: Local
+            labels:
+              otternet.lab/advertise: 'true'
+            ports:
+              http:
+                port: 80
+                targetPort: 5678
+        persistence:
+          data:
+            type: emptyDir
+            globalMounts:
+            - path: /home/node/.n8n
+
     - name: lab-whoami
       title: "OTTERNET demo workload"
       description: "The lab's own whoami demonstration, three replicas across the fabric"
