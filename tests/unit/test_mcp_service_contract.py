@@ -82,10 +82,12 @@ def _user_token_provisioner() -> ModuleType:
     return module
 
 
-def test_mcp_json_has_one_server_and_it_authenticates_as_alice() -> None:
+def test_mcp_json_has_one_infrahub_server_and_it_authenticates_as_alice() -> None:
     text = (REPO / ".mcp.json").read_text(encoding="utf-8")
     servers = json.loads(text)["mcpServers"]
-    assert list(servers) == ["otternet-infrahub"], "Claude Code may act as alice only: one entry, no mcp-agent entry"
+    assert list(servers) == ["otternet-infrahub", "arista-eos"], (
+        "Claude Code may act as alice only: one Infrahub entry, no mcp-agent entry, and the switch reader"
+    )
     server = servers["otternet-infrahub"]
     assert server["type"] == "http"
     assert server["url"] == "http://127.0.0.1:8001/mcp"
@@ -95,6 +97,19 @@ def test_mcp_json_has_one_server_and_it_authenticates_as_alice() -> None:
     assert "INFRAHUB_API_TOKEN" not in text
     assert "INITIAL_ADMIN_TOKEN" not in text
     assert "INITIAL_AGENT_TOKEN" not in text
+
+
+def test_the_eos_server_reads_switches_only_and_holds_no_password() -> None:
+    server = json.loads((REPO / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["arista-eos"]
+    text = json.dumps(server)
+    assert "INFRAHUB" not in text, "the EOS MCP server never talks to Infrahub"
+    # Pinned, not the latest: a new release must not change the demonstration unannounced.
+    assert "@aristanetworks/eos-mcp-server@0.6.1-beta" in server["args"]
+    # The password is passed by variable name; the inventory names the variable, not the value.
+    assert server["env"] == {"EOS_MCP_PASSWORD": "${EOS_MCP_PASSWORD}"}
+    inventory = (REPO / "lab/eos-mcp/inventory.yml").read_text(encoding="utf-8")
+    assert "mcp_password_env: EOS_MCP_PASSWORD" in inventory
+    assert "password:" not in inventory.replace("mcp_password_env", "")
 
 
 def test_a_user_token_variable_is_named_for_the_user() -> None:

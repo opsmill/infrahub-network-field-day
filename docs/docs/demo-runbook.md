@@ -33,6 +33,7 @@ them where the difference matters.
 | [Four](#act-four-the-review-step-bites) | A check catching a mistake nothing else would notice | A branch only, never merged |
 | [Five](#act-five-the-agent-through-the-mcp-server) | An agent working through the MCP server, on a branch | A branch only |
 | [Six](#act-six-the-builder-branch) | A prepared capability released with one command and merged as a proposed change, then acme's request for internet access as a second proposed change, then taken back out | Yes: two merges, then a reset |
+| [Seven](#act-seven-a-bgp-session-that-every-check-passed) | An agent finds a down BGP session with the Arista EOS MCP server and traces it to a merged change with the Infrahub MCP server. A person fixes it with a proposed change | Yes: the lab starts broken, then one merge |
 
 The three-act demonstration is acts one, two and six: an application with access, access to
 Grafana, and the builder branch. Acts three to five are extras for a longer slot or for questions.
@@ -863,6 +864,102 @@ uv run invoke demo-release          # branch, import, validators, proposed chang
 
 6. **Take it back out.** `uv run invoke demo-reset` (about 5 minutes; it also deletes the request branch) returns the code, the data, and the
    schema to the baseline through an Infrahub merge. Do it off stage.
+
+## Act seven: a BGP session that every check passed
+
+The lab starts this act with one fault. k8s-node3's Cilium BGP session to both k8s leaves is down,
+because the leaves expect AS 64501 from it and Cilium runs AS 65401. The wrong value arrived the way
+every change does: a proposed change, credited to `alex`, in which every validator passed. The
+reconciler then pushed it. Each switch now runs exactly its artifact, and the reconciler reports
+`differed=0`. The audience sees an agent find the fault on the switches, trace it to that change in
+Infrahub, and fix it through a proposed change.
+
+**Why no check caught it.** Infrahub holds the two ends of the session as two values:
+
+- `ClusterKubernetes.local_asn` on the `otternet` cluster. Crossplane delivers it to Cilium.
+- `RoutingVrfBgpPeer.remote_asn` on the peer `k8s-node3-cilium`. It is rendered onto both k8s leaves.
+
+No check compares them. The description at the top of `checks/peering_consistency_check.py` says that it leaves out this comparison.
+
+### Set it up, before the audience arrives
+
+```bash
+uv run invoke demo-break-peer          # 234 s on 2026-10-19; needs INFRAHUB_API_TOKEN and KUBECONFIG
+```
+
+It creates a branch, sets `remote_asn` on `k8s-node3-cilium` to 64501, runs the AVD chain on the
+branch, opens a proposed change, re-runs its checks, waits for every validator to pass, merges, and
+waits until both leaves run the new value. The branch, the edit and the proposed change are credited
+to `alex` through the mutation `context`. The merge is credited to the account of
+`INFRAHUB_API_TOKEN`, because `CoreProposedChangeMerge` takes no `context`.
+
+It refuses a node that is the only node behind a LoadBalancer address. Every LoadBalancer service in
+the lab uses `externalTrafficPolicy: Local`, so its address is announced only from the nodes that run
+its pods. On 2026-10-19 the lab DNS and Grafana ran only on k8s-node2, so breaking k8s-node2 would
+also take both off the network. The demo application has a pod on every node and still answers.
+
+Put it back between rehearsals, through the same journey with the cluster's AS number:
+
+```bash
+uv run invoke demo-break-peer --fix --merge    # 244 s on 2026-10-19; the leaves were Established 48 s after the merge
+```
+
+### Start Claude Code with both MCP servers
+
+`.mcp.json` registers `arista-eos`, Arista's read-only
+[EOS MCP server](https://github.com/aristanetworks/eos-mcp-server), next to `otternet-infrahub`. It
+needs `EOS_MCP_PASSWORD` in the environment of the shell that starts `claude`, and Docker, because it
+runs in a `node:24-alpine` container (this host has Node 22). See
+[the MCP server](./developer-guide/mcp-server.md#the-arista-eos-mcp-server).
+
+### What the agent is asked, and what it finds
+
+Ask: "The platform team says pods on k8s-node3 cannot be reached from outside the cluster. Find out
+why, and propose a fix."
+
+| Step | Tool | Expected |
+| --- | --- | --- |
+| The session state | `eos_run_show` on `K8S_LEAFS`, `show ip bgp summary vrf K8S_PROD` | On both leaves `k8s-node3-cilium`, `10.110.0.13`, AS `64501`, state `Active` or `Connect` (it alternates). The other two nodes are `Estab` with AS `65401` |
+| The reason | `eos_run_show`, `show ip bgp neighbors 10.110.0.13 vrf K8S_PROD` | `Peering failure hint: Open Message Error/bad AS number` and `Last sent notification:Open Message Error/bad AS number` |
+| The routes | `eos_run_show`, `show ip route vrf K8S_PROD bgp` | `10.111.0.0/24` and `10.111.1.0/24` are present. k8s-node3's pod network `10.111.2.0/24` is missing |
+| The intent | `otternet-infrahub`: the peer `k8s-node3-cilium` and the cluster `otternet` | `remote_asn` 64501 against `local_asn` 65401 |
+| Where it came from | `otternet-infrahub`: the merged proposed change `Update the k8s-node3 Cilium BGP peer` | All validators passed |
+
+The switches' log is not useful here. On 2026-10-19 `show logging` on `leaf-otternet-pod1-1-1` held
+no entry after 16 October, including none for the reconciler's pushes that day, so
+`eos_show_logging` returns nothing about this fault. The neighbour detail is where the evidence is.
+
+### The agent makes the fix on its branch, and a person merges it
+
+Claude Code acts in Infrahub as `alice`. Her role, `Requester Access`, allows any action on any kind on a
+branch other than `main` (see [the MCP server](./developer-guide/mcp-server.md#claude-code-acts-as-alice-only)),
+so the agent can make the whole fix on its session branch:
+
+| Step | Tool | Expected |
+| --- | --- | --- |
+| Correct the value | `node_upsert`, kind `RoutingVrfBgpPeer`, the peer's id, `remote_asn: 65401` | The session branch `mcp/session-<date>-<hex>` is created |
+| Render the hostvars | `mutate_graphql`: `CoreGeneratorDefinitionRun` for `generate-avd-device-hostvar`, `wait_until_completion: true` | `ok` |
+| Render the structured configs | the same for `generate-avd-device-structured-config`, after the hostvars | `ok` |
+| Open the change | `propose_changes` | A proposed change from the session branch |
+| Judge the final branch | `mutate_graphql`: `CoreProposedChangeRunCheck` with `check_type: ALL` | 22 validators, all passed, 51 s after the re-run on 2026-10-19 |
+
+The two generator runs are needed because no rule in `triggers.yml` runs the AVD generators after a
+`RoutingVrfBgpPeer` edit. Without them the branch carries only the new value, the leaves' artifacts stay
+the same, and the reconciler pushes nothing after the merge. The structured-config generator reads the
+stored hostvars, so it runs second. This is the order the portal uses.
+
+Review the diff: one attribute on `k8s-node3-cilium` and the line `neighbor 10.110.0.13 remote-as 65401`
+in both k8s leaves' configurations. Merge it in the Infrahub UI as `alex`. The agent must not merge:
+on Infrahub 1.10.6 nothing in Infrahub stops `alice` from merging, so the instruction to the agent is the
+only control. Then ask the agent to check again:
+
+| Step | Tool | Expected |
+| --- | --- | --- |
+| The outcome | `eos_run_show` on `K8S_LEAFS`, `show ip bgp summary vrf K8S_PROD` | `k8s-node3-cilium` `Estab` with AS `65401` on both leaves, about 48 s after the merge |
+| The routes | `eos_run_show`, `show ip route vrf K8S_PROD bgp` | `10.111.2.0/24` is back |
+
+If the agent cannot finish, the presenter can open the same fix with
+`uv run invoke demo-break-peer --fix`. It stops at `Ready: <link>` for `alex` to merge.
 
 ## Run it all, and put it back
 

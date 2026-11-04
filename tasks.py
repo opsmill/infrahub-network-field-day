@@ -1450,6 +1450,8 @@ def demo_reset(ctx: Context, name: str = DEMO_NAME, run: int = 0, timeout: int =
     print(f"\nNext release: invoke demo-release --name {name}  (it takes the next unused number, {run + 1} or later)")
 
 
+DEMO_PEER_NODE = "k8s-node3"  # solution_arista_avd.demo_peer.DEFAULT_NODE; tasks.py imports it lazily
+DEMO_PEER_ACCOUNT = "alex"
 REQUEST_FILE = "demo/requests/acme-internet.yml"
 REQUEST_BRANCH = "implement_acme-internet"
 
@@ -1522,6 +1524,166 @@ def demo_request_internet(ctx: Context, reference: str = "", timeout: int = 600,
     print(timer.summary())
     print("Review it, then merge it yourself in the Infrahub UI. Then, after about 90 seconds:")
     print("  uv run invoke demo-internet-evidence --phase request")
+
+
+def _mutate(query: str, branch: str = "") -> dict[str, Any]:
+    """One GraphQL mutation; exits with Infrahub's message when it reports errors, unlike `_graphql`."""
+    url = f"{INFRAHUB_ADDRESS}/graphql/{branch}" if branch else f"{INFRAHUB_ADDRESS}/graphql"
+    response = httpx.post(
+        url,
+        json={"query": query},
+        headers={"X-INFRAHUB-KEY": os.environ.get("INFRAHUB_API_TOKEN", "")},
+        timeout=300,
+    )
+    payload = response.json()
+    if payload.get("errors"):
+        raise Exit(f"Infrahub refused the mutation: {payload['errors'][0].get('message')}", code=1)
+    return payload.get("data") or {}
+
+
+def _peer_and_cluster_asn(node: str) -> tuple[str, int, str, int]:
+    """The node's Cilium peer (id, remote_asn, address) on main, and the cluster's local_asn."""
+    from solution_arista_avd import demo_peer as dp
+
+    description = dp.peer_description(node)
+    data = _graphql(
+        f'{{ RoutingVrfBgpPeer(description__value: "{description}") '
+        "{ edges { node { id remote_asn { value } ip_address { value } } } } "
+        "ClusterKubernetes { edges { node { local_asn { value } } } } }"
+    )
+    peers = (data.get("RoutingVrfBgpPeer") or {}).get("edges") or []
+    clusters = (data.get("ClusterKubernetes") or {}).get("edges") or []
+    if len(peers) != 1 or len(clusters) != 1:
+        raise Exit(f"Expected one RoutingVrfBgpPeer '{description}' and one cluster on main.", code=1)
+    peer = peers[0]["node"]
+    return (
+        str(peer["id"]),
+        int(peer["remote_asn"]["value"]),
+        str(peer["ip_address"]["value"]).split("/")[0],
+        int(clusters[0]["node"]["local_asn"]["value"]),
+    )
+
+
+def _wait_for_leaves(ctx: Context, address: str, want_asn: int, *, broken: bool, timeout: int) -> None:
+    """Block until both k8s leaves run ``want_asn`` for ``address`` (and, when fixing, the session is up)."""
+    from solution_arista_avd import demo_peer as dp
+
+    deadline = time.monotonic() + timeout
+    start = time.monotonic()
+    states: dict[str, tuple[int | None, str]] = {}
+    while time.monotonic() < deadline:
+        for container in dp.LEAF_CONTAINERS:
+            show = shlex.quote(f"show ip bgp summary vrf {dp.VRF} | json")
+            result = ctx.run(f"docker exec {container} Cli -p 15 -c {show}", hide=True, warn=True)
+            try:
+                states[container] = dp.leaf_peer(json.loads(result.stdout if result else ""), address)
+            except ValueError:
+                states[container] = (None, "unreadable")
+        if all(dp.leaf_reached(*states[c], want_asn, broken=broken) for c in dp.LEAF_CONTAINERS):
+            for container, (asn, state) in states.items():
+                print(f"   {container}: {address} remote-as {asn}, {state}")
+            print(f" - Both leaves there after {time.monotonic() - start:.0f}s", flush=True)
+            return
+        sleep(5)
+    raise Exit(f"The leaves did not get there within {timeout}s: {states}. Is the reconciler running?", code=1)
+
+
+@task(
+    name="demo-break-peer",
+    help={
+        "node": f"The k8s node whose Cilium peer is broken (default {DEMO_PEER_NODE})",
+        "account": f"The existing account the mistaken change is credited to (default {DEMO_PEER_ACCOUNT})",
+        "fix": "Open a proposed change that puts the cluster's AS number back, and stop for a person to merge it",
+        "merge": "With --fix, merge it too and wait for the session. Rehearsals only: on stage alex merges it",
+        "timeout": "Seconds to wait for the validators, and again for the leaves (default 900)",
+    },
+)
+def demo_break_peer(
+    ctx: Context,
+    node: str = DEMO_PEER_NODE,
+    account: str = DEMO_PEER_ACCOUNT,
+    fix: bool = False,
+    merge: bool = False,
+    timeout: int = 900,
+) -> None:
+    """Merge a mistyped Cilium peer AS number, so the demonstration starts with one BGP session down.
+
+    Branch, edit, AVD chain, proposed change, checks (all green: none compares the two values),
+    merge, and a wait until both k8s leaves run it. The edit and the proposed change are credited to
+    `--account` through the mutation `context`; the merge is credited to the token's account, because
+    the merge mutation takes no `context`.
+
+    `--fix` makes the same journey with the cluster's AS number and stops at `Ready: <link>`, for a
+    person to merge in the UI. On stage the agent makes the fix itself through the MCP server; this is
+    the fallback, and with `--merge` the way to put the lab back between rehearsals.
+    """
+    from solution_arista_avd import demo_peer as dp
+
+    if not os.environ.get("INFRAHUB_API_TOKEN"):
+        raise Exit(
+            "INFRAHUB_API_TOKEN is not set. Run `source ~/.zshrc`, or export the token infrahubctl uses.", code=1
+        )
+    peer_id, current, address, cluster_asn = _peer_and_cluster_asn(node)
+    want = cluster_asn if fix else dp.WRONG_ASN
+    if current == want:
+        print(f" - {dp.peer_description(node)} already expects AS {want} on main; nothing to merge.")
+        _wait_for_leaves(ctx, address, want, broken=not fix, timeout=timeout)
+        return
+    if not fix:
+        if current != cluster_asn:
+            raise Exit(
+                f"{dp.peer_description(node)} expects AS {current}, the cluster runs {cluster_asn}. "
+                "Something else is already wrong; run with --fix first.",
+                code=1,
+            )
+        kube = {"KUBECONFIG": str(_lab_kubeconfig())}
+        services = ctx.run("kubectl get svc -A -o json", hide=True, env=kube).stdout
+        slices = ctx.run("kubectl get endpointslices -A -o json", hide=True, env=kube).stdout
+        alone = dp.sole_backed_services(json.loads(services), json.loads(slices), node)
+        if alone:
+            raise Exit(
+                f"{node} is the only node behind {', '.join(alone)}; breaking it takes those off "
+                "the network. Pick another --node.",
+                code=1,
+            )
+
+    prefix = dp.FIX_BRANCH_PREFIX if fix else dp.BREAK_BRANCH_PREFIX
+    branch = f"{prefix}-{time.strftime('%m%d-%H%M')}"
+    context = f', context: {{account: {{id: "{account}"}}}}'
+    title = f"{'Correct' if fix else 'Update'} the {node} Cilium BGP peer"
+    description = f"Set the remote AS on the {dp.peer_description(node)} BGP peer to {want}."
+    print(f"\n=== {title}: remote AS {current} -> {want}, on {branch} ===", flush=True)
+    _mutate(f'mutation {{ BranchCreate(data: {{name: "{branch}", sync_with_git: false}}{context}) {{ ok }} }}')
+    _mutate(
+        f'mutation {{ RoutingVrfBgpPeerUpdate(data: {{id: "{peer_id}", remote_asn: {{value: {want}}}}}{context}) '
+        "{ ok } }",
+        branch,
+    )
+    # The leaves' artifacts render from stored structured configs, so the chain has to run on the branch.
+    avd(ctx, branch=branch)
+    created = _mutate(
+        f'mutation {{ CoreProposedChangeCreate(data: {{name: {{value: "{title}"}}, '
+        f'description: {{value: "{description}"}}, source_branch: {{value: "{branch}"}}, '
+        f'destination_branch: {{value: "main"}}}}{context}) {{ object {{ id }} }} }}'
+    )
+    pc_id = created["CoreProposedChangeCreate"]["object"]["id"]
+    # Creating one starts its validators at once; asking again makes them judge the final branch.
+    _mutate(f'mutation {{ CoreProposedChangeRunCheck(data: {{id: "{pc_id}", check_type: ALL}}) {{ ok }} }}')
+    _wait_for_validators(pc_id, timeout)
+    link = f"{INFRAHUB_ADDRESS}/proposed-changes/{pc_id}"
+    if fix and not merge:
+        print(f"\nReady: {link}")
+        print("Review it, then merge it in the Infrahub UI as alex. The leaves follow about 30 s after the merge.")
+        return
+    print(" - Merging", flush=True)
+    _mutate(f'mutation {{ CoreProposedChangeMerge(data: {{id: "{pc_id}"}}, wait_until_completion: true) {{ ok }} }}')
+    _delete_merged_branch(ctx, branch)
+    _wait_for_leaves(ctx, address, want, broken=not fix, timeout=timeout)
+    print(f"\nMerged: {link}")
+    if not fix:
+        print(
+            f"{node}'s BGP session to both k8s leaves is down. Put it back with: uv run invoke demo-break-peer --fix --merge"
+        )
 
 
 def _rehearsal() -> Any:
