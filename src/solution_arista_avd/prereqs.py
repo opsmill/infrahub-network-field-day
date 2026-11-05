@@ -27,6 +27,7 @@ FAIL = "FAIL"
 LAB_MEMORY_GB = 48
 INFRAHUB_MEMORY_GB = 8
 NODE_MAJOR_VERSIONS = (22, 24)
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @dataclass(frozen=True)
@@ -139,7 +140,10 @@ def check_lab_images(images_script: Path, run: Runner) -> Result:
     """
     code, out = run([str(images_script), "--check"])
     if code:
-        missing = [line.split("FAIL", 1)[1].strip() for line in out.splitlines() if "FAIL" in line]
+        plain = ANSI.sub("", out)
+        missing = [
+            line.split("FAIL", 1)[1].split(" -- ", 1)[0].strip() for line in plain.splitlines() if "FAIL" in line
+        ]
         return Result(WARN, "lab images", "; ".join(missing) + " -- bootstrap fetches them next")
     return Result(OK, "lab images", "cEOS, vSRX and branch desktop present")
 

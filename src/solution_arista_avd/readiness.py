@@ -230,15 +230,31 @@ def decide_mcp_config(config: dict[str, Any], env_names: set[str], users: tuple[
 
 
 def decide_claude_mcp_list(output: str, servers: list[str]) -> Result:
-    """`claude mcp list` prints one line per server ending in a status; each wanted server must be connected."""
+    """`claude mcp list` prints one line per server ending in a status; each wanted server must be connected.
+
+    A server still waiting for approval is a WARN, not a FAIL. Claude Code asks once per machine before
+    it uses a project's `.mcp.json` server, so every new clone starts there, and only a person can
+    answer. Failing on it made every first bootstrap on a new machine exit 1 with a working stack.
+    """
     name = "`claude mcp list` shows the servers connected"
     problems = []
+    pending = []
     for server in servers:
         line = next((ln for ln in output.splitlines() if ln.startswith(f"{server}:")), "")
         if not line:
             problems.append(f"{server} is not listed")
+        elif "Pending approval" in line:
+            pending.append(server)
         elif "Connected" not in line and "✓" not in line:
             problems.append(f"{server}: {line.split(':', 1)[1].strip()}")
+    if pending and not problems:
+        return Result(
+            name,
+            Status.WARN,
+            f"{', '.join(pending)} waits for you to approve it in Claude Code",
+            "start `claude` in this directory from a shell that ran `set -a; source .env; set +a`, and approve the server",
+        )
+    problems.extend(f"{server}: pending approval" for server in pending)
     if problems:
         return Result(
             name,

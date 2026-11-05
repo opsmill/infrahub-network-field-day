@@ -26,7 +26,11 @@ def runner(failing: frozenset[str] = frozenset(), node: str = "v22.23.2", images
     def run(cmd: list[str]) -> tuple[int, str]:
         key = cmd[0] if cmd[0] != "docker" else " ".join(cmd[:2])
         if cmd[0].endswith("images.sh"):
-            return (0, "ok") if images_ok else (1, "  FAIL  vSRX vrnetlab/juniper_vsrx:22.3R1.11 missing")
+            return (
+                (0, "ok")
+                if images_ok
+                else (1, "  \x1b[1;31mFAIL\x1b[0m  vSRX vrnetlab/juniper_vsrx:22.3R1.11 missing -- run: x")
+            )
         if key in failing:
             return 1, "error"
         if cmd[0] == "node":
@@ -111,6 +115,7 @@ def test_a_missing_lab_image_is_a_warning_because_bootstrap_fetches_it(tmp_path:
     image = by_name(results)["lab images"]
     assert image.status == prereqs.WARN
     assert "juniper_vsrx" in image.detail
+    assert "\x1b" not in image.detail
     assert not prereqs.failed(results)
 
 
