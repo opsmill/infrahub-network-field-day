@@ -165,6 +165,8 @@ Full list and pitfalls: [commands.md](docs/docs/developer-guide/commands.md).
 uv sync --all-packages
 uv run invoke --list
 uv run invoke doctor                    # run first when something is odd
+uv run invoke prereqs [--no-lab]        # host check bootstrap runs first: tools, sudo, KVM, memory, lab images
+uv run invoke lab-images                # cEOS, vSRX, branch desktop: pulled from registry.opsmill.io, else built
 uv run invoke start | stop | destroy | restart
 uv run invoke load                      # seed objects; runs NO generators
 uv run invoke avd [--branch X] [--merge]   # idempotent AVD stages; --topology only at build time

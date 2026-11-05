@@ -78,6 +78,9 @@ uv run invoke load
 To run all of that and generate the fabric in one command, without the ContainerLab lab, run
 `uv run invoke bootstrap --no-lab`. `uv run invoke bootstrap` builds the whole environment,
 including the lab; see [Bootstrapping the whole environment](docs/docs/developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
+Run `uv run invoke prereqs` first on a new machine: it lists the tools, memory and access the
+whole environment needs. The Arista cEOS, Junos vSRX and branch desktop images are pulled from
+`registry.opsmill.io` automatically; see [Run the whole lab on your own machine](docs/docs/quick-start.md#run-the-whole-lab-on-your-own-machine).
 
 Open the Infrahub UI at `http://localhost:8000`. The service portal runs in the tooling cluster, at `https://10.90.0.11:32001` from the branch desktop, once `uv run invoke tooling` (or `uv run invoke bootstrap`) has deployed it; see [The service portal](docs/docs/service-portal.md).
 
