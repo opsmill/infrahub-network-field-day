@@ -293,3 +293,4 @@ nameserver
 glibc
 resolver
 nginx
+inotify

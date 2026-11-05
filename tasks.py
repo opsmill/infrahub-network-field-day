@@ -2516,6 +2516,14 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     # setup step; it is a precondition of every deploy. The script is idempotent
     # and also lays down the route back to the branch LAN, which is why it runs
     # here rather than being left to whoever remembers.
+    # THE INOTIFY LIMITS. Linux allows 128 inotify instances per user by default,
+    # and the k3s nodes exhaust that; pods then fail with "too many open files".
+    # Raised only when lower, and like the bridge it does not survive a reboot.
+    limits = lab_path / "scripts/host-limits.sh"
+    if limits.is_file():
+        print(" - Ensuring the host's inotify limits")
+        ctx.run(shlex.quote(str(limits)), pty=True)
+
     bridge = lab_path / "scripts/tooling-bridge.sh"
     if bridge.is_file():
         print(" - Ensuring the tooling bridge exists")

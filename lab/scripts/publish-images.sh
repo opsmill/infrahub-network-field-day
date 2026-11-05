@@ -67,7 +67,8 @@ for target in "${targets[@]}"; do
                 || die "lab/configs/branch/desktop has uncommitted changes; commit them first so the tag names them"
             tag="$(git -C "$LAB_DIR" log -1 --format=%H -- configs/branch/desktop | cut -c1-7)"
             say "Building the branch desktop from source"
-            docker build -q -t otternet/branch-desktop:local "$LAB_DIR/configs/branch/desktop" >/dev/null
+            docker build -q --label "org.opsmill.otternet.desktop-source=$tag" \
+                -t otternet/branch-desktop:local "$LAB_DIR/configs/branch/desktop" >/dev/null
             publish otternet/branch-desktop:local "$REGISTRY/otternet-branch-desktop:$tag"
             ;;
         *) die "unknown image '$target' (expected ceos, vsrx or desktop)" ;;

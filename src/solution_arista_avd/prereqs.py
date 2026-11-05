@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess  # noqa: S404 - fixed-argv calls, never a shell string
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +28,30 @@ FAIL = "FAIL"
 LAB_MEMORY_GB = 48
 INFRAHUB_MEMORY_GB = 8
 NODE_MAJOR_VERSIONS = (22, 24)
+# Measured on a full environment: about 20 GB of images, 12 GB of volumes, 10 GB of build cache, and
+# the k3s nodes' own images on top. A first run on an empty machine needs about this much free.
+FIRST_RUN_DISK_GB = 60
+MINIMUM_DISK_GB = 20
+# Host ports the stack publishes (docker-compose*.yml; backstage's 3001 is build-only and never runs)
+# and the one the lab publishes (Guacamole in lab/otternet.clab.yml).
+STACK_PORTS = (2004, 3000, 4200, 6362, 7474, 7687, 8000, 8001, 8002, 8003, 15692)
+LAB_PORTS = (8080,)
+# Sites the run downloads from. Infrahub alone needs the first group; the lab and the clusters need
+# the second. Any HTTP answer counts as reachable: only a timeout or a refused connection does not.
+INFRAHUB_SITES = ("registry.opsmill.io", "registry-1.docker.io", "github.com", "pypi.org")
+LAB_SITES = (
+    "ghcr.io",
+    "quay.io",
+    "registry.yarnpkg.com",
+    "helm.cilium.io",
+    "charts.crossplane.io",
+    "infrahub-operator.github.io",
+    "xpkg.crossplane.io",
+)
+# Containers of this environment: a port they hold is freed and taken again by bootstrap itself.
+OWN_CONTAINER_PREFIXES = ("infrahub-", "clab-otternet-")
+# lab/scripts/host-limits.sh raises the inotify limits to these before every deploy.
+INOTIFY_MINIMUM = {"fs.inotify.max_user_instances": 8192, "fs.inotify.max_user_watches": 1048576}
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -132,6 +157,97 @@ def check_memory(total_gb: float | None, needed_gb: int) -> Result:
     return Result(OK, "memory", f"{total_gb:.0f} GB installed")
 
 
+def check_disk(free_gb: float | None, where: str) -> Result:
+    if free_gb is None:
+        return Result(WARN, "disk", f"could not read the free space on {where}")
+    if free_gb < MINIMUM_DISK_GB:
+        return Result(FAIL, "disk", f"{free_gb:.0f} GB free on {where}; this needs at least {MINIMUM_DISK_GB} GB")
+    if free_gb < FIRST_RUN_DISK_GB:
+        return Result(
+            WARN,
+            "disk",
+            f"{free_gb:.0f} GB free on {where}; a first run on an empty machine needs about {FIRST_RUN_DISK_GB} GB",
+        )
+    return Result(OK, "disk", f"{free_gb:.0f} GB free on {where}")
+
+
+def check_inotify(values: dict[str, int | None]) -> Result:
+    """A low limit is a warning, not a failure: `invoke lab` raises it with lab/scripts/host-limits.sh."""
+    low = [f"{key} is {have}" for key, have in values.items() if have is not None and have < INOTIFY_MINIMUM[key]]
+    if low:
+        return Result(WARN, "inotify", "; ".join(low) + " -- the lab deploy raises it (lab/scripts/host-limits.sh)")
+    return Result(OK, "inotify")
+
+
+def check_ports(wanted: tuple[int, ...], listening: set[int], ours: set[int]) -> Result:
+    busy = sorted(set(wanted) & (listening - ours))
+    if busy:
+        ports = ", ".join(str(p) for p in busy)
+        return Result(FAIL, "ports", f"{ports} already in use by something else -- `sudo ss -ltnp` shows what")
+    return Result(OK, "ports", "free, or held by this environment")
+
+
+def check_network(sites: tuple[str, ...], reachable: Callable[[str], bool]) -> Result:
+    """A warning, not a failure: a proxy may let Docker and Helm through while a direct check fails."""
+    with ThreadPoolExecutor(max_workers=len(sites)) as pool:
+        answers = dict(zip(sites, pool.map(reachable, sites), strict=True))
+    unreachable = [site for site, ok in answers.items() if not ok]
+    if unreachable:
+        return Result(WARN, "network", f"cannot reach {', '.join(unreachable)}; the run downloads from them")
+    return Result(OK, "network", f"{len(sites)} download sites reachable")
+
+
+def _reachable(site: str) -> bool:
+    code, _ = _run(["curl", "-sS", "-o", "/dev/null", "--max-time", "8", "-I", f"https://{site}/"])
+    return code == 0
+
+
+def _listening_ports() -> set[int]:
+    """TCP ports in LISTEN state, read from /proc so no root is needed."""
+    ports: set[int] = set()
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            lines = Path(table).read_text(encoding="utf-8").splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if len(fields) > 3 and fields[3] == "0A":  # 0A is LISTEN
+                ports.add(int(fields[1].rsplit(":", 1)[1], 16))
+    return ports
+
+
+def _own_ports(run: Runner) -> set[int]:
+    code, out = run(["docker", "ps", "--format", "{{.Names}}\t{{.Ports}}"])
+    if code:
+        return set()
+    ports: set[int] = set()
+    for line in out.splitlines():
+        name, _, published = line.partition("\t")
+        if name.startswith(OWN_CONTAINER_PREFIXES):
+            ports.update(int(p) for p in re.findall(r":(\d+)->", published))
+    return ports
+
+
+def _sysctl(key: str) -> int | None:
+    try:
+        return int(Path("/proc/sys", *key.split(".")).read_text(encoding="utf-8").split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _docker_root(run: Runner) -> str:
+    code, out = run(["docker", "info", "--format", "{{.DockerRootDir}}"])
+    return out if code == 0 and out.startswith("/") else "/var/lib/docker"
+
+
+def _free_gb(path: str) -> float | None:
+    try:
+        return shutil.disk_usage(path).free / 1024**3
+    except OSError:
+        return None
+
+
 def check_lab_images(images_script: Path, run: Runner) -> Result:
     """The cEOS, vSRX and desktop images, reported by `lab/scripts/images.sh --check`.
 
@@ -156,10 +272,22 @@ def run_checks(
     run: Runner = _run,
     memory_gb: float | None = None,
     kvm: Path = Path("/dev/kvm"),
+    free_disk_gb: Callable[[str], float | None] = _free_gb,
+    sysctl: Callable[[str], int | None] = _sysctl,
+    listening: Callable[[], set[int]] = _listening_ports,
+    reachable: Callable[[str], bool] = _reachable,
 ) -> list[Result]:
     """Every prerequisite for the bootstrap that was asked for. `lab=False` is `--no-lab`."""
     results: list[Result] = []
     results.extend(check_docker(which, run))
+    docker_root = _docker_root(run)
+    results.extend(
+        (
+            check_disk(free_disk_gb(docker_root), docker_root),
+            check_ports(STACK_PORTS + (LAB_PORTS if lab else ()), listening(), _own_ports(run)),
+            check_network(INFRAHUB_SITES + (LAB_SITES if lab else ()), reachable),
+        )
+    )
     total = memory_gb if memory_gb is not None else _memory_gb()
     results.extend(
         (
@@ -176,6 +304,7 @@ def run_checks(
             check_tool("containerlab", "the lab", which, 'bash -c "$(curl -sL https://get.containerlab.dev)"'),
             check_sudo(run),
             check_kvm(kvm),
+            check_inotify({key: sysctl(key) for key in INOTIFY_MINIMUM}),
             check_tool("openssl", "the portal certificate", which),
             check_node(which, run),
         )

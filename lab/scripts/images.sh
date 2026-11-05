@@ -50,6 +50,7 @@ VSRX_FILE="junos-vsrx3-x86-64-$VSRX_VERSION.qcow2"
 # new tag is not in the registry yet, the pull fails, and the image is built.
 DESKTOP_SOURCE="$LAB_DIR/configs/branch/desktop"
 DESKTOP_TAG="$(git -C "$LAB_DIR" log -1 --format=%H -- configs/branch/desktop 2>/dev/null | cut -c1-7)"
+DESKTOP_LABEL="org.opsmill.otternet.desktop-source"
 
 rc=0
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -122,15 +123,35 @@ ensure_vsrx() {
      put it in $IMAGES_DIR, and run this again."
 }
 
+# Whether the local desktop image was made from the current source: built here
+# with the source label, or pulled from the registry under the current tag.
+# A name given in OTTERNET_DESKTOP_IMAGE is trusted as it is.
+desktop_current() {
+    [[ -n "${OTTERNET_DESKTOP_IMAGE:-}" || -z "$DESKTOP_TAG" ]] && return 0
+    local id label
+    id="$(docker image inspect -f '{{.Id}}' "$DESKTOP_IMAGE" 2>/dev/null)" || return 1
+    label="$(docker image inspect -f "{{index .Config.Labels \"$DESKTOP_LABEL\"}}" "$DESKTOP_IMAGE" 2>/dev/null)"
+    [[ "$label" == "$DESKTOP_TAG" ]] && return 0
+    [[ "$id" == "$(docker image inspect -f '{{.Id}}' "$REGISTRY/otternet-branch-desktop:$DESKTOP_TAG" 2>/dev/null)" ]]
+}
+
 ensure_desktop() {
-    if present "$DESKTOP_IMAGE"; then ok "branch desktop $DESKTOP_IMAGE"; return; fi
-    if (( CHECK_ONLY )); then bad "branch desktop $DESKTOP_IMAGE missing -- run: make -C lab images"; return; fi
+    if present "$DESKTOP_IMAGE"; then
+        if desktop_current; then ok "branch desktop $DESKTOP_IMAGE"; return; fi
+        if (( CHECK_ONLY )); then
+            bad "branch desktop $DESKTOP_IMAGE is older than its source (commit $DESKTOP_TAG) -- run: make -C lab images"
+            return
+        fi
+        info "$DESKTOP_IMAGE was not made from the current source (commit $DESKTOP_TAG); replacing it"
+    elif (( CHECK_ONLY )); then
+        bad "branch desktop $DESKTOP_IMAGE missing -- run: make -C lab images"; return
+    fi
     say "Branch desktop image $DESKTOP_IMAGE"
     if [[ -n "$DESKTOP_TAG" ]] && pull "$REGISTRY/otternet-branch-desktop:$DESKTOP_TAG" "$DESKTOP_IMAGE"; then
         ok "branch desktop $DESKTOP_IMAGE"; return
     fi
     info "building from $DESKTOP_SOURCE"
-    if docker build -q -t "$DESKTOP_IMAGE" "$DESKTOP_SOURCE" >/dev/null; then
+    if docker build -q --label "$DESKTOP_LABEL=$DESKTOP_TAG" -t "$DESKTOP_IMAGE" "$DESKTOP_SOURCE" >/dev/null; then
         ok "branch desktop $DESKTOP_IMAGE"; return
     fi
     bad "branch desktop $DESKTOP_IMAGE could not be pulled or built"

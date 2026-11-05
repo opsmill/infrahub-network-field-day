@@ -20,7 +20,7 @@ SHELL := $(shell command -v bash)
 # `crossplane` target has the same name as the crossplane/ directory, so
 # without this make finds the directory, decides the target is already built,
 # and prints "make: 'crossplane' is up to date." while doing nothing at all.
-.PHONY: access access-images access-status avd-build avd-clean avd-deploy avd-validate clean crossplane deploy deploy-lite desktop-image destroy fabric-bgp fw-console fw-image fw-log grafana grafana-forward graph guac help hubble images inspect k8s k8s-bgp k8s-status post-deploy preflight preflight-lite prometheus-forward publish-images redeploy setup tooling-bridge verify wan-bgp wan-build wan-customers wan-deploy wan-tenants xp xp-apply xp-drift
+.PHONY: access access-images access-status avd-build avd-clean avd-deploy avd-validate clean crossplane deploy deploy-lite desktop-image destroy fabric-bgp fw-console fw-image fw-log grafana grafana-forward graph guac help host-limits hubble images inspect k8s k8s-bgp k8s-status post-deploy preflight preflight-lite prometheus-forward publish-images redeploy setup tooling-bridge verify wan-bgp wan-build wan-customers wan-deploy wan-tenants xp xp-apply xp-drift
 
 LAB      := otternet
 TOPO     := otternet.clab.yml
@@ -125,12 +125,12 @@ avd-clean: ## Remove generated AVD output
 # model, and both are gitignored, so a fresh clone has neither. Regenerating
 # on every deploy also means the intended config always matches the model --
 # which is the whole premise, and cheap at ~20s offline.
-deploy: images avd-build wan-build preflight tooling-bridge ## Deploy the full lab + WAN + branch
+deploy: images avd-build wan-build host-limits preflight tooling-bridge ## Deploy the full lab + WAN + branch
 	$(CLAB) deploy -t $(TOPO) --reconfigure
 	$(POST_DEPLOY)
 	$(WAN_DEPLOY)
 
-deploy-lite: images avd-build wan-build tooling-bridge ## Deploy the reduced-footprint lab
+deploy-lite: images avd-build wan-build host-limits tooling-bridge ## Deploy the reduced-footprint lab
 	./scripts/preflight.sh lite
 	OTTERNET_CEOS_MEMORY=1536MB \
 		$(CLAB) deploy -t $(TOPO) --reconfigure --node-filter $(LITE_NODES)
@@ -149,6 +149,11 @@ publish-images: ## Maintainers: push cEOS, vSRX and the desktop to registry.opsm
 
 fw-image: ## Build the vSRX vrnetlab image from a Junos vSRX 3.0 qcow2
 	./scripts/build-vsrx.sh $(OTTERNET_VSRX_QCOW2)
+
+# Linux allows 128 inotify instances per user; the k3s nodes need more. Raised
+# only when lower, and lost on reboot, so it runs before every deploy.
+host-limits: ## Raise the host's inotify limits for the k3s nodes
+	./scripts/host-limits.sh
 
 # ContainerLab does not create a `kind: bridge` node's bridge; it refuses the
 # topology when one is missing. A host bridge does not survive a reboot, so this

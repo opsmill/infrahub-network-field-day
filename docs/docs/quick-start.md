@@ -149,7 +149,8 @@ its artifact; see [Bootstrapping the whole environment](./developer-guide/bootst
 
 The whole environment adds the ContainerLab lab, the tooling cluster and Kubernetes to Infrahub. The machine needs:
 
-- Linux with about 48 GB of memory and 8 or more CPU cores.
+- Linux with about 48 GB of memory, 8 or more CPU cores, and about 60 GB of free disk for the images,
+  volumes and build cache.
 - `/dev/kvm`, because the vSRX firewall is a virtual machine. On a cloud instance, this means
   nested virtualisation or a bare-metal instance type.
 - `sudo` without a password, because ContainerLab runs under `sudo` during an unattended run.
@@ -165,8 +166,16 @@ uv run invoke prereqs
 uv run invoke bootstrap
 ```
 
-`invoke prereqs` lists everything the machine is missing. `invoke bootstrap` runs the same checks
-before it changes anything, then gets the Arista cEOS, Junos vSRX and branch desktop images from
+`invoke prereqs` lists everything the machine is missing. It also reports:
+
+- A host port the stack or the lab publishes that another program already uses, such as 3000, 8000
+  or 8080.
+- A download site the machine cannot reach, such as `registry.opsmill.io`, `ghcr.io` or
+  `xpkg.crossplane.io`.
+- inotify limits below what the k3s nodes need. The lab deploy raises them with
+  `lab/scripts/host-limits.sh`; set `OTTERNET_PERSIST_LIMITS=1` to keep them after a reboot.
+
+`invoke bootstrap` runs the same checks before it changes anything, then gets the Arista cEOS, Junos vSRX and branch desktop images from
 `registry.opsmill.io`. See the
 [lab image sources](https://github.com/opsmill/infrahub-network-field-day/blob/main/lab/README.md#images)
 for the other ways to get them. The run takes 20 to 30 minutes and ends with the readiness checks.

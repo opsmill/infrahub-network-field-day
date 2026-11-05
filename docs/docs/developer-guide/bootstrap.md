@@ -64,6 +64,14 @@ checks on their own):
   watches the prompt.
 - `/dev/kvm`, because the vSRX firewall is a VM.
 - About 48 GB of memory with the lab, or 8 GB with `--no-lab`.
+- At least 20 GB of free disk where Docker keeps its data, and a warning below 60 GB, which a first
+  run on an empty machine needs.
+- The host ports the stack and the lab publish, which must be free or held by this environment's
+  own containers.
+- The sites the run downloads from, reported as a warning because a proxy may let Docker through.
+- The inotify limits, reported as a warning because `invoke lab` raises them with
+  `lab/scripts/host-limits.sh` before every deploy. The k3s nodes exhaust Linux's default of 128
+  instances per user.
 
 It then gets the three lab images that are on no public registry, cEOS, vSRX and the branch
 desktop, with `uv run invoke lab-images` (`lab/scripts/images.sh`). Each one is pulled from
