@@ -150,31 +150,53 @@ or a site adds a zone rather than an exception.
 
 ## Prerequisites
 
-**Required, and you must supply it yourself:** the ceOS image. Arista requires a
-(free) account.
+### Images
+
+Three images are not on any public registry: Arista cEOS (`ceos:4.36.0.1F`), the
+Junos vSRX firewall (`vrnetlab/juniper_vsrx:22.3R1.11`) and the branch desktop
+(`otternet/branch-desktop:local`). One command gets all three:
 
 ```bash
-# download cEOS-lab-4.36.0.1F.tar from arista.com, then:
-docker import cEOS-lab-4.36.0.1F.tar ceos:4.36.0.1F
+make images
 ```
 
-4.32.0F or newer is not optional on a modern host: older ceOS builds require
-cgroups v1, and this box is cgroups v2. `make preflight` checks this.
+For each image, the first source that works is used:
 
-Everything else is either already here or pulled automatically, including
-Nokia SR Linux (`ghcr.io/nokia/srlinux:26.7.2`) for the ISP, customer and
-branch routers, and the Guacamole images for the branch gateway.
+1. The image is already in the local Docker image store.
+2. The image is pulled from `registry.opsmill.io/external` and tagged with the
+   local name above. No login is needed.
+3. The image is built from a raw file in `/images` (`OTTERNET_IMAGES_DIR`):
+   `cEOS-lab-4.36.0.1F.tar` is imported, `junos-vsrx3-x86-64-22.3R1.11.qcow2` is
+   built with vrnetlab (`make fw-image`), and the desktop is built from
+   `configs/branch/desktop/`.
+4. Before step 3, a missing raw file is downloaded from the OpsMill
+   [Images folder on Google Drive](https://drive.google.com/drive/folders/1FISplMk6UxB2hmuG4PuEZcSlNkXrynVr),
+   when `rclone` has a Google Drive remote named `gdrive` (`OTTERNET_GDRIVE_REMOTE`).
+   Run `rclone config` once to create it.
 
-The VM firewall needs an image its vendor does not redistribute, built locally
-from a qcow2 in `/images`:
+Without access to either OpsMill source, download the raw files from the vendors
+and put them in `/images`:
 
-```bash
-make fw-image                # vrnetlab/juniper_vsrx:22.3R1.11
-```
+- cEOS-lab 4.36.0.1F from arista.com, with a free account.
+- The vSRX 3.0 evaluation qcow2 from
+  <https://support.juniper.net/support/downloads/?p=vsrxeval>, with a free
+  account registered for "Evaluation user access". Keep Juniper's file name:
+  vrnetlab reads the version from it.
 
-No support contract is needed: Juniper's vSRX 3.0 evaluation image is available
-to any free account registered for "Evaluation user access" at
-<https://support.juniper.net/support/downloads/?p=vsrxeval>.
+cEOS 4.32.0F or newer is required on a host with cgroups v2, because older
+builds require cgroups v1. `make preflight` checks this.
+
+Every other image is pulled automatically, including Nokia SR Linux
+(`ghcr.io/nokia/srlinux:26.7.2`) for the ISP, customer and branch routers, and
+the Guacamole images for the branch gateway.
+
+Maintainers publish a new version of the three images with
+`make publish-images` after `docker login registry.opsmill.io`. It uploads with
+`regctl` in 50 MB chunks, because the registry is behind Cloudflare, which
+refuses any request over about 100 MB with `413 Payload Too Large`. The desktop
+image is tagged with the commit that last changed `configs/branch/desktop/`, so
+`make images` builds the desktop locally until a maintainer publishes that
+commit's image.
 
 ### Toolchain
 
@@ -280,14 +302,11 @@ Three things about it are worth knowing:
   9214. The config clamps TCP MSS to 9124 to compensate; see
   [docs/design.md](docs/design.md#living-with-vsrx).
 
-Building it — Juniper does not redistribute the image, but no support contract
-is needed either. A free account registered for "Evaluation user access" can
-download the vSRX 3.0 evaluation qcow2 from
-<https://support.juniper.net/support/downloads/?p=vsrxeval>; drop it in
-`/images` and:
+Getting the image: `make images` pulls it from `registry.opsmill.io/external`,
+or builds it from the qcow2 in `/images`; see [Images](#images).
 
 ```bash
-make fw-image                # vrnetlab/juniper_vsrx:22.3R1.11
+make images                  # vrnetlab/juniper_vsrx:22.3R1.11, cEOS, the desktop
 make preflight               # will this host run it?
 make deploy
 ```

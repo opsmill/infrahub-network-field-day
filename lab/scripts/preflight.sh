@@ -33,21 +33,18 @@ CEOS_IMAGE="${OTTERNET_CEOS_IMAGE:-ceos:4.36.0.1F}"
 if docker image inspect "$CEOS_IMAGE" >/dev/null 2>&1; then
     ok "ceOS image $CEOS_IMAGE"
 else
-    bad "ceOS image $CEOS_IMAGE missing -- download cEOS64-lab from arista.com, then:
-             docker import cEOS-lab-4.36.0.1F.tar ceos:4.36.0.1F"
+    bad "ceOS image $CEOS_IMAGE missing -- run: make images"
 fi
 
-# The firewall image is built here, not pulled, so a missing one is a hard fail:
-# containerlab would try to pull vrnetlab/juniper_vsrx from a registry that does
-# not have it and the lab would come up with no firewall at all.
+# The firewall image has a local name that no registry serves, so a missing one
+# is a hard fail: containerlab would try to pull vrnetlab/juniper_vsrx from
+# Docker Hub and the lab would come up with no firewall at all. `make images`
+# pulls it from registry.opsmill.io and gives it the local name.
 FW_IMAGE="${OTTERNET_VSRX_IMAGE:-vrnetlab/juniper_vsrx:${VSRX_VERSION:-22.3R1.11}}"
 if docker image inspect "$FW_IMAGE" >/dev/null 2>&1; then
     ok "firewall image $FW_IMAGE"
 else
-    bad "firewall image $FW_IMAGE missing -- run: make fw-image
-     It is built from a Junos vSRX 3.0 qcow2 in /images. Juniper does not
-     redistribute it; a free account registered for evaluation access can
-     download one from https://support.juniper.net/support/downloads/?p=vsrxeval"
+    bad "firewall image $FW_IMAGE missing -- run: make images"
 fi
 
 SRL_IMAGE="${OTTERNET_SRL_IMAGE:-ghcr.io/nokia/srlinux:26.7.2}"
@@ -56,14 +53,15 @@ for img in rancher/k3s:v1.31.3-k3s1 ghcr.io/srl-labs/network-multitool:v0.10.0 "
 done
 
 # ---- the branch office -----------------------------------------------------
-# The desktop image is built here, not pulled, so a missing one is a hard fail:
-# containerlab would try docker.io/otternet/branch-desktop and the branch site
-# would come up without the workstation the access demo is driven from.
+# The desktop image has a local name that no registry serves, so a missing one
+# is a hard fail: containerlab would try docker.io/otternet/branch-desktop and
+# the branch site would come up without the workstation the access demo is
+# driven from. `make images` pulls it, or builds it.
 DESKTOP_IMAGE="${OTTERNET_DESKTOP_IMAGE:-otternet/branch-desktop:local}"
 if docker image inspect "$DESKTOP_IMAGE" >/dev/null 2>&1; then
     ok "branch desktop image $DESKTOP_IMAGE"
 else
-    bad "branch desktop image $DESKTOP_IMAGE missing -- run: make desktop-image"
+    bad "branch desktop image $DESKTOP_IMAGE missing -- run: make images"
 fi
 for img in "${OTTERNET_GUACD_IMAGE:-guacamole/guacd:1.5.5}" \
            "${OTTERNET_GUACAMOLE_IMAGE:-guacamole/guacamole:1.5.5}"; do

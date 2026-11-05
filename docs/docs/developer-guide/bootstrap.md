@@ -55,9 +55,22 @@ remember the order and the flags.
 Since cycle 033 it also builds the portal image and runs `tooling` before `cluster`, so a
 finished bootstrap has a branch user able to sign in and ask for something.
 
-The lab needs its images before the first run: the cEOS image, the vSRX image
-(`make -C lab fw-image`) and the branch desktop image (`make -C lab desktop-image`). `invoke lab`
-builds none of them. See the [lab prerequisites](https://github.com/opsmill/infrahub-network-field-day/blob/main/lab/README.md#prerequisites).
+Before it changes anything, bootstrap checks the host (`uv run invoke prereqs` runs the same
+checks on their own):
+
+- The tools: Docker and Compose v2 usable without `sudo`, `git` and `curl`. With the lab:
+  `containerlab`, `openssl`, and Node 22 or 24 with Corepack. With the cluster: `kubectl` and `helm`.
+- `sudo` without a password, because ContainerLab and the tooling bridge run under `sudo` and nobody
+  watches the prompt.
+- `/dev/kvm`, because the vSRX firewall is a VM.
+- About 48 GB of memory with the lab, or 8 GB with `--no-lab`.
+
+It then gets the three lab images that are on no public registry, cEOS, vSRX and the branch
+desktop, with `uv run invoke lab-images` (`lab/scripts/images.sh`). Each one is pulled from
+`registry.opsmill.io/external`, or built from the raw file in `/images`, which is downloaded from
+the OpsMill Google Drive folder first when `rclone` has a `gdrive` remote. `invoke lab` runs the
+same step before every deploy. See the
+[lab image sources](https://github.com/opsmill/infrahub-network-field-day/blob/main/lab/README.md#images).
 
 | Flag | What it does |
 | --- | --- |

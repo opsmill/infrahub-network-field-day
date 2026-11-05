@@ -145,6 +145,32 @@ It ends with Infrahub at `http://localhost:8000`, the fabric cabled, and every a
 Without `--no-lab`, `uv run invoke bootstrap` also deploys the lab and configures every device from
 its artifact; see [Bootstrapping the whole environment](./developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
 
+## Run the whole lab on your own machine
+
+The whole environment adds the ContainerLab lab, the tooling cluster and Kubernetes to Infrahub. The machine needs:
+
+- Linux with about 48 GB of memory and 8 or more CPU cores.
+- `/dev/kvm`, because the vSRX firewall is a virtual machine. On a cloud instance, this means
+  nested virtualisation or a bare-metal instance type.
+- `sudo` without a password, because ContainerLab runs under `sudo` during an unattended run.
+- Docker usable without `sudo`, [ContainerLab](https://containerlab.dev/install/), `kubectl`,
+  `helm`, `openssl`, and Node 22 or 24 with Corepack (`corepack enable`).
+
+Check the machine, then bring everything up:
+
+```bash
+uv sync --all-packages
+export INFRAHUB_API_TOKEN=06438eb2-8019-4776-878c-0941b1f1d1ec
+uv run invoke prereqs
+uv run invoke bootstrap
+```
+
+`invoke prereqs` lists everything the machine is missing. `invoke bootstrap` runs the same checks
+before it changes anything, then gets the Arista cEOS, Junos vSRX and branch desktop images from
+`registry.opsmill.io`. See the
+[lab image sources](https://github.com/opsmill/infrahub-network-field-day/blob/main/lab/README.md#images)
+for the other ways to get them. The run takes 20 to 30 minutes and ends with the readiness checks.
+
 ## Common commands
 
 | Command | What it does |
@@ -157,6 +183,8 @@ its artifact; see [Bootstrapping the whole environment](./developer-guide/bootst
 | `uv run invoke load` | Re-run the full load sequence |
 | `uv run invoke bootstrap --no-lab` | Build, start, load and generate the fabric, without the lab |
 | `uv run invoke bootstrap` | The whole environment, including the lab and both clusters |
+| `uv run invoke prereqs` | Check the machine has the tools, `sudo`, KVM, memory and lab images that `bootstrap` needs |
+| `uv run invoke lab-images` | Pull, or build, the cEOS, vSRX and branch desktop images |
 | `uv run invoke load-schema` | Reload schemas only |
 | `uv run invoke load-menu` | Reload UI menus only |
 | `uv run invoke init-semaphore` | Re-register the Semaphore project and templates (idempotent) |
