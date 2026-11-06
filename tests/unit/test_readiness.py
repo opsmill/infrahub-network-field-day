@@ -145,6 +145,13 @@ def test_the_variable_names_the_scripts_write_are_the_ones_mcp_json_reads() -> N
     assert headers[r.MCP_SERVER_NAME] == f"Bearer ${{{r.token_var('alice')}}}"
 
 
+def test_claude_mcp_list_pending_approval_is_a_warning() -> None:
+    pending = "otternet-infrahub: http://127.0.0.1:8001/mcp (HTTP) - ⏸ Pending approval (run `claude` to approve)\n"
+    result = r.decide_claude_mcp_list(pending, ["otternet-infrahub"])
+    assert result.status is Status.WARN
+    assert "approve" in result.fix
+
+
 def test_claude_mcp_list_needs_every_server_connected() -> None:
     good = "otternet-infrahub: http://127.0.0.1:8001/mcp (HTTP) - ✓ Connected\n"
     assert r.decide_claude_mcp_list(good, ["otternet-infrahub"]).status is Status.PASS

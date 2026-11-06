@@ -89,7 +89,8 @@ LAB_TOPOLOGY = "otternet.clab.yml"
 # Image variables the topology interpolates. ContainerLab runs under sudo, which
 # scrubs the environment, so they have to be named to survive.
 CLAB_ENV_PASSTHROUGH = (
-    "OTTERNET_CEOS_IMAGE,OTTERNET_CEOS_MEMORY,OTTERNET_VSRX_IMAGE,OTTERNET_SRL_IMAGE,OTTERNET_GUACAMOLE_IMAGE"
+    "OTTERNET_CEOS_IMAGE,OTTERNET_CEOS_MEMORY,OTTERNET_VSRX_IMAGE,OTTERNET_SRL_IMAGE,OTTERNET_SRL_MEMORY,"
+    "OTTERNET_DESKTOP_IMAGE,OTTERNET_GUACD_IMAGE,OTTERNET_GUACAMOLE_IMAGE"
 )
 
 # Markdown authored by this project. Vendored agent content (.agents, .claude,
@@ -2420,6 +2421,48 @@ def _fabric_mgmt_addresses() -> list[str]:
     return addresses
 
 
+@task(help={"lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout."})
+def lab_images(ctx: Context, lab_dir: str = "") -> None:
+    """
+    Get the cEOS, vSRX and branch desktop images the lab needs (`lab/scripts/images.sh`).
+
+    No public registry carries these three. Each one is used if it is already local, else pulled
+    from registry.opsmill.io and given the local name the topology uses, else built from the raw
+    vendor file in /images, which is downloaded from the OpsMill Google Drive folder first when an
+    rclone remote for Drive is set up. Safe to re-run: present images are left alone.
+    """
+    script = find_lab_directory(lab_dir) / "scripts/images.sh"
+    result = ctx.run(shlex.quote(str(script)), pty=True, warn=True)
+    if result is None or result.failed:
+        raise Exit("A lab image is missing (listed above). See lab/README.md#prerequisites.", code=1)
+
+
+@task(
+    help={
+        "no-lab": "Check only what `bootstrap --no-lab` needs.",
+        "cluster": "Include the Kubernetes tools (default). --no-cluster leaves them out.",
+        "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
+    }
+)
+def prereqs(ctx: Context, no_lab: bool = False, cluster: bool = True, lab_dir: str = "") -> None:  # noqa: ARG001
+    """
+    Check this host has what `bootstrap` needs: tools, sudo, KVM, memory and the lab images.
+
+    `bootstrap` runs the same checks first, before it destroys or builds anything.
+    """
+    if not _check_prereqs(no_lab=no_lab, cluster=cluster, lab_dir=lab_dir):
+        raise Exit("A prerequisite is missing (listed above).", code=1)
+
+
+def _check_prereqs(no_lab: bool, cluster: bool, lab_dir: str) -> bool:
+    from solution_arista_avd import prereqs as checks
+
+    print("=== Host prerequisites ===")
+    results = checks.run_checks(lab=not no_lab, cluster=cluster, lab_dir=find_lab_directory(lab_dir))
+    print(checks.render(results))
+    return not checks.failed(results)
+
+
 @task(
     help={
         "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
@@ -2473,6 +2516,14 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     # setup step; it is a precondition of every deploy. The script is idempotent
     # and also lays down the route back to the branch LAN, which is why it runs
     # here rather than being left to whoever remembers.
+    # THE INOTIFY LIMITS. Linux allows 128 inotify instances per user by default,
+    # and the k3s nodes exhaust that; pods then fail with "too many open files".
+    # Raised only when lower, and like the bridge it does not survive a reboot.
+    limits = lab_path / "scripts/host-limits.sh"
+    if limits.is_file():
+        print(" - Ensuring the host's inotify limits")
+        ctx.run(shlex.quote(str(limits)), pty=True)
+
     bridge = lab_path / "scripts/tooling-bridge.sh"
     if bridge.is_file():
         print(" - Ensuring the tooling bridge exists")
@@ -2490,6 +2541,16 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     if renderer.is_file():
         print(" - Rendering the WAN boot configuration")
         ctx.run(f"{shlex.quote(sys.executable)} {shlex.quote(str(renderer))}", hide="out")
+
+    # THE THREE LOCAL IMAGES. ContainerLab would otherwise try to pull `ceos`,
+    # `vrnetlab/juniper_vsrx` and `otternet/branch-desktop` from Docker Hub and
+    # refuse the deploy. Present images are left alone, so this is quick.
+    print(" - Ensuring the lab images exist")
+    lab_images(ctx, lab_dir=lab_dir)
+
+    # k8s-node1 bind-mounts this directory to write the cluster's kubeconfig. It
+    # is gitignored, so a fresh clone does not have it.
+    (lab_path / "k8s/.kubeconfig").mkdir(parents=True, exist_ok=True)
 
     print(f" - Deploying {topology.name} (cEOS takes a few minutes to boot)")
     ctx.run(f"{clab} deploy -t {shlex.quote(str(topology))} --reconfigure", pty=True)
@@ -3219,6 +3280,12 @@ def backstage_build(ctx: Context, no_cache: bool = False) -> None:
     #
     # `tsc` first: `build:backend` bundles without typechecking, so a type error
     # would otherwise reach the image and only fail at runtime.
+    # `yarn install` first: node_modules is gitignored, so a fresh clone has
+    # none and `tsc` fails on every import. `--immutable` refuses to change
+    # yarn.lock, and with an up-to-date node_modules it takes seconds.
+    print(" - Installing the portal's dependencies")
+    with ctx.cd(str(backstage)):
+        ctx.run("yarn install --immutable", pty=True, env=env)
     print(" - Typechecking and bundling the portal")
     with ctx.cd(str(backstage)):
         ctx.run("yarn tsc", pty=True, env=env)
@@ -3537,6 +3604,8 @@ def bootstrap(
     Everything this project can automate, in the order the dependencies actually
     impose:
 
+        prereqs    the host: tools, passwordless sudo, KVM, memory (before anything changes)
+        lab-images the cEOS, vSRX and branch desktop images: pulled, else built
         build      the project image
         start      the Infrahub stack
         load       schema, menus, seed data
@@ -3584,6 +3653,16 @@ def bootstrap(
     # import setting for the demo branches, and both used to be found out after the teardown.
     readwrite = _preflight_repository_mode(ctx)
     _use_dotenv_credentials()
+
+    # THE HOST, ALSO BEFORE ANYTHING IS DESTROYED. A missing tool or image used to
+    # surface at the step that needed it -- ContainerLab, Node or kubectl about
+    # fifteen minutes in, after the stack had been rebuilt. The lab images are
+    # fetched here too, so a host that cannot get them stops now.
+    if not _check_prereqs(no_lab=no_lab, cluster=cluster, lab_dir=lab_dir):
+        raise Exit("A prerequisite is missing (listed above). Nothing has been changed.", code=1)
+    if not no_lab:
+        print("\n=== Getting the lab images ===")
+        lab_images(ctx, lab_dir=lab_dir)
 
     if fresh:
         if not no_lab:
