@@ -138,9 +138,9 @@ The stack is up and the seven switches exist with their pinned identity, but the
 ## Bring up Infrahub in one command
 
 Steps 2 to 4, and the fabric generation from [Provision Your First Fabric](./provision-first-fabric.md),
-also run as one command. With `--no-lab` it brings up Infrahub, and from the ContainerLab lab only
-the tooling node, which runs Dex and the service portal. It deploys no devices and no Kubernetes
-workload cluster. It needs about 12 GB of memory and at least 20 GB of free disk
+also run as one command. With `--no-lab` it brings up Infrahub, and Dex and the service portal as
+Docker Compose containers. It deploys no devices and no Kubernetes workload cluster, needs neither
+ContainerLab nor `sudo`, and runs on macOS. It needs about 12 GB of memory and at least 20 GB of free disk
 where Docker keeps its data, and it checks for both before it changes anything:
 
 ```bash
@@ -148,7 +148,7 @@ uv run invoke bootstrap --no-lab
 ```
 
 It ends with Infrahub at `http://localhost:8000`, the fabric cabled, every artifact rendered, the
-portal at `https://10.90.0.11:32001`, and the MCP token for `alice` in `.env`.
+portal at `https://localhost:32001`, and the MCP token for `alice` in `.env`.
 Without `--no-lab`, `uv run invoke bootstrap` also deploys the lab and configures every device from
 its artifact; see [Bootstrapping the whole environment](./developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
 

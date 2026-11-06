@@ -58,10 +58,10 @@ branch user can sign in to the portal and request a service.
 Before it changes anything, bootstrap checks the host (`uv run invoke prereqs` runs the same
 checks on their own):
 
-- The tools: Docker and Compose v2 usable without `sudo`, `git` and `curl`. With the lab:
-  `containerlab`, `openssl`, and Node 22 or 24 with Corepack. With the cluster: `kubectl` and `helm`.
-- `sudo` without a password, because ContainerLab and the tooling bridge run under `sudo` and nobody
-  watches the prompt.
+- The tools: Docker and Compose v2 usable without `sudo`, `git`, `curl`, `openssl`, and Node 22 or
+  24 with Corepack. With the lab: `containerlab`. With the cluster: `kubectl` and `helm`.
+- With the lab, `sudo` without a password, because ContainerLab and the tooling bridge run under
+  `sudo` and nobody watches the prompt. `--no-lab` needs neither ContainerLab nor `sudo`.
 - `/dev/kvm`, because the vSRX firewall is a VM.
 - About 48 GB of memory with the lab, or 12 GB with `--no-lab`.
 - At least 20 GB of free disk where Docker keeps its data, and a warning below 60 GB, which a first
@@ -94,15 +94,23 @@ same step before every deploy. See the
 ### Infrahub without the lab
 
 `--no-lab` runs `prereqs` → `build` → `start` → `load` → `avd` (on a branch, then merged) →
-`lab --tooling-only` → `backstage-build` → `tooling` → `mcp` → `mcp-tokens` → `network-admin` →
+`backstage-build` → `tooling` → `mcp` → `mcp-tokens` → `network-admin` →
 `metrics-exporter`, then the read-write demo release when the stack is read-write, then the
 readiness checks. The result is Infrahub at `http://localhost:8000` with the `OTTERNET_FABRIC`
-cabled and every artifact rendered, Dex and the portal at `https://10.90.0.11:32001`, and `alice`'s
-MCP token in `.env`, with no devices to push the artifacts to.
+cabled and every artifact rendered, Dex at `http://localhost:32556/dex`, the portal at
+`https://localhost:32001`, and `alice`'s MCP token in `.env`, with no devices to push the artifacts to.
 
-`lab --tooling-only` deploys the `tool-node1` ContainerLab node and the `br-otter-tool` bridge, and no
-other node. The tooling cluster needs no fabric, because the host is on its bridge. When `tool-node1`
-is already running, for example as part of a full lab, the step leaves it as it is.
+Dex and the portal run as Docker Compose services from `docker-compose.no-lab.yml`, not on the
+`tool-node1` ContainerLab node, so `--no-lab` needs neither ContainerLab nor `sudo` and runs on
+macOS. Without the lab there is no firewall for the portal to sit behind. Both containers share
+the `infrahub-server` network namespace, so `localhost:32556` is the same Dex for the browser, the
+host scripts and Infrahub, which an OpenID Connect issuer requires. The users and clients still
+come from `tooling/10-dex.yaml`: `invoke tooling` writes a copy with the `localhost` addresses to
+`.tooling/dex.yaml`, and the portal certificate to `.tooling/tls/`.
+
+`bootstrap` writes `OTTERNET_NO_LAB=true` or `false` to `.env`, and every later `invoke` command
+adds `docker-compose.no-lab.yml` when it is `true`. Recreating `infrahub-server` stops Dex and the
+portal from reaching the network; run `uv run invoke tooling` to recreate them.
 
 It leaves out every step that needs the rest of the lab:
 
@@ -110,8 +118,8 @@ It leaves out every step that needs the rest of the lab:
 - `cluster`, because the workload cluster runs in the lab.
 
 The readiness checks for those steps fail, so a `--no-lab` run prints the readiness summary but
-does not exit 1 because of it. `--fresh --no-lab` destroys the Infrahub stack and leaves a running
-lab as it is.
+does not exit 1 because of it. `--fresh --no-lab` destroys the Infrahub stack, including Dex and the
+portal, and leaves a running lab as it is.
 
 To add the lab later, run `uv run invoke bootstrap --fresh`. Without `--fresh`, the second run
 repeats `avd --topology` against a cabled fabric (see the warning about the topology generators above).

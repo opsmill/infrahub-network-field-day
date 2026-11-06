@@ -1,7 +1,7 @@
-"""`invoke bootstrap --no-lab` brings up Infrahub and the tooling node only.
+"""`invoke bootstrap --no-lab` brings up Infrahub, Dex and the portal, and no ContainerLab node.
 
-The Infrahub-only path deploys the tooling node alone (Dex, the portal, alice's token) and calls no
-step that needs the rest of the lab or the workload cluster; `--fresh --no-lab` must not destroy a lab. This file reads `tasks.py` as text; it needs no running Infrahub.
+The Infrahub-only path runs Dex and the portal as compose services (alice's token needs Dex) and calls
+no step that needs the lab or the workload cluster; `--fresh --no-lab` must not destroy a lab. This file reads `tasks.py` as text; it needs no running Infrahub.
 """
 
 from __future__ import annotations
@@ -17,9 +17,8 @@ INFRAHUB_ONLY = TEXT.split("def _bootstrap_infrahub_only(", 1)[1].split("def _wa
 def test_infrahub_only_path_calls_no_step_that_needs_the_lab() -> None:
     for call in ("reconcile(ctx", "_cluster_task("):
         assert call not in INFRAHUB_ONLY, call
-    # The only lab call deploys the tooling node, never the devices.
-    assert INFRAHUB_ONLY.count("lab(ctx") == 1
-    assert "lab(ctx, lab_dir=lab_dir, tooling_only=True)" in INFRAHUB_ONLY
+    # Not even the tooling node: it needs ContainerLab and sudo, which macOS cannot provide.
+    assert "lab(ctx" not in INFRAHUB_ONLY
 
 
 def test_infrahub_only_path_runs_the_steps_that_need_no_lab() -> None:
@@ -28,7 +27,7 @@ def test_infrahub_only_path_runs_the_steps_that_need_no_lab() -> None:
 
 
 def test_infrahub_only_path_brings_up_the_portal_then_mints_alices_token() -> None:
-    order = ["tooling_only=True", "backstage_build(ctx)", "tooling(ctx)", "mcp(ctx)", "mcp_tokens(ctx)"]
+    order = ["backstage_build(ctx)", "tooling(ctx)", "mcp(ctx)", "mcp_tokens(ctx)"]
     positions = [INFRAHUB_ONLY.index(call) for call in order]
     assert positions == sorted(positions), order
 
@@ -44,3 +43,10 @@ def test_fresh_no_lab_leaves_the_lab_alone() -> None:
     fresh = BOOTSTRAP.split("if fresh:", 1)[1].split("destroy(ctx)", 1)[0]
     assert "if not no_lab:" in fresh
     assert fresh.index("if not no_lab:") < fresh.index("lab(ctx, lab_dir=lab_dir, destroy=True)")
+
+
+def test_the_compose_mode_is_recorded_after_the_teardown_and_before_start() -> None:
+    fresh = BOOTSTRAP.index("if fresh:")
+    record = BOOTSTRAP.index("_set_no_lab_mode(no_lab)")
+    start = BOOTSTRAP.index("start(ctx)")
+    assert fresh < record < start

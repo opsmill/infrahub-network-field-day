@@ -85,7 +85,7 @@ def test_a_missing_tool_fails_and_names_it(tmp_path: Path) -> None:
 
 
 def test_sudo_with_a_password_fails(tmp_path: Path) -> None:
-    results = by_name(run_all(tmp_path, run=runner(failing={"sudo"})))
+    results = by_name(run_all(tmp_path, run=runner(failing=frozenset({"sudo"}))))
     assert results["sudo"].status == prereqs.FAIL
 
 
@@ -131,11 +131,11 @@ def test_a_missing_lab_image_is_a_warning_because_bootstrap_fetches_it(tmp_path:
     assert not prereqs.failed(results)
 
 
-def test_no_lab_needs_the_infrahub_and_tooling_node_tools(tmp_path: Path) -> None:
-    tools = {"docker", "git", "curl", "containerlab", "openssl", "node", "corepack"}
-    results = by_name(run_all(tmp_path, tools=tools, memory=16.0, lab=False))
+def test_no_lab_needs_neither_containerlab_nor_sudo(tmp_path: Path) -> None:
+    tools = {"docker", "git", "curl", "openssl", "node", "corepack"}
+    results = by_name(run_all(tmp_path, tools=tools, memory=16.0, lab=False, run=runner(failing=frozenset({"sudo"}))))
     assert not prereqs.failed(list(results.values()))
-    assert "containerlab" in results
+    assert {"containerlab", "sudo", "inotify"}.isdisjoint(results)
     assert "lab images" not in results
     assert "kvm" not in {name.lower() for name in results}
 

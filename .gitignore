@@ -286,3 +286,6 @@ kubeconfig-*
 
 # Local preview of the static sites
 sites/_build/
+
+# Dex configuration and the portal certificate for `bootstrap --no-lab` (tasks.py, _deploy_no_lab_tooling).
+.tooling/

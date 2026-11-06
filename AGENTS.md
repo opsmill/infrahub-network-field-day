@@ -45,7 +45,7 @@ Key docs to read before larger changes:
 - Fabric generator chain: `generate-fabric` -> `generate-pod` -> `generate-rack` -> `generate-avd-device-hostvar` -> `generate-avd-device-structured-config`.
 - Hostvars are `AvdHostvarFile` nodes and structured configs are `AvdStructuredConfigFile` nodes, both under `AvdArtifact`. Transforms render artifacts from the stored files.
 - PyAVD is version-sensitive: `pyavd>=6.4.0,<6.5.0`.
-- One request portal, Backstage, in the tooling cluster. Every request creates one service object on a branch and a generator builds the technical objects. See [tooling cluster](docs/docs/developer-guide/tooling-cluster.md).
+- One request portal, Backstage, in the tooling cluster (`bootstrap --no-lab` runs it and Dex as compose services from `docker-compose.no-lab.yml` instead). Every request creates one service object on a branch and a generator builds the technical objects. See [tooling cluster](docs/docs/developer-guide/tooling-cluster.md).
 
 ## Hard rules (each one cost real time; the linked page has the evidence)
 
@@ -165,7 +165,7 @@ Full list and pitfalls: [commands.md](docs/docs/developer-guide/commands.md).
 uv sync --all-packages
 uv run invoke --list
 uv run invoke doctor                    # run first when something is odd
-uv run invoke prereqs [--no-lab]        # host check bootstrap runs first: tools, sudo, KVM, memory, lab images
+uv run invoke prereqs [--no-lab]        # host check bootstrap runs first: tools, sudo and KVM (lab only), memory, lab images
 uv run invoke lab-images                # cEOS, vSRX, branch desktop: pulled from registry.opsmill.io, else built
 uv run invoke start | stop | destroy | restart
 uv run invoke load                      # seed objects; runs NO generators
