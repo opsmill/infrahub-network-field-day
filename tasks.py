@@ -1737,6 +1737,7 @@ def _withdraw_demo_services(timeout: int) -> dict[str, Any] | None:
         "branch": branch,
         "apps": {n: apps[n] for n in todo_apps},
         "grants": todo_grants,
+        "live": restore_module.live(grants, todo_grants) + restore_module.live(apps, todo_apps),
     }
 
 
@@ -1752,9 +1753,11 @@ def _wait_converged(removed: dict[str, Any], timeout: int) -> None:
     """Wait for the lab to follow the merge: devices pushed and confirmed, cluster and address pool cleared."""
     rehearsal = _rehearsal()
     since = removed["since"]
-    conditions: dict[str, Callable[[], bool]] = {
-        "the reconciler has pushed and then confirmed": lambda: rehearsal.pushed_and_confirmed(since),
-    }
+    conditions: dict[str, Callable[[], bool]] = {}
+    # Only a service that was still live changes a device; one revoked before the restore does not, and
+    # waiting for a push that never comes failed the restore after 600 s.
+    if removed["live"]:
+        conditions["the reconciler has pushed and then confirmed"] = lambda: rehearsal.pushed_and_confirmed(since)
 
     def namespace_gone(namespace: str) -> Callable[[], bool]:
         return lambda: "NotFound" in rehearsal.kubectl("get", "namespace", namespace).stderr
@@ -1777,6 +1780,9 @@ def _wait_converged(removed: dict[str, Any], timeout: int) -> None:
         conditions[f"{name}: its FabricApp is gone"] = fabricapp_gone(name)
         if app["block"]:
             conditions[f"{name}: the VIP block {app['block']} is released"] = block_released(app["block"])
+    if not conditions:
+        print(" - Everything removed was already withdrawn; no device changes", flush=True)
+        return
     seen = rehearsal.watch("restore", since, conditions, timeout=timeout)
     missing = [c for c in conditions if c not in seen]
     if missing:

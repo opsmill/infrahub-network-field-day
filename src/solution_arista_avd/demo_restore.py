@@ -43,6 +43,20 @@ def demo_created(existing: Iterable[str], seeded: set[str]) -> list[str]:
     return sorted(name for name in existing if name not in seeded and not name.startswith(SEEDED_PREFIX))
 
 
+# A service with one of these statuses is already withdrawn: deleting it changes no device.
+WITHDRAWN = ("decommissioning", "decommissioned")
+
+
+def live(services: dict[str, dict[str, str]], names: Iterable[str]) -> list[str]:
+    """The ``names`` whose status on ``main`` is not already withdrawn.
+
+    Only these change a device when the restore deletes them. A grant revoked and merged before the
+    restore is still listed for deletion, but its rule is already gone, so the reconciler has nothing
+    to push and waiting for a push would time out.
+    """
+    return sorted(n for n in names if services.get(n, {}).get("status") not in WITHDRAWN)
+
+
 def generator_records_for(names: set[str], records: Iterable[tuple[str, str, str]]) -> list[tuple[str, str]]:
     """``(kind, id)`` of the generator instances and tracking groups that belong to ``names``.
 
