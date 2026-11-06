@@ -46,11 +46,11 @@ LAB_SITES = (
     "helm.cilium.io",
     "charts.crossplane.io",
     "infrahub-operator.github.io",
-    "xpkg.crossplane.io",
 )
 # Containers of this environment: a port they hold is freed and taken again by bootstrap itself.
 OWN_CONTAINER_PREFIXES = ("infrahub-", "clab-otternet-")
-# lab/scripts/host-limits.sh raises the inotify limits to these before every deploy.
+# lab/scripts/host-limits.sh raises the inotify limits to these before every deploy. The cEOS
+# switches raise them much further when they boot, but the k3s nodes start at the same time.
 INOTIFY_MINIMUM = {"fs.inotify.max_user_instances": 8192, "fs.inotify.max_user_watches": 1048576}
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 

@@ -234,13 +234,24 @@ def test_the_lab_port_list_matches_the_topology() -> None:
 
 
 def test_an_unreachable_site_is_a_warning_that_names_it(tmp_path: Path) -> None:
-    results = run_all(tmp_path, unreachable=frozenset({"xpkg.crossplane.io"}))
+    results = run_all(tmp_path, unreachable=frozenset({"charts.crossplane.io"}))
     network = by_name(results)["network"]
     assert network.status == prereqs.WARN
-    assert "xpkg.crossplane.io" in network.detail
+    assert "charts.crossplane.io" in network.detail
     assert not prereqs.failed(results)
 
 
 def test_no_lab_checks_only_the_infrahub_sites(tmp_path: Path) -> None:
     results = run_all(tmp_path, unreachable=frozenset({"ghcr.io"}), lab=False, tools={"docker", "git", "curl"})
     assert by_name(results)["network"].status == prereqs.OK
+
+
+def test_crossplane_comes_from_ghcr_not_xpkg() -> None:
+    import re
+
+    packages = (REPO / "lab/crossplane/providers/00-packages.yaml").read_text(encoding="utf-8")
+    refs = re.findall(r"^\s+package:\s*(\S+)", packages, re.MULTILINE)
+    assert refs
+    assert all(ref.startswith("ghcr.io/crossplane-contrib/") for ref in refs), refs
+    install = (REPO / "lab/k8s/bootstrap/install-crossplane.sh").read_text(encoding="utf-8")
+    assert "--set image.repository=ghcr.io/crossplane/crossplane" in install

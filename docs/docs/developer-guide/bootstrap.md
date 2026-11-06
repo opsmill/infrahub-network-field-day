@@ -70,8 +70,9 @@ checks on their own):
   own containers.
 - The sites the run downloads from, reported as a warning because a proxy may let Docker through.
 - The inotify limits, reported as a warning because `invoke lab` raises them with
-  `lab/scripts/host-limits.sh` before every deploy. The k3s nodes exhaust Linux's default of 128
-  instances per user.
+  `lab/scripts/host-limits.sh` before every deploy. With the lab running, root holds about 780
+  inotify instances, and Linux allows 128 per user by default. The cEOS switches raise the limit
+  when they boot, but the k3s nodes start at the same time.
 
 It then gets the three lab images that are on no public registry, cEOS, vSRX and the branch
 desktop, with `uv run invoke lab-images` (`lab/scripts/images.sh`). Each one is pulled from

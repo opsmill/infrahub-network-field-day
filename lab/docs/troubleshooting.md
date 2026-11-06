@@ -280,7 +280,7 @@ anything. To check them by hand:
 kubectl run otternet-net-check --image=busybox:1.36.1 --restart=Never --rm -i \
     --command -- sh -c '
       nc -z -w 5 10.112.0.1 443   && echo "API ClusterIP OK"
-      nslookup xpkg.crossplane.io. >/dev/null && echo "external DNS OK"
+      nslookup ghcr.io. >/dev/null && echo "external DNS OK"
       nc -z -w 8 1.1.1.1 443      && echo "pod egress OK"'
 ```
 
@@ -357,8 +357,11 @@ kubectl get providers,functions
 kubectl describe provider provider-helm | tail -20
 ```
 
-`cannot resolve ... to digest: ... lookup xpkg.crossplane.io ... server
-misbehaving` is the DNS problem above, not a registry outage. CoreDNS forwards
+`cannot resolve ... to digest: ... lookup ghcr.io ... server misbehaving` is
+the DNS problem above, not a registry outage. The packages and the Crossplane
+image come from `ghcr.io`, because `xpkg.crossplane.io` stops answering for
+minutes at a time; `context deadline exceeded` from `xpkg.crossplane.io` means
+something still points there. CoreDNS forwards
 to whatever resolv.conf it inherited; k3s substitutes `8.8.8.8` whenever the
 host's resolv.conf has a loopback nameserver, and Docker gives this container
 `nameserver 127.0.0.11` -- an address that exists only in the *node's* netns,

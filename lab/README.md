@@ -200,9 +200,11 @@ commit's image.
 
 ### Host limits
 
-Linux allows 128 inotify instances per user by default, and the k3s nodes exhaust that: pods fail
-with "too many open files". `make deploy` and `invoke lab` raise the limits before every deploy
-with `scripts/host-limits.sh`, which never lowers a value. The change does not survive a reboot;
+Linux allows 128 inotify instances per user by default, and with the lab running root holds about
+780: past the limit, pods fail with "too many open files". The cEOS switches raise the limits when
+they boot (`ceoslab-apply-sysctls` in the image sets 62800 instances), but the k3s nodes start at
+the same time. `make deploy` and `invoke lab` therefore raise the limits before every deploy with
+`scripts/host-limits.sh`, which never lowers a value. The change does not survive a reboot;
 `OTTERNET_PERSIST_LIMITS=1 ./scripts/host-limits.sh` also writes
 `/etc/sysctl.d/99-otternet-lab.conf`.
 

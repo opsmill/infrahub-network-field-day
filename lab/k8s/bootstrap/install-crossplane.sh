@@ -37,7 +37,7 @@ kubectl -n kube-system delete pod xp-preflight --ignore-not-found >/dev/null 2>&
 if ! kubectl -n kube-system run xp-preflight --image=busybox:1.36.1 --restart=Never \
         --command --quiet --rm -i --timeout=120s -- sh -c '
             nc -z -w 5 "${API:-10.112.0.1}" 443 || { echo "FAIL: API ClusterIP unreachable from a pod"; exit 1; }
-            nslookup xpkg.crossplane.io. >/dev/null 2>&1 || { echo "FAIL: external DNS does not resolve from a pod"; exit 1; }
+            nslookup ghcr.io. >/dev/null 2>&1 || { echo "FAIL: external DNS does not resolve from a pod"; exit 1; }
             nc -z -w 8 1.1.1.1 443 || { echo "FAIL: no pod egress to the internet"; exit 1; }
             echo PREFLIGHT-OK' 2>/dev/null | grep -q PREFLIGHT-OK; then
     die "in-cluster networking preflight failed -- see docs/troubleshooting.md
@@ -47,9 +47,13 @@ fi
 say "Installing Crossplane $CROSSPLANE_VERSION"
 helm repo add crossplane-stable https://charts.crossplane.io/stable >/dev/null 2>&1 || true
 helm repo update crossplane-stable >/dev/null
+# The image from ghcr.io rather than the chart's default, xpkg.crossplane.io,
+# which stops answering for minutes at a time (see providers/00-packages.yaml).
+# Same digest on both.
 helm upgrade --install crossplane crossplane-stable/crossplane \
     --version "$CROSSPLANE_VERSION" \
     --namespace crossplane-system --create-namespace \
+    --set image.repository=ghcr.io/crossplane/crossplane \
     --wait --timeout 10m
 
 kubectl -n crossplane-system rollout status deployment/crossplane --timeout=5m
@@ -64,7 +68,7 @@ kubectl apply -f "$LAB_DIR/crossplane/providers/02-rbac.yaml"
 say "Installing providers and composition functions"
 kubectl apply -f "$LAB_DIR/crossplane/providers/00-packages.yaml"
 
-say "Waiting for packages to become healthy (pulling from xpkg.crossplane.io)"
+say "Waiting for packages to become healthy (pulling from ghcr.io)"
 for pkg in provider-helm provider-kubernetes; do
     kubectl wait "provider.pkg.crossplane.io/$pkg" \
         --for=condition=Healthy --timeout=6m \

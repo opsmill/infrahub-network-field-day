@@ -171,7 +171,7 @@ uv run invoke bootstrap
 - A host port the stack or the lab publishes that another program already uses, such as 3000, 8000
   or 8080.
 - A download site the machine cannot reach, such as `registry.opsmill.io`, `ghcr.io` or
-  `xpkg.crossplane.io`.
+  `quay.io`.
 - inotify limits below what the k3s nodes need. The lab deploy raises them with
   `lab/scripts/host-limits.sh`; set `OTTERNET_PERSIST_LIMITS=1` to keep them after a reboot.
 
