@@ -7,7 +7,7 @@ sidebar_position: 2
 
 # Provision your first fabric
 
-Prerequisites: [Quick Start](./quick-start.md) complete — Infrahub is running at `http://localhost:8000`, and seed data (`OTTERNET_FABRIC`, its pod and three racks, the seven switches, device types, IP pools) is loaded.
+Prerequisites: [Set up the stack step by step](./developer-guide/stack-step-by-step.md) complete — Infrahub is running at `http://localhost:8000`, and seed data (`OTTERNET_FABRIC`, its pod and three racks, the seven switches, device types, IP pools) is loaded.
 
 At this point the fabric design is loaded and the seven switches exist with their pinned identity, but the spine-to-leaf and MLAG links are **not cabled** and the switches have no host_vars. The steps below generate the cabling, host_vars, and configurations for `OTTERNET_FABRIC`.
 
@@ -42,7 +42,7 @@ You can also create a branch from the CLI:
 uv run infrahubctl branch create generate-otternet-fabric
 ```
 
-The CLI route needs credentials in your shell — export `INFRAHUB_API_TOKEN` (see [Quick Start](./quick-start.md#4-load-schemas-menus-objects-and-repository)) or set `INFRAHUB_USERNAME`/`INFRAHUB_PASSWORD`. If you take the CLI route, also switch the UI's branch selector to the new branch — subsequent UI actions need to be scoped there.
+The CLI route needs credentials in your shell — export `INFRAHUB_API_TOKEN` (see [Set up the stack step by step](./developer-guide/stack-step-by-step.md#4-load-schemas-menus-objects-and-repository)) or set `INFRAHUB_USERNAME`/`INFRAHUB_PASSWORD`. If you take the CLI route, also switch the UI's branch selector to the new branch — subsequent UI actions need to be scoped there.
 
 ## Step 2 — Run the fabric generator
 

@@ -11,7 +11,7 @@ A network segment is the three technical objects a tenant network is made of: an
 
 Prerequisites:
 
-- A running stack with seed data loaded ([Quick Start](../quick-start.md)).
+- A running stack with seed data loaded ([Set up the full lab environment](../setup-lab.md) or [Set up a demo environment without the lab](../setup-demo.md)).
 - A provisioned fabric with devices and artifacts ([Provision Your First Fabric](../provision-first-fabric.md)).
 - The VRF the gateway lives in must already exist. The segment selects a VRF; it doesn't create one.
 

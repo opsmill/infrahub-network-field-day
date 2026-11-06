@@ -69,7 +69,7 @@ flowchart LR
 ## Who it's for
 
 - **Network automation teams running AVD with static variable files** — add a source of truth, API and UI layer, and branch-based change control on top of an existing AVD workflow. → [Provision Your First Fabric](./provision-first-fabric.md)
-- **Teams evaluating how to operate AVD at scale** — the pipeline derives per-device host_vars from the source of truth; no separate inventory files are required. → [Quick Start](./quick-start.md)
+- **Teams evaluating how to operate AVD at scale** — the pipeline derives per-device host_vars from the source of truth; no separate inventory files are required. → [Set up the full lab environment](./setup-lab.md)
 - **Contributors extending the pipeline** — add new device roles, schema fields, or transform outputs; the developer guide covers the full chain, role mapping, and concrete examples. → [Developer Guide](./developer-guide/index.md)
 
 ## What's included
@@ -108,21 +108,19 @@ flowchart LR
 
 ## Get started
 
-**Prerequisites:** Docker and Docker Compose · uv · Python 3.11 to 3.13
+Two environments come up with one command each:
 
-1. Clone the repository and run `uv sync --all-packages` to install dependencies.
-2. Build the custom Infrahub image: `uv run invoke build` (one-time).
-3. Start the stack: `uv run invoke start`.
-4. Export the local stack's token (see [Quick Start](./quick-start.md)), then load schemas, seed data, and the repository: `uv run invoke load`.
-5. Follow [Provision Your First Fabric](./provision-first-fabric.md) to generate a fabric and reach rendered EOS artifacts.
+- [Set up the full lab environment](./setup-lab.md): Infrahub, the OTTERNET devices configured from their artifacts, and both Kubernetes clusters, on one Linux host with about 48 GB of memory. `uv run invoke bootstrap`.
+- [Set up a demo environment without the lab](./setup-demo.md): Infrahub with every artifact rendered and the service portal, on macOS or Linux with about 12 GB of memory, with no devices. `uv run invoke bootstrap --no-lab`.
 
-`uv run invoke bootstrap --no-lab` runs steps 2 to 5 in one command, and deploys Dex and the service portal, without the lab's devices.
+To run each stage yourself while changing schemas, generators or transforms, follow [Set up the stack step by step](./developer-guide/stack-step-by-step.md), then [Provision Your First Fabric](./provision-first-fabric.md).
 
 ## Additional resources
 
 | Goal | Guide |
 |------|-------|
-| Get the stack running | [Quick Start](./quick-start.md) — prerequisites, install steps, and first load |
+| Run the whole lab | [Set up the full lab environment](./setup-lab.md) — Infrahub, the devices and both clusters on one Linux host |
+| Show the workflow on a laptop | [Set up a demo environment without the lab](./setup-demo.md) — Infrahub and the portal, no devices |
 | Generate your first fabric | [Provision Your First Fabric](./provision-first-fabric.md) — end-to-end walkthrough |
 | Check what's supported | [Supported Capabilities](./supported-capabilities.md) — capability matrix |
 | Understand how it's built | [Architecture Overview](./developer-guide/architecture.md) — system components and generator pipeline |

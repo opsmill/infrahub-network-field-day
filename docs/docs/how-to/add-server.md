@@ -11,7 +11,7 @@ Places a new physical server into a compute rack. You request one `ServiceServer
 
 Prerequisites:
 
-- A running stack with seed data loaded ([Quick Start](../quick-start.md)).
+- A running stack with seed data loaded ([Set up the full lab environment](../setup-lab.md) or [Set up a demo environment without the lab](../setup-demo.md)).
 - A provisioned fabric with at least one **compute** rack ([Provision Your First Fabric](../provision-first-fabric.md)).
 - At least one `TemplateComputePhysicalServer` template, for example the seeded `otternet-workload-host`.
 

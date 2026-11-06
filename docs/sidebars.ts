@@ -3,7 +3,8 @@ import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
 const sidebars: SidebarsConfig = {
   aristaAvdSidebar: [
     'home',
-    'quick-start',
+    'setup-lab',
+    'setup-demo',
     'service-portal',
     'demo-runbook',
     'demo-builder',
@@ -48,6 +49,7 @@ const sidebars: SidebarsConfig = {
         'developer-guide/topology-page',
         'developer-guide/mcp-server',
         'developer-guide/bootstrap',
+        'developer-guide/stack-step-by-step',
         'developer-guide/development-workflow',
         'developer-guide/commands',
         'developer-guide/symptom-to-cause',

@@ -8,7 +8,7 @@ sidebar_position: 3
 # Generators
 
 :::info Developer Guide
-Explains how the generators are structured. To *run* generators as an operator, start with [Quick Start](../quick-start.md).
+Explains how the generators are structured. To *run* generators as an operator, start with [Set up the full lab environment](../setup-lab.md).
 :::
 
 ## Overview

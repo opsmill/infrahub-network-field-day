@@ -11,7 +11,7 @@ Puts a tenant onto a fabric. You request one `ServiceTenantOnboarding`; its gene
 
 Prerequisites:
 
-- A running stack with seed data loaded ([Quick Start](../quick-start.md)).
+- A running stack with seed data loaded ([Set up the full lab environment](../setup-lab.md) or [Set up a demo environment without the lab](../setup-demo.md)).
 - At least one provisioned fabric ([Provision Your First Fabric](../provision-first-fabric.md)).
 - The `OrganizationTenant` you're adding must already exist.
 
