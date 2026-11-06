@@ -5,7 +5,7 @@ audience: developer
 sidebar_position: 34
 ---
 
-# Running the AVD chain, bootstrapping and bringing up the lab
+# Running the AVD chain, bootstrapping, and bringing up the lab
 
 ## Running the AVD chain
 
@@ -45,15 +45,15 @@ uv run invoke bootstrap --no-lab           # Infrahub only, no lab and no cluste
 uv run invoke bootstrap --fresh --no-lab   # ... destroying the stack first, never the lab
 ```
 
-That runs `build` → `start` → `load` → `avd` (on a branch, then merged) → `lab` →
+That runs `prereqs` → `lab-images` → `build` → `start` → `load` → `avd` (on a branch, then merged) → `lab` →
 `reconcile --converge` → `backstage-build` → `tooling` → `mcp` → `mcp-tokens` → `network-admin` →
 `metrics-exporter` → `cluster`, and starts the reconciler loop. On a read-write stack it then
 rebuilds a stale `stage/*` branch and releases the demo branch (unless `--no-release`). It ends with
 the readiness checks. Each step is still available on its own; `bootstrap` only removes the need to
 remember the order and the flags.
 
-Since cycle 033 it also builds the portal image and runs `tooling` before `cluster`, so a
-finished bootstrap has a branch user able to sign in and ask for something.
+It builds the portal image and runs `tooling` before `cluster`, so when the bootstrap finishes a
+branch user can sign in to the portal and request a service.
 
 Before it changes anything, bootstrap checks the host (`uv run invoke prereqs` runs the same
 checks on their own):
@@ -74,7 +74,7 @@ checks on their own):
   inotify instances, and Linux allows 128 per user by default. The cEOS switches raise the limit
   when they boot, but the k3s nodes start at the same time.
 
-It then gets the three lab images that are on no public registry, cEOS, vSRX and the branch
+It then gets the three lab images that are on no public registry, cEOS, vSRX, and the branch
 desktop, with `uv run invoke lab-images` (`lab/scripts/images.sh`). Each one is pulled from
 `registry.opsmill.io/external`, or built from the raw file in `/images`, which is downloaded from
 the OpsMill Google Drive folder first when `rclone` has a `gdrive` remote. `invoke lab` runs the
@@ -85,7 +85,7 @@ same step before every deploy. See the
 | --- | --- |
 | `--fresh` | Destroys the Infrahub stack and the lab first |
 | `--no-lab` | Brings up Infrahub only (see below) |
-| `--no-cluster` | Skips `cluster`: no Cilium, Vidra or Crossplane |
+| `--no-cluster` | Skips `cluster`: no Cilium, Vidra, or Crossplane |
 | `--demo` | Builds a read-write demo stack: sets `INFRAHUB_REPOSITORY_MODE=readwrite` and `INFRAHUB_GIT_IMPORT_SYNC_BRANCH_NAMES='["demo/.*"]'`, and defaults `INFRAHUB_REPOSITORY_URL` to the Network Field Day repository |
 | `--no-release` | On a read-write stack, does not release the demo branch at the end |
 | `--branch` | The branch the AVD chain runs on before the merge, `build-fabric` by default |
@@ -93,7 +93,7 @@ same step before every deploy. See the
 
 ### Infrahub without the lab
 
-`--no-lab` runs `build` → `start` → `load` → `avd` (on a branch, then merged) → `mcp` →
+`--no-lab` runs `prereqs` → `build` → `start` → `load` → `avd` (on a branch, then merged) → `mcp` →
 `network-admin` → `metrics-exporter`, then the read-write demo release when the stack is read-write,
 then the readiness checks. The result is Infrahub at `http://localhost:8000` with the
 `OTTERNET_FABRIC` cabled and every artifact rendered, and no devices to push them to.
@@ -200,7 +200,7 @@ and the command to run once the namespace exists:
 uv run invoke observability-secrets
 ```
 
-That task runs only this step against the current cluster, with no Cilium, Vidra or Crossplane. It is idempotent, and it takes
+That task runs only this step against the current cluster, with no Cilium, Vidra, or Crossplane. It is idempotent, and it takes
 `--wait <seconds>` (default 600).
 
 Before this change the step printed a `WARNING` and carried on, and `invoke ready` did not check namespaces or Secrets. In one
@@ -364,11 +364,10 @@ cluster, the tooling cluster and signing in, then `invoke ready` and `invoke doc
 smoke: `invoke demo-run --acts one,two`, `invoke demo-restore` and `make -C lab verify`, which has to report
 121 passed. For a read-write repository, export the four settings above first. Use it after changing anything in
 the bootstrap path; "it worked" and "it is stable" are different claims, and only
-a full teardown distinguishes them. (This said "sixteen things" for several
-cycles after it stopped being sixteen, which is why the count is no longer
-stated: the stages are what stays true.)
+a full teardown distinguishes them. The number of stages is not
+stated here, because it changes each time a stage is added.
 
-Several checks are deliberately about **state rather than exit status**, because
+Six checks are deliberately about **state rather than exit status**, because
 every bug this found was quiet:
 
 - It counts **established BGP sessions**, not artifact size. An AVD artifact can

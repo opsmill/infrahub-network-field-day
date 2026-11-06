@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/opsmill/infrahub-network-field-day/actions/workflows/ci.yml/badge.svg)
 
-The OTTERNET lab's Arista EVPN/VXLAN fabric, modelled in Infrahub and rendered with AVD.
+The Arista EVPN/VXLAN fabric of the OTTERNET lab. Infrahub holds its model, and AVD renders its configurations.
 
 A fork of [opsmill/infrahub-arista-avd](https://github.com/opsmill/infrahub-arista-avd) with one thing changed: instead of seven illustrative example designs, it models **one real fabric** — the OTTERNET containerlab topology. Topology, addressing, EVPN services, tenant VRFs, firewall handoffs and workload BGP peerings all live in Infrahub as structured, queryable data, and PyAVD renders them into the EOS configuration the switches actually run.
 
@@ -20,7 +20,7 @@ The second one boots a real Infrahub stack in testcontainers, loads the schemas 
 
 **Jump to:** [The fabric](#the-fabric) · [What it's for](#what-its-for) · [How it works](#how-it-works) · [Quick start](#quick-start) · [What's included](#whats-included) · [Documentation](#documentation)
 
-## The Fabric
+## The fabric
 
 | | |
 |---|---|
@@ -35,7 +35,7 @@ Numbering the deployed lab fixes — node ID, management address, loopback, ASN 
 
 Hostnames come from the generators (`spine-{pod}-{index}`, `leaf-{pod}-{rack_index}-{index}`) and the lab is redeployed under them, rather than the generators being taught the lab's names. `scripts/regenerate_otternet_golden.py` proves that rename is cosmetic: it substitutes the names back out and asserts the result equals the deployed configuration exactly.
 
-## What It's For
+## What it's for
 
 - **Generate a complete fabric from a design** — define topology parameters and addressing pools; generators create the spines and leaves each pod and rack design calls for, allocate loopback, interconnect, and management addresses, BGP ASNs, and node IDs, and cable devices together automatically.
 - **Render EOS device configurations and documentation** — PyAVD runs inside Infrahub workers and produces EOS CLI configurations, per-device and fabric-level Markdown documentation, and a cabling plan CSV as downloadable artifacts.
@@ -43,7 +43,7 @@ Hostnames come from the generators (`spine-{pod}-{index}`, `leaf-{pod}-{rack_ind
 - **Give other teams access to network data** — the fabric is queryable through the Infrahub Web UI, GraphQL API, and MCP interface; the Backstage service portal lets stakeholders without API or CLI access request services; every request is a branch with a proposed change.
 - **Track and review every change** — all changes run through Infrahub branches and proposed changes, with a full diff before any change reaches a device.
 
-## How It Works
+## How it works
 
 The full pipeline, from a high-level fabric design to versioned, deployable configuration:
 
@@ -55,18 +55,20 @@ The full pipeline, from a high-level fabric design to versioned, deployable conf
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
 - Python 3.11 to 3.13 (`.python-version` pins 3.12)
 - PyAVD >= 6.4.0, < 6.5.0 (bundled in the custom Docker image -- no separate install required)
+- For the whole lab: Linux with about 48 GB of memory, `/dev/kvm`, and more tools. `uv run invoke prereqs`
+  lists what the machine is missing; see [Run the whole lab on your own machine](docs/docs/quick-start.md#run-the-whole-lab-on-your-own-machine).
 
-## Quick Start
+## Quick start
 
 ```bash
 # Install Python dependencies, including PyAVD and the Infrahub SDK
 uv sync --all-packages
 
-# Build the custom Infrahub image (extends the base image with PyAVD — run once)
-export INFRAHUB_BASE_VERSION=1.10.6
+# Build the custom Infrahub image (extends the base image with PyAVD — run once).
+# The Infrahub version is the Dockerfile default; set INFRAHUB_BASE_VERSION only to change it.
 uv run invoke build
 
-# Start all services: Infrahub, Neo4j, PostgreSQL, Redis, RabbitMQ, Semaphore
+# Start all services: Infrahub, Neo4j, PostgreSQL, Redis, RabbitMQ, the Prefect task manager, and Semaphore
 uv run invoke start
 
 # Load schemas, UI menu, seed data, register the repository, load checks and event triggers,
@@ -78,15 +80,15 @@ uv run invoke load
 To run all of that and generate the fabric in one command, without the ContainerLab lab, run
 `uv run invoke bootstrap --no-lab`. `uv run invoke bootstrap` builds the whole environment,
 including the lab; see [Bootstrapping the whole environment](docs/docs/developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
-Run `uv run invoke prereqs` first on a new machine: it lists the tools, memory and access the
-whole environment needs. The Arista cEOS, Junos vSRX and branch desktop images are pulled from
+Run `uv run invoke prereqs` first on a new machine: it lists the tools, memory, and access the
+whole environment needs. The Arista cEOS, Junos vSRX, and branch desktop images are pulled from
 `registry.opsmill.io` automatically; see [Run the whole lab on your own machine](docs/docs/quick-start.md#run-the-whole-lab-on-your-own-machine).
 
 Open the Infrahub UI at `http://localhost:8000`. The service portal runs in the tooling cluster, at `https://10.90.0.11:32001` from the branch desktop, once `uv run invoke tooling` (or `uv run invoke bootstrap`) has deployed it; see [The service portal](docs/docs/service-portal.md).
 
-Then follow [Provision Your First Fabric](docs/docs/provision-first-fabric.md) to run the generator chain and reach rendered EOS artifacts.
+Then follow [Provision your first fabric](docs/docs/provision-first-fabric.md) to run the generator chain and reach rendered EOS artifacts.
 
-## What You'll See
+## What you'll see
 
 After `invoke load` completes and you run the generator chain on a fabric:
 
@@ -98,9 +100,9 @@ After `invoke load` completes and you run the generator chain on a fabric:
 6. **Propose and review** — open a proposed change from the branch; the UI shows a diff of every new object and the rendered artifacts for review before any configuration reaches production.
 7. **Deploy to devices** — `uv run invoke provision` pushes each device's rendered artifact onto it, and the deployment reconciler (`uv run invoke reconcile`) does the same on a timer, pushing only what differs. CloudVision validates a proposed change's EOS configs in a workspace; it does not deploy.
 
-## What's Included
+## What's included
 
-- **Schemas** — 43 schema files covering the fabric, the WAN, the firewall, the cluster and the service layer:
+- **Schemas** — 44 schema files covering the fabric, the WAN, the firewall, the cluster and the service layer:
   - Topology: NetworkFabric, NetworkPod, LocationRack, DcimFabricSwitch, DcimInterface, NetworkLink
   - Devices beyond the fabric: DcimDevice (the SR Linux WAN routers), SecurityFirewall, ComputePhysicalServer
   - IPAM: prefixes and addresses with role tagging (loopback, interconnect, management, server)
@@ -127,7 +129,7 @@ After `invoke load` completes and you run the generator chain on a fabric:
   - Server placement into a rack, cabled to its leaves
   - Tenant onboarding onto a fabric
   - Exposed applications and access grants
-- **Stack** — Docker Compose extending Infrahub 1.10.6 with PyAVD. Includes Infrahub UI, Semaphore (a bundled Ansible runner, which does not configure devices; see [Supported Capabilities](docs/docs/supported-capabilities.md)), and Neo4j.
+- **Stack** — Docker Compose that extends the Infrahub image named in the `Dockerfile` with PyAVD. It includes the Infrahub UI, Neo4j, and Semaphore (a bundled Ansible runner, which does not configure devices; see [Supported capabilities](docs/docs/supported-capabilities.md)).
 
 | File | What it does |
 |------|-------------|
@@ -135,12 +137,12 @@ After `invoke load` completes and you run the generator chain on a fabric:
 | `schemas/` | YAML schema definitions for the full data model |
 | `generators/` | Python generators (fabric, pod, rack, AVD hostvars, structured config, server cabling, and the service layer) |
 | `transforms/` | Python and Jinja2 transforms (EOS, SR Linux and Junos config, docs, cabling plan, ANTA catalog, Crossplane manifests, telemetry config) |
-| `objects/` | Seed YAML (manufacturers, device types, pools, profiles, templates, fabrics, racks, VLANs) |
+| `objects/` | Seed YAML for the fabric, the WAN, the firewall, the Kubernetes cluster, the application catalogue, and the seeded services |
 | `triggers.yml` | Event trigger rules wiring schema changes to generator runs |
 | `backstage/` | Backstage service portal, deployed into the tooling cluster |
 | `docker-compose.yml` | Stack definition; docker-compose.override.yml adds Semaphore and the lab's supporting services |
 | `Dockerfile` | Custom Infrahub image with PyAVD |
-| `tasks.py` | Invoke task definitions (build, start, stop, load, lint, test) |
+| `tasks.py` | Invoke task definitions (`build`, `start`, `load`, `avd`, `prereqs`, `bootstrap`, `lab`, `lint`, `test`; `uv run invoke --list` shows all) |
 
 > **Note:** Brownfield import (modeling an existing fabric and importing configurations via Infrahub Sync) is available in a guided engagement today — it is not yet a self-serve path.
 
@@ -150,22 +152,21 @@ The full documentation is under [`docs/`](docs/docs/). Key entry points:
 
 | | |
 |--|--|
-| **Get the stack running** | [Quick Start](docs/docs/quick-start.md) — prerequisites, install steps, and first load |
+| **Get the stack running** | [Quick start](docs/docs/quick-start.md) — prerequisites, install steps, and first load |
 | **Show the lab to an audience** | [Demo runbook](docs/docs/demo-runbook.md) — the demo script: preflight checks, five acts, and measured timings |
-| **Provision a fabric end-to-end** | [Provision Your First Fabric](docs/docs/provision-first-fabric.md) — step-by-step walkthrough from seed data to rendered EOS artifacts |
-| **Check what's supported** | [Supported Capabilities](docs/docs/supported-capabilities.md) — capability matrix (supported / partial / not yet) |
-| **Run a day-two workflow** | [Add a Network Segment](docs/docs/how-to/add-network-segment.md) — and the other how-to guides |
-| **Understand the generator pipeline** | [Architecture Overview](docs/docs/developer-guide/architecture.md) — system components, data model, and generator chain |
-| **Understand the AVD pipeline** | [AVD Pipeline Overview](docs/docs/developer-guide/avd/overview.md) — two-phase pipeline, hostvars reference, role mapping |
-| **Extend the pipeline** | [Extending the Pipeline](docs/docs/developer-guide/avd/extending.md) — new device roles, transform outputs, schema fields |
-| **Debug pipeline issues** | [Debugging the Pipeline](docs/docs/developer-guide/avd/debugging.md) — intermediate-file inspection, single-generator re-runs, common failure modes |
+| **Provision a fabric end-to-end** | [Provision your first fabric](docs/docs/provision-first-fabric.md) — step-by-step walkthrough from seed data to rendered EOS artifacts |
+| **Check what's supported** | [Supported capabilities](docs/docs/supported-capabilities.md) — capability matrix (supported / partial / not yet) |
+| **Run a day-two workflow** | [Add a network segment](docs/docs/how-to/add-network-segment.md) — and the other how-to guides |
+| **Understand the generator pipeline** | [Architecture overview](docs/docs/developer-guide/architecture.md) — system components, data model, and generator chain |
+| **Understand the AVD pipeline** | [AVD pipeline overview](docs/docs/developer-guide/avd/overview.md) — two-phase pipeline, hostvars reference, role mapping |
+| **Extend the pipeline** | [Extending the pipeline](docs/docs/developer-guide/avd/extending.md) — new device roles, transform outputs, schema fields |
+| **Debug pipeline issues** | [Debugging the pipeline](docs/docs/developer-guide/avd/debugging.md) — intermediate-file inspection, single-generator re-runs, common failure modes |
 
-## Community & Support
+## Community and support
 
-- **Questions and discussion:** [GitHub Discussions](https://github.com/opsmill/infrahub-arista-avd/discussions)
-- **Bugs and feature requests:** [GitHub Issues](https://github.com/opsmill/infrahub-arista-avd/issues)
+- **Bugs and feature requests:** [GitHub Issues on opsmill/infrahub-arista-avd](https://github.com/opsmill/infrahub-arista-avd/issues), the upstream project. This repository does not accept issues.
 
-## Related Projects
+## Related projects
 
 | Project | Description |
 |---------|-------------|

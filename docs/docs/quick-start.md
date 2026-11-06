@@ -111,7 +111,7 @@ Seed data loads in filename order, and the numeric prefixes encode that order: s
 (`00`–`05` — groups, manufacturers, device types, profiles), then the `OTTERNET_FABRIC` design
 (`20`–`28`): device types and templates, pools, management objects, the fabric and pod, tenants and
 VRFs, racks, the pinned switches, the VRF services, and the workload endpoints. The rest of the
-lab follows (`29`–`41`): off-fabric prefixes and devices, the WAN addressing, the firewall and its
+lab follows (`29`–`41`): off-fabric prefixes and devices, the WAN addressing, the firewall with its
 static routes, the WAN, the Kubernetes cluster, the application catalogue, the seeded services and
 access grants, the site security, the monitoring profiles, and the firewall and WAN cabling.
 
@@ -119,11 +119,15 @@ access grants, the site security, the monitoring profiles, and the firewall and 
 
 Open the Infrahub UI at **`http://localhost:8000`** and log in. You should see:
 
+<!-- vale Google.Spelling = NO -->
+
 - **Fabric Design & AVD → Device Catalogue → Manufacturers**: `Arista`, `Nokia`, `Juniper`, and `Generic`.
 - **Data Centre Fabric → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
 - **Data Centre Fabric → Racks**: `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`.
 - **Data Centre Fabric → Switches**: the two spines and five leaves, with their pinned management addresses.
 - **IP Addressing & VLANs → Prefixes**: the `10.41.0.0/16` fabric supernet and the prefixes its pools draw from.
+
+<!-- vale Google.Spelling = YES -->
 
 If you don't see these, re-run `uv run invoke load` or see [Common Issues](./troubleshooting.md).
 
@@ -135,7 +139,8 @@ The stack is up and the seven switches exist with their pinned identity, but the
 
 Steps 2 to 4, and the fabric generation from [Provision Your First Fabric](./provision-first-fabric.md),
 also run as one command. With `--no-lab` it brings up Infrahub only, without the ContainerLab lab,
-the tooling cluster or Kubernetes:
+the tooling cluster, or Kubernetes. It needs about 8 GB of memory and at least 20 GB of free disk
+where Docker keeps its data, and it checks for both before it changes anything:
 
 ```bash
 uv run invoke bootstrap --no-lab
@@ -147,15 +152,16 @@ its artifact; see [Bootstrapping the whole environment](./developer-guide/bootst
 
 ## Run the whole lab on your own machine
 
-The whole environment adds the ContainerLab lab, the tooling cluster and Kubernetes to Infrahub. The machine needs:
+The whole environment adds the ContainerLab lab, the tooling cluster, and Kubernetes to Infrahub. The machine needs:
 
 - Linux with about 48 GB of memory, 8 or more CPU cores, and about 60 GB of free disk for the images,
   volumes and build cache.
 - `/dev/kvm`, because the vSRX firewall is a virtual machine. On a cloud instance, this means
   nested virtualisation or a bare-metal instance type.
 - `sudo` without a password, because ContainerLab runs under `sudo` during an unattended run.
-- Docker usable without `sudo`, [ContainerLab](https://containerlab.dev/install/), `kubectl`,
-  `helm`, `openssl`, and Node 22 or 24 with Corepack (`corepack enable`).
+- Docker and Compose v2 usable without `sudo`, `git`, `curl`,
+  [ContainerLab](https://containerlab.dev/install/), `kubectl`, `helm`, `openssl`, and Node 22 or 24
+  with Corepack (`corepack enable`).
 
 Check the machine, then bring everything up:
 
@@ -190,10 +196,10 @@ for the other ways to get them. The run takes 20 to 30 minutes and ends with the
 | `uv run invoke restart` | Restart all services |
 | `uv run invoke restart --component=infrahub-server` | Restart a specific service |
 | `uv run invoke load` | Re-run the full load sequence |
-| `uv run invoke bootstrap --no-lab` | Build, start, load and generate the fabric, without the lab |
-| `uv run invoke bootstrap` | The whole environment, including the lab and both clusters |
-| `uv run invoke prereqs` | Check the machine has the tools, `sudo`, KVM, memory and lab images that `bootstrap` needs |
-| `uv run invoke lab-images` | Pull, or build, the cEOS, vSRX and branch desktop images |
+| `uv run invoke bootstrap --no-lab` | Build, start, load, and generate the fabric, without the lab |
+| `uv run invoke bootstrap` | The whole environment: Infrahub, the lab, and both clusters |
+| `uv run invoke prereqs` | Check the machine has the tools, `sudo`, KVM, memory, and lab images that `bootstrap` needs |
+| `uv run invoke lab-images` | Pull, or build, the cEOS, vSRX, and branch desktop images |
 | `uv run invoke load-schema` | Reload schemas only |
 | `uv run invoke load-menu` | Reload UI menus only |
 | `uv run invoke init-semaphore` | Re-register the Semaphore project and templates (idempotent) |
