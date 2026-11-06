@@ -37,9 +37,10 @@ spec:
       generator: generate-dns-record
 
 ---
-# A grant made by any client is built, not only one made by the portal.
+# A service made by any client is built, not only one made by the portal.
 #
-# `generate-app-access` targets the group `service_app_accesses`, and Infrahub
+# Each service generator targets one group (`service_app_accesses`,
+# `service_network_segments` and so on), and Infrahub
 # refuses to run a generator against a node outside its target group
 # (`Target ... is not part of the group`). The portal puts each grant in the
 # group itself (`member_of_groups` in its create mutation); the API, the UI and
@@ -50,6 +51,12 @@ spec:
 # next document then runs the generator once the node is a member. Adding a node
 # that is already a member changes nothing, so it emits no group event and the
 # portal path costs no extra run.
+#
+# It started with grants alone. A fabric application or a network segment made in
+# the Infrahub UI then sat unbuilt, and its requester could not fix it: the
+# Requester Access role may create a service with its groups but not add a group
+# to an existing one (`object:Core:StandardGroup:update`), so the UI's Groups
+# dialog failed with no message. Every service kind now joins its group this way.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
@@ -58,6 +65,21 @@ spec:
     - name: add-app-access-to-its-generator-group
       member_action: add_member
       group: service_app_accesses
+    - name: add-network-segment-to-its-generator-group
+      member_action: add_member
+      group: service_network_segments
+    - name: add-fabric-app-to-its-generator-group
+      member_action: add_member
+      group: service_fabric_apps
+    - name: add-tenant-onboarding-to-its-generator-group
+      member_action: add_member
+      group: service_tenant_onboardings
+    - name: add-server-placement-to-its-generator-group
+      member_action: add_member
+      group: service_server_placements
+    - name: add-fabric-peering-to-its-generator-group
+      member_action: add_member
+      group: service_fabric_peerings
 
 ---
 apiVersion: infrahub.app/v1
@@ -236,6 +258,38 @@ spec:
       node_kind: ServiceFabricPeering
       mutation_action: "created"
       action: run-fabric-peering-generator
+
+    # Puts a service created by any client in its generator's target group. See
+    # the CoreGroupAction documents above; the grant's own rule follows below.
+    - name: trigger-network-segment-group-membership-created
+      branch_scope: "other_branches"
+      node_kind: ServiceNetworkSegment
+      mutation_action: "created"
+      action: add-network-segment-to-its-generator-group
+
+    - name: trigger-fabric-app-group-membership-created
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricApp
+      mutation_action: "created"
+      action: add-fabric-app-to-its-generator-group
+
+    - name: trigger-tenant-onboarding-group-membership-created
+      branch_scope: "other_branches"
+      node_kind: ServiceTenantOnboarding
+      mutation_action: "created"
+      action: add-tenant-onboarding-to-its-generator-group
+
+    - name: trigger-server-placement-group-membership-created
+      branch_scope: "other_branches"
+      node_kind: ServiceServerPlacement
+      mutation_action: "created"
+      action: add-server-placement-to-its-generator-group
+
+    - name: trigger-fabric-peering-group-membership-created
+      branch_scope: "other_branches"
+      node_kind: ServiceFabricPeering
+      mutation_action: "created"
+      action: add-fabric-peering-to-its-generator-group
 
     # ServiceAppAccess is now just another service kind. It carried an
     # `approved` Boolean and a second rule watching it, because nothing was
@@ -726,16 +780,20 @@ spec:
             modification_type: updated
 
 ---
-# Builds a grant that became a member of `service_app_accesses` AFTER it was
-# created, which is what the membership rule above does for a grant from any
+# Builds a service that became a member of its generator's group AFTER it was
+# created, which is what the membership rules above do for a service from any
 # client other than the portal. The `created` rule above runs at the same moment
 # as the membership rule, so for such a grant it is refused first; this rule runs
 # once the membership exists.
 #
-# For a grant the portal created, the membership came with the node, so this rule
-# may fire as well as the `created` rule. `generate-app-access` saves every node
-# with `allow_upsert` and every write-back is guarded, so a second run changes
-# nothing. The cost is one extra no-op run.
+# For a service the portal created, the membership came with the node, so this
+# rule may fire as well as the `created` rule. Every service generator saves with
+# `allow_upsert`, allocates from its pools under an identifier keyed on the
+# service, and guards its write-backs, so a second run changes nothing. The cost
+# is one extra no-op run.
+#
+# `service_fabric_apps` has two rules because two generators target it:
+# `generate-fabric-app` and `generate-dns-record`.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
@@ -746,3 +804,33 @@ spec:
       member_update: added
       group: service_app_accesses
       action: run-app-access-generator
+    - name: trigger-network-segment-generator-member-added
+      branch_scope: "other_branches"
+      member_update: added
+      group: service_network_segments
+      action: run-network-segment-generator
+    - name: trigger-fabric-app-generator-member-added
+      branch_scope: "other_branches"
+      member_update: added
+      group: service_fabric_apps
+      action: run-fabric-app-generator
+    - name: trigger-dns-record-generator-member-added
+      branch_scope: "other_branches"
+      member_update: added
+      group: service_fabric_apps
+      action: run-dns-record-generator
+    - name: trigger-tenant-onboarding-generator-member-added
+      branch_scope: "other_branches"
+      member_update: added
+      group: service_tenant_onboardings
+      action: run-tenant-onboarding-generator
+    - name: trigger-server-placement-generator-member-added
+      branch_scope: "other_branches"
+      member_update: added
+      group: service_server_placements
+      action: run-server-placement-generator
+    - name: trigger-fabric-peering-generator-member-added
+      branch_scope: "other_branches"
+      member_update: added
+      group: service_fabric_peerings
+      action: run-fabric-peering-generator
