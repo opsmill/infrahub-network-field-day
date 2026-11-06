@@ -45,7 +45,7 @@ The template then:
 
 1. **Creates a branch** named `implement_<name>`.
 2. **Creates the `ServiceNetworkSegment`** on that branch, in the `service_network_segments` group that `generate-network-segment` targets.
-3. **Waits for the generators.** The `created` event rule in `triggers.yml` runs `generate-network-segment`, which allocates the subnet and VLAN ID and creates the prefix, VLAN, and SVI.
+3. **Waits for the generators.** The event rules in `triggers.yml` add the segment to its generator's group and run `generate-network-segment`, which allocates the subnet and VLAN ID and creates the prefix, VLAN, and SVI.
 4. **Opens a proposed change** from the branch into `main`.
 
 When it finishes, the output links to the proposed change in Infrahub, the segment in the catalogue, and the segment in Infrahub.

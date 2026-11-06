@@ -389,7 +389,7 @@ seeded grant would materialise a rule, a service object and an address-book entr
 data, and the rendered Junos artifact is held byte for byte against a device file that has no such
 rule.
 
-The generator runs on `created`, and on `updated` for each of its own inputs (`status`, `ports`,
+The generator runs on creation (through its group's `member-added` rule), and on `updated` for each of its own inputs (`status`, `ports`,
 `application`, `destination_vip` and the `source_*` relationships), so withdrawing a grant is
 setting its status. `granted_rules` is deliberately not watched: it is what the generator writes.
 

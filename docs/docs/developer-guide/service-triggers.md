@@ -7,8 +7,8 @@ sidebar_position: 32
 
 # Services expand on their branch by event rule
 
-`triggers.yml` fires each service generator on `created`, scoped to
-`other_branches`. Until that existed a service was expanded only because the PORTAL
+`triggers.yml` builds each service on creation, scoped to `other_branches`: a `created` rule adds
+the node to its generator's group, and the group's `member-added` rule runs the generator. Until that existed a service was expanded only because the PORTAL
 asked for it, so one created any other way — the API, a human in the UI — sat unbuilt, and the branch diff showed a request with none of its consequences.
 That reads as "nothing happened" rather than "not built yet."
 
@@ -30,7 +30,7 @@ unchanged configuration, which is worse than showing nothing.
 requesting a service and not withdrawing one: `status` is how every kind in the table above is
 withdrawn, and for a long time nothing watched it, so setting `decommissioning` through the UI or
 the portal fired no generator and the branch diff showed a status change with none of its
-consequences — the same failure the `created` rules exist to prevent, reached from the other end.
+consequences — the same failure the creation rules exist to prevent, reached from the other end.
 `ServiceAppAccess` got its rules first; `ServiceNetworkSegment`, `ServiceFabricApp`,
 `ServiceTenantOnboarding`, `ServiceServerPlacement` and `ServiceFabricPeering` followed, and
 withdrawing any of them no longer needs `infrahubctl generator` by hand. The WAN kinds have no
@@ -83,8 +83,8 @@ and leaves the status at `decommissioning`, which is true (asked for, not done) 
 nothing.
 
 **A catalogue pin is not an input, and writes nothing a rule watches.** `ServiceFabricApp.definition`
-and `definition_pinned` are both unwatched. The pin is taken once, on creation, by the run the
-`created` rule already fires: it sets the chart fields, `definition_pinned`, and (when empty) the
+and `definition_pinned` are both unwatched. The pin is taken once, on creation, by the run that
+creation already starts: it sets the chart fields, `definition_pinned`, and (when empty) the
 selector and advertised services, none of which is watched, and it never writes `vip_block_size`,
 which is. The pin therefore adds no run: a create still costs the build plus the one no-op fired by
 `provisioning -> active`. `definition` is left unwatched because re-pointing an application at another
@@ -92,7 +92,7 @@ catalogue entry is an upgrade, and an upgrade is its own reviewed change rather 
 rebuild. `tests/unit/test_service_trigger_contract.py` holds all of it, including that no rule names
 `ServiceApplicationDefinition`.
 
-## A grant made by any client joins its generator group
+## A service made by any client joins its generator group
 
 **A `ServiceAppAccess` created outside the portal was never built.** `generate-app-access` targets the
 group `service_app_accesses`, and Infrahub refuses to run a generator against a node that is not a
@@ -103,8 +103,10 @@ send no membership, so their grants fired the `created` rule, were refused, and 
 rule while every validator on the proposed change stayed green. Measured in a live run in which
 `mcp-agent` requested Grafana access.
 
-**`triggers.yml` now adds the membership and builds on it, so the client does not have to.** Three
-objects do this:
+**`triggers.yml` now adds the membership and builds on it, so the client does not have to.** It
+started with grants; fabric applications and network segments created in the UI then sat unbuilt in
+the same way, and a requester could not add the group afterwards, because Requester Access may not
+update a group. Every service kind now has three objects. For grants:
 
 - A `CoreGroupAction`, `add-app-access-to-its-generator-group`, which adds a node to
   `service_app_accesses`.
@@ -113,15 +115,23 @@ objects do this:
 - A `CoreGroupTriggerRule`, `trigger-app-access-generator-member-added`, which runs
   `generate-app-access` when a node is added to the group on a branch.
 
-The existing `created` rule fires at the same moment as the membership rule and is still refused for
-a grant that has no membership yet. The group rule then builds the grant once the membership exists.
-The refused run is a failed task, not a failed generator instance.
+The other five kinds have the same three, named after the kind (`add-network-segment-to-its-generator-group`
+and so on). `service_fabric_apps` has two group rules, because `generate-fabric-app` and
+`generate-dns-record` both target it.
+
+**The group rule is the only rule that builds a service on creation.** A node created already in
+its group, as the portal creates it, fires the group rule too: measured with the `created` generator
+rule switched off, a segment created with its membership was still built. When a `created` rule also
+ran the generator, the two runs started within two seconds of each other, and
+`generate-network-segment`'s second run found the VLAN the first had just made and refused (`an object
+already carries this segment's name`), which failed the portal request. No `created` rule runs a
+service generator any more for that reason.
 
 **The loop still terminates.** The membership rule writes only group membership, which is not a field
 of the grant, so none of the `updated` rules above can see it. Adding a node that is already a member
 changes nothing and emits no group event. The group rule runs the generator, whose write-backs are
-guarded as described above. `tests/unit/test_service_trigger_contract.py` pins the three objects, the
-group they name and the branch scope.
+guarded as described above. `tests/unit/test_service_trigger_contract.py` pins the three objects per kind, the
+group they name, the branch scope, and that no `created` rule runs a service generator.
 
 **For a grant the portal created, the group rule may run the generator a second time.** The membership
 arrived with the node, and whether Infrahub then emits a member-added event for it was not tested. If it

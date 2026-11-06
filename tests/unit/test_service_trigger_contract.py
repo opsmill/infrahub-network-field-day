@@ -216,13 +216,23 @@ def test_watched_fields_exist_and_are_read_by_the_generator(kind: str, generator
         assert field in read, f"{generator}'s query never selects {field!r}, so watching it rebuilds nothing"
 
 
-@pytest.mark.parametrize("kind", sorted(WATCHED))
-def test_each_service_kind_still_builds_on_creation(kind: str) -> None:
-    assert [
+@pytest.mark.parametrize(("kind", "generator"), PAIRS)
+def test_each_service_is_built_on_creation_by_exactly_one_rule(kind: str, generator: str) -> None:
+    """The group's member-added rule builds it; a `created` rule running the generator too would race it.
+
+    A node created already in its group (as the portal creates it) fires the
+    member-added rule, so a `created` generator rule started a second run at the
+    same moment. generate-network-segment's second run then refused the VLAN the
+    first had just made, and the portal request failed.
+    """
+    created = [
         r
         for r in _rules()
-        if r["node_kind"] == kind and r["mutation_action"] == "created" and r["action"] in _actions()
+        if r["node_kind"] == kind and r["mutation_action"] == "created" and _actions().get(r["action"]) == generator
     ]
+    assert created == []
+    group = _generator_group(generator)
+    assert [r for r in _group_rules() if r["group"] == group and _actions()[r["action"]] == generator]
 
 
 def test_rule_names_are_unique() -> None:

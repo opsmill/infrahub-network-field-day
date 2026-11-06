@@ -101,7 +101,7 @@ portal. See [the catalogue](./schemas.md#the-application-catalogue).
 
 **The two creates are separated by a barrier, and that is the whole design.**
 `generate-app-access` reads the application's `vip_block`, `vrf` and `advertised_services`;
-`generate-fabric-app` is what allocates the block. Both fire on `created` through
+`generate-fabric-app` is what allocates the block. Both run on creation through
 independent rules and **nothing sequences them**, so a grant created beside its application
 races the allocation — and losing is permanent rather than slow: `validate_model` raises,
 `_set_status` stamps the grant `error`, and nothing ever runs it again.
