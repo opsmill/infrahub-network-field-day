@@ -84,8 +84,8 @@ The portal certificate is signed by a certificate authority that the bootstrap c
 
 <!-- vale Google.Spelling = NO -->
 
-- **Rendered configurations.** In Infrahub, open a switch under **Data Centre Fabric → Switches** and view its artifacts: the EOS configuration that PyAVD rendered from the fabric design. See [Viewing artifacts](./viewing-artifacts.md).
-- **A service request.** Sign in to the portal as `alice` and request a network segment. Infrahub creates a branch, a generator builds the VLAN, subnet and gateway on that branch, and a proposed change shows the difference. Sign in to Infrahub as `alex` to review and merge it. See [The service portal](./service-portal.md).
+- **Rendered configurations.** In Infrahub, open a switch under **Data Center → Switches** and view its artifacts: the EOS configuration that PyAVD rendered from the fabric design. See [Viewing artifacts](./viewing-artifacts.md).
+- **A service request.** Sign in to the portal as `alice` and request a network segment. Infrahub creates a branch, a generator builds the VLAN, subnet and gateway on that branch, and a proposed change shows the difference. Sign in to Infrahub as `alex` to review and merge it. [Service request workflows](./demo-workflows.md) walks through four requests, each through the portal and by hand in Infrahub.
 - **A change on a branch.** Edit the fabric design on a branch and open a proposed change. The proposed change shows the changed objects and the changed configurations before anything is merged.
 
 <!-- vale Google.Spelling = YES -->
