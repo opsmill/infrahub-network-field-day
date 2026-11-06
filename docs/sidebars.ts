@@ -5,6 +5,7 @@ const sidebars: SidebarsConfig = {
     'home',
     'setup-lab',
     'setup-demo',
+    'demo-workflows',
     'service-portal',
     'demo-runbook',
     'demo-builder',

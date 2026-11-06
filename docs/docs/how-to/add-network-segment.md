@@ -65,7 +65,7 @@ Once merged, the segment exists on `main`, and the deployment reconciler pushes 
 An operator can make the same request in the Infrahub UI or with `infrahubctl`:
 
 1. Create a branch.
-2. Create a `ServiceNetworkSegment` on it with the fields above, as a member of the `service_network_segments` group. The `created` event rule runs `generate-network-segment` on the branch.
+2. Create a `ServiceNetworkSegment` on it with the fields above. An event rule adds it to the `service_network_segments` group, and the group rule runs `generate-network-segment` on the branch.
 3. Optionally run `uv run invoke avd --branch <branch>` to regenerate hostvars, structured configs, and artifacts on the branch before review.
 4. Open a proposed change from the branch.
 

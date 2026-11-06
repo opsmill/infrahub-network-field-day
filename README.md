@@ -115,7 +115,7 @@ What a bootstrap builds, in order. Steps 1 to 6 happen in both environments; ste
   - Server placement into a rack, cabled to its leaves
   - Tenant onboarding onto a fabric
   - Exposed applications and access grants
-- **Stack** — Docker Compose that extends the Infrahub image named in the `Dockerfile` with PyAVD. It includes the Infrahub UI, Neo4j, and Semaphore (a bundled Ansible runner, which does not configure devices; see [Supported capabilities](docs/docs/supported-capabilities.md)).
+- **Stack** — Docker Compose, extending Infrahub 1.10.6 with PyAVD. The version is the `INFRAHUB_BASE_VERSION` default in the `Dockerfile`. It includes the Infrahub UI, Neo4j, and Semaphore (a bundled Ansible runner, which does not configure devices; see [Supported capabilities](docs/docs/supported-capabilities.md)).
 
 | File | What it does |
 |------|-------------|

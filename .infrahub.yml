@@ -246,6 +246,12 @@ generator_definitions:
       name: name__value
     class_name: AppAccessGenerator
     convert_query_response: false
+    # Built on its branch by triggers.yml and checked in the proposed change, so a
+    # run on main after the merge adds nothing. It used to happen by default, and
+    # its writes to main for a minute after every merge conflicted with any branch
+    # cut in that minute (docs/docs/demo-workflows.md).
+    execute_in_proposed_change: true
+    execute_after_merge: false
 
   # Sits underneath the service layer, and is the first generator here that
   # ALLOCATES rather than selects: a segment states a size and a tenant, and
@@ -264,6 +270,12 @@ generator_definitions:
       name: name__value
     class_name: NetworkSegmentGenerator
     convert_query_response: false
+    # Built on its branch by triggers.yml and checked in the proposed change, so a
+    # run on main after the merge adds nothing. It used to happen by default, and
+    # its writes to main for a minute after every merge conflicted with any branch
+    # cut in that minute (docs/docs/demo-workflows.md).
+    execute_in_proposed_change: true
+    execute_after_merge: false
 
   # Sits underneath the service layer: gives an exposed application a
   # LoadBalancer VIP block from its cluster's pool, instead of a human choosing
@@ -314,6 +326,12 @@ generator_definitions:
       name: name__value
     class_name: TenantOnboardingGenerator
     convert_query_response: false
+    # Built on its branch by triggers.yml and checked in the proposed change, so a
+    # run on main after the merge adds nothing. It used to happen by default, and
+    # its writes to main for a minute after every merge conflicted with any branch
+    # cut in that minute (docs/docs/demo-workflows.md).
+    execute_in_proposed_change: true
+    execute_after_merge: false
 
   # Places a machine in a rack and joins it to `servers`, which is the group
   # generate-server-cabling targets. Without that membership the machine is
@@ -326,6 +344,12 @@ generator_definitions:
       name: name__value
     class_name: ServerPlacementGenerator
     convert_query_response: false
+    # Built on its branch by triggers.yml and checked in the proposed change, so a
+    # run on main after the merge adds nothing. It used to happen by default, and
+    # its writes to main for a minute after every merge conflicted with any branch
+    # cut in that minute (docs/docs/demo-workflows.md).
+    execute_in_proposed_change: true
+    execute_after_merge: false
 
   - name: generate-server-cabling
     file_path: "./generators/generate_server_cabling.py"
