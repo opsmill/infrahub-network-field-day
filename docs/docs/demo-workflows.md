@@ -225,3 +225,17 @@ An existing stack needs one migration step, because the generators then keep the
 ### A service created in the UI was not built
 
 Before this page was written, only access grants were added to their generator's group automatically. An application or a network segment created in the UI without setting **Member Of Groups** was never built, and `alice` could not add the group afterwards: **Save** in the **Groups** dialog did nothing, and the browser console showed `PERMISSION_DENIED` for `object:Core:StandardGroup:update`. [`triggers.yml`](https://github.com/opsmill/infrahub-network-field-day/blob/main/triggers.yml) now adds every service kind to its generator's group when it is created, whichever client creates it.
+
+### A portal network segment request failed after that fix
+
+The first version of that fix kept the rule that ran each service's generator on creation and added a second rule that ran it when the service joined its group. The portal creates a service already in its group, so both rules started the generator within two seconds of each other. For a network segment, the second run found the VLAN the first run had just created and refused it with `an object already carries this segment's name`, and the portal request stopped with `Generator task "Run generator generate-network-segment" failure`.
+
+The group rule also runs when a service is created already in its group: with the creation rule switched off, such a segment was still built. Each service is now built by its group rule alone, and the creation rule only adds the service to its group. After the change, on a stack rebuilt with `uv run invoke bootstrap --fresh --no-lab`:
+
+- A portal network segment request was built in 30 seconds, and its proposed change passed 17 of 17 checks.
+- A portal request for an exposed application with access passed 28 of 28.
+- A portal access grant passed 27 of 27.
+- A revoke through the portal passed 23 of 23.
+- A revoke by hand in the UI, on a branch cut straight after a merge, passed 27 of 27.
+
+The design and the measurements are in [Services expand on their branch by event rule](./developer-guide/service-triggers.md#a-service-made-by-any-client-joins-its-generator-group).
