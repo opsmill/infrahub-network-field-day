@@ -11,7 +11,7 @@ A network segment is the three technical objects a tenant network is made of: an
 
 Prerequisites:
 
-- A running stack with seed data loaded ([Quick Start](../quick-start.md)).
+- A running stack with seed data loaded ([Set up the full lab environment](../setup-lab.md) or [Set up a demo environment without the lab](../setup-demo.md)).
 - A provisioned fabric with devices and artifacts ([Provision Your First Fabric](../provision-first-fabric.md)).
 - The VRF the gateway lives in must already exist. The segment selects a VRF; it doesn't create one.
 
@@ -45,7 +45,7 @@ The template then:
 
 1. **Creates a branch** named `implement_<name>`.
 2. **Creates the `ServiceNetworkSegment`** on that branch, in the `service_network_segments` group that `generate-network-segment` targets.
-3. **Waits for the generators.** The `created` event rule in `triggers.yml` runs `generate-network-segment`, which allocates the subnet and VLAN ID and creates the prefix, VLAN, and SVI.
+3. **Waits for the generators.** The event rules in `triggers.yml` add the segment to its generator's group and run `generate-network-segment`, which allocates the subnet and VLAN ID and creates the prefix, VLAN, and SVI.
 4. **Opens a proposed change** from the branch into `main`.
 
 When it finishes, the output links to the proposed change in Infrahub, the segment in the catalogue, and the segment in Infrahub.
@@ -65,7 +65,7 @@ Once merged, the segment exists on `main`, and the deployment reconciler pushes 
 An operator can make the same request in the Infrahub UI or with `infrahubctl`:
 
 1. Create a branch.
-2. Create a `ServiceNetworkSegment` on it with the fields above, as a member of the `service_network_segments` group. The `created` event rule runs `generate-network-segment` on the branch.
+2. Create a `ServiceNetworkSegment` on it with the fields above. An event rule adds it to the `service_network_segments` group, and the group rule runs `generate-network-segment` on the branch.
 3. Optionally run `uv run invoke avd --branch <branch>` to regenerate hostvars, structured configs, and artifacts on the branch before review.
 4. Open a proposed change from the branch.
 

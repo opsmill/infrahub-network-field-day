@@ -216,13 +216,23 @@ def test_watched_fields_exist_and_are_read_by_the_generator(kind: str, generator
         assert field in read, f"{generator}'s query never selects {field!r}, so watching it rebuilds nothing"
 
 
-@pytest.mark.parametrize("kind", sorted(WATCHED))
-def test_each_service_kind_still_builds_on_creation(kind: str) -> None:
-    assert [
+@pytest.mark.parametrize(("kind", "generator"), PAIRS)
+def test_each_service_is_built_on_creation_by_exactly_one_rule(kind: str, generator: str) -> None:
+    """The group's member-added rule builds it; a `created` rule running the generator too would race it.
+
+    A node created already in its group (as the portal creates it) fires the
+    member-added rule, so a `created` generator rule started a second run at the
+    same moment. generate-network-segment's second run then refused the VLAN the
+    first had just made, and the portal request failed.
+    """
+    created = [
         r
         for r in _rules()
-        if r["node_kind"] == kind and r["mutation_action"] == "created" and r["action"] in _actions()
+        if r["node_kind"] == kind and r["mutation_action"] == "created" and _actions().get(r["action"]) == generator
     ]
+    assert created == []
+    group = _generator_group(generator)
+    assert [r for r in _group_rules() if r["group"] == group and _actions()[r["action"]] == generator]
 
 
 def test_rule_names_are_unique() -> None:
@@ -265,20 +275,19 @@ def _generator_group(generator: str) -> str:
     return next(g for g in config["generator_definitions"] if g["name"] == generator)["targets"]
 
 
-def test_a_grant_from_any_client_joins_the_generator_group_on_creation() -> None:
+@pytest.mark.parametrize(("kind", "generator"), PAIRS)
+def test_a_service_from_any_client_joins_the_generator_group_on_creation(kind: str, generator: str) -> None:
     """The portal adds the membership itself; the API, the UI and the MCP server do not.
 
     Infrahub refuses a generator run against a node outside the target group, so a
-    grant without the membership is never built.
+    service without the membership is never built. A requester cannot add it
+    afterwards either: Requester Access may not update a group.
     """
-    generator = _actions()["run-app-access-generator"]
     group = _generator_group(generator)
     rules = [
         r
         for r in _rules()
-        if r["node_kind"] == "ServiceAppAccess"
-        and r["mutation_action"] == "created"
-        and r["action"] in _group_actions()
+        if r["node_kind"] == kind and r["mutation_action"] == "created" and r["action"] in _group_actions()
     ]
     assert len(rules) == 1
     assert rules[0]["branch_scope"] == "other_branches"
@@ -287,14 +296,13 @@ def test_a_grant_from_any_client_joins_the_generator_group_on_creation() -> None
     assert action["group"] == group
 
 
-def test_the_generator_runs_when_a_grant_becomes_a_member_of_its_group() -> None:
-    generator = _actions()["run-app-access-generator"]
+@pytest.mark.parametrize(("kind", "generator"), PAIRS)
+def test_the_generator_runs_when_a_service_becomes_a_member_of_its_group(kind: str, generator: str) -> None:
     group = _generator_group(generator)
-    rules = [r for r in _group_rules() if r["group"] == group]
+    rules = [r for r in _group_rules() if r["group"] == group and _actions()[r["action"]] == generator]
     assert len(rules) == 1
     assert rules[0]["member_update"] == "added"
     assert rules[0]["branch_scope"] == "other_branches"
-    assert _actions()[rules[0]["action"]] == generator
 
 
 def test_group_rules_never_name_a_deployment_or_monitoring_group() -> None:
@@ -303,11 +311,36 @@ def test_group_rules_never_name_a_deployment_or_monitoring_group() -> None:
         assert not rule["group"].startswith(("deployment", "monitoring")), rule["name"]
 
 
-def test_the_group_membership_write_is_not_watched_by_any_updated_rule() -> None:
-    """Membership is not a field of the grant, so the existing field rules cannot see it."""
-    assert "member_of_groups" not in {_matched_field(r) for r in _updated_rules("ServiceAppAccess")}
+@pytest.mark.parametrize("kind", sorted(WATCHED))
+def test_the_group_membership_write_is_not_watched_by_any_updated_rule(kind: str) -> None:
+    """Membership is not a field of the service, so the existing field rules cannot see it."""
+    assert "member_of_groups" not in {_matched_field(r) for r in _updated_rules(kind)}
 
 
 def test_every_rule_name_is_unique_across_node_and_group_rules() -> None:
     names = [r["name"] for r in _rules()] + [r["name"] for r in _group_rules()]
     assert len(names) == len(set(names))
+
+
+# Generators whose services are only ever requested on a branch: nothing seeds them
+# on main, so nothing needs them to run there after a merge.
+BRANCH_ONLY_GENERATORS = (
+    "generate-app-access",
+    "generate-network-segment",
+    "generate-tenant-onboarding",
+    "generate-server-placement",
+)
+
+
+@pytest.mark.parametrize("generator", BRANCH_ONLY_GENERATORS)
+def test_a_branch_only_service_generator_does_not_run_on_main_after_a_merge(generator: str) -> None:
+    """Its run on main rewrote every service it targets for about a minute after each merge.
+
+    A branch cut in that minute then failed Data Integrity, or a generator validator
+    asked for a rebase, and a requester may not rebase. The proposed change still
+    runs it, so the review still sees the result.
+    """
+    config = yaml.safe_load((ROOT / ".infrahub.yml").read_text(encoding="utf-8"))
+    definition = next(g for g in config["generator_definitions"] if g["name"] == generator)
+    assert definition["execute_after_merge"] is False
+    assert definition["execute_in_proposed_change"] is True

@@ -13,7 +13,8 @@ file are in `docs/docs/developer-guide/`. This file keeps the rules and a pointe
 Key docs to read before larger changes:
 
 - `README.md` and `docs/docs/home.md` for the current product overview.
-- `docs/docs/quick-start.md` for stack/load commands.
+- `docs/docs/setup-lab.md` and `docs/docs/setup-demo.md` for the two ways to bring the environment up, and
+  `docs/docs/developer-guide/stack-step-by-step.md` for the stack and load commands one at a time.
 - `docs/docs/supported-capabilities.md` before assuming a feature is supported.
 - `docs/docs/developer-guide/architecture.md` for the data model and generator chain.
 - `docs/docs/developer-guide/schemas.md` for schema kinds and dropdown values.

@@ -11,7 +11,7 @@ Places a new physical server into a compute rack. You request one `ServiceServer
 
 Prerequisites:
 
-- A running stack with seed data loaded ([Quick Start](../quick-start.md)).
+- A running stack with seed data loaded ([Set up the full lab environment](../setup-lab.md) or [Set up a demo environment without the lab](../setup-demo.md)).
 - A provisioned fabric with at least one **compute** rack ([Provision Your First Fabric](../provision-first-fabric.md)).
 - At least one `TemplateComputePhysicalServer` template, for example the seeded `otternet-workload-host`.
 
@@ -43,7 +43,7 @@ The template then:
 
 1. **Creates a branch** named `implement_<name>`.
 2. **Creates the `ServiceServerPlacement`** on that branch, in the `service_server_placements` group that `generate-server-placement` targets.
-3. **Waits for the generators.** The `created` event rule in `triggers.yml` runs `generate-server-placement`, which creates the `ComputePhysicalServer` with status `provisioning` and adds it to the `servers` group. Creating the server fires the event rule that runs `generate-server-cabling`, and the group membership is what puts the server in that generator's targets.
+3. **Waits for the generators.** The event rules in `triggers.yml` add the request to its generator's group and run `generate-server-placement`, which creates the `ComputePhysicalServer` with status `provisioning` and adds it to the `servers` group. Creating the server fires the event rule that runs `generate-server-cabling`, and the group membership is what puts the server in that generator's targets.
 4. **Opens a proposed change** from the branch into `main`.
 
 When it finishes, the output links to the proposed change in Infrahub, the placement in the catalogue, and the placement in Infrahub.
@@ -86,7 +86,7 @@ If the proposed change shows the server but no updated device configs:
 
 ## Without the portal
 
-An operator can make the same request in the Infrahub UI or with `infrahubctl`: create a branch, create a `ServiceServerPlacement` on it with the fields above as a member of the `service_server_placements` group, and open a proposed change. The `created` event rule runs the placement generator on the branch, exactly as it does for a portal request.
+An operator can make the same request in the Infrahub UI or with `infrahubctl`: create a branch, create a `ServiceServerPlacement` on it with the fields above, and open a proposed change. The event rules add it to the `service_server_placements` group and run the placement generator on the branch, exactly as they do for a portal request.
 
 To withdraw a server, set the placement's **Status** to `decommissioning` on a branch. An `updated` event rule watches that field, so the generator runs on its own: it deletes the machine with its interfaces and cabling, and sets the status to `decommissioned`. Editing the hostname, role, rack, template, or description re-runs it the same way.
 

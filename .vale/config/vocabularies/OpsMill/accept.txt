@@ -295,3 +295,5 @@ resolver
 nginx
 inotify
 Otternet
+[Rr]ebase
+Podinfo
