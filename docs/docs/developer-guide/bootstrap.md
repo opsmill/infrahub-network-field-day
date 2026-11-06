@@ -41,7 +41,7 @@ never moves.
 ```bash
 uv run invoke bootstrap                    # everything, in one command
 uv run invoke bootstrap --fresh            # ... destroying the stack and the lab first
-uv run invoke bootstrap --no-lab           # Infrahub only, no lab and no clusters
+uv run invoke bootstrap --no-lab           # Infrahub, Dex and the portal; no devices, no workload cluster
 uv run invoke bootstrap --fresh --no-lab   # ... destroying the stack first, never the lab
 ```
 
@@ -63,7 +63,7 @@ checks on their own):
 - `sudo` without a password, because ContainerLab and the tooling bridge run under `sudo` and nobody
   watches the prompt.
 - `/dev/kvm`, because the vSRX firewall is a VM.
-- About 48 GB of memory with the lab, or 8 GB with `--no-lab`.
+- About 48 GB of memory with the lab, or 12 GB with `--no-lab`.
 - At least 20 GB of free disk where Docker keeps its data, and a warning below 60 GB, which a first
   run on an empty machine needs.
 - The host ports the stack and the lab publish, which must be free or held by this environment's
@@ -93,17 +93,20 @@ same step before every deploy. See the
 
 ### Infrahub without the lab
 
-`--no-lab` runs `prereqs` → `build` → `start` → `load` → `avd` (on a branch, then merged) → `mcp` →
-`network-admin` → `metrics-exporter`, then the read-write demo release when the stack is read-write,
-then the readiness checks. The result is Infrahub at `http://localhost:8000` with the
-`OTTERNET_FABRIC` cabled and every artifact rendered, and no devices to push them to.
+`--no-lab` runs `prereqs` → `build` → `start` → `load` → `avd` (on a branch, then merged) →
+`lab --tooling-only` → `backstage-build` → `tooling` → `mcp` → `mcp-tokens` → `network-admin` →
+`metrics-exporter`, then the read-write demo release when the stack is read-write, then the
+readiness checks. The result is Infrahub at `http://localhost:8000` with the `OTTERNET_FABRIC`
+cabled and every artifact rendered, Dex and the portal at `https://10.90.0.11:32001`, and `alice`'s
+MCP token in `.env`, with no devices to push the artifacts to.
 
-It leaves out every step that needs the lab or the tooling cluster:
+`lab --tooling-only` deploys the `tool-node1` ContainerLab node and the `br-otter-tool` bridge, and no
+other node. The tooling cluster needs no fabric, because the host is on its bridge. When `tool-node1`
+is already running, for example as part of a full lab, the step leaves it as it is.
 
-- `lab`, `reconcile` and the reconciler loop, because there are no devices.
-- `backstage-build` and `tooling`, so there is no Dex and no portal.
-- `mcp-tokens`, because it signs `alice` in through Dex. The MCP server runs, but Claude Code has no
-  token to send until `mcp-tokens` runs.
+It leaves out every step that needs the rest of the lab:
+
+- The other lab nodes, `reconcile` and the reconciler loop, because there are no devices.
 - `cluster`, because the workload cluster runs in the lab.
 
 The readiness checks for those steps fail, so a `--no-lab` run prints the readiness summary but

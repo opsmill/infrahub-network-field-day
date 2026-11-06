@@ -26,7 +26,8 @@ FAIL = "FAIL"
 # The full lab needs about 36.5 GB for its nodes (lab/scripts/preflight.sh). The Infrahub stack,
 # the reconciler and the portal build add roughly 10 GB on top.
 LAB_MEMORY_GB = 48
-INFRAHUB_MEMORY_GB = 8
+# --no-lab: the stack, plus the 3 GB tooling node (Dex, the portal).
+INFRAHUB_MEMORY_GB = 12
 NODE_MAJOR_VERSIONS = (22, 24)
 # Measured on a full environment: about 20 GB of images, 12 GB of volumes, 10 GB of build cache, and
 # the k3s nodes' own images on top. A first run on an empty machine needs about this much free.
@@ -296,19 +297,20 @@ def run_checks(
             check_memory(total, LAB_MEMORY_GB if lab else INFRAHUB_MEMORY_GB),
         )
     )
-    if not lab:
-        return results
-
+    # The tooling node (Dex, the portal) runs with or without the lab.
     results.extend(
         (
             check_tool("containerlab", "the lab", which, 'bash -c "$(curl -sL https://get.containerlab.dev)"'),
             check_sudo(run),
-            check_kvm(kvm),
             check_inotify({key: sysctl(key) for key in INOTIFY_MINIMUM}),
             check_tool("openssl", "the portal certificate", which),
             check_node(which, run),
         )
     )
+    if not lab:
+        return results
+
+    results.append(check_kvm(kvm))
     if cluster:
         results.extend(
             (

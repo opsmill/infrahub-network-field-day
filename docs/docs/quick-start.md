@@ -138,15 +138,17 @@ The stack is up and the seven switches exist with their pinned identity, but the
 ## Bring up Infrahub in one command
 
 Steps 2 to 4, and the fabric generation from [Provision Your First Fabric](./provision-first-fabric.md),
-also run as one command. With `--no-lab` it brings up Infrahub only, without the ContainerLab lab,
-the tooling cluster, or Kubernetes. It needs about 8 GB of memory and at least 20 GB of free disk
+also run as one command. With `--no-lab` it brings up Infrahub, and from the ContainerLab lab only
+the tooling node, which runs Dex and the service portal. It deploys no devices and no Kubernetes
+workload cluster. It needs about 12 GB of memory and at least 20 GB of free disk
 where Docker keeps its data, and it checks for both before it changes anything:
 
 ```bash
 uv run invoke bootstrap --no-lab
 ```
 
-It ends with Infrahub at `http://localhost:8000`, the fabric cabled, and every artifact rendered.
+It ends with Infrahub at `http://localhost:8000`, the fabric cabled, every artifact rendered, the
+portal at `https://10.90.0.11:32001`, and the MCP token for `alice` in `.env`.
 Without `--no-lab`, `uv run invoke bootstrap` also deploys the lab and configures every device from
 its artifact; see [Bootstrapping the whole environment](./developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
 
@@ -196,7 +198,7 @@ for the other ways to get them. The run takes 20 to 30 minutes and ends with the
 | `uv run invoke restart` | Restart all services |
 | `uv run invoke restart --component=infrahub-server` | Restart a specific service |
 | `uv run invoke load` | Re-run the full load sequence |
-| `uv run invoke bootstrap --no-lab` | Build, start, load, and generate the fabric, without the lab |
+| `uv run invoke bootstrap --no-lab` | Build, start, load, generate the fabric, and deploy Dex and the portal, without the lab's devices |
 | `uv run invoke bootstrap` | The whole environment: Infrahub, the lab, and both clusters |
 | `uv run invoke prereqs` | Check the machine has the tools, `sudo`, KVM, memory, and lab images that `bootstrap` needs |
 | `uv run invoke lab-images` | Pull, or build, the cEOS, vSRX, and branch desktop images |

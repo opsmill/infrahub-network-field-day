@@ -32,7 +32,7 @@ uv run invoke avd --topology            # BUILD-TIME ONLY: also build the fabric
 uv run invoke avd --branch b --merge    # ... on a branch, merged when it succeeds
 uv run invoke bootstrap                 # the whole environment, one command
 uv run invoke bootstrap --fresh         # ... destroying the stack and the lab first
-uv run invoke bootstrap --no-lab        # Infrahub only: no lab, no portal, no Kubernetes
+uv run invoke bootstrap --no-lab        # Infrahub, Dex, the portal and alice's token: no devices, no Kubernetes
 uv run invoke bootstrap --no-cluster    # ... everything except Cilium, Vidra and Crossplane
 uv run invoke bootstrap --fresh --demo  # a read-write demo stack (needs NFD_GITHUB_TOKEN)
 scripts/verify_bootstrap.sh             # rebuild from nothing and assert the result

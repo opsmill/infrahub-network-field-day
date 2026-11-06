@@ -116,7 +116,7 @@ flowchart LR
 4. Export the local stack's token (see [Quick Start](./quick-start.md)), then load schemas, seed data, and the repository: `uv run invoke load`.
 5. Follow [Provision Your First Fabric](./provision-first-fabric.md) to generate a fabric and reach rendered EOS artifacts.
 
-`uv run invoke bootstrap --no-lab` runs steps 2 to 5 in one command, without the ContainerLab lab.
+`uv run invoke bootstrap --no-lab` runs steps 2 to 5 in one command, and deploys Dex and the service portal, without the lab's devices.
 
 ## Additional resources
 
