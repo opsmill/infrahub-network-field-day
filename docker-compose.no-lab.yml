@@ -1,0 +1,86 @@
+# ==========================================================================
+# Dex and the Backstage portal for `bootstrap --no-lab`, as plain containers.
+#
+# The full lab runs both in the tooling cluster (tool-node1, a ContainerLab
+# node behind the firewall). Without the lab there is no firewall to sit
+# behind, so ContainerLab, its sudo and its host bridge buy nothing, and on
+# macOS they cannot run at all. `compose_cmd()` adds this file when `.env`
+# holds OTTERNET_NO_LAB=true, which `bootstrap --no-lab` writes.
+#
+# ONE ADDRESS FOR DEX, AND IT IS `localhost:32556`. An OIDC issuer has to be a
+# URL that the browser and every relying party reach the same way. Dex and the
+# portal share infrahub-server's network namespace, so `localhost` inside
+# Infrahub, inside the portal and on the host (through the published ports) is
+# the same Dex. A `*.localhost` name was tried first: browsers resolve it, but
+# the macOS resolver does not, so the host scripts that sign alice in could not.
+#
+# Recreating infrahub-server leaves these two in a namespace that no longer
+# exists: re-run `uv run invoke tooling`, which recreates them.
+# ==========================================================================
+---
+services:
+  infrahub-server:
+    ports:
+      - "32556:32556"  # Dex
+      - "32001:7007"   # the portal
+    environment:
+      INFRAHUB_OIDC_PROVIDER1_DISCOVERY_URL: http://localhost:32556/dex/.well-known/openid-configuration
+
+  dex:
+    image: ghcr.io/dexidp/dex:v2.44.0
+    # Started by `invoke tooling`, after it has written the configuration below.
+    # Also in build-only: the portal depends on Dex, and `backstage-build` enables only that profile.
+    profiles: ["build-only", "no-lab-tooling"]
+    network_mode: service:infrahub-server
+    restart: unless-stopped
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    volumes:
+      # Generated from tooling/10-dex.yaml by `invoke tooling`, so the users and
+      # clients stay defined in one place.
+      - ./.tooling/dex.yaml:/etc/dex/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:32556/dex/.well-known/openid-configuration"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  backstage:
+    profiles: !override ["build-only", "no-lab-tooling"]
+    network_mode: service:infrahub-server
+    # Published on infrahub-server instead: a container sharing another's
+    # network namespace cannot publish ports of its own.
+    ports: !reset []
+    depends_on:
+      # The OIDC authenticator fetches Dex's discovery document once, at
+      # startup, and keeps a failure for the life of the process.
+      dex:
+        condition: service_healthy
+    # The certificate is read from files into the two variables
+    # app-config.docker.yaml names, as the tooling cluster does from a Secret.
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        export BACKSTAGE_TLS_CERT="$$(cat /etc/backstage-tls/tls.crt)"
+        BACKSTAGE_TLS_KEY="$$(cat /etc/backstage-tls/tls.key)" &&
+        exec node packages/backend --config app-config.yaml --config app-config.docker.yaml
+    volumes:
+      - ./.tooling/tls:/etc/backstage-tls:ro
+    # HTTPS: the backend terminates TLS itself, so the base file's HTTP probe never passes.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('https://localhost:7007/.backstage/health/v1/readiness').then(r
+          => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+    environment:
+      INFRAHUB_ADDRESS: http://localhost:8000
+      INFRAHUB_EXTERNAL_ADDRESS: http://localhost:8000
+      # The least-privilege `backstage-portal` account's token, which
+      # scripts/provision_portal_account.py writes into .env. Never the admin token.
+      INFRAHUB_API_TOKEN: ${INFRAHUB_PORTAL_TOKEN:-}
+      BACKSTAGE_BASE_URL: https://localhost:32001
+      BACKSTAGE_OIDC_METADATA_URL: http://localhost:32556/dex/.well-known/openid-configuration
+      # Backstage calls its own catalog at https://localhost:7007 during sign-in.
+      NODE_EXTRA_CA_CERTS: /etc/backstage-tls/ca.crt

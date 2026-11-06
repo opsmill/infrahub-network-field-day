@@ -12,6 +12,10 @@ on a bridge the **host** is also on — carrying two things: Dex, the lab's iden
 Backstage, the portal people request services through. `scripts/deploy_tooling.sh` deploys it and
 `uv run invoke tooling` is the front door.
 
+`bootstrap --no-lab` does not use the tooling cluster. It runs Dex and the portal as Docker Compose
+containers at `localhost`, from the same Dex users and clients; see
+[Infrahub without the lab](./bootstrap.md#infrahub-without-the-lab).
+
 **Infrahub does not deliver any of it, and cannot.** Dex is what Infrahub authenticates users
 against and Backstage is where requests come from, so anything waiting on an Infrahub merge would
 have to exist before it could be merged. The bridge is what breaks that: being L2-adjacent to the

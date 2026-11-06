@@ -44,10 +44,33 @@ def compose_root() -> Path:
 def compose_cmd() -> str:
     """`docker compose` pinned to the stack's real project directory."""
     root = compose_root()
-    return (
-        f"docker compose --project-directory {shlex.quote(str(root))} "
-        f"-f {shlex.quote(str(root / 'docker-compose.yml'))} "
-        f"-f {shlex.quote(str(root / 'docker-compose.override.yml'))}"
+    files = ["docker-compose.yml", "docker-compose.override.yml"]
+    if _no_lab_mode():
+        files.append(NO_LAB_COMPOSE_FILE)
+    return f"docker compose --project-directory {shlex.quote(str(root))} " + " ".join(
+        f"-f {shlex.quote(str(root / name))}" for name in files
+    )
+
+
+# `bootstrap --no-lab` runs Dex and the portal as compose services instead of in the tooling
+# cluster. It records that in `.env`, so every later `invoke` names the same compose files.
+NO_LAB_COMPOSE_FILE = "docker-compose.no-lab.yml"
+NO_LAB_DEX = "http://localhost:32556"
+NO_LAB_PORTAL = "https://localhost:32001"
+
+
+def _no_lab_mode() -> bool:
+    return _env_value("OTTERNET_NO_LAB") == "true"
+
+
+def _set_no_lab_mode(on: bool) -> None:
+    from solution_arista_avd.envfile import env_file, upsert_env
+
+    upsert_env(
+        env_file(MAIN_DIRECTORY_PATH),
+        "OTTERNET_NO_LAB",
+        "true" if on else "false",
+        "Written by `invoke bootstrap`: true runs Dex and the portal from docker-compose.no-lab.yml.",
     )
 
 
@@ -3368,7 +3391,11 @@ def tooling(ctx: Context) -> None:
     # `.env`; without this the deploy inherits the shell's old `INFRAHUB_PORTAL_TOKEN`, renders it
     # into the Secret, and the portal answers 401 to every request.
     _use_dotenv_credentials()
-    ctx.run("scripts/deploy_tooling.sh", pty=True)
+    if _no_lab_mode():
+        _deploy_no_lab_tooling(ctx)
+        os.environ.setdefault("OTTERNET_DEX_ADDRESS", NO_LAB_DEX)
+    else:
+        ctx.run("scripts/deploy_tooling.sh", pty=True)
 
     # EVERY PORTAL USER NEEDS AN INFRAHUB ACCOUNT BEFORE THEIR FIRST REQUEST.
     # The portal writes as the signed-in user through the mutation `context`,
@@ -3379,6 +3406,74 @@ def tooling(ctx: Context) -> None:
     # accounts provisioned still works for anyone who signs in by hand.
     print(" - Provisioning an Infrahub account for each portal user")
     ctx.run("python scripts/provision_portal_accounts.py", pty=True, warn=True)
+
+
+def _no_lab_dex_config(dex_manifest: Path) -> dict[str, Any]:
+    """tooling/10-dex.yaml's Dex configuration, moved to `localhost:32556` for the compose services.
+
+    The users and clients stay defined only in the manifest. Storage is in memory: nothing in Dex
+    outlives a restart that Infrahub does not hold too.
+    """
+    import yaml
+
+    for document in yaml.safe_load_all(dex_manifest.read_text(encoding="utf-8")):
+        if document and document.get("kind") == "ConfigMap":
+            config: dict[str, Any] = yaml.safe_load(document["data"]["config.yaml"])
+            break
+    else:
+        msg = f"{dex_manifest} has no Dex ConfigMap"
+        raise Exit(msg)
+    config["issuer"] = f"{NO_LAB_DEX}/dex"
+    config["web"] = {"http": "0.0.0.0:32556"}
+    config["storage"] = {"type": "memory"}
+    for client in config["staticClients"]:
+        if client["id"] == "backstage":
+            client["redirectURIs"].append(f"{NO_LAB_PORTAL}/api/auth/oidc/handler/frame")
+    return config
+
+
+def _deploy_no_lab_tooling(ctx: Context) -> None:
+    """Dex and the portal as compose services: what `scripts/deploy_tooling.sh` does on the node."""
+    import yaml
+
+    root = compose_root()
+    out = root / ".tooling"
+    tls = out / "tls"
+    tls.mkdir(parents=True, exist_ok=True)
+    (out / "dex.yaml").write_text(yaml.safe_dump(_no_lab_dex_config(root / "tooling/10-dex.yaml")), encoding="utf-8")
+
+    # A throwaway CA and a server certificate it signs, as on the node; see deploy_tooling.sh step 1
+    # for why it is two certificates. Kept across runs so a browser exception stays accepted.
+    if not (tls / "ca.crt").is_file():
+        print(" - Generating a lab CA and a certificate for localhost")
+        (tls / "leaf.ext").write_text(
+            "subjectAltName=IP:127.0.0.1,DNS:localhost\nbasicConstraints=critical,CA:FALSE\n"
+            "keyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n",
+            encoding="utf-8",
+        )
+        with ctx.cd(str(tls)):
+            ctx.run(
+                "openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout ca.key -out ca.crt "
+                "-subj '/CN=OTTERNET lab CA' -addext 'basicConstraints=critical,CA:TRUE,pathlen:0' "
+                "-addext 'keyUsage=critical,keyCertSign,cRLSign' 2>/dev/null"
+            )
+            ctx.run(
+                "openssl req -newkey rsa:2048 -nodes -keyout tls.key -out tls.csr -subj '/CN=otternet-portal' 2>/dev/null"
+            )
+            ctx.run(
+                "openssl x509 -req -in tls.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 825 "
+                "-extfile leaf.ext -out tls.crt 2>/dev/null"
+            )
+        for name in ("ca.key", "tls.csr", "leaf.ext", "ca.srl"):
+            (tls / name).unlink(missing_ok=True)
+        # The portal runs as `node`, not as the user who made the key.
+        (tls / "tls.key").chmod(0o644)
+
+    # --force-recreate: the configuration is a bind mount and the token an environment variable,
+    # so neither reaches a running container otherwise. Dex first; compose holds the portal until
+    # Dex is healthy, then --wait holds this until the portal is.
+    ctx.run(f"{compose_cmd()} --profile no-lab-tooling up -d --force-recreate --wait dex backstage", pty=True)
+    print(f" - Portal: {NO_LAB_PORTAL}   Dex: {NO_LAB_DEX}/dex")
 
 
 @task
@@ -3447,6 +3542,8 @@ def mcp_tokens(ctx: Context) -> None:
     from solution_arista_avd import readiness
 
     _use_dotenv_credentials()
+    if _no_lab_mode():
+        os.environ.setdefault("OTTERNET_DEX_ADDRESS", NO_LAB_DEX)
     # The account first: the token script signs in too, but a missing account is easier to read here.
     ctx.run("python scripts/provision_portal_accounts.py", pty=True)
     for user in readiness.MCP_TOKEN_USERS:
@@ -3599,9 +3696,9 @@ _cluster_task = cluster
         "cluster": "Also bring up Kubernetes: Cilium, Vidra, Crossplane and the handover.",
         "fresh": "Destroy the stack and the lab (not with --no-lab) first, so the run starts from nothing.",
         "no-lab": (
-            "Bring up Infrahub and the tooling node only: build, start, load, the AVD chain, Dex and the "
-            "portal, the MCP server and alice's token, the network-admin account and the exporter. "
-            "Skips the rest of the lab, the reconciler and Kubernetes."
+            "Bring up Infrahub only, with no ContainerLab and no sudo: build, start, load, the AVD chain, "
+            "Dex and the portal as compose services, the MCP server and alice's token, the network-admin "
+            "account and the exporter. Skips the lab, the reconciler and Kubernetes. Runs on macOS."
         ),
         "release": "On a read-write stack, release the staged demo branch at the end, so it is ready (default true).",
         "demo": (
@@ -3659,11 +3756,12 @@ def bootstrap(
     inside `avd --topology` are destructive against a fabric that already has
     cabling, so a second bootstrap onto a populated instance wants `--fresh`.
 
-    `--no-lab` stops at Infrahub and the tooling node: build, start, load, avd,
-    the tooling node alone (`lab --tooling-only`), backstage-build, tooling, mcp,
-    mcp-tokens, network-admin and metrics. It deploys no device, so `--fresh
-    --no-lab` destroys only the stack, and a tooling node that is already running
-    is reused. `reconcile` and `cluster` need the rest of the lab. The readiness
+    `--no-lab` stops at Infrahub: build, start, load, avd, backstage-build,
+    tooling, mcp, mcp-tokens, network-admin and metrics. Dex and the portal run as
+    compose services from docker-compose.no-lab.yml at `localhost`, not on the
+    tooling node, so it needs neither ContainerLab nor sudo. It deploys no device,
+    so `--fresh --no-lab` destroys only the stack. `reconcile` and `cluster` need
+    the rest of the lab. The readiness
     checks still run, but a failure does not fail the run, because the checks for
     those steps cannot pass.
     """
@@ -3704,6 +3802,10 @@ def bootstrap(
     # The reconciler runs the image's installed copy of the package, not the bind mount, and
     # `destroy` keeps images. Without this a bootstrap after a pull ran an old reconciler;
     # `invoke doctor` showed the image 14 hours behind the source commits. Cached, so a repeat is quick.
+    # After any teardown, which has to name the compose files the old stack was started with, and
+    # before `start`, which has to name the ones this stack runs with.
+    _set_no_lab_mode(no_lab)
+
     print("\n=== Building the project image ===")
     build(ctx)
 
@@ -3718,7 +3820,7 @@ def bootstrap(
     avd(ctx, branch=branch, topology=True, merge=True)
 
     if no_lab:
-        _bootstrap_infrahub_only(ctx, lab_dir=lab_dir, readwrite=readwrite, release=release)
+        _bootstrap_infrahub_only(ctx, readwrite=readwrite, release=release)
         return
 
     print("\n=== Deploying the lab ===")
@@ -3798,15 +3900,14 @@ def bootstrap(
         raise Exit("Bootstrap finished, but the demo branch was not released (see above).", code=1)
 
 
-def _bootstrap_infrahub_only(ctx: Context, lab_dir: str, readwrite: bool, release: bool) -> None:
-    """The steps of `bootstrap --no-lab` after the AVD chain: the tooling node, but no device."""
-    # The tooling cluster needs no fabric (the host is on its bridge), so Dex and the portal come
-    # up without the lab, and alice can be signed in through Dex for her MCP token.
-    print("\n=== Deploying the tooling node ===")
-    lab(ctx, lab_dir=lab_dir, tooling_only=True)
+def _bootstrap_infrahub_only(ctx: Context, readwrite: bool, release: bool) -> None:
+    """The steps of `bootstrap --no-lab` after the AVD chain: Dex and the portal, but no device."""
+    # Dex and the portal run as compose services (docker-compose.no-lab.yml), not in the tooling
+    # cluster: with no firewall to sit behind, the node and its sudo buy nothing. alice is still
+    # signed in through Dex for her MCP token.
     print("\n=== Building the service portal ===")
     backstage_build(ctx)
-    print("\n=== Deploying the tooling cluster ===")
+    print("\n=== Starting Dex and the portal ===")
     tooling(ctx)
     print("\n=== Starting the MCP server ===")
     mcp(ctx)
@@ -3826,7 +3927,7 @@ def _bootstrap_infrahub_only(ctx: Context, lab_dir: str, readwrite: bool, releas
 
     print("\n=== Bootstrap complete (Infrahub only) ===")
     print(f"   Infrahub is at {INFRAHUB_ADDRESS} with the fabric generated and its artifacts rendered.")
-    print("   Portal: https://10.90.0.11:32001 (Dex at http://10.90.0.11:32556/dex); alice's MCP token is in .env.")
+    print(f"   Portal: {NO_LAB_PORTAL} (Dex at {NO_LAB_DEX}/dex); alice's MCP token is in .env.")
     print("   Not started: the lab's devices, the reconciler, Kubernetes.")
     print("   `uv run invoke bootstrap` without --no-lab adds them; its AVD step is destructive here, so add --fresh.")
 
