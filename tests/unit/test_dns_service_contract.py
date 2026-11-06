@@ -184,10 +184,19 @@ def test_the_trigger_rules_run_the_generator_and_name_no_forbidden_kind() -> Non
         for d in (doc["spec"]["data"] if doc["spec"]["kind"] == "CoreNodeTriggerRule" else [])
         if d.get("action") == "run-dns-record-generator"
     ]
-    assert len(rules) == 5
+    # Four field rules; creation is the group rule's, so a created rule does not race it.
+    assert len(rules) == 4
     for rule in rules:
         assert rule["node_kind"] == "ServiceFabricApp"
+        assert rule["mutation_action"] == "updated"
         assert not rule["node_kind"].startswith(("Deployment", "Monitoring"))
+    group_rules = [
+        d
+        for doc in triggers
+        for d in (doc["spec"]["data"] if doc["spec"]["kind"] == "CoreGroupTriggerRule" else [])
+        if d.get("action") == "run-dns-record-generator"
+    ]
+    assert [r["group"] for r in group_rules] == ["service_fabric_apps"]
 
 
 def _pinned_address(values: Any) -> str | None:

@@ -964,7 +964,7 @@ use live.
   nothing visible on the grant and every validator green. The portal sends the membership
   itself. Since `triggers.yml` gained a group action, a grant from the API, an SDK or the
   MCP server joins the group on creation and is built by the group rule (see
-  [service triggers](./developer-guide/service-triggers.md#a-grant-made-by-any-client-joins-its-generator-group)).
+  [service triggers](./developer-guide/service-triggers.md#a-service-made-by-any-client-joins-its-generator-group)).
   On a stack that has not loaded those rules, send `member_of_groups: [{ hfid:
   ["service_app_accesses"] }]` with the grant, or add the membership afterwards.
 - **The proposed change from the MCP server has no border leaf diff, or holds only 9 validators.** The

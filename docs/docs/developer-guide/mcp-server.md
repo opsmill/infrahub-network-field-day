@@ -354,7 +354,7 @@ cannot change them and documents the way around each.
   ```
 
   `member_of_groups` is not required since the group rules in `triggers.yml` add the membership
-  (see [service triggers](./service-triggers.md#a-grant-made-by-any-client-joins-its-generator-group)),
+  (see [service triggers](./service-triggers.md#a-service-made-by-any-client-joins-its-generator-group)),
   but sending it does no harm and is what the portal does. On a stack that has not yet loaded those
   rules (`invoke load` loads `triggers.yml`), a grant without the membership is never built.
 

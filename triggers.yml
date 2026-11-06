@@ -229,36 +229,14 @@ spec:
     # the time anyone looks at it. Without these the diff shows a
     # ServiceNetworkSegment and no subnet, no VLAN and no SVI -- which reads as
     # "nothing happened" rather than "not built yet".
-    - name: trigger-network-segment-generator-created
-      branch_scope: "other_branches"
-      node_kind: ServiceNetworkSegment
-      mutation_action: "created"
-      action: run-network-segment-generator
-
-    - name: trigger-fabric-app-generator-created
-      branch_scope: "other_branches"
-      node_kind: ServiceFabricApp
-      mutation_action: "created"
-      action: run-fabric-app-generator
-
-    - name: trigger-tenant-onboarding-generator-created
-      branch_scope: "other_branches"
-      node_kind: ServiceTenantOnboarding
-      mutation_action: "created"
-      action: run-tenant-onboarding-generator
-
-    - name: trigger-server-placement-generator-created
-      branch_scope: "other_branches"
-      node_kind: ServiceServerPlacement
-      mutation_action: "created"
-      action: run-server-placement-generator
-
-    - name: trigger-fabric-peering-generator-created
-      branch_scope: "other_branches"
-      node_kind: ServiceFabricPeering
-      mutation_action: "created"
-      action: run-fabric-peering-generator
-
+    #
+    # A service is built on creation by its group's `member-added` rule (the
+    # CoreGroupTriggerRule document at the end of this file), never by a
+    # `created` rule as well. Both fired for a node created already in its
+    # group, as the portal creates them, and the two runs raced:
+    # generate-network-segment's second run found the VLAN the first had just
+    # made and refused, which failed the portal request. The `created` rules
+    # below only add the node to its group.
     # Puts a service created by any client in its generator's target group. See
     # the CoreGroupAction documents above; the grant's own rule follows below.
     - name: trigger-network-segment-group-membership-created
@@ -306,12 +284,6 @@ spec:
       node_kind: ServiceAppAccess
       mutation_action: "created"
       action: add-app-access-to-its-generator-group
-
-    - name: trigger-app-access-generator-created
-      branch_scope: "other_branches"
-      node_kind: ServiceAppAccess
-      mutation_action: "created"
-      action: run-app-access-generator
 
     # ...AND ON UPDATE, which is not symmetry for its own sake. `status` is how
     # every service kind here is withdrawn, and for three cycles nothing watched
@@ -587,16 +559,10 @@ spec:
 
     # The lab's DNS names (specs/037-lab-dns-service). An application has a name
     # when it is exposed, live and has a VIP block, so those are the inputs
-    # watched: creation, status, exposed and -- because generate-fabric-app
+    # watched (creation is the group rule's): status, exposed and -- because generate-fabric-app
     # allocates it after creation -- the block itself. The generator writes an
     # IpamIPAddress and never the application, so none of this can loop.
     # Nothing here names a Deployment* or Monitoring* kind.
-    - name: trigger-dns-record-generator-created
-      branch_scope: "other_branches"
-      node_kind: ServiceFabricApp
-      mutation_action: "created"
-      action: run-dns-record-generator
-
     - name: trigger-dns-record-generator-update-status
       branch_scope: "other_branches"
       node_kind: ServiceFabricApp
@@ -786,11 +752,10 @@ spec:
 # as the membership rule, so for such a grant it is refused first; this rule runs
 # once the membership exists.
 #
-# For a service the portal created, the membership came with the node, so this
-# rule may fire as well as the `created` rule. Every service generator saves with
-# `allow_upsert`, allocates from its pools under an identifier keyed on the
-# service, and guards its write-backs, so a second run changes nothing. The cost
-# is one extra no-op run.
+# This is the ONLY rule that builds a service on creation. A node created already
+# in the group, as the portal creates it, fires it too (measured: with the
+# `created` generator rule switched off, such a segment was still built), so a
+# `created` rule running the generator as well only started a second, racing run.
 #
 # `service_fabric_apps` has two rules because two generators target it:
 # `generate-fabric-app` and `generate-dns-record`.
