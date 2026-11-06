@@ -49,56 +49,42 @@ The full pipeline, from a high-level fabric design to versioned, deployable conf
 
 ![The AVD + Infrahub pipeline: generate topology, format host vars, run EOS Designs, generate artifacts, and store and version every output in the knowledge graph.](docs/static/img/pipeline.png)
 
-## Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python package manager)
-- Python 3.11 to 3.13 (`.python-version` pins 3.12)
-- PyAVD >= 6.4.0, < 6.5.0 (bundled in the custom Docker image -- no separate install required)
-- For the whole lab: Linux with about 48 GB of memory, `/dev/kvm`, and more tools. `uv run invoke prereqs`
-  lists what the machine is missing; see [Run the whole lab on your own machine](docs/docs/quick-start.md#run-the-whole-lab-on-your-own-machine).
-
 ## Quick start
 
+There are two environments, and each comes up with one command. Both need
+[Docker](https://docs.docker.com/get-docker/) with Compose v2, [uv](https://docs.astral.sh/uv/getting-started/installation/),
+Python 3.11 to 3.13, `git`, `curl`, `openssl`, and Node 22 or 24 with Corepack. PyAVD is installed in the
+project's Infrahub image, so it needs no separate install. `invoke prereqs` lists anything the machine is missing.
+
+| Environment | Runs on | What it includes | Guide |
+|---|---|---|---|
+| Full lab | Linux, about 48 GB of memory, `/dev/kvm`, passwordless `sudo` | Infrahub, the ContainerLab devices configured from their artifacts, the tooling cluster and the Kubernetes workload cluster | [Set up the full lab environment](docs/docs/setup-lab.md) |
+| Demo without the lab | macOS or Linux, about 12 GB of memory | Infrahub with the fabric cabled and every artifact rendered, Dex and the service portal; no devices and no Kubernetes | [Set up a demo environment without the lab](docs/docs/setup-demo.md) |
+
+Both start the same way:
+
 ```bash
-# Install Python dependencies, including PyAVD and the Infrahub SDK
 uv sync --all-packages
+export INFRAHUB_API_TOKEN=06438eb2-8019-4776-878c-0941b1f1d1ec   # the local stack's admin token
 
-# Build the custom Infrahub image (extends the base image with PyAVD — run once).
-# The Infrahub version is the Dockerfile default; set INFRAHUB_BASE_VERSION only to change it.
-uv run invoke build
-
-# Start all services: Infrahub, Neo4j, PostgreSQL, Redis, RabbitMQ, the Prefect task manager, and Semaphore
-uv run invoke start
-
-# Load schemas, UI menu, seed data, register the repository, load checks and event triggers,
-# and upload application payloads. infrahubctl needs a token: the local stack's admin token
-export INFRAHUB_API_TOKEN=06438eb2-8019-4776-878c-0941b1f1d1ec
-uv run invoke load
+uv run invoke prereqs && uv run invoke bootstrap                       # full lab
+uv run invoke prereqs --no-lab && uv run invoke bootstrap --no-lab     # demo without the lab
 ```
 
-To run all of that, generate the fabric, and deploy Dex and the service portal in one command,
-without the lab's devices, run `uv run invoke bootstrap --no-lab`. `uv run invoke bootstrap` builds the whole environment,
-including the lab; see [Bootstrapping the whole environment](docs/docs/developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
-Run `uv run invoke prereqs` first on a new machine: it lists the tools, memory, and access the
-whole environment needs. The Arista cEOS, Junos vSRX, and branch desktop images are pulled from
-`registry.opsmill.io` automatically; see [Run the whole lab on your own machine](docs/docs/quick-start.md#run-the-whole-lab-on-your-own-machine).
-
-Open the Infrahub UI at `http://localhost:8000`. The service portal runs in the tooling cluster, at `https://10.90.0.11:32001` from the branch desktop, once `uv run invoke tooling` (or `uv run invoke bootstrap`) has deployed it; see [The service portal](docs/docs/service-portal.md).
-
-Then follow [Provision your first fabric](docs/docs/provision-first-fabric.md) to run the generator chain and reach rendered EOS artifacts.
+Infrahub is then at `http://localhost:8000`. For development, where you run each stage yourself, follow
+[Set up the stack step by step](docs/docs/developer-guide/stack-step-by-step.md).
 
 ## What you'll see
 
-After `invoke load` completes and you run the generator chain on a fabric:
+What a bootstrap builds, in order. Steps 1 to 6 happen in both environments; step 7 needs the full lab.
 
 1. **Seed data appears in the UI** — the manufacturer, cEOS-LAB device type and templates, addressing and numbering pools, and the `OTTERNET_FABRIC` design with its pod, three leaf racks, seven switches, four tenants and six VRFs are loaded.
 2. **FabricGenerator runs** — `OTTERNET_FABRIC` declares no device tier above its spines, so it creates no devices; it resolves the fabric's pools and triggers the pod generator.
 3. **PodGenerator and RackGenerator trigger automatically** — the two spines and five leaves are reconciled (their pinned identity is preserved), cabled to their uplinks and MLAG peers, and given interconnect addresses.
 4. **AVD generators run** — each device's PyAVD host_vars and structured configuration are stored as `AvdArtifact` graph objects.
 5. **Transforms produce artifacts** — EOS device configuration, per-device Markdown documentation, fabric documentation, and a cabling plan CSV are available as downloadable artifacts on each device and fabric object.
-6. **Propose and review** — open a proposed change from the branch; the UI shows a diff of every new object and the rendered artifacts for review before any configuration reaches production.
-7. **Deploy to devices** — `uv run invoke provision` pushes each device's rendered artifact onto it, and the deployment reconciler (`uv run invoke reconcile`) does the same on a timer, pushing only what differs. CloudVision validates a proposed change's EOS configs in a workspace; it does not deploy.
+6. **Propose and review** — the bootstrap runs the chain on a branch and merges it. Any later change, from the UI, the portal or the MCP server, goes through a proposed change that shows a diff of every changed object and the rendered artifacts before anything is merged.
+7. **Deploy to devices (full lab only)** — `uv run invoke provision` pushes each device's rendered artifact onto it, and the deployment reconciler (`uv run invoke reconcile`) does the same on a timer, pushing only what differs. CloudVision validates a proposed change's EOS configs in a workspace; it does not deploy.
 
 ## What's included
 
@@ -124,7 +110,7 @@ After `invoke load` completes and you run the generator chain on a fabric:
   - SR Linux configuration for the WAN routers, and Junos configuration for the firewall
   - Crossplane manifests for applications and cluster peering, delivered by Vidra, and the telemetry collector's configuration
 - **Seed data** — the manufacturer, cEOS-LAB device type, interface profiles and device templates, addressing and number pools (loopback, VTEP, interconnect, MLAG, management, ASN, node ID), and the `OTTERNET_FABRIC` design: one pod, three leaf racks, the seven switches with their pinned identity, four tenants over six VRFs, and the workload endpoints.
-- **Service portal** — Backstage, in the tooling cluster, with one generated request template per service kind:
+- **Service portal** — Backstage, with one generated request template per service kind. It runs in the tooling cluster in the full lab, and as a Docker Compose container beside Infrahub in the demo environment:
   - Network segment (subnet, VLAN, and gateway SVI, allocated from pools)
   - Server placement into a rack, cabled to its leaves
   - Tenant onboarding onto a fabric
@@ -140,7 +126,7 @@ After `invoke load` completes and you run the generator chain on a fabric:
 | `objects/` | Seed YAML for the fabric, the WAN, the firewall, the Kubernetes cluster, the application catalogue, and the seeded services |
 | `triggers.yml` | Event trigger rules wiring schema changes to generator runs |
 | `backstage/` | Backstage service portal, deployed into the tooling cluster |
-| `docker-compose.yml` | Stack definition; docker-compose.override.yml adds Semaphore and the lab's supporting services |
+| `docker-compose.yml` | Stack definition; `docker-compose.override.yml` adds Semaphore and the lab's supporting services, and `docker-compose.no-lab.yml` adds Dex and the portal for the demo environment |
 | `Dockerfile` | Custom Infrahub image with PyAVD |
 | `tasks.py` | Invoke task definitions (`build`, `start`, `load`, `avd`, `prereqs`, `bootstrap`, `lab`, `lint`, `test`; `uv run invoke --list` shows all) |
 
@@ -152,9 +138,10 @@ The full documentation is under [`docs/`](docs/docs/). Key entry points:
 
 | | |
 |--|--|
-| **Get the stack running** | [Quick start](docs/docs/quick-start.md) — prerequisites, install steps, and first load |
-| **Show the lab to an audience** | [Demo runbook](docs/docs/demo-runbook.md) — the demo script: preflight checks, five acts, and measured timings |
-| **Provision a fabric end-to-end** | [Provision your first fabric](docs/docs/provision-first-fabric.md) — step-by-step walkthrough from seed data to rendered EOS artifacts |
+| **Run the whole lab** | [Set up the full lab environment](docs/docs/setup-lab.md) — Infrahub, the devices and both clusters on one Linux host |
+| **Show the workflow on a laptop** | [Set up a demo environment without the lab](docs/docs/setup-demo.md) — Infrahub and the portal, no devices |
+| **Show the lab to an audience** | [Demo runbook](docs/docs/demo-runbook.md) — the demo script for the full lab: preflight checks, six acts, and measured timings |
+| **Run each stage yourself** | [Set up the stack step by step](docs/docs/developer-guide/stack-step-by-step.md), then [Provision your first fabric](docs/docs/provision-first-fabric.md) — from seed data to rendered EOS artifacts, for development |
 | **Check what's supported** | [Supported capabilities](docs/docs/supported-capabilities.md) — capability matrix (supported / partial / not yet) |
 | **Run a day-two workflow** | [Add a network segment](docs/docs/how-to/add-network-segment.md) — and the other how-to guides |
 | **Understand the generator pipeline** | [Architecture overview](docs/docs/developer-guide/architecture.md) — system components, data model, and generator chain |
