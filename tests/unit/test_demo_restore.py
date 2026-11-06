@@ -100,3 +100,13 @@ def test_release_numbers_come_from_every_kind_of_ref_and_skip_reset_branches() -
 def test_with_no_release_the_next_run_is_one() -> None:
     assert dr.next_run("internet-access", ["main"]) == 1
     assert dr.latest_run("internet-access", []) == 1
+
+
+def test_only_a_service_still_live_on_main_changes_a_device() -> None:
+    services = {
+        "otter-shop": {"status": "active"},
+        "revoked": {"status": "decommissioned"},
+        "being-revoked": {"status": "decommissioning"},
+    }
+    assert dr.live(services, ["revoked", "otter-shop", "being-revoked"]) == ["otter-shop"]
+    assert dr.live(services, ["revoked"]) == []
