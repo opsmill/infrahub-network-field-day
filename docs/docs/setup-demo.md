@@ -35,7 +35,8 @@ The environment runs on macOS or Linux. It needs no ContainerLab, no `sudo` and 
 - At least 20 GB of free disk where Docker keeps its data.
 - Docker with Compose v2, usable without `sudo`.
 - `git`, `curl` and `openssl`.
-- Node 22 or 24 with Corepack enabled (`corepack enable`), to build the portal.
+- Node 22, 24 or 26, to build the portal. Corepack and Yarn are not needed: the build runs the Yarn
+  release committed in `backstage/.yarn/`.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.11 to 3.13.
 
 ## Bring the environment up

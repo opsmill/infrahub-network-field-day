@@ -18,7 +18,8 @@ Use this environment to run the [demo runbook](./demo-runbook.md), or to develop
 - `sudo` without a password, because ContainerLab runs under `sudo` and the run is unattended.
 - Docker with Compose v2, usable without `sudo`.
 - `git`, `curl`, `openssl`, [ContainerLab](https://containerlab.dev/install/), `kubectl` and `helm`.
-- Node 22 or 24 with Corepack enabled (`corepack enable`), to build the portal.
+- Node 22, 24 or 26, to build the portal. Corepack and Yarn are not needed: the build runs the Yarn
+  release committed in `backstage/.yarn/`.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.11 to 3.13.
 
 ## Bring the environment up
