@@ -77,8 +77,8 @@ export INFRAHUB_API_TOKEN=06438eb2-8019-4776-878c-0941b1f1d1ec
 uv run invoke load
 ```
 
-To run all of that and generate the fabric in one command, without the ContainerLab lab, run
-`uv run invoke bootstrap --no-lab`. `uv run invoke bootstrap` builds the whole environment,
+To run all of that, generate the fabric, and deploy Dex and the service portal in one command,
+without the lab's devices, run `uv run invoke bootstrap --no-lab`. `uv run invoke bootstrap` builds the whole environment,
 including the lab; see [Bootstrapping the whole environment](docs/docs/developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
 Run `uv run invoke prereqs` first on a new machine: it lists the tools, memory, and access the
 whole environment needs. The Arista cEOS, Junos vSRX, and branch desktop images are pulled from

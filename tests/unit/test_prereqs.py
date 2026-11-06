@@ -131,11 +131,13 @@ def test_a_missing_lab_image_is_a_warning_because_bootstrap_fetches_it(tmp_path:
     assert not prereqs.failed(results)
 
 
-def test_no_lab_needs_only_the_infrahub_tools(tmp_path: Path) -> None:
-    results = by_name(run_all(tmp_path, tools={"docker", "git", "curl"}, memory=16.0, lab=False))
+def test_no_lab_needs_the_infrahub_and_tooling_node_tools(tmp_path: Path) -> None:
+    tools = {"docker", "git", "curl", "containerlab", "openssl", "node", "corepack"}
+    results = by_name(run_all(tmp_path, tools=tools, memory=16.0, lab=False))
     assert not prereqs.failed(list(results.values()))
-    assert "containerlab" not in results
+    assert "containerlab" in results
     assert "lab images" not in results
+    assert "kvm" not in {name.lower() for name in results}
 
 
 def test_no_cluster_leaves_out_kubectl_and_helm(tmp_path: Path) -> None:
@@ -156,7 +158,8 @@ def test_bootstrap_checks_the_host_and_fetches_images_before_destroying_anything
 
 def test_the_lab_task_fetches_images_before_the_deploy() -> None:
     lab = TASKS.split("def lab(", 1)[1].split("\ndef ", 1)[0]
-    assert lab.index("lab_images(ctx") < lab.index("deploy -t")
+    # The last deploy is the full one; the tooling-only deploy before it needs none of the local images.
+    assert lab.index("lab_images(ctx") < lab.rindex("deploy -t")
 
 
 def test_every_image_variable_in_the_topology_survives_sudo() -> None:
@@ -209,7 +212,7 @@ def test_a_port_held_by_this_environment_passes() -> None:
 def test_a_busy_port_fails_the_whole_check(tmp_path: Path) -> None:
     assert prereqs.failed(run_all(tmp_path, listening=frozenset({8080})))
     assert not prereqs.failed(
-        run_all(tmp_path, listening=frozenset({8080}), lab=False, tools={"docker", "git", "curl"})
+        run_all(tmp_path, listening=frozenset({8080}), lab=False, tools=ALL_TOOLS - {"kubectl", "helm"})
     )
 
 

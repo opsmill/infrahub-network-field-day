@@ -2306,6 +2306,9 @@ def _wait_for_artifacts(ctx: Context, timeout: int = 600) -> None:  # noqa: ARG0
         print(f"   WARNING: {empty} artifact(s) still empty after {timeout}s -- `invoke provision` would push nothing")
 
 
+TOOLING_NODE = "clab-otternet-tool-node1"
+
+
 def _remove_orphaned_lab_nodes(ctx: Context, topology: Path) -> None:
     """Remove containers labelled with this lab that its topology no longer declares.
 
@@ -2468,9 +2471,10 @@ def _check_prereqs(no_lab: bool, cluster: bool, lab_dir: str) -> bool:
         "lab-dir": "Path to the lab. Defaults to OTTERNET_LAB_DIR, else lab/ in the main checkout.",
         "destroy": "Tear the lab down instead of deploying it.",
         "wait": "Block until every fabric switch answers eAPI before returning.",
+        "tooling-only": "Deploy only the tooling node (Dex, the portal), and skip it when it is already running.",
     }
 )
-def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = True) -> None:
+def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = True, tooling_only: bool = False) -> None:
     """
     Bring up the ContainerLab topology with management connectivity.
 
@@ -2485,6 +2489,10 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     lab's own files and are re-provisioned from Infrahub the same way.
 
     Run `invoke provision` next.
+
+    `--tooling-only` deploys `tool-node1` and its bridge and nothing else: the tooling cluster
+    needs no fabric, so `bootstrap --no-lab` can still run Dex and the portal. A running tooling
+    node is left alone, so a full lab that is already up is not disturbed.
     """
     lab_path = find_lab_directory(lab_dir)
     topology = lab_path / LAB_TOPOLOGY
@@ -2498,6 +2506,10 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
         print(f" - Destroying lab from {topology.name}")
         ctx.run(f"{clab} destroy -t {shlex.quote(str(topology))} --cleanup", pty=True)
         _remove_orphaned_lab_nodes(ctx, topology)
+        return
+
+    if tooling_only and ctx.run(f"docker inspect {TOOLING_NODE}", hide=True, warn=True).ok:
+        print(f" - {TOOLING_NODE} is already running; leaving it as it is")
         return
 
     # Before a deploy too: an orphan left by an earlier topology makes
@@ -2545,6 +2557,16 @@ def lab(ctx: Context, lab_dir: str = "", destroy: bool = False, wait: bool = Tru
     # THE THREE LOCAL IMAGES. ContainerLab would otherwise try to pull `ceos`,
     # `vrnetlab/juniper_vsrx` and `otternet/branch-desktop` from Docker Hub and
     # refuse the deploy. Present images are left alone, so this is quick.
+    if tooling_only:
+        # ponytail: rancher/k3s is pulled from Docker Hub, so none of the three local images is needed.
+        (lab_path / "k8s/.kubeconfig-tooling").mkdir(parents=True, exist_ok=True)
+        print(f" - Deploying only the tooling node from {topology.name}")
+        ctx.run(
+            f"{clab} deploy -t {shlex.quote(str(topology))} --reconfigure --node-filter tool-node1,br-otter-tool",
+            pty=True,
+        )
+        return
+
     print(" - Ensuring the lab images exist")
     lab_images(ctx, lab_dir=lab_dir)
 
@@ -3577,8 +3599,9 @@ _cluster_task = cluster
         "cluster": "Also bring up Kubernetes: Cilium, Vidra, Crossplane and the handover.",
         "fresh": "Destroy the stack and the lab (not with --no-lab) first, so the run starts from nothing.",
         "no-lab": (
-            "Bring up Infrahub only: build, start, load, the AVD chain, the MCP server, the network-admin "
-            "account and the exporter. Skips the lab, the reconciler, the tooling cluster and Kubernetes."
+            "Bring up Infrahub and the tooling node only: build, start, load, the AVD chain, Dex and the "
+            "portal, the MCP server and alice's token, the network-admin account and the exporter. "
+            "Skips the rest of the lab, the reconciler and Kubernetes."
         ),
         "release": "On a read-write stack, release the staged demo branch at the end, so it is ready (default true).",
         "demo": (
@@ -3636,12 +3659,13 @@ def bootstrap(
     inside `avd --topology` are destructive against a fabric that already has
     cabling, so a second bootstrap onto a populated instance wants `--fresh`.
 
-    `--no-lab` stops at Infrahub: build, start, load, avd, mcp, network-admin and
-    metrics. It never touches the lab, so `--fresh --no-lab` destroys only the
-    stack. Every later step needs the lab or the tooling cluster: `reconcile`
-    pushes to the devices, `mcp-tokens` signs alice in through Dex, and `cluster`
-    runs in the lab. The readiness checks still run, but a failure does not fail
-    the run, because the checks for those steps cannot pass.
+    `--no-lab` stops at Infrahub and the tooling node: build, start, load, avd,
+    the tooling node alone (`lab --tooling-only`), backstage-build, tooling, mcp,
+    mcp-tokens, network-admin and metrics. It deploys no device, so `--fresh
+    --no-lab` destroys only the stack, and a tooling node that is already running
+    is reused. `reconcile` and `cluster` need the rest of the lab. The readiness
+    checks still run, but a failure does not fail the run, because the checks for
+    those steps cannot pass.
     """
     if demo:
         # Explicit exports win; only what is unset is filled in. The compose files read the import
@@ -3694,7 +3718,7 @@ def bootstrap(
     avd(ctx, branch=branch, topology=True, merge=True)
 
     if no_lab:
-        _bootstrap_infrahub_only(ctx, readwrite=readwrite, release=release)
+        _bootstrap_infrahub_only(ctx, lab_dir=lab_dir, readwrite=readwrite, release=release)
         return
 
     print("\n=== Deploying the lab ===")
@@ -3774,10 +3798,20 @@ def bootstrap(
         raise Exit("Bootstrap finished, but the demo branch was not released (see above).", code=1)
 
 
-def _bootstrap_infrahub_only(ctx: Context, readwrite: bool, release: bool) -> None:
-    """The steps of `bootstrap --no-lab` after the AVD chain: those that need neither the lab nor Dex."""
+def _bootstrap_infrahub_only(ctx: Context, lab_dir: str, readwrite: bool, release: bool) -> None:
+    """The steps of `bootstrap --no-lab` after the AVD chain: the tooling node, but no device."""
+    # The tooling cluster needs no fabric (the host is on its bridge), so Dex and the portal come
+    # up without the lab, and alice can be signed in through Dex for her MCP token.
+    print("\n=== Deploying the tooling node ===")
+    lab(ctx, lab_dir=lab_dir, tooling_only=True)
+    print("\n=== Building the service portal ===")
+    backstage_build(ctx)
+    print("\n=== Deploying the tooling cluster ===")
+    tooling(ctx)
     print("\n=== Starting the MCP server ===")
     mcp(ctx)
+    print("\n=== Minting the MCP tokens ===")
+    mcp_tokens(ctx)
     print("\n=== Creating the network-admin account ===")
     network_admin(ctx)
     print("\n=== Starting the Infrahub exporter ===")
@@ -3792,7 +3826,8 @@ def _bootstrap_infrahub_only(ctx: Context, readwrite: bool, release: bool) -> No
 
     print("\n=== Bootstrap complete (Infrahub only) ===")
     print(f"   Infrahub is at {INFRAHUB_ADDRESS} with the fabric generated and its artifacts rendered.")
-    print("   Not started: the lab, the reconciler, the tooling cluster (Dex, portal), alice's MCP token, Kubernetes.")
+    print("   Portal: https://10.90.0.11:32001 (Dex at http://10.90.0.11:32556/dex); alice's MCP token is in .env.")
+    print("   Not started: the lab's devices, the reconciler, Kubernetes.")
     print("   `uv run invoke bootstrap` without --no-lab adds them; its AVD step is destructive here, so add --fresh.")
 
     print("\n=== Readiness (checks for the skipped steps are expected to fail) ===")
