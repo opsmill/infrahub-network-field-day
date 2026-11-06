@@ -29,7 +29,8 @@ services:
   dex:
     image: ghcr.io/dexidp/dex:v2.44.0
     # Started by `invoke tooling`, after it has written the configuration below.
-    profiles: ["no-lab-tooling"]
+    # Also in build-only: the portal depends on Dex, and `backstage-build` enables only that profile.
+    profiles: ["build-only", "no-lab-tooling"]
     network_mode: service:infrahub-server
     restart: unless-stopped
     command: ["dex", "serve", "/etc/dex/config.yaml"]

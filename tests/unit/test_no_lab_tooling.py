@@ -36,3 +36,10 @@ def test_the_compose_file_names_the_same_addresses() -> None:
     portal = compose["services"]["backstage"]["environment"]
     assert portal["BACKSTAGE_BASE_URL"] == tasks.NO_LAB_PORTAL
     assert portal["BACKSTAGE_OIDC_METADATA_URL"].startswith(tasks.NO_LAB_DEX + "/dex/")
+
+
+def test_dex_is_enabled_wherever_the_portal_is() -> None:
+    """The portal depends on Dex; a profile that enables only the portal is an invalid project."""
+    compose = yaml.load((ROOT / tasks.NO_LAB_COMPOSE_FILE).read_text(encoding="utf-8"), Loader=_ComposeLoader)  # noqa: S506
+    services = compose["services"]
+    assert set(services["backstage"]["profiles"]) <= set(services["dex"]["profiles"])
