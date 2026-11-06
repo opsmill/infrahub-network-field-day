@@ -3921,10 +3921,47 @@ def _prune_menu(branch: str = "") -> None:
         print(f" - Pruned stale menu item {node['namespace']['value']}{node['name']['value']}")
 
 
-@task(help={"branch": "Branch to load onto (default main)", "prune": "Delete items menus/ no longer declares"})
-def load_menu(ctx: Context, branch: str = "", prune: bool = True) -> None:
+def _reset_menu(branch: str = "") -> None:
+    """Delete every menu item this repository owns, so the next load recreates them in file order.
+
+    Infrahub attaches menu children in creation order, so an existing item moved under a newer
+    group in menus/menu.yml is dropped from the sidebar without an error. Deleting and reloading
+    makes the creation order match the file. Infrahub's own items (namespace `Builtin`,
+    `protected`) are never touched. Children are deleted before their parent.
+    """
+    query = (
+        "{ CoreMenuItem { edges { node { id namespace { value } name { value } "
+        "protected { value } children { count } } } } }"
+    )
+    for _ in range(10):
+        data = _graphql(query, branch)
+        owned = [
+            edge["node"]
+            for edge in (data.get("CoreMenuItem") or {}).get("edges", [])
+            if not edge["node"]["protected"]["value"] and edge["node"]["namespace"]["value"] != "Builtin"
+        ]
+        if not owned:
+            return
+        for node in owned:
+            if node["children"]["count"]:
+                continue
+            _graphql(f'mutation {{ CoreMenuItemDelete(data: {{ id: "{node["id"]}" }}) {{ ok }} }}', branch)
+            print(f" - Deleted menu item {node['namespace']['value']}{node['name']['value']}")
+    print(" - Some menu items could not be deleted; check the Infrahub logs.")
+
+
+@task(
+    help={
+        "branch": "Branch to load onto (default main)",
+        "prune": "Delete items menus/ no longer declares",
+        "reset": "Delete every repository menu item first, then load (needed after moving an entry to another group)",
+    }
+)
+def load_menu(ctx: Context, branch: str = "", prune: bool = True, reset: bool = False) -> None:
     """Load the menu into Infrahub using infrahubctl, then prune stale items."""
     branch_arg = f" --branch {shlex.quote(branch)}" if branch else ""
+    if reset:
+        _reset_menu(branch)
     with ctx.cd(MAIN_DIRECTORY_PATH):
         ctx.run(f"infrahubctl menu load menus/{branch_arg}", pty=True)
     if prune:

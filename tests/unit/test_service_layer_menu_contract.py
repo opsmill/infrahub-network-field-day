@@ -18,14 +18,15 @@ import yaml
 MENU_PATH = Path("menus/menu.yml")
 SCHEMA_DIR = Path("schemas")
 
-# The domains cycle 010 introduced, each of which FR-065 requires to be
-# reachable from the menu.
+# The top-level sections FR-065 requires. Tenants and locations, once a section
+# of their own, are under Data Center (`Network` + `FabricMenu`).
 EXPECTED_SECTIONS = {
     ("Service", "ServiceMenu"),
-    ("Security", "SecurityMenu"),
-    ("Cluster", "ClusterMenu"),
+    ("Network", "FabricMenu"),
     ("Wan", "WanMenu"),
-    ("Organization", "OrganizationMenu"),
+    ("Security", "SecurityMenu"),
+    ("Avd", "DesignMenu"),
+    ("Cluster", "ClusterMenu"),
 }
 
 # Every concrete service kind. FR-065 puts them under one grouping, because
@@ -201,8 +202,13 @@ MARKETPLACE_SCHEMA_FILES = {
 }
 
 # Kinds with seed data that are deliberately NOT in the menu, each reached
-# through the object that owns it. Empty today; an addition names its parent.
-REACHED_THROUGH_A_PARENT: dict[str, str] = {}
+# through the object or the built-in menu entry that lists it.
+REACHED_THROUGH_A_PARENT: dict[str, str] = {
+    # Infrahub's built-in IPAM section lists every BuiltinIPPrefix and
+    # BuiltinIPAddress, and these are the only kinds inheriting them.
+    "IpamPrefix": "IPAM > IP Prefixes (built-in)",
+    "IpamIPAddress": "IPAM > IP Addresses (built-in)",
+}
 
 
 def _schema_nodes_by_kind() -> dict[str, tuple[Path, dict[str, Any]]]:
@@ -280,8 +286,10 @@ def test_every_seeded_kind_is_reachable_from_the_menu() -> None:
 def test_top_level_sections_are_weighted_explicitly_and_in_order() -> None:
     """Infrahub gives every top-level item the same default weight, so
     without explicit weights the order is whatever the database returns.
-    They stay below 9500, where Infrahub's built-in IPAM entry sits."""
-    sections = _menu()["spec"]["data"]
+    They stay below 9500, where Infrahub's built-in IPAM entry sits.
+    Entries attached to a built-in section with `parent:` are not top-level
+    sections and take their place inside that section instead."""
+    sections = [item for item in _menu()["spec"]["data"] if not item.get("parent")]
     weights = [item.get("order_weight") for item in sections]
 
     assert all(isinstance(w, int) for w in weights), weights

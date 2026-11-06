@@ -26,6 +26,7 @@ uv run invoke restart --component=infrahub-server
 uv run invoke load
 uv run invoke load-schema
 uv run invoke load-menu
+uv run invoke load-menu --reset         # after moving a menu entry to another group
 uv run invoke avd                       # regenerate AVD hostvars, structured configs and artifacts
 uv run invoke avd --branch my-change    # ... on a branch, so the result can be reviewed
 uv run invoke avd --topology            # BUILD-TIME ONLY: also build the fabric and its cabling

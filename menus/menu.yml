@@ -26,25 +26,45 @@
 # every kind with `include_in_menu: false` and seed data is reachable here or
 # through a parent object.
 #
-# Sections run in the order people use the lab: what you can ask for first,
-# then the systems it changes, then the shared plumbing, then the design data
-# the AVD pipeline consumes. Top-level `order_weight` is explicit because
-# Infrahub otherwise gives every top-level item the same weight; children are
-# weighted by their position in this file. All weights stay below 9500, where
-# Infrahub's built-in IPAM browser sits.
+# Seven top-level sections:
+#
+#   1. Service Requests: what somebody asks for.
+#   2. Data Center: locations, tenants, the switches and servers, their
+#      interfaces and cabling, and whether each device runs its intended
+#      configuration.
+#   3. Backbone: the WAN routers, circuits and their routing.
+#   4. Security: the firewall.
+#   5. Arista AVD: the EVPN overlay, VRF services and design data the AVD
+#      pipeline reads, and the files it writes.
+#   6. Compute Services: Kubernetes and monitoring.
+#   7. IPAM: Infrahub's built-in section. The entries at the end of this file
+#      attach to it with `parent: [Builtin, IPAM]` instead of declaring a
+#      second "IPAM" heading.
+#
+# Top-level `order_weight` is explicit because Infrahub otherwise gives every
+# top-level item the same weight; children are weighted by their position in
+# this file. All weights stay below 9500, where Infrahub's built-in IPAM
+# section sits.
 #
 # Renaming or removing an entry leaves the old CoreMenuItem in the database --
 # `menu load` and the repository import only upsert. `uv run invoke
 # load-menu` prunes entries this file no longer declares.
+#
+# Moving an existing entry under a different group needs `uv run invoke
+# load-menu --reset`. Infrahub attaches menu children in creation order, so an
+# older item moved under a newer group is dropped from the sidebar without an
+# error. `--reset` deletes every menu item this repository owns and loads the
+# file again, so the creation order matches the file.
 ---
 apiVersion: infrahub.app/v1
 kind: Menu
 spec:
   data:
-    # --------- Services ---------
+    # --------- Service Requests ---------
     # What somebody asks for. Every kind here inherits ServiceGeneric, is
     # requested through the portal on a branch, and is built by a generator
-    # into the technical objects in the sections below.
+    # into the technical objects in the sections below. The catalogue comes
+    # first because an application request picks one of its entries.
     - namespace: Service
       name: ServiceMenu
       label: Service Requests
@@ -53,16 +73,16 @@ spec:
       children:
         data:
           - namespace: Service
-            name: FabricAppServices
-            label: Applications
-            kind: ServiceFabricApp
-            icon: "mdi:apps"
-
-          - namespace: Service
             name: ApplicationDefinitionCatalogue
             label: Application Catalogue
             kind: ServiceApplicationDefinition
             icon: "mdi:store-outline"
+
+          - namespace: Service
+            name: FabricAppServices
+            label: Applications
+            kind: ServiceFabricApp
+            icon: "mdi:apps"
 
           - namespace: Service
             name: AppAccessServices
@@ -71,16 +91,16 @@ spec:
             icon: "mdi:key-chain"
 
           - namespace: Service
-            name: NetworkSegmentServices
-            label: Network Segments
-            kind: ServiceNetworkSegment
-            icon: "mdi:lan"
-
-          - namespace: Service
             name: TenantOnboardingServices
             label: Tenant Onboarding
             kind: ServiceTenantOnboarding
             icon: "mdi:account-plus"
+
+          - namespace: Service
+            name: NetworkSegmentServices
+            label: Network Segments
+            kind: ServiceNetworkSegment
+            icon: "mdi:lan"
 
           - namespace: Service
             name: ServerPlacementServices
@@ -106,16 +126,55 @@ spec:
             kind: ServiceTenantCloud
             icon: "mdi:cloud-lock"
 
-    # --------- Data centre fabric ---------
-    # The EOS fabric AVD renders: its building blocks, the boxes in it, how
-    # they are cabled, and the EVPN overlay on top.
+    # --------- Data Center ---------
+    # Where things are and what is in them: locations, tenants, the fabric's
+    # switches and servers, their interfaces and cabling, and whether each
+    # device runs its intended configuration.
     - namespace: Network
       name: FabricMenu
-      label: Data Centre Fabric
+      label: Data Center
       icon: "mdi:lan"
       order_weight: 1500
       children:
         data:
+          - namespace: Location
+            name: LocationsMenu
+            label: Locations
+            icon: "mdi:map-marker-radius"
+            children:
+              data:
+                - namespace: Location
+                  name: Site
+                  label: Sites
+                  kind: LocationSite
+                  icon: "mdi:map-marker-radius"
+
+                - namespace: Location
+                  name: Hall
+                  label: Data Centre Halls
+                  kind: LocationHall
+                  icon: "mdi:office-building"
+
+                - namespace: Location
+                  name: Rack
+                  label: Racks
+                  kind: LocationRack
+                  icon: "mdi:server-network"
+
+                # Tags are what a segment request names to say which racks it
+                # lands on, so they sit with the racks.
+                - namespace: Avd
+                  name: AvdTags
+                  label: Rack Tags
+                  kind: AvdTag
+                  icon: "mdi:tag-outline"
+
+          - namespace: Organization
+            name: Tenant
+            label: Tenants
+            kind: OrganizationTenant
+            icon: "mdi:account-tie"
+
           - namespace: Network
             name: Fabric
             label: Fabrics
@@ -128,16 +187,11 @@ spec:
             kind: NetworkPod
             icon: "mdi:hexagon-multiple"
 
-          - namespace: Location
-            name: Rack
-            label: Racks
-            kind: LocationRack
-            icon: "mdi:server-network"
-
           # One entry per CONCRETE device kind, each in the section of the
-          # system it belongs to: switches here, routers under WAN, the
-          # firewall under Firewall. DcimGenericDevice is a generic with
-          # `include_in_menu: false`, and no entry in this file names a generic.
+          # system it belongs to: switches and servers here, routers under
+          # Backbone, the firewall under Security. DcimGenericDevice is a generic
+          # with `include_in_menu: false`, and no entry in this file names a
+          # generic.
           - namespace: Dcim
             name: FabricSwitches
             label: Switches
@@ -149,12 +203,6 @@ spec:
             label: Servers
             kind: ComputePhysicalServer
             icon: "mdi:server"
-
-          - namespace: Network
-            name: Connections
-            label: Connections
-            kind: NetworkLink
-            icon: "mdi:cable-data"
 
           - namespace: Mlag
             name: MlagDomains
@@ -192,58 +240,55 @@ spec:
                   kind: MlagInterface
                   icon: "mdi:link-variant"
 
-          - namespace: Evpn
-            name: EvpnMenu
-            label: EVPN
-            icon: "mdi:cloud-outline"
+          - namespace: Network
+            name: Connections
+            label: Connections
+            kind: NetworkLink
+            icon: "mdi:cable-data"
+
+
+          - namespace: Dcim
+            name: TypesAndModelsMenu
+            label: Device Catalogue
+            icon: "mdi:package-variant"
             children:
               data:
-                - namespace: Evpn
-                  name: Tenants
-                  label: EVPN Tenants
-                  kind: EvpnTenant
-                  icon: "mdi:account-group"
+                - namespace: Organization
+                  name: Manufacturers
+                  label: Manufacturers
+                  kind: OrganizationManufacturer
+                  icon: "mdi:factory"
 
-                - namespace: Evpn
-                  name: SVIs
-                  label: SVIs
-                  kind: EvpnSvi
-                  icon: "mdi:lan-connect"
+                - namespace: Dcim
+                  name: DeviceTypes
+                  label: Device Types
+                  kind: DcimDeviceType
+                  icon: "mdi:package-variant"
 
-                - namespace: Evpn
-                  name: SviNodes
-                  label: SVI Node Addresses
-                  kind: EvpnSviNode
-                  icon: "mdi:ip-outline"
+                - namespace: Dcim
+                  name: Platforms
+                  label: Platforms
+                  kind: DcimPlatform
+                  icon: "mdi:chip"
 
-                - namespace: Evpn
-                  name: L2VLANs
-                  label: L2 VLANs
-                  kind: EvpnL2Vlan
-                  icon: "mdi:tag-multiple"
+          # Whether intent reached the devices. One DeploymentState record covers
+          # each device with a rendered configuration, across all four device
+          # kinds; its diff file is reached through the record. There is no
+          # CloudVision Workspaces entry: this lab has no CloudVision and
+          # `cv-config-validation` is not registered (.infrahub.yml), so the list
+          # would always be empty.
+          - namespace: Deployment
+            name: DeploymentState
+            label: Device Sync State
+            kind: DeploymentState
+            icon: "mdi:cloud-check-outline"
 
-                # Gateway groups are reached from a domain's relationship
-                # view, deliberately (see docs/docs/developer-guide/schemas.md).
-                - namespace: Evpn
-                  name: Domains
-                  label: Domains
-                  kind: EvpnDomain
-                  icon: "mdi:domain"
-
-          # Tags are what a segment request names to say which racks it
-          # lands on, so they sit with the racks rather than with the design.
-          - namespace: Avd
-            name: AvdTags
-            label: Rack Tags
-            kind: AvdTag
-            icon: "mdi:tag-outline"
-
-    # --------- WAN ---------
+    # --------- Backbone ---------
     # The provider network outside the fabric: SR Linux routers, the circuits
-    # between them, and how each customer site attaches.
+    # between them, how each customer site attaches, and their routing.
     - namespace: Wan
       name: WanMenu
-      label: WAN
+      label: Backbone
       icon: "mdi:wan"
       order_weight: 2000
       children:
@@ -284,12 +329,57 @@ spec:
             kind: OrganizationProvider
             icon: "mdi:domain"
 
-    # --------- Firewall ---------
+          # The WAN routers' and the firewall's own BGP sessions and routes, and
+          # the ASN pool every system draws from. The fabric's VRF services are
+          # under Arista AVD.
+          - namespace: Routing
+            name: RoutingMenu
+            label: Routing
+            icon: "mdi:routes"
+            children:
+              data:
+                - namespace: Routing
+                  name: Asn
+                  label: BGP ASNs
+                  kind: RoutingAsn
+                  icon: "mdi:numeric"
+
+                - namespace: Routing
+                  name: BGPPeerGroup
+                  label: BGP Peer Groups
+                  kind: RoutingBGPPeerGroup
+                  icon: "mdi:account-multiple"
+
+                - namespace: Routing
+                  name: BGPNeighbor
+                  label: BGP Neighbors
+                  kind: RoutingBGPNeighbor
+                  icon: "mdi:connection"
+
+                - namespace: Routing
+                  name: PrefixList
+                  label: Prefix Lists
+                  kind: RoutingPrefixList
+                  icon: "mdi:format-list-bulleted"
+
+                - namespace: Routing
+                  name: RouteMap
+                  label: Route Maps
+                  kind: RoutingRouteMap
+                  icon: "mdi:map-outline"
+
+                - namespace: Routing
+                  name: StaticRoute
+                  label: Static Routes
+                  kind: RoutingStaticRoute
+                  icon: "mdi:routes"
+
+    # --------- Security ---------
     # What exists on fw1. Every entry naming a marketplace kind keeps
     # namespace + name equal to the kind -- see the header.
     - namespace: Security
       name: SecurityMenu
-      label: Firewall
+      label: Security
       icon: "mdi:security"
       order_weight: 2500
       children:
@@ -405,228 +495,80 @@ spec:
                   kind: SecurityServiceGroup
                   icon: "mdi:folder-multiple"
 
-    # --------- Kubernetes ---------
-    - namespace: Cluster
-      name: ClusterMenu
-      label: Kubernetes
-      icon: "mdi:kubernetes"
+    # --------- Arista AVD ---------
+    # What the AVD pipeline reads and writes: the EVPN overlay, the VRF
+    # services, the design data, and the generated files.
+    - namespace: Avd
+      name: DesignMenu
+      label: Arista AVD
+      icon: "mdi:cog-transfer"
       order_weight: 3000
       children:
         data:
-          - namespace: Cluster
-            name: KubernetesClusters
-            label: Clusters
-            kind: ClusterKubernetes
-            icon: "mdi:kubernetes"
+          - namespace: Evpn
+            name: EvpnMenu
+            label: EVPN
+            icon: "mdi:cloud-outline"
+            children:
+              data:
+                - namespace: Evpn
+                  name: Tenants
+                  label: EVPN Tenants
+                  kind: EvpnTenant
+                  icon: "mdi:account-group"
 
-          # The BGP sessions a Cluster Peering request built. Created by the
-          # generator, not by hand.
-          - namespace: Cluster
-            name: FabricPeerings
-            label: Fabric Peerings
-            kind: ClusterFabricPeering
-            icon: "mdi:handshake-outline"
+                # Gateway groups are reached from a domain's relationship
+                # view, deliberately (see docs/docs/developer-guide/schemas.md).
+                - namespace: Evpn
+                  name: Domains
+                  label: Domains
+                  kind: EvpnDomain
+                  icon: "mdi:domain"
 
-    # --------- Monitoring ---------
-    # What is watched, as intent (cycle 034). A profile names device groups and
-    # measurements; the collector's whole configuration is the artifact
-    # rendered from them. Edit here, review in a proposed change -- never in
-    # the collector.
-    - namespace: Monitoring
-      name: MonitoringMenu
-      label: Monitoring
-      icon: "mdi:chart-line"
-      order_weight: 3500
-      children:
-        data:
-          - namespace: Monitoring
-            name: Profiles
-            label: Profiles
-            kind: MonitoringProfile
-            icon: "mdi:tune"
+                - namespace: Evpn
+                  name: L2VLANs
+                  label: L2 VLANs
+                  kind: EvpnL2Vlan
+                  icon: "mdi:tag-multiple"
 
-          - namespace: Monitoring
-            name: Collectors
-            label: Collectors
-            kind: MonitoringCollector
-            icon: "mdi:chart-line"
+                - namespace: Evpn
+                  name: SVIs
+                  label: SVIs
+                  kind: EvpnSvi
+                  icon: "mdi:lan-connect"
 
-          - namespace: Monitoring
-            name: Measurements
-            label: Measurements
-            kind: MonitoringMeasurement
-            icon: "mdi:gauge"
+                - namespace: Evpn
+                  name: SviNodes
+                  label: SVI Node Addresses
+                  kind: EvpnSviNode
+                  icon: "mdi:ip-outline"
 
-    # --------- Deployment ---------
-    # Whether intent reached the devices. One DeploymentState record covers
-    # each device with a rendered configuration, across all four device
-    # kinds; its diff file is reached through the record. There is no
-    # CloudVision Workspaces entry: this lab has no CloudVision and
-    # `cv-config-validation` is not registered (.infrahub.yml), so the list
-    # would always be empty.
-    - namespace: Deployment
-      name: DeploymentMenu
-      label: Deployment
-      icon: "mdi:cloud-check-outline"
-      order_weight: 4000
-      children:
-        data:
-          - namespace: Deployment
-            name: DeploymentState
-            label: Device Sync State
-            kind: DeploymentState
-            icon: "mdi:cloud-check-outline"
-
-    # --------- Routing ---------
-    # Shared by the fabric, the WAN and the firewall: the ASN pool, the
-    # firewall's static routes, and the BGP objects AVD reconciles.
-    - namespace: Routing
-      name: RoutingMenu
-      label: Routing
-      icon: "mdi:routes"
-      order_weight: 4500
-      children:
-        data:
+          # AVD inputs: authored here and rendered into the fabric's
+          # configuration.
           - namespace: Routing
-            name: Asn
-            label: BGP ASNs
-            kind: RoutingAsn
-            icon: "mdi:numeric"
-
-          - namespace: Routing
-            name: BGPPeerGroup
-            label: BGP Peer Groups
-            kind: RoutingBGPPeerGroup
-            icon: "mdi:account-multiple"
-
-          - namespace: Routing
-            name: BGPNeighbor
-            label: BGP Neighbors
-            kind: RoutingBGPNeighbor
-            icon: "mdi:connection"
-
-          - namespace: Routing
-            name: PrefixList
-            label: Prefix Lists
-            kind: RoutingPrefixList
-            icon: "mdi:format-list-bulleted"
-
-          - namespace: Routing
-            name: RouteMap
-            label: Route Maps
-            kind: RoutingRouteMap
-            icon: "mdi:map-outline"
-
-          - namespace: Routing
-            name: StaticRoute
-            label: Static Routes
-            kind: RoutingStaticRoute
-            icon: "mdi:routes"
-
-          # The three VRF-scoped services below are AVD *inputs* -- authored
-          # here and rendered into the fabric's config. The five above hold the
-          # WAN routers' and the firewall's own sessions and routes; nothing
-          # reads a switch's derived routing state back into them.
-          - namespace: Routing
-            name: VrfStaticRoute
-            label: VRF Static Routes
-            kind: RoutingVrfStaticRoute
+            name: VrfServicesMenu
+            label: VRF Services
             icon: "mdi:routes-clock"
+            children:
+              data:
+                - namespace: Routing
+                  name: VrfL3Interface
+                  label: VRF L3 Interfaces
+                  kind: RoutingVrfL3Interface
+                  icon: "mdi:ethernet"
 
-          - namespace: Routing
-            name: VrfBgpPeer
-            label: VRF BGP Peers
-            kind: RoutingVrfBgpPeer
-            icon: "mdi:vector-polyline"
+                - namespace: Routing
+                  name: VrfStaticRoute
+                  label: VRF Static Routes
+                  kind: RoutingVrfStaticRoute
+                  icon: "mdi:routes-clock"
 
-          - namespace: Routing
-            name: VrfL3Interface
-            label: VRF L3 Interfaces
-            kind: RoutingVrfL3Interface
-            icon: "mdi:ethernet"
+                - namespace: Routing
+                  name: VrfBgpPeer
+                  label: VRF BGP Peers
+                  kind: RoutingVrfBgpPeer
+                  icon: "mdi:vector-polyline"
 
-    # --------- IP addressing ---------
-    # Labelled apart from Infrahub's built-in "IPAM" entry, the prefix-tree
-    # browser that always sits below this file's sections.
-    - namespace: Ipam
-      name: IpamMenu
-      label: IP Addressing & VLANs
-      icon: "mdi:ip-network"
-      order_weight: 5000
-      children:
-        data:
-          - namespace: Ipam
-            name: Prefixes
-            label: Prefixes
-            kind: IpamPrefix
-            icon: "mdi:ip-network"
-
-          - namespace: Ipam
-            name: IPAddresses
-            label: IP Addresses
-            kind: IpamIPAddress
-            icon: "mdi:ip"
-
-          - namespace: Ipam
-            name: VRFs
-            label: VRFs
-            kind: IpamVRF
-            icon: "mdi:table-network"
-
-          - namespace: Ipam
-            name: RouteTargets
-            label: Route Targets
-            kind: IpamRouteTarget
-            icon: "mdi:bullseye-arrow"
-
-          - namespace: Ipam
-            name: VLANs
-            label: VLANs
-            kind: IpamVLAN
-            icon: "mdi:tag-outline"
-
-          - namespace: Ipam
-            name: L2Domains
-            label: L2 Domains
-            kind: IpamL2Domain
-            icon: "mdi:vector-square"
-
-    # --------- Organisation ---------
-    - namespace: Organization
-      name: OrganizationMenu
-      label: Tenants & Locations
-      icon: "mdi:domain"
-      order_weight: 5500
-      children:
-        data:
-          - namespace: Organization
-            name: Tenant
-            label: Tenants
-            kind: OrganizationTenant
-            icon: "mdi:account-tie"
-
-          - namespace: Location
-            name: Site
-            label: Sites
-            kind: LocationSite
-            icon: "mdi:map-marker-radius"
-
-          - namespace: Location
-            name: Hall
-            label: Data Centre Halls
-            kind: LocationHall
-            icon: "mdi:office-building"
-
-    # --------- Fabric design ---------
-    # What the AVD pipeline reads and writes. Edited rarely, and mostly by
-    # whoever maintains the fabric rather than whoever requests from it.
-    - namespace: Avd
-      name: DesignMenu
-      label: Fabric Design & AVD
-      icon: "mdi:cog-transfer"
-      order_weight: 6000
-      children:
-        data:
           - namespace: Network
             name: DeviceDesignsMenu
             label: Device Designs
@@ -687,30 +629,6 @@ spec:
                   kind: NetworkLocalUser
                   icon: "mdi:account-key"
 
-          - namespace: Dcim
-            name: TypesAndModelsMenu
-            label: Device Catalogue
-            icon: "mdi:package-variant"
-            children:
-              data:
-                - namespace: Dcim
-                  name: DeviceTypes
-                  label: Device Types
-                  kind: DcimDeviceType
-                  icon: "mdi:package-variant"
-
-                - namespace: Dcim
-                  name: Platforms
-                  label: Platforms
-                  kind: DcimPlatform
-                  icon: "mdi:chip"
-
-                - namespace: Organization
-                  name: Manufacturers
-                  label: Manufacturers
-                  kind: OrganizationManufacturer
-                  icon: "mdi:factory"
-
           # Written by the AVD generators, never by hand. Listed so a
           # pipeline can be debugged without hunting for a UUID.
           - namespace: Avd
@@ -719,10 +637,6 @@ spec:
             icon: "mdi:file-cog-outline"
             children:
               data:
-                # Not `AvdArtifacts`, its name before this group existed:
-                # Infrahub attaches menu children in creation order, so an
-                # older item moved under a newer mid-level group is silently
-                # dropped from the sidebar. A new name makes it a new item.
                 - namespace: Avd
                   name: Artifacts
                   label: AVD Artifacts
@@ -740,3 +654,93 @@ spec:
                   label: Structured Config Files
                   kind: AvdStructuredConfigFile
                   icon: "mdi:file-tree-outline"
+
+    # --------- Compute Services ---------
+    - namespace: Cluster
+      name: ClusterMenu
+      label: Compute Services
+      icon: "mdi:kubernetes"
+      order_weight: 3500
+      children:
+        data:
+          - namespace: Cluster
+            name: KubernetesMenu
+            label: Kubernetes
+            icon: "mdi:kubernetes"
+            children:
+              data:
+                - namespace: Cluster
+                  name: KubernetesClusters
+                  label: Clusters
+                  kind: ClusterKubernetes
+                  icon: "mdi:kubernetes"
+
+                # The BGP sessions a Cluster Peering request built. Created by the
+                # generator, not by hand.
+                - namespace: Cluster
+                  name: FabricPeerings
+                  label: Fabric Peerings
+                  kind: ClusterFabricPeering
+                  icon: "mdi:handshake-outline"
+
+          # What is watched, as intent (cycle 034). A profile names device groups
+          # and measurements; the collector's whole configuration is the artifact
+          # rendered from them. Edit here, review in a proposed change -- never in
+          # the collector.
+          - namespace: Monitoring
+            name: MonitoringMenu
+            label: Monitoring
+            icon: "mdi:chart-line"
+            children:
+              data:
+                - namespace: Monitoring
+                  name: Profiles
+                  label: Profiles
+                  kind: MonitoringProfile
+                  icon: "mdi:tune"
+
+                - namespace: Monitoring
+                  name: Measurements
+                  label: Measurements
+                  kind: MonitoringMeasurement
+                  icon: "mdi:gauge"
+
+                - namespace: Monitoring
+                  name: Collectors
+                  label: Collectors
+                  kind: MonitoringCollector
+                  icon: "mdi:chart-line"
+
+    # --------- IPAM ---------
+    # Attached to Infrahub's built-in IPAM section rather than declared as a
+    # second "IPAM" heading. The section is shown because IpamPrefix and
+    # IpamIPAddress inherit BuiltinIPPrefix and BuiltinIPAddress, and its own
+    # "IP Prefixes" and "IP Addresses" entries list those two kinds, so this
+    # file does not list them again.
+    - namespace: Ipam
+      name: VRFs
+      label: VRFs
+      kind: IpamVRF
+      icon: "mdi:table-network"
+      parent: [Builtin, IPAM]
+
+    - namespace: Ipam
+      name: RouteTargets
+      label: Route Targets
+      kind: IpamRouteTarget
+      icon: "mdi:bullseye-arrow"
+      parent: [Builtin, IPAM]
+
+    - namespace: Ipam
+      name: L2Domains
+      label: L2 Domains
+      kind: IpamL2Domain
+      icon: "mdi:vector-square"
+      parent: [Builtin, IPAM]
+
+    - namespace: Ipam
+      name: VLANs
+      label: VLANs
+      kind: IpamVLAN
+      icon: "mdi:tag-outline"
+      parent: [Builtin, IPAM]
