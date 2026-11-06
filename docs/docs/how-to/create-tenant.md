@@ -11,7 +11,7 @@ Puts a tenant onto a fabric. You request one `ServiceTenantOnboarding`; its gene
 
 Prerequisites:
 
-- A running stack with seed data loaded ([Quick Start](../quick-start.md)).
+- A running stack with seed data loaded ([Set up the full lab environment](../setup-lab.md) or [Set up a demo environment without the lab](../setup-demo.md)).
 - At least one provisioned fabric ([Provision Your First Fabric](../provision-first-fabric.md)).
 - The `OrganizationTenant` you're adding must already exist.
 
@@ -41,7 +41,7 @@ The template then:
 
 1. **Creates a branch** named `implement_<name>`.
 2. **Creates the `ServiceTenantOnboarding`** on that branch, in the `service_tenant_onboardings` group that `generate-tenant-onboarding` targets.
-3. **Waits for the generators.** The `created` event rule in `triggers.yml` runs `generate-tenant-onboarding`, which creates the `EvpnTenant` with its derived VNI base.
+3. **Waits for the generators.** The event rules in `triggers.yml` add the request to its generator's group and run `generate-tenant-onboarding`, which creates the `EvpnTenant` with its derived VNI base.
 4. **Opens a proposed change** from the branch into `main`.
 
 When it finishes, the output links to the proposed change in Infrahub, the onboarding in the catalogue, and the onboarding in Infrahub.
@@ -60,7 +60,7 @@ Instead, the generator takes the lowest free multiple of 1000 at or above `11000
 
 ## Without the portal
 
-An operator can make the same request in the Infrahub UI or with `infrahubctl`: create a branch, create a `ServiceTenantOnboarding` on it with the fields above as a member of the `service_tenant_onboardings` group, and open a proposed change. The `created` event rule runs the generator on the branch, exactly as it does for a portal request.
+An operator can make the same request in the Infrahub UI or with `infrahubctl`: create a branch, create a `ServiceTenantOnboarding` on it with the fields above, and open a proposed change. The event rules add it to the `service_tenant_onboardings` group and run the generator on the branch, exactly as they do for a portal request.
 
 To withdraw a tenant, set the onboarding's **Status** to `decommissioning` on a branch. An `updated` event rule watches that field, so the generator runs on its own: it deletes the EVPN tenant and sets the status to `decommissioned`. While VRFs or L2 VLANs still reference the tenant it refuses instead: the run fails naming what is attached, and the status stays `decommissioning`. Remove those references, then set the status again to retry.
 

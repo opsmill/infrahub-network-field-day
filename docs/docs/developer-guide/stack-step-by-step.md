@@ -1,13 +1,14 @@
 ---
-title: Quick start
-description: Install dependencies, bring the stack up, and load seed data.
-audience: user
-sidebar_position: 1
+title: Set up the stack step by step
+description: Build, start and load the Infrahub stack one command at a time, with no generators run, for development work.
+audience: developer
 ---
 
-# Quick start
+# Set up the stack step by step
 
-The steps below take you from a fresh clone to a running Infrahub instance with seed data loaded. After this, see [Provision Your First Fabric](./provision-first-fabric.md) to generate devices, configurations, and AVD artifacts.
+These steps take a fresh clone to a running Infrahub instance with seed data loaded and no generators run. Use this route when you change schemas, generators or transforms and want to run each stage yourself. To bring up a finished environment in one command, use [Set up the full lab environment](../setup-lab.md) or [Set up a demo environment without the lab](../setup-demo.md) instead.
+
+After these steps, follow [Provision Your First Fabric](../provision-first-fabric.md) to cable the fabric and render the configurations and AVD artifacts.
 
 ## Prerequisites
 
@@ -62,7 +63,7 @@ This brings up, in the background:
 | Neo4j Browser | `http://localhost:7474` | Graph database browser |
 | Prefect | `http://localhost:4200` | Task-manager UI — where generator, transform, and check runs show up |
 
-The service portal isn't part of this stack. It runs in the tooling cluster, which `uv run invoke tooling` deploys, and is reached from the branch desktop at `https://10.90.0.11:32001`. See [The service portal](./service-portal.md).
+The service portal isn't part of this stack. It runs in the tooling cluster, which `uv run invoke tooling` deploys, and is reached from the branch desktop at `https://10.90.0.11:32001`. See [The service portal](../service-portal.md).
 
 Wait for services to become healthy. You can check with:
 
@@ -121,72 +122,19 @@ Open the Infrahub UI at **`http://localhost:8000`** and log in. You should see:
 
 <!-- vale Google.Spelling = NO -->
 
-- **Fabric Design & AVD → Device Catalogue → Manufacturers**: `Arista`, `Nokia`, `Juniper`, and `Generic`.
-- **Data Centre Fabric → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
-- **Data Centre Fabric → Racks**: `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`.
-- **Data Centre Fabric → Switches**: the two spines and five leaves, with their pinned management addresses.
-- **IP Addressing & VLANs → Prefixes**: the `10.41.0.0/16` fabric supernet and the prefixes its pools draw from.
+- **Data Center → Device Catalogue → Manufacturers**: `Arista`, `Nokia`, `Juniper`, and `Generic`.
+- **Data Center → Fabrics**: `OTTERNET_FABRIC` with its pod `otternet-pod1`.
+- **Data Center → Locations → Racks**: `K8S_LEAFS`, `APP_LEAFS` and `BORDER_LEAFS`.
+- **Data Center → Switches**: the two spines and five leaves, with their pinned management addresses.
+- **IPAM → IP Prefixes**: the `10.41.0.0/16` fabric supernet and the prefixes its pools draw from.
 
 <!-- vale Google.Spelling = YES -->
 
-If you don't see these, re-run `uv run invoke load` or see [Common Issues](./troubleshooting.md).
+If you don't see these, re-run `uv run invoke load` or see [Common Issues](../troubleshooting.md).
 
 ## Next: provision a fabric
 
-The stack is up and the seven switches exist with their pinned identity, but the spine-to-leaf and MLAG links are not cabled yet and no host_vars or configurations have been rendered — `invoke load` runs no generators. Follow [Provision Your First Fabric](./provision-first-fabric.md) next.
-
-## Bring up Infrahub in one command
-
-Steps 2 to 4, and the fabric generation from [Provision Your First Fabric](./provision-first-fabric.md),
-also run as one command. With `--no-lab` it brings up Infrahub, and Dex and the service portal as
-Docker Compose containers. It deploys no devices and no Kubernetes workload cluster, needs neither
-ContainerLab nor `sudo`, and runs on macOS. It needs about 12 GB of memory and at least 20 GB of free disk
-where Docker keeps its data, and it checks for both before it changes anything:
-
-```bash
-uv run invoke bootstrap --no-lab
-```
-
-It ends with Infrahub at `http://localhost:8000`, the fabric cabled, every artifact rendered, the
-portal at `https://localhost:32001`, and the MCP token for `alice` in `.env`.
-Without `--no-lab`, `uv run invoke bootstrap` also deploys the lab and configures every device from
-its artifact; see [Bootstrapping the whole environment](./developer-guide/bootstrap.md#bootstrapping-the-whole-environment).
-
-## Run the whole lab on your own machine
-
-The whole environment adds the ContainerLab lab, the tooling cluster, and Kubernetes to Infrahub. The machine needs:
-
-- Linux with about 48 GB of memory, 8 or more CPU cores, and about 60 GB of free disk for the images,
-  volumes and build cache.
-- `/dev/kvm`, because the vSRX firewall is a virtual machine. On a cloud instance, this means
-  nested virtualisation or a bare-metal instance type.
-- `sudo` without a password, because ContainerLab runs under `sudo` during an unattended run.
-- Docker and Compose v2 usable without `sudo`, `git`, `curl`,
-  [ContainerLab](https://containerlab.dev/install/), `kubectl`, `helm`, `openssl`, and Node 22 or 24
-  with Corepack (`corepack enable`).
-
-Check the machine, then bring everything up:
-
-```bash
-uv sync --all-packages
-export INFRAHUB_API_TOKEN=06438eb2-8019-4776-878c-0941b1f1d1ec
-uv run invoke prereqs
-uv run invoke bootstrap
-```
-
-`invoke prereqs` lists everything the machine is missing. It also reports:
-
-- A host port the stack or the lab publishes that another program already uses, such as 3000, 8000
-  or 8080.
-- A download site the machine cannot reach, such as `registry.opsmill.io`, `ghcr.io` or
-  `quay.io`.
-- inotify limits below what the k3s nodes need. The lab deploy raises them with
-  `lab/scripts/host-limits.sh`; set `OTTERNET_PERSIST_LIMITS=1` to keep them after a reboot.
-
-`invoke bootstrap` runs the same checks before it changes anything, then gets the Arista cEOS, Junos vSRX and branch desktop images from
-`registry.opsmill.io`. See the
-[lab image sources](https://github.com/opsmill/infrahub-network-field-day/blob/main/lab/README.md#images)
-for the other ways to get them. The run takes 20 to 30 minutes and ends with the readiness checks.
+The stack is up and the seven switches exist with their pinned identity, but the spine-to-leaf and MLAG links are not cabled yet and no host_vars or configurations have been rendered — `invoke load` runs no generators. Follow [Provision Your First Fabric](../provision-first-fabric.md) next.
 
 ## Common commands
 
