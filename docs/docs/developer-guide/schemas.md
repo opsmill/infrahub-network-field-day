@@ -485,10 +485,15 @@ Four properties of these kinds are deliberate and each looks like an oversight:
 
 ## An application is a Helm chart
 
-`ServiceFabricApp` carries `chart_repository`, `chart_name` and `chart_version`, and all three
-are **mandatory together**. That mirrors the Crossplane composite definition, whose `chart`
-block requires the same three, so an incomplete chart is refused here rather than by the
-cluster.
+`ServiceFabricApp` carries `chart_repository`, `chart_name` and `chart_version`. The Crossplane
+composite definition's `chart` block requires all three together. The schema makes them
+**optional**, because the catalogue entry decides them: `generate-fabric-app` copies them from
+the entry (see [the pin](#the-application-catalogue)), so a request made in the Infrahub UI names
+only the entry. The requirement is held in code instead. `generate-fabric-app` refuses an
+application with neither a catalogue entry nor a chart, and `crossplane_fabric_app` refuses one
+with no chart or half a chart, naming the application, rather than delivering it to a cluster
+that rejects it. `namespace_name` is optional for the same reason: the generator sets it to the
+application's name when it is empty.
 
 No second way to describe a workload remains. The `manifests` attribute and the
 `ServiceFabricAppManifestsFile` kind were withdrawn: an application whose fields were all
@@ -537,8 +542,9 @@ edit to the entry changes nothing already requested. An upgrade is its own revie
 application. Seeded applications are created on `main`, where no event rule fires, so the seed data
 carries the pin itself (`definition_pinned: true`).
 
-The `chart_*` fields on the application stay mandatory — an existing contract test asserts it — so the
-portal reads the entry and sends them in the create.
+The portal still reads the entry and sends the `chart_*` fields in the create. A request made in the
+Infrahub UI leaves them empty, and the pin fills them. `tests/unit/test_application_catalogue_schema_contract.py`
+keeps them, and `namespace_name`, optional.
 
 **`otternet-shop` and `otternet-wiki` are static web sites.** Their chart is `bjw-s/app-template`, a generic chart that runs any image from values.
 The image is `nginxinc/nginx-unprivileged` (port 8080, published as 80), and the pages are a ConfigMap in the entry's `default_values`, mounted over

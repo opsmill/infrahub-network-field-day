@@ -345,16 +345,16 @@ class NetworkFabric(CoreArtifactTarget, NetworkBuildingBlock):
 
 
 class ServiceFabricApp(ServiceGeneric, GeneratorTarget, CoreArtifactTarget):
-    chart_name: String
-    chart_repository: String
+    chart_name: StringOptional
+    chart_repository: StringOptional
     chart_values: JSONAttributeOptional
-    chart_version: String
+    chart_version: StringOptional
     communities: ListAttributeOptional
     definition_pinned: Boolean
     dns_address: StringOptional
     dns_zone: StringOptional
     exposed: Boolean
-    namespace_name: String
+    namespace_name: StringOptional
     policy_allow_dns: Boolean
     policy_allow_egress_api_server: Boolean
     policy_allow_egress_internet: Boolean
