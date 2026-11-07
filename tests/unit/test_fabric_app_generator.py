@@ -206,6 +206,11 @@ class _RecordingNode:
         # the attribute it writes. Overridden by a `status=` kwarg below, which
         # is how a test says what the service already carried.
         self.status = _RecordingAttribute("provisioning")
+        # What every real application has once its request is complete, so the
+        # pin step's namespace default and no-chart refusal stay out of the way.
+        self.name = _RecordingAttribute(node_id)
+        self.namespace_name = _RecordingAttribute(node_id)
+        self.chart_name = _RecordingAttribute("whoami")
         for key, value in attributes.items():
             setattr(self, key, _RecordingAttribute(value))
 

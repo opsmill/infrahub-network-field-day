@@ -462,16 +462,17 @@ def test_fabric_app_workload_source_is_a_chart_and_nothing_else() -> None:
     chart, raw manifests, or both -- so the renderer decided which by looking at
     what happened to be populated, and refused only when everything was empty.
 
-    The three chart fields are now mandatory TOGETHER, which is the constraint
-    the Crossplane XRD already imposes (`required: [repository, name, version]`).
-    Stating it here catches an incomplete chart before an artifact renders,
-    rather than after the cluster rejects it.
+    The three chart fields are the only workload source. They are optional
+    because the catalogue entry decides them: generate-fabric-app pins all three
+    from the entry, and crossplane_fabric_app refuses an application with no
+    chart or half a chart (`tests/unit/test_crossplane_fabric_app.py`).
     """
     app = _node(_load_yaml(KUBERNETES_SERVICES_SCHEMA), "Service", "FabricApp")
     attributes = _attributes(app)
 
     for name in ("chart_repository", "chart_name", "chart_version"):
-        assert attributes[name].get("optional") is False, f"{name} must be mandatory"
+        assert attributes[name].get("optional") is True, f"{name} is pinned from the catalogue entry"
+    assert "manifests" not in attributes
 
     # The inline escape hatch for values small enough not to need a file. The
     # attachment still wins when both are present.

@@ -1,12 +1,12 @@
 ---
 title: Service request workflows, through the portal and in Infrahub
-description: Step-by-step instructions for the four service request workflows in the demo environment, each done once through the service portal and once by hand in the Infrahub UI, with what the proposed change shows and the problems to avoid.
+description: Step-by-step instructions for the service request workflows in the demo environment, done through the service portal and by hand in the Infrahub UI, with what the proposed change shows and the problems to avoid.
 audience: user
 ---
 
 # Service request workflows, through the portal and in Infrahub
 
-A branch user asks for a network service, Infrahub builds it on a branch, and a network engineer reviews and merges the proposed change. This page walks through four such requests. Each is done two ways:
+A branch user asks for a network service, Infrahub builds it on a branch, and a network engineer reviews and merges the proposed change. This page walks through four such requests, each done two ways, and then the other three service kinds, done in the Infrahub UI:
 
 - **Through the service portal.** The requester fills in a form, and the portal creates the branch, the service object and the proposed change.
 - **By hand in the Infrahub UI.** The requester creates the branch, the service object and the proposed change themselves.
@@ -19,8 +19,11 @@ Both routes produce the same objects and the same configuration changes, so the 
 | [Grant access to Grafana](#grant-access-to-grafana) | `ServiceAppAccess` | Application Access Grant |
 | [Revoke access](#revoke-access) | `ServiceAppAccess`, status `decommissioning` | Revoke access |
 | [Add a network segment](#add-a-network-segment) | `ServiceNetworkSegment` | Network Segment |
+| [Onboard a tenant](#onboard-a-tenant-in-infrahub) | `ServiceTenantOnboarding` | Tenant Onboarding |
+| [Place a server](#place-a-server-in-infrahub) | `ServiceServerPlacement` | Server Placement |
+| [Change the cluster peering](#change-the-cluster-peering-in-infrahub) | `ServiceFabricPeering` | Cluster Peering |
 
-The steps and timings were recorded on the [demo environment without the lab](./setup-demo.md) on November 6, 2026. In that environment nothing is pushed to a device, so each workflow ends at the merge and the re-rendered configurations. In the [full lab](./setup-lab.md), the reconciler then pushes the merged configurations to the switches and the firewall; the [demo runbook](./demo-runbook.md) covers that part.
+The steps and timings were recorded on the [demo environment without the lab](./setup-demo.md) on November 6 and 7, 2026. In that environment nothing is pushed to a device, so each workflow ends at the merge and the re-rendered configurations. In the [full lab](./setup-lab.md), the reconciler then pushes the merged configurations to the switches and the firewall; the [demo runbook](./demo-runbook.md) covers that part.
 
 ## Before you start
 
@@ -68,8 +71,7 @@ When it ends, the page links to **Review the proposed change**, **The applicatio
 ### By hand in Infrahub
 
 1. **Create a branch.** In the branch selector at the top left, select **+**, enter a name such as `implement_otter-shop-ui_demo2`, and select **Create a new branch**.
-2. **Read the catalogue entry.** Open **Service Requests → Application Catalogue** and open **Who am I**. Note its chart repository (`https://cowboysysop.github.io/charts/`), chart name (`whoami`), chart version (`6.0.0`) and default service selector (`otternet.lab/advertise=true`). The UI does not copy these for you.
-3. **Create the application.** On the new branch, open **Service Requests → Applications** and select **Add Fabric Application**. Fill in:
+2. **Create the application.** On the new branch, open **Service Requests → Applications** and select **Add Fabric Application**. Fill in:
 
    | Field | Value used |
    | --- | --- |
@@ -78,17 +80,14 @@ When it ends, the page links to **Review the proposed change**, **The applicatio
    | Cluster | `otternet` |
    | Fabric Tenant VRF | `K8S_PROD` |
    | Catalogue Entry | **Who am I** |
-   | Namespace | `otter-shop-ui` |
-   | Chart Repository, Chart Name, Chart Version | the values from step 2 |
    | Exposed to Fabric | **True** |
-   | Service Selector | `otternet.lab/advertise=true` |
 
-   Fill **Service Selector** last. The field asks you to press Enter to add an item, and that Enter also saves the whole form.
+   Leave these fields empty: **Namespace**, **Service Selector** and the three **Chart** fields. The application's generator copies the chart and the service selector from the catalogue entry, and sets the namespace to the application's name. Values typed into the chart fields are replaced by the entry's values.
 
    The **Catalogue Entry** picker in Infrahub lists all eleven entries, including the lab's own infrastructure entries that the portal hides. Pick a requestable one.
-4. **Check that it was built.** Within about ten seconds, the application shows a **VIP Block** (for example `10.112.240.32/28`), **Pinned From Catalogue** is true, and **Advertised Services** lists `junos-http`. An event rule adds the application to the `service_fabric_apps` group and runs `generate-fabric-app`; you do not set the group yourself.
-5. **Create the access grant.** Open **Service Requests → Application Access** and select **Add**. Fill in **Name** (`otter-shop-ui-access`), **Owner** (`Tenant`, `branch`), **Application** (`otter-shop-ui`), **Source Site** (`branch-office`), **Requester** (`alice@otternet.lab`) and **Justification**, then **Save**. Within a few seconds the grant's status is `active`, the firewall rule `svc-otter-shop-ui-access` exists, and `10.70.0.0/24` is added to the application's allowed source prefixes.
-6. **Open the proposed change.** Switch the branch selector to `main`; **New proposed change** is disabled on any other branch. Open **Proposed Changes**, select **New proposed change**, choose the source branch, enter a name, and select **Open**.
+3. **Check that it was built.** Within about ten seconds, the application shows a **VIP Block** (for example `10.112.240.32/28`), **Pinned From Catalogue** is true, and **Advertised Services** lists `junos-http`. An event rule adds the application to the `service_fabric_apps` group and runs `generate-fabric-app`; you do not set the group yourself.
+4. **Create the access grant.** Open **Service Requests → Application Access** and select **Add**. Fill in **Name** (`otter-shop-ui-access`), **Owner** (`Tenant`, `branch`), **Application** (`otter-shop-ui`), **Source Site** (`branch-office`), **Requester** (`alice@otternet.lab`) and **Justification**, then **Save**. Within a few seconds the grant's status is `active`, the firewall rule `svc-otter-shop-ui-access` exists, and `10.70.0.0/24` is added to the application's allowed source prefixes.
+5. **Open the proposed change.** Switch the branch selector to `main`; **New proposed change** is disabled on any other branch. Open **Proposed Changes**, select **New proposed change**, choose the source branch, enter a name, and select **Open**.
 
 You do not need to regenerate the switches' host vars by hand. When the grant's generator writes the border leaf's custom host vars, an event rule regenerates that leaf, and the proposed change's checks render the configuration.
 
@@ -196,6 +195,53 @@ The request took 40 seconds. The generator allocated `10.230.0.0/24` and created
 
 - **Checks:** 17 when nothing else has changed on `main`, all successful.
 - **Artifacts:** five: the AVD EOS Configuration and AVD Device Documentation of `leaf-otternet-pod1-2-1` and `leaf-otternet-pod1-2-2`, the two leaves of the `APP_LEAFS` rack, and the Telemetry Collector Configuration.
+
+## Onboard a tenant in Infrahub
+
+Onboarding puts an existing organization onto the fabric. The generator creates the organization's EVPN tenant and gives it the lowest free VNI base, a multiple of 1000 from 11000. The portal route is in [Create a tenant](./how-to/create-tenant.md).
+
+1. Create a branch, such as `onboard_initech`.
+2. If the organization does not exist yet, open **Data Center → Tenants**, select **Add**, enter its **Name** (for example `initech`), and select **Save**.
+3. Open **Service Requests → Tenant Onboarding** and select **Add**. Fill in **Name** (`initech-onboarding`), **Owner** (`Tenant`, the organization), **Organization** (`initech`) and **Fabric** (`OTTERNET_FABRIC`). Leave **MAC-VRF VNI Base** and **EVPN Tenant** empty; the generator sets them. Select **Save**.
+4. Within a few seconds the onboarding shows **EVPN Tenant** `TENANT_INITECH` and **MAC-VRF VNI Base** `14000`.
+5. Switch to `main` and open a proposed change from the branch.
+
+The proposed change ran 12 checks on the demo environment and 13 on the full lab, all successful. A tenant with no network segments yet adds no configuration to any switch. Add a segment for it next, as in [Add a network segment](#add-a-network-segment).
+
+## Place a server in Infrahub
+
+A placement adds a physical server to a compute rack. The generator creates the server from an object template, and the server-cabling generator cables it to the rack's leaves. The portal route, and what happens after the merge, are in [Add a server](./how-to/add-server.md).
+
+1. Create a branch, such as `place_app-srv09`.
+2. Open **Service Requests → Server Placements** and select **Add**. Fill in:
+
+   | Field | Value used |
+   | --- | --- |
+   | Name | `place-app-srv09` |
+   | Owner | **Kind** `Tenant`, then `branch` |
+   | Hostname | `app-srv09`; it is also the server's ContainerLab node name |
+   | Role | **Compute** (the default) |
+   | Rack | `APP_LEAFS` |
+   | Object Template | `otternet-workload-host` |
+
+   Leave **Server** empty; the generator sets it. Select **Save**.
+3. Within a few seconds the placement shows **Server** `app-srv09`, and the server's `eth1` is cabled to `leaf-otternet-pod1-2-1` `Ethernet5`.
+4. Switch to `main` and open a proposed change from the branch.
+
+The proposed change ran 24 checks, all successful, on both environments.
+
+## Change the cluster peering in Infrahub
+
+The cluster peering is the BGP sessions between the Kubernetes cluster's nodes and the leaves they are cabled to. The lab has one cluster, `otternet`, and one peering service for it, `otternet-fabric-peering`. Change that service rather than adding a second one: the `peering-consistency` check fails a proposed change that gives one cluster two peering services.
+
+Changing **Status** or **Cluster** runs the generator again. Changing **Communities** or **Advertisement Selector** does not, because no event rule watches them.
+
+1. Create a branch, such as `peering_withdraw`.
+2. Open **Service Requests → Cluster Peering**, open `otternet-fabric-peering`, select **Edit**, set **Status** to **Decommissioning**, and select **Save**.
+3. Within a few seconds the generator removes the service's two peerings. **Realized Peerings** is empty.
+4. Switch to `main` and open a proposed change from the branch.
+
+The proposed change ran 12 checks on the full lab, all successful. This test was not merged: merging it ends the BGP sessions between the cluster and the fabric, and every exposed application becomes unreachable. To put the peering back on a branch, set **Status** to **Active**.
 
 ## Review and merge
 

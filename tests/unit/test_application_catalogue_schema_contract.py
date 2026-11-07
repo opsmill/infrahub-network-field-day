@@ -13,8 +13,8 @@ What these tests guard is what fails quietly:
 - `requestable` defaulting to true, which would put an entry in the portal
   picker the moment someone forgot to say otherwise;
 - `definition` becoming mandatory, which Infrahub refuses against existing data;
-- the chart fields on the application becoming optional, which would let a
-  request through with half a chart.
+- the chart fields on the application becoming mandatory again, which makes a
+  request in the Infrahub UI copy three values the generator overwrites.
 """
 
 from __future__ import annotations
@@ -168,10 +168,11 @@ def test_the_pin_marker_is_an_optional_boolean_off_by_default(app: dict[str, Any
     assert marker["default_value"] is False
 
 
-def test_the_chart_fields_stay_mandatory_together(app: dict[str, Any]) -> None:
+def test_the_catalogue_entry_is_enough_to_request_an_application(app: dict[str, Any]) -> None:
+    """generate-fabric-app pins the chart and defaults the namespace; the form must not ask for them."""
     attributes = _fields(app, "attributes")
-    for name in ("chart_repository", "chart_name", "chart_version"):
-        assert attributes[name]["optional"] is False, name
+    for name in ("chart_repository", "chart_name", "chart_version", "namespace_name"):
+        assert attributes[name]["optional"] is True, name
 
 
 def test_the_catalogue_directory_loads_with_the_rest_of_schemas() -> None:
