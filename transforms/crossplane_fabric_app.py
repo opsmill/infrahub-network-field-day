@@ -473,10 +473,10 @@ class CrossplaneFabricAppTransform(InfrahubTransform):
         # A CHART IS THE WHOLE WORKLOAD SOURCE since cycle 033. It used to be a
         # chart, raw manifests, or both, which left this deciding which of three
         # shapes it was looking at from whichever fields happened to be
-        # populated -- and refusing only when everything was empty. The three
-        # chart fields are mandatory together in the schema now, so reaching
-        # here without one means the object predates that and was never
-        # migrated.
+        # populated -- and refusing only when everything was empty. The chart
+        # fields are optional so a request can name only a catalogue entry, and
+        # generate-fabric-app pins the chart from it; reaching here without one
+        # means the application was never pinned.
         if not chart:
             msg = (
                 f"application {name!r} names no chart; rendering it would produce a namespace and a "

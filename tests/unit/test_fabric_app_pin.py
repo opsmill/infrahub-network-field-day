@@ -103,6 +103,7 @@ class _Service:
         self.id = "app-1"
         self.name = _Attr("my-app")
         self.status = _Attr("provisioning")
+        self.namespace_name = _Attr("my-app-ns")
         self.chart_repository = _Attr("https://example.invalid/typed")
         self.chart_name = _Attr("typed")
         self.chart_version = _Attr("0.0.1")
@@ -243,6 +244,36 @@ async def test_an_application_with_no_entry_is_left_exactly_as_it_was() -> None:
     assert client.created == []
     assert service.chart_name.value == "typed"
     assert service.definition_pinned.value is False
+
+
+@pytest.mark.asyncio
+async def test_an_empty_namespace_becomes_the_application_name_in_the_pin_save() -> None:
+    service = _Service(_Entry(), namespace_name=_Attr(None))
+
+    await _generator(_Client(service))._pin_definition("app-1")
+
+    assert service.namespace_name.value == "my-app"
+    assert len(service.saves) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_empty_namespace_is_filled_even_with_no_entry() -> None:
+    service = _Service(None, namespace_name=_Attr(""))
+
+    await _generator(_Client(service))._pin_definition("app-1")
+
+    assert service.namespace_name.value == "my-app"
+    assert len(service.saves) == 1
+    assert service.definition_pinned.value is False
+
+
+@pytest.mark.asyncio
+async def test_no_entry_and_no_chart_is_refused_by_name() -> None:
+    """The chart fields are optional; without an entry the manifest would deploy nothing."""
+    service = _Service(None, chart_name=_Attr(None))
+
+    with pytest.raises(ValueError, match="'my-app' has no catalogue entry and no chart"):
+        await _generator(_Client(service))._pin_definition("app-1")
 
 
 @pytest.mark.asyncio
