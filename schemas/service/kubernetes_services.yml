@@ -90,42 +90,40 @@ nodes:
       - name: namespace_name
         kind: Text
         label: Namespace
-        optional: false
+        optional: true
         # Not `namespace`: that is a schema-level key and an attribute of that
-        # name would shadow it.
-        description: "Kubernetes namespace to create and deploy into"
+        # name would shadow it. Optional: generate-fabric-app sets the
+        # application's name when it is left empty.
+        description: "Kubernetes namespace to create and deploy into. Empty means the application's name"
         order_weight: 1300
       # -- the workload, which is a chart and nothing else -------------------
       #
-      # MANDATORY TOGETHER, because the XRD already requires them together:
-      # `chart` carries `required: [repository, name, version]`, so a
-      # two-of-three chart is a resource the cluster rejects. Stating it here
-      # catches it before an artifact renders rather than after delivery.
+      # OPTIONAL, because the catalogue entry decides them. generate-fabric-app
+      # copies the entry's three fields onto the application (see
+      # `definition_pinned`), overwriting anything typed here, so a request made
+      # in the Infrahub UI needs only the entry. They were mandatory from cycle
+      # 033 until then, which made a person copy three values the generator
+      # replaced anyway.
       #
-      # They were all optional until cycle 033, alongside a `manifests`
-      # attribute and a manifests file attachment. That gave an application
-      # three valid shapes -- a chart, raw API objects, or both -- and left the
-      # renderer to work out which one it was looking at from whichever fields
-      # happened to be populated. It refused only when everything was empty.
-      #
-      # Tightening these is why the migration order inverts `invoke load`:
-      # making an attribute mandatory is REFUSED while any existing object
-      # leaves it empty, and the server names the node without naming the
-      # field. See scripts/migrate_fabric_app_charts.py.
+      # The XRD still requires all three together (`chart` carries
+      # `required: [repository, name, version]`). That is held in code, not
+      # here: generate-fabric-app refuses an application with neither an entry
+      # nor a chart, and crossplane_fabric_app refuses one with no chart or
+      # half a chart, naming the application.
       - name: chart_repository
         kind: Text
         label: Chart Repository
-        optional: false
+        optional: true
         order_weight: 1400
       - name: chart_name
         kind: Text
         label: Chart Name
-        optional: false
+        optional: true
         order_weight: 1410
       - name: chart_version
         kind: Text
         label: Chart Version
-        optional: false
+        optional: true
         order_weight: 1420
       # Values small enough not to need a file. The attachment below wins when
       # both are present -- and it has to exist, because `infrahubctl object

@@ -253,18 +253,33 @@ class FabricAppGenerator(InfrahubGenerator):
 
         Reads through the SDK rather than the generator's query: a new query
         model needs `schema.graphql`, which only a live Infrahub can re-export.
-        Returns without writing when there is no definition, when the pin has
-        been taken, or when the entry has nothing to say.
+        Defaults an empty namespace to the application's name first, and refuses
+        an application with neither a catalogue entry nor a chart, because the
+        manifest would deploy nothing. Otherwise pins nothing when there is no
+        definition or the pin has been taken.
         """
         service = await self.client.get(kind="ServiceFabricApp", id=app_id)
+        name = _value(service.name)  # type: ignore[attr-defined]
+        # The namespace and the chart are optional so that a request made in the
+        # Infrahub UI needs only the catalogue entry; this fills what was left
+        # empty. Guarded: a second run finds the namespace set and writes nothing.
+        defaulted = not _value(service.namespace_name)  # type: ignore[attr-defined]
+        if defaulted:
+            service.namespace_name.value = name  # type: ignore[attr-defined]
         if service.definition.id is None:  # type: ignore[attr-defined]
+            if not _value(service.chart_name):  # type: ignore[attr-defined]
+                msg = f"application {name!r} has no catalogue entry and no chart; pick a catalogue entry"
+                raise ValueError(msg)
+            if defaulted:
+                await service.save(update_group_context=False)
             return
         if _value(service.definition_pinned):  # type: ignore[attr-defined]
+            if defaulted:
+                await service.save(update_group_context=False)
             return
 
         await service.definition.fetch()  # type: ignore[attr-defined]
         entry = service.definition.peer  # type: ignore[attr-defined]
-        name = _value(service.name)  # type: ignore[attr-defined]
 
         # The file first, so the marker below is the commit point.
         values = _value(entry.default_values)
