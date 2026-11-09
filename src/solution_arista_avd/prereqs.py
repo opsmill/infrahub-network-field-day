@@ -28,7 +28,9 @@ FAIL = "FAIL"
 LAB_MEMORY_GB = 48
 # --no-lab: the stack, plus Dex and the portal as compose services.
 INFRAHUB_MEMORY_GB = 12
-NODE_MAJOR_VERSIONS = (22, 24)
+# Node 26 ships without Corepack, which is why the portal build runs the Yarn release committed under
+# backstage/.yarn/ with `node` instead of a `yarn` on PATH.
+NODE_MAJOR_VERSIONS = (22, 24, 26)
 # Measured on a full environment: about 20 GB of images, 12 GB of volumes, 10 GB of build cache, and
 # the k3s nodes' own images on top. A first run on an empty machine needs about this much free.
 FIRST_RUN_DISK_GB = 60
@@ -113,16 +115,14 @@ def check_docker(which: Which, run: Runner) -> list[Result]:
 
 def check_node(which: Which, run: Runner) -> Result:
     if not which("node"):
-        return Result(FAIL, "node", "missing; the service portal is built with Node 22 or 24 -- https://nodejs.org")
+        return Result(FAIL, "node", "missing; the service portal is built with Node 22, 24 or 26 -- https://nodejs.org")
     code, out = run(["node", "--version"])
     match = re.match(r"v(\d+)\.", out)
     if code or not match:
         return Result(FAIL, "node", f"could not read the version: {out}")
     major = int(match.group(1))
     if major not in NODE_MAJOR_VERSIONS:
-        return Result(FAIL, "node", f"{out}; the portal needs Node 22 or 24")
-    if not which("corepack") and not which("yarn"):
-        return Result(FAIL, "node", f"{out}, but neither corepack nor yarn is installed -- run: corepack enable")
+        return Result(FAIL, "node", f"{out}; the portal needs Node 22, 24 or 26")
     return Result(OK, "node", out)
 
 

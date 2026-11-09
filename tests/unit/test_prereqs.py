@@ -9,13 +9,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import tasks
 from solution_arista_avd import prereqs
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
 REPO = Path(__file__).resolve().parents[2]
-ALL_TOOLS = {"docker", "git", "curl", "containerlab", "openssl", "node", "corepack", "kubectl", "helm"}
+ALL_TOOLS = {"docker", "git", "curl", "containerlab", "openssl", "node", "kubectl", "helm"}
 
 
 def which_from(tools: set[str]):
@@ -101,6 +102,22 @@ def test_wrong_node_major_version_fails(tmp_path: Path) -> None:
     assert results["node"].status == prereqs.FAIL
 
 
+def test_node_26_without_corepack_passes(tmp_path: Path) -> None:
+    # Node 26 ships without Corepack; the portal build runs the Yarn release committed in backstage/.yarn/.
+    results = by_name(run_all(tmp_path, tools=ALL_TOOLS - {"corepack", "yarn"}, run=runner(node="v26.12.1")))
+    assert results["node"].status == prereqs.OK
+
+
+def test_the_portal_build_runs_the_committed_yarn_release() -> None:
+    backstage = REPO / "backstage"
+    release = tasks._yarn_release(backstage)
+    assert (backstage / release).is_file()
+    source = (REPO / "tasks.py").read_text(encoding="utf-8")
+    body = source[source.index("def backstage_build(") :]
+    body = body[: body.index("\n@task")]
+    assert 'ctx.run("yarn ' not in body
+
+
 def test_missing_kvm_fails(tmp_path: Path) -> None:
     results = prereqs.run_checks(
         lab=True,
@@ -132,7 +149,7 @@ def test_a_missing_lab_image_is_a_warning_because_bootstrap_fetches_it(tmp_path:
 
 
 def test_no_lab_needs_neither_containerlab_nor_sudo(tmp_path: Path) -> None:
-    tools = {"docker", "git", "curl", "openssl", "node", "corepack"}
+    tools = {"docker", "git", "curl", "openssl", "node"}
     results = by_name(run_all(tmp_path, tools=tools, memory=16.0, lab=False, run=runner(failing=frozenset({"sudo"}))))
     assert not prereqs.failed(list(results.values()))
     assert {"containerlab", "sudo", "inotify"}.isdisjoint(results)

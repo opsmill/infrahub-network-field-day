@@ -261,11 +261,13 @@ configuration changes arrive and code changes do not.
 
 Two traps inside that step, both of which cost real time before being read rather than guessed:
 
-- **`cd`, never `yarn --cwd`.** The portal pins Yarn 4 through `.yarnrc.yml` and `.yarn/`, and
-  Yarn finds that only when run from inside the project. `--cwd` is resolved after the version
-  decision, so Corepack concludes there is no project, falls back to Yarn Classic and asks
-  `Corepack is about to download … yarn-1.22.22.tgz … Do you want to continue? [Y/n]`. Nobody
-  watches that prompt, so the build sits on it looking exactly like a slow typecheck.
+- **The committed Yarn, never a `yarn` on `PATH`.** `invoke backstage-build` runs
+  `node .yarn/releases/yarn-<version>.cjs` (the `yarnPath` in `.yarnrc.yml`) from inside
+  `backstage/`. A `yarn` on `PATH` usually comes from Corepack, which Node 26 no longer ships, and
+  Corepack has hung the build before: run with `yarn --cwd`, it decided there was no project, fell
+  back to Yarn Classic and asked `Corepack is about to download … yarn-1.22.22.tgz … Do you want to
+  continue? [Y/n]`. Nobody watches that prompt, so the build sat on it looking exactly like a slow
+  typecheck.
 - **A bounded heap.** Node sizes its old space against *total* system memory, so on this host it
   grows past what is free with the lab up and the build is **killed** rather than failing.
   `invoke backstage-build` sets `--max-old-space-size=4096`.

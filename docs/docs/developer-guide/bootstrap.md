@@ -58,8 +58,8 @@ branch user can sign in to the portal and request a service.
 Before it changes anything, bootstrap checks the host (`uv run invoke prereqs` runs the same
 checks on their own):
 
-- The tools: Docker and Compose v2 usable without `sudo`, `git`, `curl`, `openssl`, and Node 22 or
-  24 with Corepack. With the lab: `containerlab`. With the cluster: `kubectl` and `helm`.
+- The tools: Docker and Compose v2 usable without `sudo`, `git`, `curl`, `openssl`, and Node 22, 24
+  or 26. With the lab: `containerlab`. With the cluster: `kubectl` and `helm`.
 - With the lab, `sudo` without a password, because ContainerLab and the tooling bridge run under
   `sudo` and nobody watches the prompt. `--no-lab` needs neither ContainerLab nor `sudo`.
 - `/dev/kvm`, because the vSRX firewall is a VM.

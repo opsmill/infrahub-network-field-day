@@ -53,7 +53,7 @@ The full pipeline, from a high-level fabric design to versioned, deployable conf
 
 There are two environments, and each comes up with one command. Both need
 [Docker](https://docs.docker.com/get-docker/) with Compose v2, [uv](https://docs.astral.sh/uv/getting-started/installation/),
-Python 3.11 to 3.13, `git`, `curl`, `openssl`, and Node 22 or 24 with Corepack. PyAVD is installed in the
+Python 3.11 to 3.13, `git`, `curl`, `openssl`, and Node 22, 24 or 26. PyAVD is installed in the
 project's Infrahub image, so it needs no separate install. `invoke prereqs` lists anything the machine is missing.
 
 | Environment | Runs on | What it includes | Guide |

@@ -3282,6 +3282,15 @@ def _wait_for_syncs(ctx: Context, kubeconfig: Path, timeout: int = 300) -> None:
         )
 
 
+def _yarn_release(project: Path) -> str:
+    """The Yarn release a Yarn 4 project commits, relative to it: `yarnPath` in its `.yarnrc.yml`."""
+    for line in (project / ".yarnrc.yml").read_text(encoding="utf-8").splitlines():
+        key, _, value = line.partition(":")
+        if key.strip() == "yarnPath" and value.strip():
+            return value.strip().strip("'\"")
+    raise Exit(f"{project / '.yarnrc.yml'} names no yarnPath; the portal build runs the committed Yarn release")
+
+
 @task(
     help={"no-cache": "Rebuild the image from scratch, ignoring the layer cache."},
 )
@@ -3316,31 +3325,32 @@ def backstage_build(ctx: Context, no_cache: bool = False) -> None:
     # looks like an infrastructure hiccup rather than a resource limit.
     env = {"NODE_OPTIONS": "--max-old-space-size=4096"}
 
-    # `cd`, NOT `yarn --cwd`. This repository pins Yarn 4 through `.yarnrc.yml`
-    # and `.yarn/`, and Yarn finds that only by being run from inside the
-    # project. `yarn --cwd <dir>` is resolved before the directory is consulted,
-    # so Corepack decides there is no project, falls back to Yarn Classic, and
-    # asks whether to download it:
+    # THE COMMITTED YARN, run with `node`, NOT a `yarn` on PATH. `.yarnrc.yml` names the release
+    # under `.yarn/releases/` (`yarnPath`). A `yarn` on PATH comes from Corepack, which Node 26 no
+    # longer ships, and Corepack has hung this build before: run as `yarn --cwd <dir>`, it decided
+    # there was no project, fell back to Yarn Classic and asked whether to download it:
     #
     #   ! Corepack is about to download .../yarn-1.22.22.tgz
     #   ? Do you want to continue? [Y/n]
     #
     # Nobody is watching that prompt, so the build sits on it indefinitely --
     # which looks exactly like a slow typecheck. It sat for twenty-five minutes
-    # before anyone read the output rather than the clock.
+    # before anyone read the output rather than the clock. Running from inside the
+    # project (`cd`) still matters: Yarn reads `.yarnrc.yml` from there.
     #
     # `tsc` first: `build:backend` bundles without typechecking, so a type error
     # would otherwise reach the image and only fail at runtime.
     # `yarn install` first: node_modules is gitignored, so a fresh clone has
     # none and `tsc` fails on every import. `--immutable` refuses to change
     # yarn.lock, and with an up-to-date node_modules it takes seconds.
+    yarn = f"node {_yarn_release(backstage)}"
     print(" - Installing the portal's dependencies")
     with ctx.cd(str(backstage)):
-        ctx.run("yarn install --immutable", pty=True, env=env)
+        ctx.run(f"{yarn} install --immutable", pty=True, env=env)
     print(" - Typechecking and bundling the portal")
     with ctx.cd(str(backstage)):
-        ctx.run("yarn tsc", pty=True, env=env)
-        ctx.run("yarn build:backend", pty=True, env=env)
+        ctx.run(f"{yarn} tsc", pty=True, env=env)
+        ctx.run(f"{yarn} build:backend", pty=True, env=env)
 
     flag = " --no-cache" if no_cache else ""
     print(" - Building the image around it")
