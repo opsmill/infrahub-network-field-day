@@ -40,13 +40,13 @@ def test_the_role_holds_exactly_these_permissions() -> None:
     module = _provisioner()
     assert module.OBJECT_PERMISSIONS == [
         {"namespace": "*", "name": "*", "action": "view", "decision": 6},
-        {"namespace": "Service", "name": "*", "action": "any", "decision": 4},
+        {"namespace": "*", "name": "*", "action": "any", "decision": 4},
         {"namespace": "Core", "name": "ProposedChange", "action": "create", "decision": 2},
     ]
     assert module.GLOBAL_PERMISSIONS == [{"action": "edit_default_branch", "decision": 6}]
     assert module.expected_permissions() == {
         ("object", "*", "*", "view", 6),
-        ("object", "Service", "*", "any", 4),
+        ("object", "*", "*", "any", 4),
         ("object", "Core", "ProposedChange", "create", 2),
         ("global", "edit_default_branch", 6),
     }
@@ -57,13 +57,13 @@ def test_the_view_permission_is_kept_for_every_kind() -> None:
     assert {"namespace": "*", "name": "*", "action": "view", "decision": 6} in module.OBJECT_PERMISSIONS
 
 
-def test_writes_are_limited_to_service_kinds_on_branches_other_than_the_default() -> None:
+def test_writes_are_limited_to_branches_other_than_the_default() -> None:
     # decision 4 = allow on branches other than the default; 2 = the default branch only.
     module = _provisioner()
     writes = [item for item in module.OBJECT_PERMISSIONS if item["action"] != "view"]
     for item in writes:
         if item["action"] == "any":
-            assert item["namespace"] == "Service"
+            # Any kind, but never on `main`: the default branch changes only through a merge.
             assert item["decision"] == 4
         else:
             assert (item["namespace"], item["name"], item["action"], item["decision"]) == (

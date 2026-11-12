@@ -13,8 +13,10 @@ WHAT A MEMBER MAY DO AFTER THIS SCRIPT, through one role, `Requester Access`:
 
 - view every kind, so people can read the data (`view` on every namespace and kind,
   everywhere);
-- create and edit service objects on a branch other than the default branch: every
-  kind in the `Service` namespace, decision 4. A write on `main` is refused;
+- create, edit and delete any kind on a branch other than the default branch, decision 4.
+  A write on `main` is refused. This was every kind in the `Service` namespace until
+  2026-10-19; it was widened so that an agent acting as alice can correct routing data on
+  its branch and run the AVD generators there, as the portal's account already does;
 - create a proposed change. A proposed change is stored on `main`, so this is
   `object:Core:ProposedChange:create:allow_default` plus the global `edit_default_branch`,
   which admits a request to the default branch at all. Object permissions still narrow
@@ -53,7 +55,7 @@ ROLE = "Requester Access"
 # than the default, 6 = allow everywhere
 OBJECT_PERMISSIONS = [
     {"namespace": "*", "name": "*", "action": "view", "decision": 6},
-    {"namespace": "Service", "name": "*", "action": "any", "decision": 4},
+    {"namespace": "*", "name": "*", "action": "any", "decision": 4},
     {"namespace": "Core", "name": "ProposedChange", "action": "create", "decision": 2},
 ]
 GLOBAL_PERMISSIONS = [
@@ -180,7 +182,7 @@ def main() -> int:
         print(f"PROBLEM: {problem}")
     if not problems:
         print(
-            f"{GROUP!r} holds only {ROLE!r}: view everything, write service objects on a branch, open a proposed change."
+            f"{GROUP!r} holds only {ROLE!r}: view everything, write any kind on a branch other than main, open a proposed change."
         )
     return 1 if problems else 0
 

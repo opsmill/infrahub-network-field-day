@@ -6,6 +6,21 @@
       "headers": {
         "Authorization": "Bearer ${INFRAHUB_MCP_TOKEN_ALICE}"
       }
+    },
+    "arista-eos": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--network", "host",
+        "-e", "EOS_MCP_PASSWORD",
+        "-v", "${PWD}/lab/eos-mcp:/inventory:ro",
+        "node:24-alpine",
+        "npx", "-y", "@aristanetworks/eos-mcp-server@0.6.1-beta",
+        "serve", "--inventory", "/inventory/inventory.yml"
+      ],
+      "env": {
+        "EOS_MCP_PASSWORD": "${EOS_MCP_PASSWORD}"
+      }
     }
   }
 }

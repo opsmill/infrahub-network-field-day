@@ -1,0 +1,40 @@
+---
+# Inventory for the Arista EOS MCP server (aristanetworks/eos-mcp-server).
+#
+# Host names are the switches' names in Infrahub and their EOS hostnames, never
+# the short ContainerLab names in lab/avd/inventory.yml, so an agent can carry a
+# name from one MCP server to the other unchanged. The addresses are the
+# mgmt-ipv4 values in lab/otternet.clab.yml.
+#
+# mcp_password_env names an environment variable; the password is never here.
+all:
+  children:
+    OTTERNET_FABRIC:
+      vars:
+        ansible_user: admin
+        ansible_network_os: eos
+        mcp_password_env: EOS_MCP_PASSWORD
+        mcp_validate_certs: false
+      children:
+        SPINES:
+          hosts:
+            spine-otternet-pod1-1:
+              ansible_host: 172.20.41.11
+            spine-otternet-pod1-2:
+              ansible_host: 172.20.41.12
+        K8S_LEAFS:
+          hosts:
+            leaf-otternet-pod1-1-1:
+              ansible_host: 172.20.41.21
+            leaf-otternet-pod1-1-2:
+              ansible_host: 172.20.41.22
+        APP_LEAFS:
+          hosts:
+            leaf-otternet-pod1-2-1:
+              ansible_host: 172.20.41.23
+            leaf-otternet-pod1-2-2:
+              ansible_host: 172.20.41.24
+        BORDER_LEAFS:
+          hosts:
+            leaf-otternet-pod1-3-1:
+              ansible_host: 172.20.41.25
